@@ -64,7 +64,13 @@ class Tenancy
     }
 
     /**
-     * Force the current tenant (for console, Jobs, seeders and tests).
+     * Force the current tenant until explicitly changed or forgotten.
+     *
+     * Prefer {@see Tenancy::forSchool()} inside queued Jobs: this override is a
+     * process-lifetime static, so in a long-running worker it would otherwise
+     * persist into the next job. forSchool() restores the previous state when the
+     * callback ends. (The queue listeners in AppServiceProvider also reset it
+     * between jobs as a safety net.)
      */
     public static function useSchool(School|int $school): void
     {

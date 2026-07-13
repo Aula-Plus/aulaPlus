@@ -37,8 +37,12 @@ class AuthenticatedSessionController extends Controller
     {
         Auth::guard('web')->logout();
 
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // A pure bearer-token client authenticates without a session; only tear
+        // down session state when the request actually carries one (the SPA does).
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         return response()->json(['message' => 'Sesión cerrada.']);
     }

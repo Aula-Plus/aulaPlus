@@ -30,7 +30,12 @@ let csrfPromise: Promise<unknown> | null = null
  */
 export function ensureCsrfCookie(): Promise<unknown> {
   if (!csrfPromise) {
-    csrfPromise = api.get("/sanctum/csrf-cookie")
+    csrfPromise = api.get("/sanctum/csrf-cookie").catch((error) => {
+      // Don't cache a failed request: clear it so the next call retries instead
+      // of replaying the rejected promise forever.
+      csrfPromise = null
+      throw error
+    })
   }
   return csrfPromise
 }

@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Enums\Role;
 use App\Models\School;
 use App\Models\User;
-use App\Support\Tenancy;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
@@ -33,28 +32,22 @@ class CreateUser extends Command
 
         $name = text('Full name', required: true);
 
-        $email = text('Email', required: true, validate: function (string $value) use ($school) {
-            $exists = Tenancy::forSchool($school, fn () => User::where('email', $value)->exists());
-
-            return $exists ? 'A user with that email already exists.' : null;
-        });
+        $email = text('Email', required: true, validate: fn (string $value) => $this->validateEmail($value));
 
         $roleValue = select('Role', options: array_combine(Role::values(), Role::values()));
 
         $plain = password('Password', validate: fn (string $value) => $this->validatePassword($value));
 
-        $user = Tenancy::forSchool($school, function () use ($school, $name, $email, $roleValue, $plain) {
-            $user = User::create([
-                'school_id' => $school->id,
-                'name' => $name,
-                'email' => $email,
-                'password' => Hash::make($plain),
-            ]);
+        // User does not use the SchoolScope (see App\Models\User), and school_id
+        // is set explicitly here, so no Tenancy override is needed.
+        $user = User::create([
+            'school_id' => $school->id,
+            'name' => $name,
+            'email' => $email,
+            'password' => Hash::make($plain),
+        ]);
 
-            $user->assignRole($roleValue);
-
-            return $user;
-        });
+        $user->assignRole($roleValue);
 
         $this->info("Created user #{$user->id} ({$email}) as {$roleValue} in \"{$school->name}\".");
 
@@ -81,6 +74,20 @@ class CreateUser extends Command
         );
 
         return $schools->firstWhere('id', $id);
+    }
+
+    protected function validateEmail(string $value): ?string
+    {
+        try {
+            validator(
+                ['email' => $value],
+                ['email' => ['required', 'email', 'unique:users,email']],
+            )->validate();
+        } catch (ValidationException $e) {
+            return $e->validator->errors()->first('email');
+        }
+
+        return null;
     }
 
     protected function validatePassword(string $value): ?string
