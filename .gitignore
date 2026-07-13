@@ -1,0 +1,7 @@
+# OS / editor cruft (per-app .gitignore files cover vendor/, node_modules/, .env)
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
