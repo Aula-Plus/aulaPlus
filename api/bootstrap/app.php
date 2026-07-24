@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Requests coming from configured stateful domains receive session +
         // CSRF protection; everything else falls back to bearer-token auth.
         $middleware->statefulApi();
+
+        // Global rate limit for every /api/* route (limiter defined in
+        // AppServiceProvider). Individual endpoints may still layer a
+        // stricter throttle on top (e.g. /login's throttle:6,1).
+        $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
