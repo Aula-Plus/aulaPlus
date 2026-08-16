@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\StudentController;
+use App\Http\Controllers\TeacherOptionsController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -28,6 +29,7 @@ Route::post('/login', [AuthenticatedSessionController::class, 'store'])
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/me', CurrentUserController::class)->name('me');
+    Route::get('/teachers', TeacherOptionsController::class);
     Route::apiResource('groups', GroupController::class);
     Route::apiResource('students', StudentController::class);
 });
