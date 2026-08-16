@@ -6,13 +6,16 @@ import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import * as groupsApi from "./groupsApi"
+import type { Teacher } from "./groupsApi"
 
 const groupSchema = z.object({
   name: z.string().min(1, "Ingresá un nombre"),
   level: z.string().optional(),
   year: z.string().optional(),
+  teacher_id: z.string().optional(),
 })
 
 type GroupValues = z.infer<typeof groupSchema>
@@ -23,6 +26,7 @@ export function GroupFormPage() {
   const navigate = useNavigate()
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [teachers, setTeachers] = useState<Teacher[]>([])
 
   const {
     register,
@@ -31,23 +35,36 @@ export function GroupFormPage() {
     formState: { errors, isSubmitting },
   } = useForm<GroupValues>({
     resolver: zodResolver(groupSchema),
-    defaultValues: { name: "", level: "", year: "" },
+    defaultValues: { name: "", level: "", year: "", teacher_id: "" },
   })
+
+  useEffect(() => {
+    groupsApi.fetchTeachers().then(setTeachers)
+  }, [])
 
   useEffect(() => {
     if (!id) return
     groupsApi.fetchGroup(Number(id)).then((group) => {
-      reset({ name: group.name, level: group.level ?? "", year: group.year ?? "" })
+      reset({
+        name: group.name,
+        level: group.level ?? "",
+        year: group.year ?? "",
+        teacher_id: group.teacher_id ? String(group.teacher_id) : "",
+      })
     })
   }, [id, reset])
 
   async function onSubmit(values: GroupValues) {
     setFormError(null)
     try {
+      const input = {
+        ...values,
+        teacher_id: values.teacher_id ? Number(values.teacher_id) : null,
+      }
       if (isEdit) {
-        await groupsApi.updateGroup(Number(id), values)
+        await groupsApi.updateGroup(Number(id), input)
       } else {
-        await groupsApi.createGroup(values)
+        await groupsApi.createGroup(input)
       }
       navigate("/clases", { replace: true })
     } catch {
@@ -89,6 +106,17 @@ export function GroupFormPage() {
           <div className="grid gap-2">
             <Label htmlFor="year">Año</Label>
             <Input id="year" {...register("year")} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="teacher_id">Docente a cargo</Label>
+            <Select id="teacher_id" {...register("teacher_id")}>
+              <option value="">Sin docente asignado</option>
+              {teachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.id}>
+                  {teacher.name}
+                </option>
+              ))}
+            </Select>
           </div>
           {formError && (
             <p role="alert" className="text-sm text-destructive">

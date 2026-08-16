@@ -31,3 +31,13 @@ export async function updateGroup(id: number, input: GroupInput): Promise<Group>
 export async function deleteGroup(id: number): Promise<void> {
   await api.delete(`/api/groups/${id}`)
 }
+
+export interface Teacher {
+  id: number
+  name: string
+}
+
+export async function fetchTeachers(): Promise<Teacher[]> {
+  const { data } = await api.get<{ data: Teacher[] }>("/api/teachers")
+  return data.data
+}
