@@ -22,6 +22,7 @@ export function GroupFormPage() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [formError, setFormError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const {
     register,
@@ -54,6 +55,21 @@ export function GroupFormPage() {
     }
   }
 
+  async function onDelete() {
+    if (!id) return
+    if (!window.confirm("¿Eliminar esta clase? Esta acción no se puede deshacer.")) return
+
+    setFormError(null)
+    setIsDeleting(true)
+    try {
+      await groupsApi.deleteGroup(Number(id))
+      navigate("/clases", { replace: true })
+    } catch {
+      setFormError("No pudimos eliminar la clase.")
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <Card className="max-w-lg">
       <CardHeader>
@@ -79,9 +95,16 @@ export function GroupFormPage() {
               {formError}
             </p>
           )}
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Guardando…" : "Guardar"}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Guardando…" : "Guardar"}
+            </Button>
+            {isEdit && (
+              <Button type="button" variant="destructive" disabled={isDeleting} onClick={onDelete}>
+                {isDeleting ? "Eliminando…" : "Eliminar clase"}
+              </Button>
+            )}
+          </div>
         </form>
       </CardContent>
     </Card>
