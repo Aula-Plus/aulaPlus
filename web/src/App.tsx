@@ -4,6 +4,7 @@ import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { GroupsListPage } from "@/features/groups/GroupsListPage"
+import { GroupFormPage } from "@/features/groups/GroupFormPage"
 
 function App() {
   return (
@@ -24,6 +25,22 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupsListPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clases/nueva"
+            element={
+              <ProtectedLayout>
+                <GroupFormPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clases/:id"
+            element={
+              <ProtectedLayout>
+                <GroupFormPage />
               </ProtectedLayout>
             }
           />
