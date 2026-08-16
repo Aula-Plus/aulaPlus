@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { AuthProvider } from "@/features/auth/AuthProvider"
-import { ProtectedRoute } from "@/components/ProtectedRoute"
+import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 
@@ -13,9 +13,9 @@ function App() {
           <Route
             path="/"
             element={
-              <ProtectedRoute>
+              <ProtectedLayout>
                 <DashboardPage />
-              </ProtectedRoute>
+              </ProtectedLayout>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
