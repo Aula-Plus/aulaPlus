@@ -2496,3 +2496,762 @@ git status
 git add -A
 git commit -m "chore: apply formatting fixes"
 ```
+
+---
+
+> **Addendum (post-review):** the whole-branch review after Task 14 found the
+> spec's "eliminar" for clases and the "docente a cargo" field were never
+> wired into the frontend — the backend already supports both. Tasks 15-16
+> close those two gaps.
+
+## Task 15: Delete action on `GroupFormPage`
+
+**Files:**
+- Modify: `web/src/features/groups/GroupFormPage.tsx`
+- Modify: `web/src/features/groups/GroupFormPage.test.tsx`
+
+**Interfaces:**
+- Consumes: `groupsApi.deleteGroup(id): Promise<void>` (already exists, unused until now).
+- No new exports — this only adds a button and a handler to the existing component.
+
+The backend `DELETE /api/groups/{group}` endpoint, its `GroupPolicy::delete` (director-only), and the `groupsApi.deleteGroup()` client function already exist and are tested — this task only adds the missing UI trigger.
+
+- [ ] **Step 1: Write the failing tests**
+
+Replace `web/src/features/groups/GroupFormPage.test.tsx` in full:
+
+```tsx
+import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { MemoryRouter, Route, Routes } from "react-router-dom"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { GroupFormPage } from "./GroupFormPage"
+import * as groupsApi from "./groupsApi"
+
+function renderCreate() {
+  return render(
+    <MemoryRouter initialEntries={["/clases/nueva"]}>
+      <Routes>
+        <Route path="/clases/nueva" element={<GroupFormPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+function renderEdit(id = "1") {
+  return render(
+    <MemoryRouter initialEntries={[`/clases/${id}`]}>
+      <Routes>
+        <Route path="/clases/:id" element={<GroupFormPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+describe("GroupFormPage", () => {
+  it("shows a validation error and does not submit when name is empty", async () => {
+    const createGroup = vi.spyOn(groupsApi, "createGroup")
+
+    renderCreate()
+
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
+
+    expect(await screen.findByText(/ingresá un nombre/i)).toBeInTheDocument()
+    expect(createGroup).not.toHaveBeenCalled()
+  })
+
+  it("calls createGroup with the entered values on a valid submit", async () => {
+    const createGroup = vi.spyOn(groupsApi, "createGroup").mockResolvedValue({
+      id: 1,
+      name: "3° A",
+      level: "",
+      year: "",
+      teacher_id: null,
+      teacher: null,
+    })
+
+    renderCreate()
+
+    await userEvent.type(screen.getByLabelText(/nombre/i), "3° A")
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
+
+    expect(createGroup).toHaveBeenCalledWith({ name: "3° A", level: "", year: "" })
+  })
+
+  it("does not show a delete button when creating a new group", () => {
+    renderCreate()
+
+    expect(screen.queryByRole("button", { name: /eliminar clase/i })).not.toBeInTheDocument()
+  })
+
+  describe("editing an existing group", () => {
+    beforeEach(() => {
+      vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue({
+        id: 1,
+        name: "3° A",
+        level: "Primaria",
+        year: "2026",
+        teacher_id: null,
+        teacher: null,
+      })
+    })
+
+    it("shows a delete button and calls deleteGroup after confirming", async () => {
+      const deleteGroup = vi.spyOn(groupsApi, "deleteGroup").mockResolvedValue(undefined)
+      vi.stubGlobal("confirm", vi.fn(() => true))
+
+      renderEdit()
+
+      const deleteButton = await screen.findByRole("button", { name: /eliminar clase/i })
+      await userEvent.click(deleteButton)
+
+      expect(deleteGroup).toHaveBeenCalledWith(1)
+
+      vi.unstubAllGlobals()
+    })
+
+    it("does not call deleteGroup when the confirmation is cancelled", async () => {
+      const deleteGroup = vi.spyOn(groupsApi, "deleteGroup")
+      vi.stubGlobal("confirm", vi.fn(() => false))
+
+      renderEdit()
+
+      const deleteButton = await screen.findByRole("button", { name: /eliminar clase/i })
+      await userEvent.click(deleteButton)
+
+      expect(deleteGroup).not.toHaveBeenCalled()
+
+      vi.unstubAllGlobals()
+    })
+  })
+})
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd web && npm run test -- --run GroupFormPage`
+Expected: FAIL — no "Eliminar clase" button exists yet.
+
+- [ ] **Step 3: Add the delete action to `GroupFormPage`**
+
+Replace `web/src/features/groups/GroupFormPage.tsx` in full:
+
+```tsx
+import { useEffect, useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { useNavigate, useParams } from "react-router-dom"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import * as groupsApi from "./groupsApi"
+
+const groupSchema = z.object({
+  name: z.string().min(1, "Ingresá un nombre"),
+  level: z.string().optional(),
+  year: z.string().optional(),
+})
+
+type GroupValues = z.infer<typeof groupSchema>
+
+export function GroupFormPage() {
+  const { id } = useParams()
+  const isEdit = Boolean(id)
+  const navigate = useNavigate()
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<GroupValues>({
+    resolver: zodResolver(groupSchema),
+    defaultValues: { name: "", level: "", year: "" },
+  })
+
+  useEffect(() => {
+    if (!id) return
+    groupsApi.fetchGroup(Number(id)).then((group) => {
+      reset({ name: group.name, level: group.level ?? "", year: group.year ?? "" })
+    })
+  }, [id, reset])
+
+  async function onSubmit(values: GroupValues) {
+    setFormError(null)
+    try {
+      if (isEdit) {
+        await groupsApi.updateGroup(Number(id), values)
+      } else {
+        await groupsApi.createGroup(values)
+      }
+      navigate("/clases", { replace: true })
+    } catch {
+      setFormError("No pudimos guardar la clase.")
+    }
+  }
+
+  async function onDelete() {
+    if (!id) return
+    if (!window.confirm("¿Eliminar esta clase? Esta acción no se puede deshacer.")) return
+
+    setFormError(null)
+    setIsDeleting(true)
+    try {
+      await groupsApi.deleteGroup(Number(id))
+      navigate("/clases", { replace: true })
+    } catch {
+      setFormError("No pudimos eliminar la clase.")
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <Card className="max-w-lg">
+      <CardHeader>
+        <CardTitle>{isEdit ? "Editar clase" : "Nueva clase"}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
+          <div className="grid gap-2">
+            <Label htmlFor="name">Nombre</Label>
+            <Input id="name" {...register("name")} />
+            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="level">Nivel</Label>
+            <Input id="level" {...register("level")} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="year">Año</Label>
+            <Input id="year" {...register("year")} />
+          </div>
+          {formError && (
+            <p role="alert" className="text-sm text-destructive">
+              {formError}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Guardando…" : "Guardar"}
+            </Button>
+            {isEdit && (
+              <Button type="button" variant="destructive" disabled={isDeleting} onClick={onDelete}>
+                {isDeleting ? "Eliminando…" : "Eliminar clase"}
+              </Button>
+            )}
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `cd web && npm run test -- --run GroupFormPage`
+Expected: PASS (6 tests)
+
+- [ ] **Step 5: Run the full frontend suite**
+
+Run: `cd web && npm run test -- --run`
+Expected: PASS (all tests)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add web/src/features/groups/GroupFormPage.tsx web/src/features/groups/GroupFormPage.test.tsx
+git commit -m "feat: add delete action to the class edit form"
+```
+
+---
+
+## Task 16: Teacher assignment on `GroupFormPage`
+
+**Files:**
+- Create: `api/app/Http/Controllers/TeacherOptionsController.php`
+- Modify: `api/routes/api.php`
+- Test: `api/tests/Feature/TeacherOptionsTest.php`
+- Modify: `web/src/features/groups/groupsApi.ts`
+- Modify: `web/src/features/groups/GroupFormPage.tsx`
+- Modify: `web/src/features/groups/GroupFormPage.test.tsx`
+
+**Interfaces:**
+- Produces: `GET /api/teachers` → `{"data": [{id, name}, ...]}`, director-only, scoped to the caller's school, ordered by name.
+- Produces: `groupsApi.fetchTeachers(): Promise<Teacher[]>`, consumed by `GroupFormPage`.
+- `GroupFormPage`'s submitted payload gains `teacher_id: number | null`, already accepted by `StoreGroupRequest`/`UpdateGroupRequest` (Task 5) and already displayed by `GroupsListPage` (Task 10) — this task is the last piece connecting an already-validated, already-displayed field to an actual input.
+
+### Backend
+
+- [ ] **Step 1: Write the failing test**
+
+```php
+<?php
+
+use App\Models\School;
+use App\Models\User;
+use Laravel\Sanctum\Sanctum;
+
+it('lets a director list teachers in their own school, ordered by name', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    User::factory()->forSchool($school)->teacher()->create(['name' => 'Zoe Diaz']);
+    User::factory()->forSchool($school)->teacher()->create(['name' => 'Ana Ruiz']);
+    User::factory()->forSchool($school)->psychopedagogue()->create();
+
+    Sanctum::actingAs($director);
+
+    $this->getJson('/api/teachers')
+        ->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonPath('data.0.name', 'Ana Ruiz')
+        ->assertJsonPath('data.1.name', 'Zoe Diaz');
+});
+
+it('excludes teachers from other schools', function () {
+    $schoolA = School::factory()->create();
+    $schoolB = School::factory()->create();
+    $director = User::factory()->forSchool($schoolA)->director()->create();
+    User::factory()->forSchool($schoolB)->teacher()->create();
+
+    Sanctum::actingAs($director);
+
+    $this->getJson('/api/teachers')->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('forbids non-directors from listing teachers', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+
+    Sanctum::actingAs($teacher);
+
+    $this->getJson('/api/teachers')->assertForbidden();
+});
+
+it('requires authentication', function () {
+    $this->getJson('/api/teachers')->assertUnauthorized();
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `cd api && ./vendor/bin/sail test --filter=TeacherOptionsTest`
+Expected: FAIL — route not defined.
+
+- [ ] **Step 3: Write `TeacherOptionsController`**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\Role;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+/**
+ * Lightweight, read-only directory of teachers in the caller's school, used
+ * to populate the "docente a cargo" selector on GroupFormPage. Director-only
+ * — the only place this is consumed today is the group create/edit form.
+ */
+class TeacherOptionsController extends Controller
+{
+    public function __invoke(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasRole(Role::Director->value), 403);
+
+        $teachers = User::query()
+            ->where('school_id', $request->user()->school_id)
+            ->role(Role::Teacher->value)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json(['data' => $teachers]);
+    }
+}
+```
+
+- [ ] **Step 4: Register the route**
+
+In `api/routes/api.php`, add the import:
+
+```php
+use App\Http\Controllers\TeacherOptionsController;
+```
+
+Add inside the `auth:sanctum` group, after the `/me` route:
+
+```php
+    Route::get('/teachers', TeacherOptionsController::class);
+```
+
+- [ ] **Step 5: Run the test to verify it passes**
+
+Run: `cd api && ./vendor/bin/sail test --filter=TeacherOptionsTest`
+Expected: PASS (4 tests)
+
+- [ ] **Step 6: Run the full backend suite and Pint**
+
+Run: `cd api && ./vendor/bin/sail test && ./vendor/bin/sail bin pint --test`
+Expected: both clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add api/app/Http/Controllers/TeacherOptionsController.php api/routes/api.php api/tests/Feature/TeacherOptionsTest.php
+git commit -m "feat: add teacher directory endpoint for group assignment"
+```
+
+### Frontend
+
+- [ ] **Step 8: Add `fetchTeachers` to `groupsApi.ts`**
+
+Append to `web/src/features/groups/groupsApi.ts`:
+
+```ts
+export interface Teacher {
+  id: number
+  name: string
+}
+
+export async function fetchTeachers(): Promise<Teacher[]> {
+  const { data } = await api.get<{ data: Teacher[] }>("/api/teachers")
+  return data.data
+}
+```
+
+- [ ] **Step 9: Write the failing tests**
+
+Replace `web/src/features/groups/GroupFormPage.test.tsx` in full:
+
+```tsx
+import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { MemoryRouter, Route, Routes } from "react-router-dom"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { GroupFormPage } from "./GroupFormPage"
+import * as groupsApi from "./groupsApi"
+
+function renderCreate() {
+  return render(
+    <MemoryRouter initialEntries={["/clases/nueva"]}>
+      <Routes>
+        <Route path="/clases/nueva" element={<GroupFormPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+function renderEdit(id = "1") {
+  return render(
+    <MemoryRouter initialEntries={[`/clases/${id}`]}>
+      <Routes>
+        <Route path="/clases/:id" element={<GroupFormPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+describe("GroupFormPage", () => {
+  beforeEach(() => {
+    vi.spyOn(groupsApi, "fetchTeachers").mockResolvedValue([])
+  })
+
+  it("shows a validation error and does not submit when name is empty", async () => {
+    const createGroup = vi.spyOn(groupsApi, "createGroup")
+
+    renderCreate()
+
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
+
+    expect(await screen.findByText(/ingresá un nombre/i)).toBeInTheDocument()
+    expect(createGroup).not.toHaveBeenCalled()
+  })
+
+  it("calls createGroup with the entered values on a valid submit", async () => {
+    const createGroup = vi.spyOn(groupsApi, "createGroup").mockResolvedValue({
+      id: 1,
+      name: "3° A",
+      level: "",
+      year: "",
+      teacher_id: null,
+      teacher: null,
+    })
+
+    renderCreate()
+
+    await userEvent.type(screen.getByLabelText(/nombre/i), "3° A")
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
+
+    expect(createGroup).toHaveBeenCalledWith({
+      name: "3° A",
+      level: "",
+      year: "",
+      teacher_id: null,
+    })
+  })
+
+  it("does not show a delete button when creating a new group", () => {
+    renderCreate()
+
+    expect(screen.queryByRole("button", { name: /eliminar clase/i })).not.toBeInTheDocument()
+  })
+
+  it("populates the teacher select from fetchTeachers and submits the chosen teacher_id as a number", async () => {
+    vi.spyOn(groupsApi, "fetchTeachers").mockResolvedValue([
+      { id: 5, name: "Ana Ruiz" },
+      { id: 9, name: "Zoe Diaz" },
+    ])
+    const createGroup = vi.spyOn(groupsApi, "createGroup").mockResolvedValue({
+      id: 1,
+      name: "3° A",
+      level: "",
+      year: "",
+      teacher_id: 5,
+      teacher: { id: 5, name: "Ana Ruiz" },
+    })
+
+    renderCreate()
+
+    expect(await screen.findByRole("option", { name: "Ana Ruiz" })).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText(/nombre/i), "3° A")
+    await userEvent.selectOptions(screen.getByLabelText(/docente a cargo/i), "5")
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
+
+    expect(createGroup).toHaveBeenCalledWith({
+      name: "3° A",
+      level: "",
+      year: "",
+      teacher_id: 5,
+    })
+  })
+
+  describe("editing an existing group", () => {
+    beforeEach(() => {
+      vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue({
+        id: 1,
+        name: "3° A",
+        level: "Primaria",
+        year: "2026",
+        teacher_id: 5,
+        teacher: { id: 5, name: "Ana Ruiz" },
+      })
+      vi.spyOn(groupsApi, "fetchTeachers").mockResolvedValue([
+        { id: 5, name: "Ana Ruiz" },
+        { id: 9, name: "Zoe Diaz" },
+      ])
+    })
+
+    it("preselects the group's current teacher", async () => {
+      renderEdit()
+
+      const select = (await screen.findByLabelText(/docente a cargo/i)) as HTMLSelectElement
+      expect(await screen.findByRole("option", { name: "Ana Ruiz" })).toBeInTheDocument()
+      expect(select.value).toBe("5")
+    })
+
+    it("shows a delete button and calls deleteGroup after confirming", async () => {
+      const deleteGroup = vi.spyOn(groupsApi, "deleteGroup").mockResolvedValue(undefined)
+      vi.stubGlobal("confirm", vi.fn(() => true))
+
+      renderEdit()
+
+      const deleteButton = await screen.findByRole("button", { name: /eliminar clase/i })
+      await userEvent.click(deleteButton)
+
+      expect(deleteGroup).toHaveBeenCalledWith(1)
+
+      vi.unstubAllGlobals()
+    })
+
+    it("does not call deleteGroup when the confirmation is cancelled", async () => {
+      const deleteGroup = vi.spyOn(groupsApi, "deleteGroup")
+      vi.stubGlobal("confirm", vi.fn(() => false))
+
+      renderEdit()
+
+      const deleteButton = await screen.findByRole("button", { name: /eliminar clase/i })
+      await userEvent.click(deleteButton)
+
+      expect(deleteGroup).not.toHaveBeenCalled()
+
+      vi.unstubAllGlobals()
+    })
+  })
+})
+```
+
+- [ ] **Step 10: Run the tests to verify they fail**
+
+Run: `cd web && npm run test -- --run GroupFormPage`
+Expected: FAIL — no "Docente a cargo" label/select exists yet, and `createGroup` is called without `teacher_id`.
+
+- [ ] **Step 11: Add the teacher selector to `GroupFormPage`**
+
+Replace `web/src/features/groups/GroupFormPage.tsx` in full:
+
+```tsx
+import { useEffect, useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { useNavigate, useParams } from "react-router-dom"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import * as groupsApi from "./groupsApi"
+import type { Teacher } from "./groupsApi"
+
+const groupSchema = z.object({
+  name: z.string().min(1, "Ingresá un nombre"),
+  level: z.string().optional(),
+  year: z.string().optional(),
+  teacher_id: z.string().optional(),
+})
+
+type GroupValues = z.infer<typeof groupSchema>
+
+export function GroupFormPage() {
+  const { id } = useParams()
+  const isEdit = Boolean(id)
+  const navigate = useNavigate()
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<GroupValues>({
+    resolver: zodResolver(groupSchema),
+    defaultValues: { name: "", level: "", year: "", teacher_id: "" },
+  })
+
+  useEffect(() => {
+    groupsApi.fetchTeachers().then(setTeachers)
+  }, [])
+
+  useEffect(() => {
+    if (!id) return
+    groupsApi.fetchGroup(Number(id)).then((group) => {
+      reset({
+        name: group.name,
+        level: group.level ?? "",
+        year: group.year ?? "",
+        teacher_id: group.teacher_id ? String(group.teacher_id) : "",
+      })
+    })
+  }, [id, reset])
+
+  async function onSubmit(values: GroupValues) {
+    setFormError(null)
+    try {
+      const input = {
+        ...values,
+        teacher_id: values.teacher_id ? Number(values.teacher_id) : null,
+      }
+      if (isEdit) {
+        await groupsApi.updateGroup(Number(id), input)
+      } else {
+        await groupsApi.createGroup(input)
+      }
+      navigate("/clases", { replace: true })
+    } catch {
+      setFormError("No pudimos guardar la clase.")
+    }
+  }
+
+  async function onDelete() {
+    if (!id) return
+    if (!window.confirm("¿Eliminar esta clase? Esta acción no se puede deshacer.")) return
+
+    setFormError(null)
+    setIsDeleting(true)
+    try {
+      await groupsApi.deleteGroup(Number(id))
+      navigate("/clases", { replace: true })
+    } catch {
+      setFormError("No pudimos eliminar la clase.")
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <Card className="max-w-lg">
+      <CardHeader>
+        <CardTitle>{isEdit ? "Editar clase" : "Nueva clase"}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
+          <div className="grid gap-2">
+            <Label htmlFor="name">Nombre</Label>
+            <Input id="name" {...register("name")} />
+            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="level">Nivel</Label>
+            <Input id="level" {...register("level")} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="year">Año</Label>
+            <Input id="year" {...register("year")} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="teacher_id">Docente a cargo</Label>
+            <Select id="teacher_id" {...register("teacher_id")}>
+              <option value="">Sin docente asignado</option>
+              {teachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.id}>
+                  {teacher.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {formError && (
+            <p role="alert" className="text-sm text-destructive">
+              {formError}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Guardando…" : "Guardar"}
+            </Button>
+            {isEdit && (
+              <Button type="button" variant="destructive" disabled={isDeleting} onClick={onDelete}>
+                {isDeleting ? "Eliminando…" : "Eliminar clase"}
+              </Button>
+            )}
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+- [ ] **Step 12: Run the tests to verify they pass**
+
+Run: `cd web && npm run test -- --run GroupFormPage`
+Expected: PASS (8 tests)
+
+- [ ] **Step 13: Run the full frontend suite, typecheck, and build**
+
+Run: `cd web && npm run test -- --run && npm run typecheck && npm run build`
+Expected: all clean.
+
+- [ ] **Step 14: Commit**
+
+```bash
+git add web/src/features/groups/groupsApi.ts web/src/features/groups/GroupFormPage.tsx web/src/features/groups/GroupFormPage.test.tsx
+git commit -m "feat: add teacher assignment selector to the class form"
+```
