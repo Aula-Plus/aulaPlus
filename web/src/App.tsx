@@ -5,6 +5,7 @@ import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { GroupsListPage } from "@/features/groups/GroupsListPage"
 import { GroupFormPage } from "@/features/groups/GroupFormPage"
+import { StudentsListPage } from "@/features/students/StudentsListPage"
 
 function App() {
   return (
@@ -41,6 +42,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupFormPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/alumnos"
+            element={
+              <ProtectedLayout>
+                <StudentsListPage />
               </ProtectedLayout>
             }
           />
