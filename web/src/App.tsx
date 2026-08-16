@@ -3,6 +3,7 @@ import { AuthProvider } from "@/features/auth/AuthProvider"
 import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
+import { GroupsListPage } from "@/features/groups/GroupsListPage"
 
 function App() {
   return (
@@ -15,6 +16,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <DashboardPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clases"
+            element={
+              <ProtectedLayout>
+                <GroupsListPage />
               </ProtectedLayout>
             }
           />
