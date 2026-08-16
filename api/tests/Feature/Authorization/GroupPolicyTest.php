@@ -25,7 +25,7 @@ it('lets a psychopedagogue view any group in their school but not create one', f
         ->and($psychopedagogue->can('create', Group::class))->toBeFalse();
 });
 
-it('lets a teacher view only groups they lead', function () {
+it('lets a teacher view groups they lead, but not update or delete them', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
 
@@ -34,7 +34,7 @@ it('lets a teacher view only groups they lead', function () {
 
     expect($teacher->can('view', $own))->toBeTrue()
         ->and($teacher->can('view', $other))->toBeFalse()
-        ->and($teacher->can('update', $own))->toBeTrue()
+        ->and($teacher->can('update', $own))->toBeFalse()
         ->and($teacher->can('delete', $own))->toBeFalse();
 });
 
