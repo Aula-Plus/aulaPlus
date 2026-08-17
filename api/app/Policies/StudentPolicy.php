@@ -10,8 +10,10 @@ use App\Models\User;
  * Reference policy for student records. Same two-layer pattern as GroupPolicy:
  * tenant isolation first, then role rules.
  *
- * A psychopedagogue and a director have automatic, school-wide access to every
- * student. A teacher only sees students that belong to a group they lead.
+ * Director-only: creating and editing student records is restricted to
+ * the director. Psychopedagogue keeps full read access (see view/viewAny)
+ * but does not write.
+ * A teacher only sees students that belong to a group they lead.
  */
 class StudentPolicy
 {
@@ -37,14 +39,13 @@ class StudentPolicy
 
     public function create(User $user): bool
     {
-        // Director and psychopedagogue manage the roster; teachers do not.
-        return $user->hasAnyRole(Role::schoolWideValues());
+        return $user->hasRole(Role::Director->value);
     }
 
     public function update(User $user, Student $student): bool
     {
         return $this->sharesSchool($user, $student)
-            && $user->hasAnyRole(Role::schoolWideValues());
+            && $user->hasRole(Role::Director->value);
     }
 
     public function delete(User $user, Student $student): bool

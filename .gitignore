@@ -5,3 +5,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Isolated worktrees for feature work (superpowers:using-git-worktrees)
+.worktrees/
