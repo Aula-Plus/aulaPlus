@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\Role;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\GroupFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -79,5 +81,20 @@ class Group extends Model
     public function isLedBy(User $user): bool
     {
         return $this->teachers()->where('teacher_id', $user->id)->exists();
+    }
+
+    /**
+     * Scope a query to the groups a user is allowed to see: every group for
+     * a school-wide role (director/psychopedagogue), or only the groups they
+     * lead for a teacher. Mirrors GroupPolicy::view — keeps that role check
+     * out of controllers, which only call this scope.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->hasAnyRole(Role::schoolWideValues())) {
+            return $query;
+        }
+
+        return $query->whereHas('teachers', fn ($q) => $q->where('users.id', $user->id));
     }
 }

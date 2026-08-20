@@ -35,7 +35,7 @@ class GroupPolicy
         }
 
         return $user->hasAnyRole(Role::schoolWideValues())
-            || $group->isLedBy($user);
+            || $user->teachesGroup($group);
     }
 
     public function create(User $user): bool
