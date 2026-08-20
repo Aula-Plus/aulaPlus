@@ -1,8 +1,23 @@
-# Portal Docentes v2 — Repo guardrails
+# Portal Docentes v2 (Aula+) — Repo guardrails
 
-Monorepo for a multi-tenant school-management platform for **staff** (docentes,
-directores, psicopedagogos). **Alumnos are records, not users** — they never log
-in. This is a security-conscious rewrite of a previous version whose audit found
+## Product context
+
+Aula+ (internal repo name: Portal Docentes v2) is a multi-tenant school-management
+platform for K-12 private schools in Uruguay (350+ students). Two pillars:
+
+1. **Institutional tracking dashboard** — centralizes pedagogical data per
+   student/group (pulled from staff input and, later, school information
+   systems) and surfaces trends and early alerts.
+2. **AI teaching assistant** — helps teachers plan annual curricula, units,
+   classes, and assessments, aligned with Universal Design for Learning (UDL)
+   principles. It always proposes; the teacher decides.
+
+Customers: school leadership (purchase decision). Users: teaching and
+pedagogical staff — teachers, directors, psychopedagogues, and, pending the
+open question below, psychologists and therapeutic companions. **Students are
+records, not users — they never log in.**
+
+This is a security-conscious rewrite of a previous version whose audit found
 fake shared auth, `USING (true)` RLS, unauthenticated privileged endpoints, and
 logged API keys. The rules below exist to not repeat those mistakes — they are
 **not** style preferences.
@@ -51,10 +66,20 @@ security boundary.
   console/Jobs/tests set it via `Tenancy::useSchool()`).
 - `User` deliberately does **not** use the scope (would recurse during auth
   resolution); user-row isolation is enforced in queries/policies instead.
-- Roles (`App\Enums\Role`): `teacher` (own groups), `psychopedagogue` (school-wide),
-  `director` (school-wide + admin). Tenant isolation and role rules are **both**
-  checked in Policies (defence in depth over the scope). Role identifiers are
-  English; user-facing Spanish labels live in the frontend (`web/src/types.ts`).
+
+## Roles
+
+`App\Enums\Role`: `teacher` (own groups), `psychopedagogue` (school-wide),
+`director` (school-wide + admin). Tenant isolation and role rules are **both**
+checked in Policies (defence in depth over the scope). Role identifiers are
+English; user-facing Spanish labels live in the frontend (`web/src/types.ts`).
+
+> **Open question:** the product brief also calls for `psychologist` and `at`
+> (therapeutic companion, assigned per student) roles, each with narrower access
+> than psychopedagogue. They're not in the current 3-role skeleton. Confirm
+> whether that's deliberate scope-cutting for this phase or something to add now
+> — building Policies and the tracking module on top of a 3-role assumption is
+> expensive to unwind later if it's actually 5.
 
 ## Security rules (hard requirements)
 
@@ -76,6 +101,12 @@ security boundary.
 9. Real environment separation (local/staging/prod) via per-env vars — never
    hardcode hosts or deploy URLs.
 10. No debug endpoints that leak internals, not even "temporarily".
+11. Records tied to a student's learning/clinical profile (accommodations,
+    learning barriers, technical/psychopedagogical reports) hold sensitive data
+    about minors: enforce field-level access by role — not just per-endpoint —
+    never log their content in full, and keep PII out of any third-party API
+    call (the AI assistant included: send aggregated/anonymized context, never
+    student names).
 
 ## Language convention
 
@@ -84,6 +115,24 @@ security boundary.
 - **All user-facing UI text in Spanish:** the product is a Spanish app. Labels,
   buttons, messages shown to users are Spanish, and live in the frontend
   (map code values → Spanish labels, e.g. `roleLabels` in `web/src/types.ts`).
+- Domain terms without an obvious 1:1 English translation (e.g. *Contemplación*,
+  *Barrera*, *Ítem Curricular*, *Programa Anual*) should be decided **once** and
+  recorded as a glossary in `docs/ARCHITECTURE.md`, not re-decided per PR.
+
+## Out of scope for now
+
+Not implemented yet, and not to be built even after the auth/tenancy/roles
+skeleton is done, until explicitly asked:
+
+- SIGED integration (external school-management system) — will be a decoupled
+  connector, not a hardcoded integration, when it's built.
+- Billing / plans / per-module entitlements.
+- Report-card ("Boletín") and progress-indicator entities — undecided at the
+  product level.
+- Project/assignment entity and its relation to students — undecided
+  (multi-submission, multi-grade design not settled).
+- AI evaluations, lesson/curriculum planning, and communications features in
+  general — the current scope is the auth/tenancy/roles/CI skeleton.
 
 ## Working in this repo
 
