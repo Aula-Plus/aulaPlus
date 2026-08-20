@@ -49,7 +49,15 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
 - [ ] **Sesión 1** — Modelo de dominio (sobre el skeleton de tenancy existente)
   Resumen:
 - [ ] **Sesión 2** — Roles y permisos
-  Resumen:
+  Resumen: Implementadas las 13 Policies de la matriz de doc02 §2 (User, Student,
+  Group, AnnualPlan/Unit/ClassSession/Assessment, Accommodation, Barrier,
+  TechnicalReport, Calendar/CalendarEvent, catálogo curricular), con helpers
+  `User::teachesGroup`/`teachesStudent` reutilizados en todas. `StudentResource`
+  filtra el perfil clínico a nivel de campo vía `Gate::allows('view-clinical-profile', ...)`.
+  Asunciones documentadas en el PR: ownership de `ClassSession` inferido vía
+  liderazgo de Group (no tiene `teacher_id` propio); `Unit` hereda tenant y
+  ownership vía su `AnnualPlan`. PR apilado sobre `feature/sesion-01-modelo-dominio`
+  (Sesión 1 aún no mergeada a `develop`). 92/92 tests en verde, Pint limpio.
 - [ ] **Sesión 3** — Flujos de aprobación y trazabilidad
   Resumen:
 - [ ] **Sesión 4** — Seguimiento institucional
