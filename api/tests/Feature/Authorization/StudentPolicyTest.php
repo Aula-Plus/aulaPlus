@@ -31,11 +31,14 @@ it('lets a psychopedagogue view any student but not create or update one', funct
 it('lets a teacher view only students in a group they lead, and never create or update', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
-    $ownGroup = Group::factory()->create(['school_id' => $school->id, 'teacher_id' => $teacher->id]);
+    $ownGroup = Group::factory()->create(['school_id' => $school->id]);
+    $ownGroup->teachers()->attach($teacher);
     $otherGroup = Group::factory()->create(['school_id' => $school->id]);
 
-    $own = Student::factory()->create(['school_id' => $school->id, 'group_id' => $ownGroup->id]);
-    $other = Student::factory()->create(['school_id' => $school->id, 'group_id' => $otherGroup->id]);
+    $own = Student::factory()->create(['school_id' => $school->id]);
+    $own->groups()->attach($ownGroup, ['school_year' => 2026]);
+    $other = Student::factory()->create(['school_id' => $school->id]);
+    $other->groups()->attach($otherGroup, ['school_year' => 2026]);
 
     expect($teacher->can('view', $own))->toBeTrue()
         ->and($teacher->can('view', $other))->toBeFalse()
