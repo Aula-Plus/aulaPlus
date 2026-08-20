@@ -75,4 +75,27 @@ class User extends Authenticatable
     {
         return $this->hasMany(Assessment::class, 'teacher_id');
     }
+
+    /**
+     * Whether this user leads the given group (group_teacher pivot). The
+     * single source of truth for Policies that grant a teacher access to
+     * "their" groups — do not re-derive this with an ad hoc query.
+     */
+    public function teachesGroup(Group $group): bool
+    {
+        return $group->isLedBy($this);
+    }
+
+    /**
+     * Whether this user leads a group the given student currently or
+     * historically belonged to (group_teacher + group_student pivots). The
+     * single source of truth for Policies that grant a teacher access to
+     * "their" students — do not re-derive this with an ad hoc query.
+     */
+    public function teachesStudent(Student $student): bool
+    {
+        return $student->groups()
+            ->whereHas('teachers', fn ($query) => $query->whereKey($this->id))
+            ->exists();
+    }
 }
