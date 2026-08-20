@@ -2,57 +2,98 @@
 
 namespace App\Models;
 
-use App\Enums\StudentStatus;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * A student record. NOTE: students are NOT platform users — they never log in.
  * They are records managed by the school staff (rosters, profiles, tracking).
- * Skeleton only for now; pedagogical tracking fields come later.
+ *
+ * Some fields on this model (learning_profile, individual_profile,
+ * tracking_notes, related_documents) hold sensitive data about a minor's
+ * learning/clinical profile — see CLAUDE.md security rule 11: field-level
+ * access by role, never logged in full, never sent to a third-party API
+ * un-anonymized.
  */
 #[Fillable([
-    'first_name',
-    'last_name',
+    'full_name',
+    'photo_url',
     'birth_date',
-    'group_id',
-    'status',
-    'family_contact_name',
-    'family_contact_phone',
-    'family_contact_email',
-    'pedagogical_notes',
+    'enrollment_year',
+    'has_therapeutic_companion',
+    'learning_profile',
+    'tracking_notes',
+    'individual_profile',
+    'related_documents',
 ])]
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
-    use BelongsToSchool, HasFactory;
+    use BelongsToSchool, HasFactory, SoftDeletes;
 
     protected $table = 'students';
-
-    protected $attributes = [
-        'status' => 'active',
-    ];
 
     protected function casts(): array
     {
         return [
             'birth_date' => 'date',
-            'status' => StudentStatus::class,
+            'has_therapeutic_companion' => 'boolean',
+            'learning_profile' => 'array',
+            'individual_profile' => 'array',
+            'related_documents' => 'array',
         ];
     }
 
-    public function group(): BelongsTo
+    /**
+     * Groups this student has belonged to, per school year (M:N via group_student).
+     */
+    public function groups(): BelongsToMany
     {
-        return $this->belongsTo(Group::class);
+        return $this->belongsToMany(Group::class, 'group_student')
+            ->withPivot(['school_year', 'details'])
+            ->withTimestamps();
     }
 
-    protected function fullName(): Attribute
+    public function curricularFrameworks(): BelongsToMany
     {
-        return Attribute::get(fn (): string => trim("{$this->first_name} {$this->last_name}"));
+        return $this->belongsToMany(CurricularFramework::class, 'student_curricular_framework')
+            ->withTimestamps();
+    }
+
+    public function annualPlans(): HasMany
+    {
+        return $this->hasMany(AnnualPlan::class);
+    }
+
+    public function accommodations(): HasMany
+    {
+        return $this->hasMany(Accommodation::class);
+    }
+
+    public function barriers(): HasMany
+    {
+        return $this->hasMany(Barrier::class);
+    }
+
+    public function technicalReports(): HasMany
+    {
+        return $this->hasMany(TechnicalReport::class);
+    }
+
+    /**
+     * The group this student belongs to for a given school year (defaults to
+     * the current year). Convenience accessor over the group_student pivot.
+     */
+    public function groupForYear(?int $schoolYear = null): ?Group
+    {
+        return $this->groups()
+            ->wherePivot('school_year', $schoolYear ?? now()->year)
+            ->first();
     }
 }

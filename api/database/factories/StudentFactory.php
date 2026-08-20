@@ -15,10 +15,15 @@ class StudentFactory extends Factory
     {
         return [
             'school_id' => School::factory(),
-            'group_id' => null,
-            'first_name' => fake()->firstName(),
-            'last_name' => fake()->lastName(),
+            'full_name' => fake()->firstName().' '.fake()->lastName(),
+            'photo_url' => null,
             'birth_date' => fake()->dateTimeBetween('-18 years', '-4 years')->format('Y-m-d'),
+            'enrollment_year' => now()->year,
+            'has_therapeutic_companion' => false,
+            'learning_profile' => null,
+            'tracking_notes' => null,
+            'individual_profile' => null,
+            'related_documents' => null,
         ];
     }
 }

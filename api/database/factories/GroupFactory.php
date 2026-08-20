@@ -15,10 +15,11 @@ class GroupFactory extends Factory
     {
         return [
             'school_id' => School::factory(),
-            'teacher_id' => null,
             'name' => fake()->numberBetween(1, 7).'° '.fake()->randomLetter(),
             'level' => fake()->randomElement(['Inicial', 'Primaria', 'Secundaria']),
-            'year' => (string) now()->year,
+            'school_year' => now()->year,
+            'group_profile' => null,
+            'related_documents' => null,
         ];
     }
 }
