@@ -18,14 +18,15 @@ it('lets a director view, create and update any student in their school', functi
         ->and($director->can('update', $student))->toBeTrue();
 });
 
-it('lets a psychopedagogue view any student but not create or update one', function () {
+it('lets a psychopedagogue view, create and update any student in their school', function () {
     $school = School::factory()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
 
     expect($psychopedagogue->can('view', $student))->toBeTrue()
-        ->and($psychopedagogue->can('create', Student::class))->toBeFalse()
-        ->and($psychopedagogue->can('update', $student))->toBeFalse();
+        ->and($psychopedagogue->can('create', Student::class))->toBeTrue()
+        ->and($psychopedagogue->can('update', $student))->toBeTrue()
+        ->and($psychopedagogue->can('delete', $student))->toBeFalse();
 });
 
 it('lets a teacher view only students in a group they lead, and never create or update', function () {
@@ -56,4 +57,38 @@ it('never authorizes across schools even for a director', function () {
     expect($directorA->can('view', $studentB))->toBeFalse()
         ->and($directorA->can('update', $studentB))->toBeFalse()
         ->and($directorA->can('delete', $studentB))->toBeFalse();
+});
+
+// Specific case required by docs/prompts/02-roles-permisos.md §4: a teacher
+// who does NOT teach a student can never see their clinical profile, even
+// within the same school.
+it('never lets a teacher without a teaching relation view a student clinical profile, even in the same school', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+
+    expect($teacher->can('view', $student))->toBeFalse()
+        ->and($teacher->can('view-clinical-profile', $student))->toBeFalse();
+});
+
+it('lets a teacher who teaches the student view them, but never the clinical profile', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $group->teachers()->attach($teacher);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => 2026]);
+
+    expect($teacher->can('view', $student))->toBeTrue()
+        ->and($teacher->can('view-clinical-profile', $student))->toBeFalse();
+});
+
+it('lets director and psychopedagogue view the full clinical profile of any student in their school', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+
+    expect($director->can('view-clinical-profile', $student))->toBeTrue()
+        ->and($psychopedagogue->can('view-clinical-profile', $student))->toBeTrue();
 });
