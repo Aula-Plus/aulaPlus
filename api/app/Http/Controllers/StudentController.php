@@ -17,10 +17,13 @@ class StudentController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $user = $request->user();
-        $query = Student::query()->with('group');
+        $query = Student::query()->with('groups');
 
         if (! $user->hasAnyRole(Role::schoolWideValues())) {
-            $query->whereHas('group', fn ($q) => $q->where('teacher_id', $user->id));
+            $query->whereHas(
+                'groups',
+                fn ($q) => $q->whereHas('teachers', fn ($qq) => $qq->where('users.id', $user->id))
+            );
         }
 
         return StudentResource::collection($query->latest()->get());
@@ -28,9 +31,15 @@ class StudentController extends Controller
 
     public function store(StoreStudentRequest $request): JsonResponse
     {
-        $student = Student::create($request->validated());
+        $student = Student::create($request->safe()->except(['group_id', 'school_year']));
 
-        return (new StudentResource($student->load('group')))
+        if ($request->filled('group_id')) {
+            $student->groups()->attach($request->input('group_id'), [
+                'school_year' => $request->input('school_year'),
+            ]);
+        }
+
+        return (new StudentResource($student->load('groups')))
             ->response()
             ->setStatusCode(201);
     }
@@ -39,14 +48,20 @@ class StudentController extends Controller
     {
         $this->authorize('view', $student);
 
-        return new StudentResource($student->load('group'));
+        return new StudentResource($student->load('groups'));
     }
 
     public function update(UpdateStudentRequest $request, Student $student): StudentResource
     {
-        $student->update($request->validated());
+        $student->update($request->safe()->except(['group_id', 'school_year']));
 
-        return new StudentResource($student->load('group'));
+        if ($request->filled('group_id')) {
+            $student->groups()->syncWithoutDetaching([
+                $request->input('group_id') => ['school_year' => $request->input('school_year')],
+            ]);
+        }
+
+        return new StudentResource($student->load('groups'));
     }
 
     public function destroy(Student $student): Response

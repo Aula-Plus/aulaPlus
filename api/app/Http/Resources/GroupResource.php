@@ -20,12 +20,13 @@ class GroupResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'level' => $this->level,
-            'year' => $this->year,
-            'teacher_id' => $this->teacher_id,
-            'teacher' => $this->teacher ? [
-                'id' => $this->teacher->id,
-                'name' => $this->teacher->name,
-            ] : null,
+            'school_year' => $this->school_year,
+            'group_profile' => $this->group_profile,
+            'related_documents' => $this->related_documents,
+            'teachers' => $this->whenLoaded('teachers', fn () => $this->teachers->map(fn ($teacher) => [
+                'id' => $teacher->id,
+                'name' => $teacher->name,
+            ])->all()),
         ];
     }
 }

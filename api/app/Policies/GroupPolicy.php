@@ -13,7 +13,7 @@ use App\Models\User;
  *   1. Tenant isolation — every check first asserts the user and the group share
  *      a school. This is defence-in-depth on top of the SchoolScope global scope.
  *   2. Role rules — director/psychopedagogue have school-wide visibility; a
- *      teacher is limited to the groups they lead (group.teacher_id === user.id).
+ *      teacher is limited to the groups they lead (group_teacher pivot).
  *
  * Laravel auto-discovers this policy for App\Models\Group by naming convention.
  */
@@ -35,7 +35,7 @@ class GroupPolicy
         }
 
         return $user->hasAnyRole(Role::schoolWideValues())
-            || $this->leadsGroup($user, $group);
+            || $group->isLedBy($user);
     }
 
     public function create(User $user): bool
@@ -58,10 +58,5 @@ class GroupPolicy
     protected function sharesSchool(User $user, Group $group): bool
     {
         return $user->school_id === $group->school_id;
-    }
-
-    protected function leadsGroup(User $user, Group $group): bool
-    {
-        return $group->teacher_id !== null && $group->teacher_id === $user->id;
     }
 }
