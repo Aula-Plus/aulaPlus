@@ -25,7 +25,7 @@ it('scopes queries to the active school', function () {
 it('auto-fills school_id on create from the current tenant', function () {
     $school = School::factory()->create();
 
-    $group = Tenancy::forSchool($school, fn () => Group::create(['name' => '3° A']));
+    $group = Tenancy::forSchool($school, fn () => Group::create(['name' => '3° A', 'school_year' => 2026]));
 
     expect($group->school_id)->toBe($school->id);
 });

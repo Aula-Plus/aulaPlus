@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\StudentStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,9 +18,15 @@ class UpdateStudentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
+            'full_name' => ['required', 'string', 'max:255'],
+            'photo_url' => ['nullable', 'string', 'max:255'],
             'birth_date' => ['nullable', 'date'],
+            'enrollment_year' => ['sometimes', 'integer'],
+            'has_therapeutic_companion' => ['sometimes', 'boolean'],
+            'learning_profile' => ['nullable', 'array'],
+            'tracking_notes' => ['nullable', 'string'],
+            'individual_profile' => ['nullable', 'array'],
+            'related_documents' => ['nullable', 'array'],
             'group_id' => [
                 'nullable',
                 'integer',
@@ -29,11 +34,7 @@ class UpdateStudentRequest extends FormRequest
                     fn ($query) => $query->where('school_id', $this->user()->school_id)
                 ),
             ],
-            'status' => ['sometimes', Rule::enum(StudentStatus::class)],
-            'family_contact_name' => ['nullable', 'string', 'max:255'],
-            'family_contact_phone' => ['nullable', 'string', 'max:50'],
-            'family_contact_email' => ['nullable', 'email', 'max:255'],
-            'pedagogical_notes' => ['nullable', 'string'],
+            'school_year' => ['required_with:group_id', 'integer'],
         ];
     }
 }

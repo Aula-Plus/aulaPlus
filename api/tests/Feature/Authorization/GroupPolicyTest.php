@@ -29,7 +29,8 @@ it('lets a teacher view groups they lead, but not update or delete them', functi
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
 
-    $own = Group::factory()->create(['school_id' => $school->id, 'teacher_id' => $teacher->id]);
+    $own = Group::factory()->create(['school_id' => $school->id]);
+    $own->teachers()->attach($teacher);
     $other = Group::factory()->create(['school_id' => $school->id]);
 
     expect($teacher->can('view', $own))->toBeTrue()

@@ -13,7 +13,8 @@ use App\Models\User;
  * Director-only: creating and editing student records is restricted to
  * the director. Psychopedagogue keeps full read access (see view/viewAny)
  * but does not write.
- * A teacher only sees students that belong to a group they lead.
+ * A teacher only sees students enrolled (group_student) in a group they lead
+ * (group_teacher).
  */
 class StudentPolicy
 {
@@ -32,9 +33,9 @@ class StudentPolicy
             return true;
         }
 
-        // Teacher: the student must belong to a group this teacher leads.
-        return $student->group !== null
-            && $student->group->teacher_id === $user->id;
+        return $student->groups()
+            ->whereHas('teachers', fn ($query) => $query->where('users.id', $user->id))
+            ->exists();
     }
 
     public function create(User $user): bool

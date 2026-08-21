@@ -10,16 +10,17 @@ use App\Models\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 
 class GroupController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
         $user = $request->user();
-        $query = Group::query()->with('teacher');
+        $query = Group::query()->with('teachers');
 
         if (! $user->hasAnyRole(Role::schoolWideValues())) {
-            $query->where('teacher_id', $user->id);
+            $query->whereHas('teachers', fn ($q) => $q->where('users.id', $user->id));
         }
 
         return GroupResource::collection($query->latest()->get());
@@ -27,9 +28,13 @@ class GroupController extends Controller
 
     public function store(StoreGroupRequest $request): JsonResponse
     {
-        $group = Group::create($request->validated());
+        $group = Group::create($request->safe()->except('teacher_ids'));
 
-        return (new GroupResource($group->load('teacher')))
+        if ($request->filled('teacher_ids')) {
+            $group->teachers()->sync($request->input('teacher_ids'));
+        }
+
+        return (new GroupResource($group->load('teachers')))
             ->response()
             ->setStatusCode(201);
     }
@@ -38,22 +43,26 @@ class GroupController extends Controller
     {
         $this->authorize('view', $group);
 
-        return new GroupResource($group->load('teacher'));
+        return new GroupResource($group->load('teachers'));
     }
 
     public function update(UpdateGroupRequest $request, Group $group): GroupResource
     {
-        $group->update($request->validated());
+        $group->update($request->safe()->except('teacher_ids'));
 
-        return new GroupResource($group->load('teacher'));
+        if ($request->has('teacher_ids')) {
+            $group->teachers()->sync($request->input('teacher_ids', []));
+        }
+
+        return new GroupResource($group->load('teachers'));
     }
 
-    public function destroy(Group $group): JsonResponse
+    public function destroy(Group $group): Response
     {
         $this->authorize('delete', $group);
 
         $group->delete();
 
-        return response()->json(null, 204);
+        return response()->noContent();
     }
 }

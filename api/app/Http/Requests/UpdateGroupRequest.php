@@ -18,11 +18,13 @@ class UpdateGroupRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'level' => ['nullable', 'string', 'max:255'],
-            'year' => ['nullable', 'string', 'max:255'],
-            'teacher_id' => [
-                'nullable',
+            'name' => ['sometimes', 'string', 'max:255'],
+            'level' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'school_year' => ['sometimes', 'integer'],
+            'group_profile' => ['sometimes', 'nullable', 'array'],
+            'related_documents' => ['sometimes', 'nullable', 'array'],
+            'teacher_ids' => ['sometimes', 'array'],
+            'teacher_ids.*' => [
                 'integer',
                 Rule::exists('users', 'id')->where(
                     fn ($query) => $query->where('school_id', $this->user()->school_id)
