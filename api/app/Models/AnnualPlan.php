@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\AnnualPlanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class AnnualPlan extends Model
 {
     /** @use HasFactory<AnnualPlanFactory> */
-    use BelongsToSchool, HasFactory;
+    use Auditable, BelongsToSchool, HasFactory;
 
     public function group(): BelongsTo
     {

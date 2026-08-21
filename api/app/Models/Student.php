@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -37,7 +38,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
-    use BelongsToSchool, HasFactory, SoftDeletes;
+    use Auditable, BelongsToSchool, HasFactory, SoftDeletes;
+
+    public static array $auditableExcludeFromDiff = [
+        'learning_profile',
+        'individual_profile',
+        'tracking_notes',
+        'related_documents',
+    ];
 
     protected $table = 'students';
 

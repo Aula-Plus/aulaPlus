@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\GroupFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Group extends Model
 {
     /** @use HasFactory<GroupFactory> */
-    use BelongsToSchool, HasFactory;
+    use Auditable, BelongsToSchool, HasFactory;
 
     protected $table = 'groups';
 
