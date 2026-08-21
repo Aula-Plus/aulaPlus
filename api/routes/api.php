@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccommodationApprovalController;
+use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
@@ -68,5 +69,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+
+        Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
     });
 });

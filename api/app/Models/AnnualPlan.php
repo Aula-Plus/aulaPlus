@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
+use App\Models\Concerns\LogsUsageEvents;
 use Database\Factories\AnnualPlanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -29,7 +30,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class AnnualPlan extends Model
 {
     /** @use HasFactory<AnnualPlanFactory> */
-    use Auditable, BelongsToSchool, HasFactory;
+    use Auditable, BelongsToSchool, HasFactory, LogsUsageEvents;
+
+    /** @see LogsUsageEvents */
+    public static string $usageEventType = 'annual_plan.created';
 
     public function group(): BelongsTo
     {
