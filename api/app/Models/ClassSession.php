@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ClassSessionStatus;
 use App\Models\Concerns\BelongsToSchool;
+use App\Models\Concerns\LogsUsageEvents;
 use Database\Factories\ClassSessionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -26,7 +27,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ClassSession extends Model
 {
     /** @use HasFactory<ClassSessionFactory> */
-    use BelongsToSchool, HasFactory;
+    use BelongsToSchool, HasFactory, LogsUsageEvents;
+
+    /** @see LogsUsageEvents */
+    public static string $usageEventType = 'class_session.created';
 
     protected function casts(): array
     {
