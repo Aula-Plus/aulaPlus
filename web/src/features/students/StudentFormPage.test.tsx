@@ -6,18 +6,22 @@ import { StudentFormPage } from "./StudentFormPage"
 import * as studentsApi from "./studentsApi"
 import * as groupsApi from "@/features/groups/groupsApi"
 
+function renderCreate() {
+  return render(
+    <MemoryRouter initialEntries={["/alumnos/nuevo"]}>
+      <Routes>
+        <Route path="/alumnos/nuevo" element={<StudentFormPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 describe("StudentFormPage", () => {
   it("shows validation errors and does not submit when required fields are empty", async () => {
     vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([])
     const createStudent = vi.spyOn(studentsApi, "createStudent")
 
-    render(
-      <MemoryRouter initialEntries={["/alumnos/nuevo"]}>
-        <Routes>
-          <Route path="/alumnos/nuevo" element={<StudentFormPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    renderCreate()
 
     await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
 
@@ -26,38 +30,54 @@ describe("StudentFormPage", () => {
   })
 
   it("calls createStudent with the entered values on a valid submit", async () => {
-    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([
-      { id: 1, name: "3° A", level: null, year: null, teacher_id: null, teacher: null },
-    ])
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([])
     const createStudent = vi.spyOn(studentsApi, "createStudent").mockResolvedValue({
       id: 1,
-      first_name: "Ana",
-      last_name: "Gómez",
       full_name: "Ana Gómez",
+      photo_url: null,
       birth_date: null,
-      status: "active",
-      family_contact_name: null,
-      family_contact_phone: null,
-      family_contact_email: null,
-      pedagogical_notes: null,
-      group_id: null,
-      group: null,
+      enrollment_year: 2026,
+      has_therapeutic_companion: false,
+      groups: [],
     })
 
-    render(
-      <MemoryRouter initialEntries={["/alumnos/nuevo"]}>
-        <Routes>
-          <Route path="/alumnos/nuevo" element={<StudentFormPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    renderCreate()
 
-    await userEvent.type(screen.getByLabelText(/nombre/i), "Ana")
-    await userEvent.type(screen.getByLabelText(/apellido/i), "Gómez")
+    await userEvent.type(screen.getByLabelText(/nombre completo/i), "Ana Gómez")
+    await userEvent.type(screen.getByLabelText(/año de ingreso/i), "2026")
     await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
 
     expect(createStudent).toHaveBeenCalledWith(
-      expect.objectContaining({ first_name: "Ana", last_name: "Gómez", status: "active" }),
+      expect.objectContaining({ full_name: "Ana Gómez", enrollment_year: 2026 }),
     )
+  })
+
+  it("only lists groups for the current school year", async () => {
+    const currentYear = new Date().getFullYear()
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([
+      {
+        id: 1,
+        name: "3° A (actual)",
+        level: null,
+        school_year: currentYear,
+        group_profile: null,
+        related_documents: null,
+        teachers: [],
+      },
+      {
+        id: 2,
+        name: "2° A (pasado)",
+        level: null,
+        school_year: currentYear - 1,
+        group_profile: null,
+        related_documents: null,
+        teachers: [],
+      },
+    ])
+
+    renderCreate()
+
+    expect(await screen.findByRole("option", { name: "3° A (actual)" })).toBeInTheDocument()
+    expect(screen.queryByRole("option", { name: "2° A (pasado)" })).not.toBeInTheDocument()
   })
 })

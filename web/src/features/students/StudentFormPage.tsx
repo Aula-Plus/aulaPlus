@@ -7,23 +7,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { studentStatusLabels } from "@/types"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import type { Group } from "@/types"
 import * as studentsApi from "./studentsApi"
 import * as groupsApi from "@/features/groups/groupsApi"
 
 const studentSchema = z.object({
-  first_name: z.string().min(1, "Ingresá un nombre"),
-  last_name: z.string().min(1, "Ingresá un apellido"),
+  full_name: z.string().min(1, "Ingresá un nombre"),
+  photo_url: z.string().optional(),
   birth_date: z.string().optional(),
+  enrollment_year: z.string().min(1, "Ingresá el año de ingreso"),
+  has_therapeutic_companion: z.boolean(),
   group_id: z.string().optional(),
-  status: z.enum(["active", "inactive"]),
-  family_contact_name: z.string().optional(),
-  family_contact_phone: z.string().optional(),
-  family_contact_email: z.string().email("Email inválido").optional().or(z.literal("")),
-  pedagogical_notes: z.string().optional(),
 })
 
 type StudentValues = z.infer<typeof studentSchema>
@@ -33,7 +30,9 @@ export function StudentFormPage() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [formError, setFormError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [groups, setGroups] = useState<Group[]>([])
+  const currentYear = getCurrentSchoolYear()
 
   const {
     register,
@@ -43,45 +42,47 @@ export function StudentFormPage() {
   } = useForm<StudentValues>({
     resolver: zodResolver(studentSchema),
     defaultValues: {
-      first_name: "",
-      last_name: "",
+      full_name: "",
+      photo_url: "",
       birth_date: "",
+      enrollment_year: "",
+      has_therapeutic_companion: false,
       group_id: "",
-      status: "active",
-      family_contact_name: "",
-      family_contact_phone: "",
-      family_contact_email: "",
-      pedagogical_notes: "",
     },
   })
 
   useEffect(() => {
-    groupsApi.fetchGroups().then(setGroups)
-  }, [])
+    groupsApi.fetchGroups().then((allGroups) => {
+      setGroups(allGroups.filter((group) => group.school_year === currentYear))
+    })
+  }, [currentYear])
 
   useEffect(() => {
     if (!id) return
     studentsApi.fetchStudent(Number(id)).then((student) => {
+      const currentGroup = student.groups.find((group) => group.school_year === currentYear)
       reset({
-        first_name: student.first_name,
-        last_name: student.last_name,
+        full_name: student.full_name,
+        photo_url: student.photo_url ?? "",
         birth_date: student.birth_date ?? "",
-        group_id: student.group_id ? String(student.group_id) : "",
-        status: student.status,
-        family_contact_name: student.family_contact_name ?? "",
-        family_contact_phone: student.family_contact_phone ?? "",
-        family_contact_email: student.family_contact_email ?? "",
-        pedagogical_notes: student.pedagogical_notes ?? "",
+        enrollment_year: String(student.enrollment_year),
+        has_therapeutic_companion: student.has_therapeutic_companion,
+        group_id: currentGroup ? String(currentGroup.id) : "",
       })
     })
-  }, [id, reset])
+  }, [id, reset, currentYear])
 
   async function onSubmit(values: StudentValues) {
     setFormError(null)
     try {
       const input = {
-        ...values,
+        full_name: values.full_name,
+        photo_url: values.photo_url || undefined,
+        birth_date: values.birth_date || undefined,
+        enrollment_year: Number(values.enrollment_year),
+        has_therapeutic_companion: values.has_therapeutic_companion,
         group_id: values.group_id ? Number(values.group_id) : null,
+        school_year: values.group_id ? currentYear : undefined,
       }
       if (isEdit) {
         await studentsApi.updateStudent(Number(id), input)
@@ -94,6 +95,19 @@ export function StudentFormPage() {
     }
   }
 
+  async function onDelete() {
+    if (!id) return
+    setFormError(null)
+    setIsDeleting(true)
+    try {
+      await studentsApi.deleteStudent(Number(id))
+      navigate("/alumnos", { replace: true })
+    } catch {
+      setFormError("No pudimos eliminar el alumno.")
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <Card className="max-w-lg">
       <CardHeader>
@@ -102,25 +116,29 @@ export function StudentFormPage() {
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">
-            <Label htmlFor="first_name">Nombre</Label>
-            <Input id="first_name" {...register("first_name")} />
-            {errors.first_name && (
-              <p className="text-sm text-destructive">{errors.first_name.message}</p>
+            <Label htmlFor="full_name">Nombre completo</Label>
+            <Input id="full_name" {...register("full_name")} />
+            {errors.full_name && (
+              <p className="text-sm text-destructive">{errors.full_name.message}</p>
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="last_name">Apellido</Label>
-            <Input id="last_name" {...register("last_name")} />
-            {errors.last_name && (
-              <p className="text-sm text-destructive">{errors.last_name.message}</p>
-            )}
+            <Label htmlFor="photo_url">URL de foto</Label>
+            <Input id="photo_url" {...register("photo_url")} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="birth_date">Fecha de nacimiento</Label>
             <Input id="birth_date" type="date" {...register("birth_date")} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="group_id">Clase</Label>
+            <Label htmlFor="enrollment_year">Año de ingreso</Label>
+            <Input id="enrollment_year" type="number" {...register("enrollment_year")} />
+            {errors.enrollment_year && (
+              <p className="text-sm text-destructive">{errors.enrollment_year.message}</p>
+            )}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="group_id">Clase ({currentYear})</Label>
             <Select id="group_id" {...register("group_id")}>
               <option value="">Sin clase asignada</option>
               {groups.map((group) => (
@@ -130,43 +148,39 @@ export function StudentFormPage() {
               ))}
             </Select>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="status">Estado</Label>
-            <Select id="status" {...register("status")}>
-              {Object.entries(studentStatusLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="family_contact_name">Contacto de familia</Label>
-            <Input id="family_contact_name" {...register("family_contact_name")} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="family_contact_phone">Teléfono de contacto</Label>
-            <Input id="family_contact_phone" {...register("family_contact_phone")} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="family_contact_email">Email de contacto</Label>
-            <Input id="family_contact_email" type="email" {...register("family_contact_email")} />
-            {errors.family_contact_email && (
-              <p className="text-sm text-destructive">{errors.family_contact_email.message}</p>
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="pedagogical_notes">Notas pedagógicas</Label>
-            <Textarea id="pedagogical_notes" {...register("pedagogical_notes")} />
+          <div className="flex items-center gap-2">
+            <input
+              id="has_therapeutic_companion"
+              type="checkbox"
+              className="size-4"
+              {...register("has_therapeutic_companion")}
+            />
+            <Label htmlFor="has_therapeutic_companion">Tiene acompañante terapéutico</Label>
           </div>
           {formError && (
             <p role="alert" className="text-sm text-destructive">
               {formError}
             </p>
           )}
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Guardando…" : "Guardar"}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Guardando…" : "Guardar"}
+            </Button>
+            {isEdit && (
+              <ConfirmDialog
+                trigger={
+                  <Button type="button" variant="destructive" disabled={isDeleting}>
+                    {isDeleting ? "Eliminando…" : "Eliminar alumno"}
+                  </Button>
+                }
+                title="Eliminar alumno"
+                description="Esta acción no se puede deshacer."
+                confirmLabel="Eliminar"
+                isConfirming={isDeleting}
+                onConfirm={onDelete}
+              />
+            )}
+          </div>
         </form>
       </CardContent>
     </Card>
