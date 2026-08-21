@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\Role;
 use App\Http\Requests\StoreGroupRequest;
 use App\Http\Requests\UpdateGroupRequest;
 use App\Http\Resources\GroupResource;
@@ -16,14 +15,13 @@ class GroupController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $user = $request->user();
-        $query = Group::query()->with('teachers');
+        $groups = Group::query()
+            ->visibleTo($request->user())
+            ->with('teachers')
+            ->latest()
+            ->get();
 
-        if (! $user->hasAnyRole(Role::schoolWideValues())) {
-            $query->whereHas('teachers', fn ($q) => $q->where('users.id', $user->id));
-        }
-
-        return GroupResource::collection($query->latest()->get());
+        return GroupResource::collection($groups);
     }
 
     public function store(StoreGroupRequest $request): JsonResponse

@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\Role;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -95,5 +97,23 @@ class Student extends Model
         return $this->groups()
             ->wherePivot('school_year', $schoolYear ?? now()->year)
             ->first();
+    }
+
+    /**
+     * Scope a query to the students a user is allowed to see: every student
+     * for a school-wide role (director/psychopedagogue), or only students
+     * enrolled in a group they lead for a teacher. Mirrors StudentPolicy::view
+     * — keeps that role check out of controllers, which only call this scope.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->hasAnyRole(Role::schoolWideValues())) {
+            return $query;
+        }
+
+        return $query->whereHas(
+            'groups',
+            fn ($q) => $q->whereHas('teachers', fn ($qq) => $qq->where('users.id', $user->id))
+        );
     }
 }

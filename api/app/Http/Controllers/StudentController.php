@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\Role;
 use App\Http\Requests\StoreStudentRequest;
 use App\Http\Requests\UpdateStudentRequest;
 use App\Http\Resources\StudentResource;
@@ -16,17 +15,13 @@ class StudentController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $user = $request->user();
-        $query = Student::query()->with('groups');
+        $students = Student::query()
+            ->visibleTo($request->user())
+            ->with('groups')
+            ->latest()
+            ->get();
 
-        if (! $user->hasAnyRole(Role::schoolWideValues())) {
-            $query->whereHas(
-                'groups',
-                fn ($q) => $q->whereHas('teachers', fn ($qq) => $qq->where('users.id', $user->id))
-            );
-        }
-
-        return StudentResource::collection($query->latest()->get());
+        return StudentResource::collection($students);
     }
 
     public function store(StoreStudentRequest $request): JsonResponse

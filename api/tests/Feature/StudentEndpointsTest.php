@@ -61,11 +61,21 @@ it('lets a director reassign a student to a different group in the same school y
         ->assertJsonCount(1, 'data.groups');
 });
 
-it('rejects a psychopedagogue trying to create or update a student', function () {
+it('lets a psychopedagogue create and update a student too', function () {
     $school = School::factory()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
     Sanctum::actingAs($psychopedagogue);
+
+    $this->postJson('/api/students', ['full_name' => 'Ana Gómez', 'enrollment_year' => 2026])->assertCreated();
+    $this->putJson("/api/students/{$student->id}", ['full_name' => 'x'])->assertOk();
+});
+
+it('rejects a teacher trying to create or update a student', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs($teacher);
 
     $this->postJson('/api/students', ['full_name' => 'Ana Gómez', 'enrollment_year' => 2026])->assertForbidden();
     $this->putJson("/api/students/{$student->id}", ['full_name' => 'x'])->assertForbidden();
