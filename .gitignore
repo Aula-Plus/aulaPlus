@@ -8,3 +8,6 @@ Thumbs.db
 
 # Isolated worktrees for feature work (superpowers:using-git-worktrees)
 .worktrees/
+
+# Subagent-driven-development working files (briefs/reports, not project output)
+.superpowers/
