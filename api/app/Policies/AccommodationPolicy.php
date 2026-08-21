@@ -8,10 +8,7 @@ use App\Models\User;
 
 /**
  * Holds sensitive data about a minor's learning profile — see CLAUDE.md
- * security rule 11. Authorship/approval workflow fields exist on the model
- * but the workflow itself (who proposes, who validates) is wired up in
- * Session 3; this Policy only covers the access rules already specified for
- * this session.
+ * security rule 11.
  */
 class AccommodationPolicy
 {
@@ -41,15 +38,26 @@ class AccommodationPolicy
     }
 
     /**
-     * Approving an accommodation only makes sense when it actually requires
-     * external approval (`requires_external_approval`); a director or
-     * psychopedagogue can never "approve" one that doesn't need it.
+     * Role/tenant authorization only — deliberately does NOT check
+     * `requires_external_approval`/`approved` here. Whether approving makes
+     * sense *right now* is a business-state precondition, not an
+     * authorization decision: the controller checks it separately and
+     * responds 422 (not 403) when it fails, per
+     * docs/prompts/03-flujos-aprobacion-trazabilidad.md §3.
      */
     public function approve(User $user, Accommodation $accommodation): bool
     {
         return $this->sharesSchool($user, $accommodation)
-            && $accommodation->requires_external_approval
             && $user->hasAnyRole(Role::schoolWideValues());
+    }
+
+    /**
+     * Same authorization as {@see self::approve()} — rejecting is the other
+     * outcome of the same director/psychopedagogue-only workflow.
+     */
+    public function reject(User $user, Accommodation $accommodation): bool
+    {
+        return $this->approve($user, $accommodation);
     }
 
     protected function sharesSchool(User $user, Accommodation $accommodation): bool

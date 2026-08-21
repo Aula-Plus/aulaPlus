@@ -37,16 +37,26 @@ it('lets only director and psychopedagogue approve an accommodation that require
         ->and($teacher->can('approve', $accommodation))->toBeFalse();
 });
 
-it('never lets anyone approve an accommodation that does not require external approval', function () {
+// Whether requires_external_approval/approved are in a state where approving
+// makes sense is a business-state precondition, not an authorization rule —
+// see AccommodationPolicy::approve() and AccommodationApprovalTest for the
+// endpoint-level 422 this produces (docs/prompts/03-flujos-aprobacion-
+// trazabilidad.md §3). The Policy itself authorizes based on role/tenant only,
+// regardless of the accommodation's current approval state.
+it('authorizes approve/reject for director and psychopedagogue regardless of the accommodation approval state', function () {
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
     $accommodation = Accommodation::factory()->create([
         'student_id' => $student->id,
         'requires_external_approval' => false,
     ]);
 
-    expect($director->can('approve', $accommodation))->toBeFalse();
+    expect($director->can('approve', $accommodation))->toBeTrue()
+        ->and($director->can('reject', $accommodation))->toBeTrue()
+        ->and($teacher->can('approve', $accommodation))->toBeFalse()
+        ->and($teacher->can('reject', $accommodation))->toBeFalse();
 });
 
 it('never authorizes across schools', function () {

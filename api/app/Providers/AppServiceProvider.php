@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\StatusChangeNotifier;
+use App\Notifications\LogNotifier;
 use App\Support\Tenancy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Queue;
@@ -15,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Only implementation for now; swapping the real channel in later
+        // (email/push) means rebinding this line, no caller changes.
+        $this->app->bind(StatusChangeNotifier::class, LogNotifier::class);
     }
 
     /**
