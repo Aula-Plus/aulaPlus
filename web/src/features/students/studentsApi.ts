@@ -1,16 +1,18 @@
 import { api } from "@/lib/api"
-import type { Student, StudentStatus } from "@/types"
+import type { Student } from "@/types"
 
 export interface StudentInput {
-  first_name: string
-  last_name: string
+  full_name: string
+  photo_url?: string
   birth_date?: string
+  enrollment_year: number
+  has_therapeutic_companion?: boolean
   group_id?: number | null
-  status?: StudentStatus
-  family_contact_name?: string
-  family_contact_phone?: string
-  family_contact_email?: string
-  pedagogical_notes?: string
+  school_year?: number
+  learning_profile?: unknown
+  tracking_notes?: string
+  individual_profile?: unknown
+  related_documents?: unknown
 }
 
 export async function fetchStudents(): Promise<Student[]> {

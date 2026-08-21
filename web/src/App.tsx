@@ -29,23 +29,10 @@ function App() {
                 <GroupsListPage />
               </ProtectedLayout>
             }
-          />
-          <Route
-            path="/clases/nueva"
-            element={
-              <ProtectedLayout>
-                <GroupFormPage />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/clases/:id"
-            element={
-              <ProtectedLayout>
-                <GroupFormPage />
-              </ProtectedLayout>
-            }
-          />
+          >
+            <Route path="nueva" element={<GroupFormPage />} />
+            <Route path=":id" element={<GroupFormPage />} />
+          </Route>
           <Route
             path="/alumnos"
             element={
@@ -53,23 +40,10 @@ function App() {
                 <StudentsListPage />
               </ProtectedLayout>
             }
-          />
-          <Route
-            path="/alumnos/nuevo"
-            element={
-              <ProtectedLayout>
-                <StudentFormPage />
-              </ProtectedLayout>
-            }
-          />
-          <Route
-            path="/alumnos/:id"
-            element={
-              <ProtectedLayout>
-                <StudentFormPage />
-              </ProtectedLayout>
-            }
-          />
+          >
+            <Route path="nuevo" element={<StudentFormPage />} />
+            <Route path=":id" element={<StudentFormPage />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

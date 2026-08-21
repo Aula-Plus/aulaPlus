@@ -27,6 +27,7 @@ class PilotSchoolsSeeder extends Seeder
 
         $escuelaIntegral = $this->seedSchool(
             name: 'Escuela Integral',
+            emailSlug: 'integral',
             levelsOffered: ['Inicial', 'Primaria', 'Secundaria'],
             instructionLanguages: ['Español'],
             anepPrimaryBody: AnepPrimaryBody::Dgeip,
@@ -36,6 +37,7 @@ class PilotSchoolsSeeder extends Seeder
 
         $ivyThomas = $this->seedSchool(
             name: 'Ivy Thomas Memorial School',
+            emailSlug: 'ivy',
             levelsOffered: ['Primaria', 'Secundaria'],
             instructionLanguages: ['Español', 'Inglés'],
             anepPrimaryBody: AnepPrimaryBody::Dgeip,
@@ -45,6 +47,7 @@ class PilotSchoolsSeeder extends Seeder
 
         $stPatricks = $this->seedSchool(
             name: "St. Patrick's College",
+            emailSlug: 'stpatricks',
             levelsOffered: ['Primaria', 'Secundaria'],
             instructionLanguages: ['Español', 'Inglés'],
             anepPrimaryBody: AnepPrimaryBody::Dgeip,
@@ -66,6 +69,7 @@ class PilotSchoolsSeeder extends Seeder
      */
     protected function seedSchool(
         string $name,
+        string $emailSlug,
         array $levelsOffered,
         array $instructionLanguages,
         AnepPrimaryBody $anepPrimaryBody,
@@ -86,15 +90,18 @@ class PilotSchoolsSeeder extends Seeder
             $school->curricularFrameworks()->attach($framework, ['active' => true]);
         }
 
-        return Tenancy::forSchool($school, function () use ($school, $name) {
+        return Tenancy::forSchool($school, function () use ($school, $name, $emailSlug) {
             $teacher = User::factory()->forSchool($school)->teacher()->create([
                 'name' => "Docente {$name}",
+                'email' => "m{$emailSlug}@gmail.com",
             ]);
             User::factory()->forSchool($school)->psychopedagogue()->create([
                 'name' => "Psicopedagogo/a {$name}",
+                'email' => "p{$emailSlug}@gmail.com",
             ]);
             User::factory()->forSchool($school)->director()->create([
                 'name' => "Director/a {$name}",
+                'email' => "d{$emailSlug}@gmail.com",
             ]);
 
             $schoolYear = (int) now()->year;

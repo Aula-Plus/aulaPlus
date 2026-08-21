@@ -1,0 +1,46 @@
+<!-- @dsCard group="Layout" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Card — Aula+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #F3EDE7; color: #241E1B; padding: 40px; }
+  .card { max-width: 420px; background: #FFFFFF; border: 1px solid #E7DFD8; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); padding: 24px 0; }
+  .header { padding: 0 24px 16px; }
+  .title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .description { font-size: 14px; color: #7A6F68; margin: 0; }
+  .content { padding: 0 24px; display: flex; flex-direction: column; gap: 12px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .field input { width: 100%; height: 36px; border-radius: 6px; border: 1px solid #E7DFD8; padding: 0 12px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
+  .footer { padding: 16px 24px 0; margin-top: 8px; border-top: 1px solid #E7DFD8; display: flex; justify-content: flex-end; gap: 8px; }
+  button { height: 36px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  .cancel { background: transparent; border-color: #E7DFD8; color: #241E1B; }
+  .submit { background: #A85A35; color: #FBF8F5; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <p class="title">Nueva clase</p>
+      <p class="description">Completá los datos para crear la clase.</p>
+    </div>
+    <div class="content">
+      <div class="field">
+        <label>Nombre</label>
+        <input value="3° A" readonly />
+      </div>
+      <div class="field">
+        <label>Año lectivo</label>
+        <input value="2026" readonly />
+      </div>
+    </div>
+    <div class="footer">
+      <button class="cancel">Cancelar</button>
+      <button class="submit">Guardar</button>
+    </div>
+  </div>
+</body>
+</html>

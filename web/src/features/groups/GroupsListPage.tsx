@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useCallback, useEffect, useState } from "react"
+import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
 import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import * as groupsApi from "./groupsApi"
 import type { Group } from "@/types"
+import type { GroupFormOutletContext } from "./GroupFormPage"
 
 export function GroupsListPage() {
   const { user } = useAuth()
@@ -11,20 +13,16 @@ export function GroupsListPage() {
   const [groups, setGroups] = useState<Group[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let active = true
-    groupsApi
+  const loadGroups = useCallback(() => {
+    return groupsApi
       .fetchGroups()
-      .then((data) => {
-        if (active) setGroups(data)
-      })
-      .catch(() => {
-        if (active) setError("No pudimos cargar las clases.")
-      })
-    return () => {
-      active = false
-    }
+      .then((data) => setGroups(data))
+      .catch(() => setError("No pudimos cargar las clases."))
   }, [])
+
+  useEffect(() => {
+    loadGroups()
+  }, [loadGroups])
 
   return (
     <div className="grid gap-4">
@@ -40,42 +38,48 @@ export function GroupsListPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!groups && !error && <p className="text-muted-foreground">Cargando…</p>}
       {groups && groups.length === 0 && (
-        <p className="text-muted-foreground">Todavía no hay clases cargadas.</p>
+        <p className="text-muted-foreground">Todavía no hay clases.</p>
       )}
 
       {groups && groups.length > 0 && (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th className="py-2 pr-4">Nombre</th>
-              <th className="py-2 pr-4">Nivel</th>
-              <th className="py-2 pr-4">Año</th>
-              <th className="py-2 pr-4">Docente a cargo</th>
-              {isDirector && <th className="py-2" />}
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nombre</TableHead>
+              <TableHead>Nivel</TableHead>
+              <TableHead>Año</TableHead>
+              <TableHead>Docentes</TableHead>
+              {isDirector && <TableHead />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {groups.map((group) => (
-              <tr key={group.id} className="border-b last:border-b-0">
-                <td className="py-2 pr-4">{group.name}</td>
-                <td className="py-2 pr-4">{group.level ?? "—"}</td>
-                <td className="py-2 pr-4">{group.year ?? "—"}</td>
-                <td className="py-2 pr-4">{group.teacher?.name ?? "—"}</td>
+              <TableRow key={group.id}>
+                <TableCell>{group.name}</TableCell>
+                <TableCell>{group.level ?? "—"}</TableCell>
+                <TableCell>{group.school_year}</TableCell>
+                <TableCell>
+                  {group.teachers.length > 0
+                    ? group.teachers.map((teacher) => teacher.name).join(", ")
+                    : "—"}
+                </TableCell>
                 {isDirector && (
-                  <td className="py-2 text-right">
+                  <TableCell className="text-right">
                     <Link
                       className="text-primary underline-offset-4 hover:underline"
                       to={`/clases/${group.id}`}
                     >
                       Editar
                     </Link>
-                  </td>
+                  </TableCell>
                 )}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
+
+      <Outlet context={{ onSaved: loadGroups } satisfies GroupFormOutletContext} />
     </div>
   )
 }

@@ -1,28 +1,57 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/latin-700.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --background: #fbf8f5;
+  --foreground: #241e1b;
+  --card: #ffffff;
+  --card-foreground: #241e1b;
+  --popover: #ffffff;
+  --popover-foreground: #241e1b;
+  --primary: #a85a35;
+  --primary-hover: #8c4a2a;
+  --primary-foreground: #fbf8f5;
+  --secondary: #f1eae3;
+  --secondary-foreground: #241e1b;
+  --muted: #f3ede7;
+  --muted-foreground: #7a6f68;
+  --accent: #f3ede7;
+  --accent-foreground: #241e1b;
+  --destructive: #c23a3a;
+  --destructive-foreground: #fbf8f5;
+  --border: #e7dfd8;
+  --input: #e7dfd8;
+  --ring: color-mix(in oklab, #a85a35 50%, transparent);
+
+  /* Semantic states — flexible scale, not yet mapped to a specific
+     product feature (see docs/superpowers/specs/2026-08-21-design-system-foundations-design.md) */
+  --success: #3f8f5f;
+  --success-background: #dff0e4;
+  --warning: #c98a1f;
+  --warning-background: #fbefd9;
+  --info: #2c6c8c;
+  --info-background: #dceaf0;
+
+  /* Sensitive data (clinical profile) — visual reinforcement only,
+     never the access-control boundary (that's the backend Policy). */
+  --sensitive-background: #eff1f2;
+  --sensitive-border: #dadfe2;
+  --sensitive-foreground: #2b3a42;
+  --sensitive-muted: #4a5559;
+
+  /* Navigation (AppLayout header) */
+  --nav-background: #2b3a42;
+  --nav-foreground: rgba(255, 255, 255, 0.62);
+  --nav-accent: #e8946a;
+  --nav-border: rgba(255, 255, 255, 0.3);
 }
 
 .dark {
@@ -47,6 +76,7 @@
 }
 
 @theme inline {
+  --font-sans: var(--font-sans);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -58,6 +88,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -66,9 +97,27 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-background: var(--success-background);
+  --color-warning: var(--warning);
+  --color-warning-background: var(--warning-background);
+  --color-info: var(--info);
+  --color-info-background: var(--info-background);
+
+  --color-sensitive-background: var(--sensitive-background);
+  --color-sensitive-border: var(--sensitive-border);
+  --color-sensitive-foreground: var(--sensitive-foreground);
+  --color-sensitive-muted: var(--sensitive-muted);
+
+  --color-nav-background: var(--nav-background);
+  --color-nav-foreground: var(--nav-foreground);
+  --color-nav-accent: var(--nav-accent);
+  --color-nav-border: var(--nav-border);
 }
 
 @layer base {

@@ -4,8 +4,8 @@ import type { Group } from "@/types"
 export interface GroupInput {
   name: string
   level?: string
-  year?: string
-  teacher_id?: number | null
+  school_year: number
+  teacher_ids?: number[]
 }
 
 export async function fetchGroups(): Promise<Group[]> {
