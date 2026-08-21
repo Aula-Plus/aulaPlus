@@ -58,6 +58,7 @@ export function StudentFormPage() {
   const { user } = useAuth()
   const canEditClinicalProfile =
     user?.roles.some((role) => role === "director" || role === "psychopedagogue") ?? false
+  const canDelete = user?.roles.includes("director") ?? false
 
   const {
     register,
@@ -98,16 +99,16 @@ export function StudentFormPage() {
         has_therapeutic_companion: student.has_therapeutic_companion,
         group_id: currentGroup ? String(currentGroup.id) : "",
         learning_profile:
-          student.learning_profile !== undefined
+          student.learning_profile != null
             ? JSON.stringify(student.learning_profile, null, 2)
             : "",
         tracking_notes: student.tracking_notes ?? "",
         individual_profile:
-          student.individual_profile !== undefined
+          student.individual_profile != null
             ? JSON.stringify(student.individual_profile, null, 2)
             : "",
         related_documents:
-          student.related_documents !== undefined
+          student.related_documents != null
             ? JSON.stringify(student.related_documents, null, 2)
             : "",
       })
@@ -253,7 +254,7 @@ export function StudentFormPage() {
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Guardando…" : "Guardar"}
             </Button>
-            {isEdit && (
+            {isEdit && canDelete && (
               <ConfirmDialog
                 trigger={
                   <Button type="button" variant="destructive" disabled={isDeleting}>

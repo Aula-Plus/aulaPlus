@@ -212,6 +212,8 @@ describe("StudentFormPage", () => {
       const select = (await screen.findByLabelText(/clase/i)) as HTMLSelectElement
       expect(select.value).toBe("1")
       expect(await screen.findByLabelText(/notas de seguimiento/i)).toHaveValue("Progresa bien.")
+      expect(await screen.findByLabelText(/perfil individual/i)).toHaveValue("")
+      expect(screen.getByLabelText(/documentos relacionados/i)).toHaveValue("")
     })
 
     it("shows a delete button and calls deleteStudent after confirming", async () => {
@@ -234,6 +236,24 @@ describe("StudentFormPage", () => {
       await userEvent.click(await screen.findByRole("button", { name: "Eliminar" }))
 
       expect(deleteStudent).toHaveBeenCalledWith(1)
+    })
+
+    it("does not show a delete button for a psychopedagogue", async () => {
+      vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([])
+      vi.spyOn(studentsApi, "fetchStudent").mockResolvedValue({
+        id: 1,
+        full_name: "Ana Gómez",
+        photo_url: null,
+        birth_date: null,
+        enrollment_year: 2024,
+        has_therapeutic_companion: false,
+        groups: [],
+      })
+
+      renderEdit("psychopedagogue")
+
+      await screen.findByLabelText(/nombre completo/i)
+      expect(screen.queryByRole("button", { name: /eliminar alumno/i })).not.toBeInTheDocument()
     })
   })
 })
