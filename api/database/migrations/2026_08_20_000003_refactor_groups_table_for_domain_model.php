@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -24,9 +25,17 @@ return new class extends Migration
         });
 
         Schema::table('groups', function (Blueprint $table) {
-            $table->integer('school_year')->after('level');
+            $table->integer('school_year')->nullable()->after('level');
             $table->jsonb('group_profile')->nullable()->after('school_year');
             $table->jsonb('related_documents')->nullable()->after('group_profile');
+        });
+
+        // Backfill any pre-existing rows (the old `year` string is already gone by
+        // this point) before tightening the column to NOT NULL.
+        DB::table('groups')->whereNull('school_year')->update(['school_year' => now()->year]);
+
+        Schema::table('groups', function (Blueprint $table) {
+            $table->integer('school_year')->nullable(false)->change();
         });
     }
 

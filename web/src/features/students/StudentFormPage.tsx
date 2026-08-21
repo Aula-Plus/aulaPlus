@@ -2,12 +2,12 @@ import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
@@ -47,10 +47,15 @@ const studentSchema = z.object({
 
 type StudentValues = z.infer<typeof studentSchema>
 
+export interface StudentFormOutletContext {
+  onSaved: () => void
+}
+
 export function StudentFormPage() {
   const { id } = useParams()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
+  const outletContext = useOutletContext<StudentFormOutletContext | null>()
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [groups, setGroups] = useState<Group[]>([])
@@ -148,6 +153,7 @@ export function StudentFormPage() {
       } else {
         await studentsApi.createStudent(input)
       }
+      outletContext?.onSaved()
       navigate("/alumnos", { replace: true })
     } catch {
       setFormError("No pudimos guardar el alumno.")
@@ -160,6 +166,7 @@ export function StudentFormPage() {
     setIsDeleting(true)
     try {
       await studentsApi.deleteStudent(Number(id))
+      outletContext?.onSaved()
       navigate("/alumnos", { replace: true })
     } catch {
       setFormError("No pudimos eliminar el alumno.")
@@ -167,12 +174,16 @@ export function StudentFormPage() {
     }
   }
 
+  function handleOpenChange(open: boolean) {
+    if (!open) navigate("/alumnos", { replace: true })
+  }
+
   return (
-    <Card className="max-w-lg">
-      <CardHeader>
-        <CardTitle>{isEdit ? "Editar alumno" : "Nuevo alumno"}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Dialog open onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar alumno" : "Nuevo alumno"}</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">
             <Label htmlFor="full_name">Nombre completo</Label>
@@ -270,7 +281,7 @@ export function StudentFormPage() {
             )}
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }

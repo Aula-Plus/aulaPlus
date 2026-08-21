@@ -14,23 +14,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-svh">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center justify-between p-4">
-          <nav className="flex gap-4 text-sm">
+      <header className="bg-nav-background">
+        <div className="mx-auto flex max-w-5xl items-center gap-6 p-4">
+          <span className="text-sm font-bold text-nav-accent">Aula+</span>
+          <nav className="flex flex-1 gap-4 text-sm font-semibold">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
                 className={({ isActive }) =>
-                  isActive ? "font-semibold" : "text-muted-foreground hover:text-foreground"
+                  isActive ? "text-nav-accent" : "text-nav-foreground hover:text-white"
                 }
               >
                 {item.label}
               </NavLink>
             ))}
           </nav>
-          <Button variant="outline" size="sm" onClick={() => logout()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-nav-border bg-transparent text-white hover:bg-white/10 hover:text-white"
+            onClick={() => logout()}
+          >
             Cerrar sesión
           </Button>
         </div>

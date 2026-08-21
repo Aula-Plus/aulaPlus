@@ -1,0 +1,41 @@
+<!-- @dsCard group="Overlays" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Dialog — Aula+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; height: 100vh; position: relative; background: #FBF8F5; }
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+  .dialog { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; max-width: 480px; background: #FFFFFF; border: 1px solid #E7DFD8; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); padding: 24px; box-sizing: border-box; }
+  .close { position: absolute; top: 16px; right: 16px; width: 16px; height: 16px; opacity: 0.7; color: #241E1B; font-size: 14px; line-height: 1; background: none; border: none; cursor: pointer; }
+  h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+  .description { margin: 0 0 20px; font-size: 14px; color: #7A6F68; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .field input { width: 100%; height: 36px; border-radius: 6px; border: 1px solid #E7DFD8; padding: 0 12px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
+  .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  button.action { border-radius: 6px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  .cancel { background: transparent; border-color: #E7DFD8; color: #241E1B; }
+  .confirm { background: #A85A35; color: #FBF8F5; }
+</style>
+</head>
+<body>
+  <div class="overlay"></div>
+  <div class="dialog">
+    <button class="close">✕</button>
+    <h2>Editar docente</h2>
+    <p class="description">Los cambios se aplican a esta clase únicamente.</p>
+    <div class="field">
+      <label>Nombre</label>
+      <input value="Ana Ruiz" readonly />
+    </div>
+    <div class="footer">
+      <button class="action cancel">Cancelar</button>
+      <button class="action confirm">Guardar</button>
+    </div>
+  </div>
+</body>
+</html>

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
@@ -22,10 +22,15 @@ const groupSchema = z.object({
 
 type GroupValues = z.infer<typeof groupSchema>
 
+export interface GroupFormOutletContext {
+  onSaved: () => void
+}
+
 export function GroupFormPage() {
   const { id } = useParams()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
+  const outletContext = useOutletContext<GroupFormOutletContext | null>()
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -76,6 +81,7 @@ export function GroupFormPage() {
       } else {
         await groupsApi.createGroup(input)
       }
+      outletContext?.onSaved()
       navigate("/clases", { replace: true })
     } catch {
       setFormError("No pudimos guardar la clase.")
@@ -88,6 +94,7 @@ export function GroupFormPage() {
     setIsDeleting(true)
     try {
       await groupsApi.deleteGroup(Number(id))
+      outletContext?.onSaved()
       navigate("/clases", { replace: true })
     } catch {
       setFormError("No pudimos eliminar la clase.")
@@ -95,14 +102,18 @@ export function GroupFormPage() {
     }
   }
 
+  function handleOpenChange(open: boolean) {
+    if (!open) navigate("/clases", { replace: true })
+  }
+
   const teacherOptions = teachers.map((teacher) => ({ id: teacher.id, label: teacher.name }))
 
   return (
-    <Card className="max-w-lg">
-      <CardHeader>
-        <CardTitle>{isEdit ? "Editar clase" : "Nueva clase"}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Dialog open onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar clase" : "Nueva clase"}</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">
             <Label htmlFor="name">Nombre</Label>
@@ -160,7 +171,7 @@ export function GroupFormPage() {
             )}
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }

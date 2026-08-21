@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useCallback, useEffect, useState } from "react"
+import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import * as studentsApi from "./studentsApi"
 import type { Student } from "@/types"
+import type { StudentFormOutletContext } from "./StudentFormPage"
 
 export function StudentsListPage() {
   const { user } = useAuth()
@@ -14,20 +15,16 @@ export function StudentsListPage() {
   const [students, setStudents] = useState<Student[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let active = true
-    studentsApi
+  const loadStudents = useCallback(() => {
+    return studentsApi
       .fetchStudents()
-      .then((data) => {
-        if (active) setStudents(data)
-      })
-      .catch(() => {
-        if (active) setError("No pudimos cargar los alumnos.")
-      })
-    return () => {
-      active = false
-    }
+      .then((data) => setStudents(data))
+      .catch(() => setError("No pudimos cargar los alumnos."))
   }, [])
+
+  useEffect(() => {
+    loadStudents()
+  }, [loadStudents])
 
   const currentYear = getCurrentSchoolYear()
 
@@ -82,6 +79,8 @@ export function StudentsListPage() {
           </TableBody>
         </Table>
       )}
+
+      <Outlet context={{ onSaved: loadStudents } satisfies StudentFormOutletContext} />
     </div>
   )
 }

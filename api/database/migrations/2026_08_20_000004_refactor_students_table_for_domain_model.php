@@ -46,13 +46,20 @@ return new class extends Migration
             ]);
 
             $table->string('photo_url')->nullable()->after('full_name');
-            $table->integer('enrollment_year')->after('birth_date');
+            $table->integer('enrollment_year')->nullable()->after('birth_date');
             $table->boolean('has_therapeutic_companion')->default(false)->after('enrollment_year');
             $table->jsonb('learning_profile')->nullable()->after('has_therapeutic_companion');
             $table->text('tracking_notes')->nullable()->after('learning_profile');
             $table->jsonb('individual_profile')->nullable()->after('tracking_notes');
             $table->jsonb('related_documents')->nullable()->after('individual_profile');
             $table->softDeletes();
+        });
+
+        // Backfill any pre-existing rows before tightening to NOT NULL.
+        DB::table('students')->whereNull('enrollment_year')->update(['enrollment_year' => now()->year]);
+
+        Schema::table('students', function (Blueprint $table) {
+            $table->integer('enrollment_year')->nullable(false)->change();
         });
     }
 

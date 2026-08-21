@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useCallback, useEffect, useState } from "react"
+import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import * as groupsApi from "./groupsApi"
 import type { Group } from "@/types"
+import type { GroupFormOutletContext } from "./GroupFormPage"
 
 export function GroupsListPage() {
   const { user } = useAuth()
@@ -12,20 +13,16 @@ export function GroupsListPage() {
   const [groups, setGroups] = useState<Group[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let active = true
-    groupsApi
+  const loadGroups = useCallback(() => {
+    return groupsApi
       .fetchGroups()
-      .then((data) => {
-        if (active) setGroups(data)
-      })
-      .catch(() => {
-        if (active) setError("No pudimos cargar las clases.")
-      })
-    return () => {
-      active = false
-    }
+      .then((data) => setGroups(data))
+      .catch(() => setError("No pudimos cargar las clases."))
   }, [])
+
+  useEffect(() => {
+    loadGroups()
+  }, [loadGroups])
 
   return (
     <div className="grid gap-4">
@@ -81,6 +78,8 @@ export function GroupsListPage() {
           </TableBody>
         </Table>
       )}
+
+      <Outlet context={{ onSaved: loadGroups } satisfies GroupFormOutletContext} />
     </div>
   )
 }
