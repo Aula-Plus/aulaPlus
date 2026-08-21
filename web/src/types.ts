@@ -31,9 +31,10 @@ export interface Group {
   id: number
   name: string
   level: string | null
-  year: string | null
-  teacher_id: number | null
-  teacher: { id: number; name: string } | null
+  school_year: number
+  group_profile: unknown | null
+  related_documents: unknown | null
+  teachers: { id: number; name: string }[]
 }
 
 export interface Student {

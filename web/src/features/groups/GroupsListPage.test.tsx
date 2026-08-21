@@ -25,13 +25,42 @@ function renderList(role: "director" | "teacher") {
 describe("GroupsListPage", () => {
   it("renders groups returned by the API and shows the create link for a director", async () => {
     vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([
-      { id: 1, name: "3° A", level: "Primaria", year: "2026", teacher_id: null, teacher: null },
+      {
+        id: 1,
+        name: "3° A",
+        level: "Primaria",
+        school_year: 2026,
+        group_profile: null,
+        related_documents: null,
+        teachers: [{ id: 5, name: "Ana Ruiz" }],
+      },
     ])
 
     renderList("director")
 
     expect(await screen.findByText("3° A")).toBeInTheDocument()
+    expect(screen.getByText("Ana Ruiz")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: /nueva clase/i })).toBeInTheDocument()
+  })
+
+  it("shows a dash when a group has no teachers assigned", async () => {
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([
+      {
+        id: 1,
+        name: "3° A",
+        level: null,
+        school_year: 2026,
+        group_profile: null,
+        related_documents: null,
+        teachers: [],
+      },
+    ])
+
+    renderList("director")
+
+    const row = (await screen.findByText("3° A")).closest("tr")
+    expect(row).not.toBeNull()
+    expect(row!.textContent).toContain("—")
   })
 
   it("hides the create link for a teacher", async () => {
