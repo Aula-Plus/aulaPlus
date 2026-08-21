@@ -23,10 +23,10 @@ class AccommodationFactory extends Factory
     {
         return [
             'student_id' => Student::factory(),
-            'type' => fake()->randomElement(['tiempo_extra', 'material_adaptado', 'apoyo_visual']),
+            'type' => fake()->randomElement(['extra_time', 'adapted_material', 'visual_support']),
             'active' => true,
             'description' => fake()->paragraph(),
-            'focus_area' => fake()->randomElement(['lectoescritura', 'matemática', 'atención']),
+            'focus_area' => fake()->randomElement(['literacy', 'mathematics', 'attention']),
             'llm_rule' => null,
             'requires_external_approval' => false,
             'approved' => null,

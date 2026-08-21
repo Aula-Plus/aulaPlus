@@ -22,6 +22,7 @@ return new class extends Migration
             $table->jsonb('details')->nullable();
             $table->timestamps();
 
+            $table->index('group_id');
             $table->unique(['student_id', 'school_year']);
         });
     }

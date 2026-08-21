@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('curricular_catalogs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('curricular_framework_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('curricular_framework_id')->constrained()->cascadeOnDelete()->index();
             $table->string('name');
             $table->date('valid_from');
             $table->date('valid_until')->nullable();

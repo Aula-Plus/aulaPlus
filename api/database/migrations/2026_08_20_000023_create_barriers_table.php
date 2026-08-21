@@ -15,7 +15,7 @@ return new class extends Migration
             $table->text('description');
             $table->text('coping_strategy')->nullable();
             $table->boolean('active')->default(true);
-            $table->foreignId('created_by_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('created_by_id')->constrained('users')->restrictOnDelete();
             $table->foreignId('deleted_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->softDeletes();

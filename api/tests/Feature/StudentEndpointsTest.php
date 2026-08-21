@@ -42,6 +42,25 @@ it('lets a director enroll a student in a group for a school year', function () 
     $create->assertCreated()->assertJsonPath('data.groups.0.id', $group->id);
 });
 
+it('lets a director reassign a student to a different group in the same school year', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $originalGroup = Group::factory()->create(['school_id' => $school->id]);
+    $newGroup = Group::factory()->create(['school_id' => $school->id]);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($originalGroup, ['school_year' => 2026]);
+    Sanctum::actingAs($director);
+
+    $update = $this->putJson("/api/students/{$student->id}", [
+        'full_name' => $student->full_name,
+        'group_id' => $newGroup->id,
+        'school_year' => 2026,
+    ]);
+
+    $update->assertOk()->assertJsonPath('data.groups.0.id', $newGroup->id)
+        ->assertJsonCount(1, 'data.groups');
+});
+
 it('rejects a psychopedagogue trying to create or update a student', function () {
     $school = School::factory()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();

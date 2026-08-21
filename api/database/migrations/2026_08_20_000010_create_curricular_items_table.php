@@ -23,6 +23,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['curricular_catalog_id', 'parent_id']);
+            $table->index('parent_id');
         });
     }
 

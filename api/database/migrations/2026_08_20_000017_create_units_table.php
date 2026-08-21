@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('units', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('annual_plan_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('annual_plan_id')->constrained()->cascadeOnDelete()->index();
             $table->string('name');
             $table->integer('position');
             $table->date('start_date');

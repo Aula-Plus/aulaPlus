@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('document_url');
             $table->text('summary')->nullable();
             $table->jsonb('attachments')->nullable();
-            $table->foreignId('uploaded_by_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('uploaded_by_id')->constrained('users')->restrictOnDelete();
             $table->timestamps();
 
             $table->index(['school_id', 'student_id']);

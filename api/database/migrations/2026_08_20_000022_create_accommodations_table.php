@@ -19,7 +19,7 @@ return new class extends Migration
             $table->jsonb('llm_rule')->nullable();
             $table->boolean('requires_external_approval')->default(false);
             $table->boolean('approved')->nullable();
-            $table->foreignId('created_by_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('created_by_id')->constrained('users')->restrictOnDelete();
             $table->foreignId('deleted_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->softDeletes();

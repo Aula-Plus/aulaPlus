@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->foreignId('group_id')->constrained()->cascadeOnDelete();
             $table->foreignId('curricular_framework_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('teacher_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('teacher_id')->constrained('users')->restrictOnDelete();
             // When set, this is an individualized plan (PEI/PTP) for this student
             // within the group, instead of the group's general annual plan.
             $table->foreignId('student_id')->nullable()->constrained('students')->cascadeOnDelete();

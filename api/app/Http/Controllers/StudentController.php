@@ -56,8 +56,9 @@ class StudentController extends Controller
         $student->update($request->safe()->except(['group_id', 'school_year']));
 
         if ($request->filled('group_id')) {
-            $student->groups()->syncWithoutDetaching([
-                $request->input('group_id') => ['school_year' => $request->input('school_year')],
+            $student->groups()->wherePivot('school_year', $request->input('school_year'))->detach();
+            $student->groups()->attach($request->input('group_id'), [
+                'school_year' => $request->input('school_year'),
             ]);
         }
 

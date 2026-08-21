@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->foreignId('group_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('teacher_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('teacher_id')->constrained('users')->restrictOnDelete();
             $table->string('type');
             $table->text('purpose')->nullable();
             $table->integer('duration_minutes')->nullable();
