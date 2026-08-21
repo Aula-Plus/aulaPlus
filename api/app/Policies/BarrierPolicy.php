@@ -41,6 +41,20 @@ class BarrierPolicy
             && $user->hasAnyRole([Role::Teacher->value, Role::Psychopedagogue->value]);
     }
 
+    /**
+     * Authorization for validating a barrier↔accommodation link
+     * (docs/prompts/03-flujos-aprobacion-trazabilidad.md §4): role/tenant
+     * only. The four-eyes rule (validator ≠ proposer) is a business-state
+     * precondition checked separately by the controller, which responds 422
+     * (not 403) when it fails — same split as
+     * AccommodationPolicy::approve()/reject().
+     */
+    public function validate(User $user, Barrier $barrier): bool
+    {
+        return $this->sharesSchool($user, $barrier)
+            && $user->hasAnyRole(Role::schoolWideValues());
+    }
+
     protected function sharesSchool(User $user, Barrier $barrier): bool
     {
         return $user->school_id === $barrier->school_id;

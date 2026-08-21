@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -37,7 +39,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
-    use BelongsToSchool, HasFactory, SoftDeletes;
+    use Auditable, BelongsToSchool, HasFactory, SoftDeletes;
+
+    public static array $auditableExcludeFromDiff = [
+        'learning_profile',
+        'individual_profile',
+        'tracking_notes',
+        'related_documents',
+    ];
 
     protected $table = 'students';
 
@@ -86,6 +95,16 @@ class Student extends Model
     public function technicalReports(): HasMany
     {
         return $this->hasMany(TechnicalReport::class);
+    }
+
+    public function comments(): MorphMany
+    {
+        return $this->morphMany(Comment::class, 'commentable');
+    }
+
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
     }
 
     /**

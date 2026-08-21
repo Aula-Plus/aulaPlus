@@ -1,9 +1,18 @@
 <?php
 
+use App\Http\Controllers\AccommodationApprovalController;
+use App\Http\Controllers\AdoptionDashboardController;
+use App\Http\Controllers\AlertController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
+use App\Http\Controllers\BarrierAccommodationController;
+use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
+use App\Http\Controllers\GroupTrackingController;
+use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
+use App\Http\Controllers\StudentHistoryController;
+use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\TeacherOptionsController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,4 +41,35 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/teachers', TeacherOptionsController::class);
     Route::apiResource('groups', GroupController::class);
     Route::apiResource('students', StudentController::class);
+
+    // Versioned routes start here (session 3): approval/validation flows and
+    // audit-log-backed traceability. Existing unversioned routes above are
+    // untouched.
+    Route::prefix('v1')->group(function (): void {
+        Route::post('/accommodations/{accommodation}/approve', [AccommodationApprovalController::class, 'approve']);
+        Route::post('/accommodations/{accommodation}/reject', [AccommodationApprovalController::class, 'reject']);
+
+        Route::get('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'index']);
+        Route::post('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'store']);
+        Route::post('/barriers/{barrier}/accommodations/{accommodation}/validate', [BarrierAccommodationController::class, 'validateLink']);
+
+        Route::get('/students/{student}/history', [StudentHistoryController::class, 'show']);
+
+        // Session 4: institutional tracking (docs/prompts/04-seguimiento-
+        // institucional.md) — comments, student/group tracking aggregator
+        // views, early alerts, and the director-only adoption dashboard.
+        Route::get('/students/{student}/comments', [StudentCommentController::class, 'index']);
+        Route::post('/students/{student}/comments', [StudentCommentController::class, 'store']);
+        Route::get('/groups/{group}/comments', [GroupCommentController::class, 'index']);
+        Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
+
+        Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
+        Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
+
+        Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
+        Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
+        Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+
+        Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
+    });
 });
