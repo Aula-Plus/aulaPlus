@@ -7,9 +7,9 @@ use App\Models\User;
 
 /**
  * A CalendarEvent is a shared record linked to one or more calendars via the
- * calendar_calendar_event pivot. doc02 §2 groups it with Calendar under
- * "CRUD propio — cualquier usuario sobre su propio calendario": a user may
- * act on an event only if it is linked to their own calendar.
+ * calendar_calendar_event pivot. doc02 §2 groups it with Calendar under the
+ * same "full CRUD over one's own calendar" rule: a user may act on an event
+ * only if it is linked to their own calendar.
  */
 class CalendarEventPolicy
 {

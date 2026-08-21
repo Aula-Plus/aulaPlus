@@ -6,9 +6,9 @@ use App\Models\Calendar;
 use App\Models\User;
 
 /**
- * A user's own calendar (1:1, see App\Models\Calendar). doc02 §2: "CRUD
- * propio — cualquier usuario sobre su propio calendario". No role check:
- * every staff member manages their own calendar regardless of role.
+ * A user's own calendar (1:1, see App\Models\Calendar). doc02 §2 grants full
+ * CRUD to any user over their own calendar. No role check: every staff
+ * member manages their own calendar regardless of role.
  */
 class CalendarPolicy
 {

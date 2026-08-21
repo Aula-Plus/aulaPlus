@@ -7,8 +7,8 @@ use App\Models\User;
 
 /**
  * Global catalog (see App\Models\CurricularFramework — not tenant-scoped).
- * doc02 §2: readable by any authenticated user; write access is
- * "ninguno todavía" (seeded data, no write endpoint in this session) — no
+ * doc02 §2: readable by any authenticated user; write access is not granted
+ * to anyone yet (seeded data, no write endpoint in this session) — no
  * create/update/delete methods are defined, so they deny by default.
  */
 class CurricularFrameworkPolicy

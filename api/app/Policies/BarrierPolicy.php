@@ -9,8 +9,8 @@ use App\Models\User;
 /**
  * Holds sensitive data about a minor's learning profile — see CLAUDE.md
  * security rule 11. Unlike Accommodation, `director` is deliberately NOT
- * included for create/update/delete (doc02 §2: "cualquier teacher o
- * psychopedagogue" — director is not listed).
+ * included for create/update/delete (doc02 §2 grants this only to teacher
+ * and psychopedagogue — director is not listed).
  */
 class BarrierPolicy
 {
