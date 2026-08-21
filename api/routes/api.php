@@ -4,7 +4,9 @@ use App\Http\Controllers\AccommodationApprovalController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
+use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
+use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
 use App\Http\Controllers\TeacherOptionsController;
@@ -48,5 +50,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/barriers/{barrier}/accommodations/{accommodation}/validate', [BarrierAccommodationController::class, 'validateLink']);
 
         Route::get('/students/{student}/history', [StudentHistoryController::class, 'show']);
+
+        // Session 4: institutional tracking (docs/prompts/04-seguimiento-
+        // institucional.md) — comments, student/group tracking aggregator
+        // views, early alerts, and the director-only adoption dashboard.
+        Route::get('/students/{student}/comments', [StudentCommentController::class, 'index']);
+        Route::post('/students/{student}/comments', [StudentCommentController::class, 'store']);
+        Route::get('/groups/{group}/comments', [GroupCommentController::class, 'index']);
+        Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
     });
 });
