@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import * as groupsApi from "./groupsApi"
 import type { Teacher } from "./groupsApi"
 
 const groupSchema = z.object({
   name: z.string().min(1, "Ingresá un nombre"),
   level: z.string().optional(),
-  year: z.string().optional(),
-  teacher_id: z.string().optional(),
+  school_year: z.string().min(1, "Ingresá el año lectivo"),
+  teacher_ids: z.array(z.number()),
 })
 
 type GroupValues = z.infer<typeof groupSchema>
@@ -32,10 +34,16 @@ export function GroupFormPage() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<GroupValues>({
     resolver: zodResolver(groupSchema),
-    defaultValues: { name: "", level: "", year: "", teacher_id: "" },
+    defaultValues: {
+      name: "",
+      level: "",
+      school_year: String(getCurrentSchoolYear()),
+      teacher_ids: [],
+    },
   })
 
   useEffect(() => {
@@ -48,8 +56,8 @@ export function GroupFormPage() {
       reset({
         name: group.name,
         level: group.level ?? "",
-        year: group.year ?? "",
-        teacher_id: group.teacher_id ? String(group.teacher_id) : "",
+        school_year: String(group.school_year),
+        teacher_ids: group.teachers.map((teacher) => teacher.id),
       })
     })
   }, [id, reset])
@@ -58,8 +66,10 @@ export function GroupFormPage() {
     setFormError(null)
     try {
       const input = {
-        ...values,
-        teacher_id: values.teacher_id ? Number(values.teacher_id) : null,
+        name: values.name,
+        level: values.level,
+        school_year: Number(values.school_year),
+        teacher_ids: values.teacher_ids,
       }
       if (isEdit) {
         await groupsApi.updateGroup(Number(id), input)
@@ -74,8 +84,6 @@ export function GroupFormPage() {
 
   async function onDelete() {
     if (!id) return
-    if (!window.confirm("¿Eliminar esta clase? Esta acción no se puede deshacer.")) return
-
     setFormError(null)
     setIsDeleting(true)
     try {
@@ -86,6 +94,8 @@ export function GroupFormPage() {
       setIsDeleting(false)
     }
   }
+
+  const teacherOptions = teachers.map((teacher) => ({ id: teacher.id, label: teacher.name }))
 
   return (
     <Card className="max-w-lg">
@@ -104,19 +114,26 @@ export function GroupFormPage() {
             <Input id="level" {...register("level")} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="year">Año</Label>
-            <Input id="year" {...register("year")} />
+            <Label htmlFor="school_year">Año lectivo</Label>
+            <Input id="school_year" type="number" {...register("school_year")} />
+            {errors.school_year && (
+              <p className="text-sm text-destructive">{errors.school_year.message}</p>
+            )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="teacher_id">Docente a cargo</Label>
-            <Select id="teacher_id" {...register("teacher_id")}>
-              <option value="">Sin docente asignado</option>
-              {teachers.map((teacher) => (
-                <option key={teacher.id} value={teacher.id}>
-                  {teacher.name}
-                </option>
-              ))}
-            </Select>
+            <Label htmlFor="teacher_ids">Docentes</Label>
+            <Controller
+              name="teacher_ids"
+              control={control}
+              render={({ field }) => (
+                <MultiSelect
+                  id="teacher_ids"
+                  options={teacherOptions}
+                  selected={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
           </div>
           {formError && (
             <p role="alert" className="text-sm text-destructive">
@@ -128,9 +145,18 @@ export function GroupFormPage() {
               {isSubmitting ? "Guardando…" : "Guardar"}
             </Button>
             {isEdit && (
-              <Button type="button" variant="destructive" disabled={isDeleting} onClick={onDelete}>
-                {isDeleting ? "Eliminando…" : "Eliminar clase"}
-              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button type="button" variant="destructive" disabled={isDeleting}>
+                    {isDeleting ? "Eliminando…" : "Eliminar clase"}
+                  </Button>
+                }
+                title="Eliminar clase"
+                description="Esta acción no se puede deshacer."
+                confirmLabel="Eliminar"
+                isConfirming={isDeleting}
+                onConfirm={onDelete}
+              />
             )}
           </div>
         </form>
