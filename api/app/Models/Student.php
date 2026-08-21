@@ -102,6 +102,11 @@ class Student extends Model
         return $this->morphMany(Comment::class, 'commentable');
     }
 
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
+    }
+
     /**
      * The group this student belongs to for a given school year (defaults to
      * the current year). Convenience accessor over the group_student pivot.

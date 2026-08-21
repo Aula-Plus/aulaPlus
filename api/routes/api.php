@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccommodationApprovalController;
+use App\Http\Controllers\AlertController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
@@ -58,5 +59,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/students/{student}/comments', [StudentCommentController::class, 'store']);
         Route::get('/groups/{group}/comments', [GroupCommentController::class, 'index']);
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
+
+        Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
+        Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
+        Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
     });
 });
