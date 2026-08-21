@@ -7,9 +7,11 @@ use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
+use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
+use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\TeacherOptionsController;
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +61,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/students/{student}/comments', [StudentCommentController::class, 'store']);
         Route::get('/groups/{group}/comments', [GroupCommentController::class, 'index']);
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
+
+        Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
+        Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
