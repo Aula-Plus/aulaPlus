@@ -1,0 +1,32 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>MultiSelect — Aula+</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: oklch(1 0 0); color: oklch(0.145 0 0); padding: 40px; }
+  .field { max-width: 320px; }
+  .trigger { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 36px; width: 100%; border: 1px solid oklch(0.922 0 0); border-radius: 6px; padding: 4px 12px; box-sizing: border-box; }
+  .chip { background: oklch(0.97 0 0); color: oklch(0.205 0 0); border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+  .panel { margin-top: 4px; border: 1px solid oklch(0.922 0 0); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 4px; }
+  .option { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 14px; border-radius: 4px; }
+  .option:hover { background: oklch(0.97 0 0); }
+  .box { width: 16px; height: 16px; border: 1px solid oklch(0.922 0 0); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .box.checked { background: oklch(0.205 0 0); color: white; border-color: oklch(0.205 0 0); }
+</style>
+</head>
+<body>
+  <div class="field">
+    <div class="trigger">
+      <span class="chip">Ana Ruiz</span>
+      <span class="chip">Zoe Diaz</span>
+    </div>
+    <div class="panel">
+      <div class="option"><span class="box checked">✓</span> Ana Ruiz</div>
+      <div class="option"><span class="box checked">✓</span> Zoe Diaz</div>
+      <div class="option"><span class="box"></span> Marco Pi</div>
+    </div>
+  </div>
+</body>
+</html>
