@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccommodationApprovalController;
 use App\Http\Controllers\AdoptionDashboardController;
+use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
@@ -71,5 +72,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
 
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
+
+        // Session 5: AI teaching assistant (docs/prompts/05-asistente-ia-
+        // docente.md). The assistant proposes drafts; the teacher applies or
+        // discards. Only generation is throttled (cost control, per school).
+        Route::post('/groups/{group}/assistant/generate', [AIProposalController::class, 'generate'])
+            ->middleware('throttle:ai-proposal-generate');
+        Route::get('/ai-proposals/{ai_proposal}', [AIProposalController::class, 'show']);
+        Route::post('/ai-proposals/{ai_proposal}/apply', [AIProposalController::class, 'apply']);
+        Route::post('/ai-proposals/{ai_proposal}/discard', [AIProposalController::class, 'discard']);
     });
 });

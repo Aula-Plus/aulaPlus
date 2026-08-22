@@ -16,6 +16,13 @@ use Illuminate\Support\ServiceProvider;
 class AppServiceProvider extends ServiceProvider
 {
     /**
+     * Max AI-assistant generations per school per hour (docs/prompts/
+     * 05-asistente-ia-docente.md §3). Cost control, not a security boundary —
+     * kept here as a constant so it's easy to tune.
+     */
+    public const AI_PROPOSAL_GENERATE_PER_HOUR = 20;
+
+    /**
      * Register any application services.
      */
     public function register(): void
@@ -48,5 +55,10 @@ class AppServiceProvider extends ServiceProvider
         // top of this, since middleware stacks.
         RateLimiter::for('api', fn ($request) => Limit::perMinute(60)
             ->by($request->user()?->id ?: $request->ip()));
+
+        // AI-assistant generation limit: per school (cost control). Applied only
+        // to the generation route, never to poll/apply/discard.
+        RateLimiter::for('ai-proposal-generate', fn ($request) => Limit::perHour(self::AI_PROPOSAL_GENERATE_PER_HOUR)
+            ->by($request->user()->school_id));
     }
 }
