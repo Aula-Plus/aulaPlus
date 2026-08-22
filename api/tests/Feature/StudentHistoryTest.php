@@ -22,7 +22,11 @@ it('lets a director see the paginated audit timeline for a student, most recent 
     $student = Student::factory()->create(['school_id' => $school->id]);
     Sanctum::actingAs($director);
 
-    $accommodation = Accommodation::factory()->create(['student_id' => $student->id]);
+    // Pin the initial focus_area to a value different from the one the update
+    // sets below: AccommodationFactory picks focus_area at random, so if it
+    // happened to pick 'literacy' the update would be a no-op and emit no
+    // 'updated' audit log (flaky ~1/3 of runs).
+    $accommodation = Accommodation::factory()->create(['student_id' => $student->id, 'focus_area' => 'mathematics']);
     $barrier = Barrier::factory()->create(['student_id' => $student->id]);
     $accommodation->update(['focus_area' => 'literacy']);
 

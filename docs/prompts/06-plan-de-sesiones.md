@@ -85,11 +85,14 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   heurística v1 de subárbol curricular (backbone + match por subject/focus).
   `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` en `.env.example` sin modelo
   hardcodeado. Resultado: 22 tests nuevos en verde (168 en total, +22), Pint
-  limpio. Verificado en este entorno con `php artisan test` sobre SQLite en
-  memoria (Sail/Docker no disponible acá). Nota: `StudentHistoryTest` (Sesión
-  3, ajeno a esta sesión) es flaky ~1/3 de las corridas porque
-  `AccommodationFactory` elige `focus_area` al azar y el `update` del test a
-  veces es no-op — no lo toqué por estar fuera de alcance.
+  limpio (168 tests, 3 corridas consecutivas en verde). Verificado en este
+  entorno con `php artisan test` sobre SQLite en memoria (Sail/Docker no
+  disponible acá). Único cambio fuera de Sesión 5: un fix de determinismo de
+  una línea en `StudentHistoryTest` (Sesión 3), que era flaky ~1/3 de las
+  corridas porque `AccommodationFactory` elige `focus_area` al azar y el
+  `update` del test a veces quedaba no-op (sin log `updated`); se fija el
+  `focus_area` inicial a un valor distinto del que setea el `update`. Es
+  test-only, no toca código de producción de Sesiones 1-4.
 
 ## 5. Explícitamente fuera de este plan
 
