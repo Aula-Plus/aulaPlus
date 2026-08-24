@@ -137,7 +137,15 @@ export interface Accommodation {
   description: string | null
   focus_area: string | null
   requires_external_approval: boolean
-  approved: boolean
+  /**
+   * Approval state for accommodations that require external approval:
+   *   - `null` → pending an approve/reject decision (only meaningful when
+   *     `requires_external_approval` is true).
+   *   - `true` → approved, `false` → rejected.
+   * When `requires_external_approval` is false, `approved` is not part of
+   * the effective vigency test — use `is_effective` instead.
+   */
+  approved: boolean | null
   is_effective: boolean
   created_by_id: number | null
   created_at: string | null
@@ -202,4 +210,82 @@ export interface AdoptionDashboard {
   teacher_planning_rate_30d: number
   weekly_login_series: WeeklySeriesPoint[]
   weekly_content_series: WeeklySeriesPoint[]
+}
+
+// ── Approval flows & traceability (Sesión 9) ────────────────────────────────
+// Mirrors the backend Session 3 API (docs/prompts/03-flujos-aprobacion-
+// trazabilidad.md). Only the shapes that reach the SPA are defined here —
+// server-side workflow guards (four-eyes rule, business-state preconditions)
+// remain the security boundary.
+
+/**
+ * An Accommodation as seen through a Barrier link
+ * (`GET /api/v1/barriers/{barrier}/accommodations`). Mirror of
+ * `BarrierAccommodationResource` — a subset of Accommodation's fields plus the
+ * pivot columns (`proposed_by_id`, `validated`, `validated_by_id`).
+ */
+export interface BarrierAccommodationLink {
+  /** The Accommodation's id — the link is uniquely keyed by (barrier, accommodation). */
+  id: number
+  type: string
+  description: string | null
+  focus_area: string | null
+  proposed_by_id: number
+  validated: boolean
+  validated_by_id: number | null
+}
+
+/** Mirror of `App\Enums\AuditAction`. */
+export type AuditAction = "created" | "updated" | "deleted"
+
+export const auditActionLabels: Record<AuditAction, string> = {
+  created: "Creado",
+  updated: "Actualizado",
+  deleted: "Eliminado",
+}
+
+/** Mirror of `App\Enums\AuditOrigin`. `system` entries have `user_id === null`. */
+export type AuditOrigin = "user" | "system"
+
+export const auditOriginLabels: Record<AuditOrigin, string> = {
+  user: "Usuario",
+  system: "Sistema",
+}
+
+/**
+ * One row of the student audit timeline
+ * (`GET /api/v1/students/{id}/history`). Mirror of `AuditLogResource`.
+ *
+ * `auditable_type` is the class-basename ("Accommodation" | "Barrier" |
+ * "TechnicalReport"), not the fully-qualified PHP class. `changes` is the raw
+ * `audit_logs.changes` JSON; its shape varies by action (a `created` row
+ * carries the initial column values, an `updated` row carries
+ * `{ before, after }` pairs), so it is typed loosely and rendered as
+ * pretty-printed JSON in the UI rather than picked apart per action.
+ */
+export interface AuditLogEntry {
+  id: number
+  auditable_type: string
+  auditable_id: number
+  action: AuditAction
+  /** `null` when `origin === "system"` (background jobs, seeders, etc.). */
+  user_id: number | null
+  origin: AuditOrigin
+  changes: Record<string, unknown>
+  created_at: string | null
+}
+
+/**
+ * Wrapper for endpoints paginated with Laravel's default page paginator.
+ * Currently only the audit history uses this — every other endpoint uses the
+ * unpaginated `{ data: T[] }` sleeve. When a second paginated endpoint appears,
+ * this stays as the canonical shape (do not re-derive it per feature).
+ */
+export interface Paginated<T> {
+  data: T[]
+  meta: {
+    current_page: number
+    last_page: number
+    total: number
+  }
 }

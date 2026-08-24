@@ -126,3 +126,55 @@ export function canViewAdoptionDashboard(user: User | null | undefined): boolean
 export function canResolveAlert(user: User | null | undefined): boolean {
   return isSchoolWide(user)
 }
+
+// ── Approval flows & traceability (Sesión 9) ────────────────────────────────
+
+/**
+ * Mirror of `AccommodationPolicy::approve` / `::reject` (role portion):
+ * school-wide roles. The server additionally requires the accommodation to
+ * share the user's school AND (as a 422 business-state precondition, not
+ * authorization) `requires_external_approval === true` and `approved === null`
+ * — the UI mirrors those preconditions before showing the buttons.
+ */
+export function canApproveAccommodation(user: User | null | undefined): boolean {
+  return isSchoolWide(user)
+}
+
+/**
+ * Roles allowed to propose a Barrier↔Accommodation link. Mirror of
+ * `BarrierPolicy::update` (role portion, reused by
+ * `AttachBarrierAccommodationRequest::authorize` — see the request class):
+ * teacher and psychopedagogue. **Director is deliberately excluded** here to
+ * match the backend Policy (BarrierPolicy explicitly does NOT list director
+ * for create/update/delete — see the class docblock).
+ */
+export function canProposeBarrierAccommodation(user: User | null | undefined): boolean {
+  return hasAnyRole(user, ["teacher", "psychopedagogue"])
+}
+
+/**
+ * Mirror of `BarrierPolicy::validate` (role portion) plus the four-eyes
+ * business-state precondition (validator ≠ proposer, which the server enforces
+ * with a 422). School-wide roles may validate, EXCEPT the same user who
+ * proposed the link — that user never sees a "Validar" button (the spec is
+ * explicit: not disabled with a tooltip, absent).
+ *
+ * `proposedById` is the pivot's `proposed_by_id`. When the current user has no
+ * id (unauthenticated), the answer is `false` regardless of proposer.
+ */
+export function canValidateBarrierAccommodation(
+  user: User | null | undefined,
+  proposedById: number,
+): boolean {
+  if (!user || !isSchoolWide(user)) return false
+  return user.id !== proposedById
+}
+
+/**
+ * Mirror of `StudentHistoryController`'s `authorize('view-clinical-profile',
+ * ...)` (role portion): school-wide roles. The server additionally requires
+ * same-school access to the student itself.
+ */
+export function canViewStudentHistory(user: User | null | undefined): boolean {
+  return canAccessClinicalProfile(user)
+}

@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest"
 import {
   canAccessClinicalProfile,
+  canApproveAccommodation,
   canCreateGroup,
   canCreateStudent,
   canDeleteStudent,
   canEditGroup,
   canEditStudent,
+  canProposeBarrierAccommodation,
   canResolveAlert,
+  canValidateBarrierAccommodation,
   canViewAdoptionDashboard,
+  canViewStudentHistory,
   hasAnyRole,
   hasRole,
   isDirector,
@@ -120,6 +124,49 @@ describe("permissions", () => {
       expect(canResolveAlert(psychopedagogue)).toBe(true)
       expect(canResolveAlert(teacher)).toBe(false)
       expect(canResolveAlert(null)).toBe(false)
+    })
+  })
+
+  // Session 9 — approval flows and audit history. The expected values below
+  // mirror the role portion of AccommodationPolicy::approve/reject,
+  // BarrierPolicy::update (reused by AttachBarrierAccommodationRequest),
+  // BarrierPolicy::validate, and StudentHistoryController's
+  // 'view-clinical-profile' gate. If a Policy changes, these must too.
+  describe("approval flows & history predicates (Sesión 9)", () => {
+    it("only school-wide roles can approve/reject an accommodation", () => {
+      expect(canApproveAccommodation(director)).toBe(true)
+      expect(canApproveAccommodation(psychopedagogue)).toBe(true)
+      expect(canApproveAccommodation(teacher)).toBe(false)
+      expect(canApproveAccommodation(null)).toBe(false)
+    })
+
+    it("only teacher and psychopedagogue can propose a Barrier↔Accommodation link", () => {
+      // Director is deliberately excluded — mirrors BarrierPolicy::update.
+      expect(canProposeBarrierAccommodation(psychopedagogue)).toBe(true)
+      expect(canProposeBarrierAccommodation(teacher)).toBe(true)
+      expect(canProposeBarrierAccommodation(director)).toBe(false)
+      expect(canProposeBarrierAccommodation(null)).toBe(false)
+    })
+
+    it("school-wide roles can validate a Barrier↔Accommodation link they did NOT propose", () => {
+      const someoneElse = 42
+      expect(canValidateBarrierAccommodation(director, someoneElse)).toBe(true)
+      expect(canValidateBarrierAccommodation(psychopedagogue, someoneElse)).toBe(true)
+      expect(canValidateBarrierAccommodation(teacher, someoneElse)).toBe(false)
+      expect(canValidateBarrierAccommodation(null, someoneElse)).toBe(false)
+    })
+
+    it("blocks the proposer from validating their own link (four-eyes rule, UI half)", () => {
+      // director/psychopedagogue.id === 1 above; passing 1 as proposedById.
+      expect(canValidateBarrierAccommodation(director, director.id)).toBe(false)
+      expect(canValidateBarrierAccommodation(psychopedagogue, psychopedagogue.id)).toBe(false)
+    })
+
+    it("only school-wide roles can view the student audit history", () => {
+      expect(canViewStudentHistory(director)).toBe(true)
+      expect(canViewStudentHistory(psychopedagogue)).toBe(true)
+      expect(canViewStudentHistory(teacher)).toBe(false)
+      expect(canViewStudentHistory(null)).toBe(false)
     })
   })
 })
