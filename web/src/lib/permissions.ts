@@ -104,3 +104,25 @@ export function canDeleteStudent(user: User | null | undefined): boolean {
 export function canAccessClinicalProfile(user: User | null | undefined): boolean {
   return isSchoolWide(user)
 }
+
+// ── Institutional tracking (Sesión 8) ───────────────────────────────────────
+
+/**
+ * Mirror of `SchoolPolicy::viewAdoptionDashboard` (role portion): director
+ * only. The server additionally requires the school to be the user's own
+ * (`$user->school_id === $school->id`), which the frontend cannot re-derive —
+ * it only ever requests its own school's dashboard.
+ */
+export function canViewAdoptionDashboard(user: User | null | undefined): boolean {
+  return isDirector(user)
+}
+
+/**
+ * Mirror of `AlertPolicy::resolve` (role portion), which delegates to
+ * `StudentPolicy::viewClinicalProfile`: school-wide roles. Alerts are only
+ * ever returned to those roles anyway, so this gates the resolve affordance to
+ * match. The server re-checks same-school ownership per alert.
+ */
+export function canResolveAlert(user: User | null | undefined): boolean {
+  return isSchoolWide(user)
+}

@@ -52,7 +52,7 @@ export function StudentsListPage() {
             <TableRow>
               <TableHead>Nombre</TableHead>
               <TableHead>Clase</TableHead>
-              {showEdit && <TableHead />}
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -64,16 +64,24 @@ export function StudentsListPage() {
                 <TableRow key={student.id}>
                   <TableCell>{student.full_name}</TableCell>
                   <TableCell>{currentGroup?.name ?? "—"}</TableCell>
-                  {showEdit && (
-                    <TableCell className="text-right">
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-4">
                       <Link
                         className="text-primary underline-offset-4 hover:underline"
-                        to={`/alumnos/${student.id}`}
+                        to={`/alumnos/${student.id}/seguimiento`}
                       >
-                        Editar
+                        Seguimiento
                       </Link>
-                    </TableCell>
-                  )}
+                      {showEdit && (
+                        <Link
+                          className="text-primary underline-offset-4 hover:underline"
+                          to={`/alumnos/${student.id}`}
+                        >
+                          Editar
+                        </Link>
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               )
             })}
