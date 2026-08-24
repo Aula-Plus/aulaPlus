@@ -48,3 +48,32 @@ backend, resultado real de lint/typecheck/test/build).
   ajeno a este cambio); `npm run typecheck` → OK; `npm run test -- --run` →
   49/49 en verde (incluye 10 tests nuevos de `permissions.test.ts`);
   `npm run build` → OK (warning de tamaño de chunk preexistente).
+
+- [x] **Sesión 8** — Seguimiento institucional en la UI
+  Resumen: Se agregó la capa de UI sobre la API de seguimiento (backend
+  Sesión 4): tipos en `types.ts` (Comment/Alert/Accommodation/Barrier +
+  StudentTracking/GroupTracking/AdoptionDashboard con labels en español),
+  `features/tracking/trackingApi.ts` y `adoptionApi.ts` (endpoints `/api/v1`),
+  el componente reutilizable `CommentsPanel` y tres pantallas
+  (`StudentTrackingPage`, `GroupTrackingPage`, `AdoptionDashboardPage`),
+  ruteadas y enlazadas desde las listas + una entrada de nav "Adopción"
+  solo-director. Regla clave de `visible_to` (§3): si no se elige ningún rol,
+  el campo se **omite** (nunca `[]`, que ocultaría el comentario incluso al
+  autor) — con test dedicado. Sin librería de gráficos nueva: el tablero de
+  adopción usa tablas simples. Los helpers `canViewAdoptionDashboard`/
+  `canResolveAlert` se sumaron a `permissions.ts` (capa de UX; el límite de
+  seguridad son las Policies del server, que además re-chequean tenancy y el
+  filtrado clínico/`visible_to` por request). **Apilado sobre
+  `feature/frontend-sesion-07-roles-permisos`** (la Sesión 7 no está mergeada
+  a `develop` y esta sesión depende de su `permissions.ts`): comparar el PR
+  contra esa rama, no contra `develop`. El spec formal
+  `08-frontend-seguimiento-institucional.md` no existe en el repo (igual que
+  el `07-*` — ver nota de arriba); se implementó desde el enunciado de la
+  tarea + el contrato real del backend (Resources/Controllers de Sesión 4) +
+  las convenciones del frontend existente. Nada quedó pendiente: las 4
+  pantallas/componente del enunciado están completas (no hizo falta partir en
+  8a/8b). Verificación real desde `web/`: `npx oxlint` → 0 errores (mismo
+  warning preexistente en `button.tsx`); `npm run typecheck` → OK;
+  `npm run test -- --run` → 65/65 en verde (16 tests nuevos: `CommentsPanel`,
+  las tres páginas y 2 de `permissions`); `npm run build` → OK (mismo warning
+  de tamaño de chunk preexistente).

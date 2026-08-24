@@ -6,6 +6,8 @@ import {
   canDeleteStudent,
   canEditGroup,
   canEditStudent,
+  canResolveAlert,
+  canViewAdoptionDashboard,
   hasAnyRole,
   hasRole,
   isDirector,
@@ -102,6 +104,22 @@ describe("permissions", () => {
       expect(canEditStudent(null)).toBe(false)
       expect(canDeleteStudent(null)).toBe(false)
       expect(canAccessClinicalProfile(null)).toBe(false)
+    })
+  })
+
+  describe("tracking predicates (Sesión 8)", () => {
+    it("only a director can view the adoption dashboard", () => {
+      expect(canViewAdoptionDashboard(director)).toBe(true)
+      expect(canViewAdoptionDashboard(psychopedagogue)).toBe(false)
+      expect(canViewAdoptionDashboard(teacher)).toBe(false)
+      expect(canViewAdoptionDashboard(null)).toBe(false)
+    })
+
+    it("only school-wide roles can resolve an alert", () => {
+      expect(canResolveAlert(director)).toBe(true)
+      expect(canResolveAlert(psychopedagogue)).toBe(true)
+      expect(canResolveAlert(teacher)).toBe(false)
+      expect(canResolveAlert(null)).toBe(false)
     })
   })
 })
