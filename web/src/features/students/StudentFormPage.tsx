@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { useAuth } from "@/features/auth/AuthContext"
+import { canAccessClinicalProfile, canDeleteStudent } from "@/lib/permissions"
 import type { Group } from "@/types"
 import * as studentsApi from "./studentsApi"
 import * as groupsApi from "@/features/groups/groupsApi"
@@ -61,9 +62,8 @@ export function StudentFormPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const currentYear = getCurrentSchoolYear()
   const { user } = useAuth()
-  const canEditClinicalProfile =
-    user?.roles.some((role) => role === "director" || role === "psychopedagogue") ?? false
-  const canDelete = user?.roles.includes("director") ?? false
+  const canEditClinicalProfile = canAccessClinicalProfile(user)
+  const canDelete = canDeleteStudent(user)
 
   const {
     register,
