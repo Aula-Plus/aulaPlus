@@ -77,3 +77,43 @@ backend, resultado real de lint/typecheck/test/build).
   `npm run test -- --run` → 65/65 en verde (16 tests nuevos: `CommentsPanel`,
   las tres páginas y 2 de `permissions`); `npm run build` → OK (mismo warning
   de tamaño de chunk preexistente).
+
+- [x] **Sesión 9** — Flujos de aprobación y trazabilidad en la UI
+  Resumen: Sobre `StudentTrackingPage` de la Sesión 8, botones "Aprobar" /
+  "Rechazar" por adaptación con `requires_external_approval && approved ===
+  null`, un badge de estado (Aprobada / Rechazada / Pendiente / Vigente / No
+  vigente) que respeta que `is_effective` reemplaza al badge de aprobación
+  cuando no aplica (spec §3); el aprobar/rechazar actualiza en el lugar con
+  la respuesta del endpoint —**no** hay refetch del aggregate `tracking`, que
+  el backend cachea ~60s. Se agregó `BarrierAccommodationsPanel` colapsable
+  por barrera que carga on-demand `GET /barriers/{id}/accommodations`, ofrece
+  el `<select>` sólo con adaptaciones del propio alumno (única lista
+  conocida) y respeta la regla de cuatro ojos escondiendo el botón
+  "Validar" cuando `proposed_by_id === user.id` (no un botón deshabilitado).
+  Nuevo `StudentHistoryPage` en `/alumnos/:id/historial` con paginación
+  server-side (`Paginated<T>` como envelope único en `types.ts`), origen
+  "Sistema" para entradas con `origin: system` (nunca "Usuario #null"), y
+  disclosure por fila que imprime `changes` como JSON. Nuevos helpers en
+  `permissions.ts`: `canApproveAccommodation` (school-wide, mirror de
+  `AccommodationPolicy::approve`), `canProposeBarrierAccommodation`
+  (teacher/psychopedagogue — **director deliberadamente excluído** por
+  `BarrierPolicy::update`), `canValidateBarrierAccommodation(user,
+  proposerId)` (school-wide + cuatro ojos), y `canViewStudentHistory`
+  (school-wide). `Accommodation.approved` pasa a `boolean | null` (antes
+  estaba tipado como `boolean` a secas, incorrecto según el ResourceJSON).
+  El spec `09-frontend-flujos-aprobacion-trazabilidad.md` sí existía en
+  `origin/main` (commit `5090014`) — se trajo intacto a la rama; el `10-*`
+  de main es una versión inicial del checklist (ver §4 de este archivo) y
+  se dejó la versión completa que ya venía de las Sesiones 7/8 en lugar de
+  sobreescribirla. **Apilado sobre
+  `feature/frontend-sesion-08-seguimiento-institucional`** (la Sesión 8
+  todavía no está mergeada a `develop` y esta sesión depende tanto de su
+  `StudentTrackingPage` como del `permissions.ts` de la 7, que la 8 apila
+  primero): comparar el PR contra esa rama, no contra `develop`. Nada quedó
+  pendiente; los seis criterios de aceptación del §7 están cubiertos.
+  Verificación real desde `web/`: `npx oxlint` → 0 errores (mismo warning
+  preexistente en `button.tsx`); `npm run typecheck` → OK;
+  `npm run test -- --run` → 82/82 en verde (17 tests nuevos: 5 de
+  aprobación/rechazo/vinculación/validación/historial en
+  `StudentTrackingPage`, 5 de `StudentHistoryPage`, 5 de `permissions`);
+  `npm run build` → OK (mismo warning de tamaño de chunk preexistente).
