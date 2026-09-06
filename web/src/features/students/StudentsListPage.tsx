@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canCreateStudent, canEditStudent } from "@/lib/permissions"
+import { canManageStudents } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
@@ -11,8 +11,7 @@ import type { StudentFormOutletContext } from "./StudentFormPage"
 
 export function StudentsListPage() {
   const { user } = useAuth()
-  const showCreate = canCreateStudent(user)
-  const showEdit = canEditStudent(user)
+  const canManage = canManageStudents(user)
   const [students, setStudents] = useState<Student[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,7 +32,7 @@ export function StudentsListPage() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Alumnos</h1>
-        {showCreate && (
+        {canManage && (
           <Button asChild>
             <Link to="/alumnos/nuevo">Nuevo alumno</Link>
           </Button>
@@ -72,7 +71,7 @@ export function StudentsListPage() {
                       >
                         Seguimiento
                       </Link>
-                      {showEdit && (
+                      {canManage && (
                         <Link
                           className="text-primary underline-offset-4 hover:underline"
                           to={`/alumnos/${student.id}`}

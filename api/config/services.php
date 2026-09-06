@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    // AI teaching assistant (docs/prompts/05-asistente-ia-docente.md). Backend
+    // only — the key is never exposed to the client or logged. No hardcoded
+    // model default: it must be set per environment to the current Sonnet model
+    // (see .env.example).
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL'),
+    ],
+
 ];
