@@ -45,12 +45,8 @@ class GroupPolicy
 
     public function update(User $user, Group $group): bool
     {
-        if (! $this->sharesSchool($user, $group)) {
-            return false;
-        }
-
-        return $user->hasRole(Role::Director->value)
-            || $this->leadsGroup($user, $group);
+        return $this->sharesSchool($user, $group)
+            && $user->hasRole(Role::Director->value);
     }
 
     public function delete(User $user, Group $group): bool
