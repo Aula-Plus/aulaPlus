@@ -1,6 +1,5 @@
 import { useAuth } from "@/features/auth/AuthContext"
 import { roleLabels } from "@/types"
-import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -10,22 +9,17 @@ import {
 } from "@/components/ui/card"
 
 export function DashboardPage() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   if (!user) return null
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Hola, {user.name}</h1>
-          <p className="text-muted-foreground">
-            {user.school?.name ?? "Sin escuela asignada"}
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => logout()}>
-          Cerrar sesión
-        </Button>
+    <div className="grid gap-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Hola, {user.name}</h1>
+        <p className="text-muted-foreground">
+          {user.school?.name ?? "Sin escuela asignada"}
+        </p>
       </div>
 
       <Card>
