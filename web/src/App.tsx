@@ -7,6 +7,9 @@ import { GroupsListPage } from "@/features/groups/GroupsListPage"
 import { GroupFormPage } from "@/features/groups/GroupFormPage"
 import { StudentsListPage } from "@/features/students/StudentsListPage"
 import { StudentFormPage } from "@/features/students/StudentFormPage"
+import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
+import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
+import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 
 function App() {
   return (
@@ -44,6 +47,30 @@ function App() {
             <Route path="nuevo" element={<StudentFormPage />} />
             <Route path=":id" element={<StudentFormPage />} />
           </Route>
+          <Route
+            path="/alumnos/:id/seguimiento"
+            element={
+              <ProtectedLayout>
+                <StudentTrackingPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clases/:id/seguimiento"
+            element={
+              <ProtectedLayout>
+                <GroupTrackingPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/adopcion"
+            element={
+              <ProtectedLayout>
+                <AdoptionDashboardPage />
+              </ProtectedLayout>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

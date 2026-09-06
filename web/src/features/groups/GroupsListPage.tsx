@@ -50,7 +50,7 @@ export function GroupsListPage() {
               <TableHead>Nivel</TableHead>
               <TableHead>Año</TableHead>
               <TableHead>Docentes</TableHead>
-              {canManage && <TableHead />}
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -64,16 +64,24 @@ export function GroupsListPage() {
                     ? group.teachers.map((teacher) => teacher.name).join(", ")
                     : "—"}
                 </TableCell>
-                {canManage && (
-                  <TableCell className="text-right">
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-4">
                     <Link
                       className="text-primary underline-offset-4 hover:underline"
-                      to={`/clases/${group.id}`}
+                      to={`/clases/${group.id}/seguimiento`}
                     >
-                      Editar
+                      Seguimiento
                     </Link>
-                  </TableCell>
-                )}
+                    {canManage && (
+                      <Link
+                        className="text-primary underline-offset-4 hover:underline"
+                        to={`/clases/${group.id}`}
+                      >
+                        Editar
+                      </Link>
+                    )}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -64,8 +64,38 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   preexistente en `button.tsx`, ajeno); `npm run typecheck` → OK;
   `npm run test -- --run` → todos en verde; `npm run build` → OK (warning de
   tamaño de chunk preexistente). PR #40 contra `develop`.
-- [ ] **Sesión 8** — Seguimiento institucional en la UI
-  Resumen:
+- [x] **Sesión 8** — Seguimiento institucional en la UI
+  Resumen: Se agregó la capa de UI sobre la API de seguimiento (backend
+  Sesión 4): tipos en `types.ts` (Comment/Alert/Accommodation/Barrier +
+  StudentTracking/GroupTracking/AdoptionDashboard con labels en español),
+  `features/tracking/trackingApi.ts` y `adoptionApi.ts` (endpoints `/api/v1`),
+  el componente reutilizable `CommentsPanel` y tres pantallas
+  (`StudentTrackingPage`, `GroupTrackingPage`, `AdoptionDashboardPage`),
+  ruteadas y enlazadas desde las listas ("Seguimiento", visible a cualquier rol
+  que pueda ver la clase/alumno; "Editar" sigue gateado por
+  `canManageGroups`/`canManageStudents`) + una entrada de nav "Adopción"
+  solo-director. Regla clave de `visible_to` (§3): si no se elige ningún rol,
+  el campo se **omite** (nunca `[]`, que ocultaría el comentario incluso al
+  autor) — con test dedicado. Sin librería de gráficos nueva: el tablero de
+  adopción usa tablas simples. Reutiliza `canResolveAlert`/
+  `canViewAdoptionDashboard`, ya agregados a `permissions.ts` en la Sesión 7
+  como helpers forward-looking (no se duplicaron). **Se desarrolló apilada
+  sobre `feature/frontend-sesion-07-roles-permisos`** antes de que esa rama
+  mergeara a `develop`; al integrar (PR #40 mergeado primero) se resolvieron a
+  mano los renames de la Sesión 7 en los 3 archivos que ambas ramas tocaban:
+  `canCreateGroup`/`canEditGroup` → `canManageGroups`, `canCreateStudent`/
+  `canEditStudent` → `canManageStudents`, `canAccessClinicalProfile` →
+  `canViewClinicalProfileUX`, `isSchoolWide` → `isSchoolWideStaff` (sin cambios
+  de comportamiento, solo de nombre). El spec formal
+  `08-frontend-seguimiento-institucional.md` no existe en el repo (igual que
+  el `07-*`); se implementó desde el enunciado de la tarea + el contrato real
+  del backend (Resources/Controllers de Sesión 4) + las convenciones del
+  frontend existente. Nada quedó pendiente: las 4 pantallas/componente del
+  enunciado están completas (no hizo falta partir en 8a/8b). Verificación real
+  desde `web/` tras resolver la integración con `develop`: `npx oxlint` → 0
+  errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` →
+  OK; `npm run test -- --run` → verde; `npm run build` → OK (mismo warning de
+  tamaño de chunk preexistente).
 - [ ] **Sesión 9** — Flujos de aprobación y trazabilidad en la UI
   Resumen:
 

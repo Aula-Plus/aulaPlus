@@ -1,16 +1,22 @@
 import type { ReactNode } from "react"
 import { NavLink } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
+import { canViewAdoptionDashboard } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 
-const navItems = [
+const baseNavItems = [
   { to: "/", label: "Inicio" },
   { to: "/clases", label: "Clases" },
   { to: "/alumnos", label: "Alumnos" },
 ]
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
+
+  // The adoption dashboard is director-only (UX gate; the server enforces it).
+  const navItems = canViewAdoptionDashboard(user)
+    ? [...baseNavItems, { to: "/adopcion", label: "Adopción" }]
+    : baseNavItems
 
   return (
     <div className="min-h-svh">
