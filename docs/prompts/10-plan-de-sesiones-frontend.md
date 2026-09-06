@@ -64,8 +64,29 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   preexistente en `button.tsx`, ajeno); `npm run typecheck` → OK;
   `npm run test -- --run` → todos en verde; `npm run build` → OK (warning de
   tamaño de chunk preexistente). PR #40 contra `develop`.
-- [ ] **Sesión 8** — Seguimiento institucional en la UI
-  Resumen:
+- [x] **Sesión 8** — Seguimiento institucional en la UI
+  Resumen: Se implementó el spec completo (`08-frontend-seguimiento-institucional.md`):
+  tipos de tracking en `types.ts`; `features/tracking/trackingApi.ts`
+  (`fetch*`/`post*Comment`/`resolveAlert`) y `features/adoption/adoptionApi.ts`;
+  el componente reusable `CommentsPanel` (contrato `subject`, autoenvía con
+  `MultiSelect` para `visible_to`); y las cuatro pantallas —
+  `StudentTrackingPage` (`/alumnos/:id/seguimiento`), `GroupTrackingPage`
+  (`/clases/:id/seguimiento`) y `AdoptionDashboardPage` (`/panel-adopcion`,
+  gateada por ruta con redirect + link condicional en `AppLayout`). Se usan los
+  helpers ya existentes de `permissions.ts` (`canViewAdoptionDashboard`,
+  `canResolveAlert` — agregados forward-looking en la Sesión 7), sin duplicarlos.
+  Regla `visible_to` §3 cubierta por test (nunca manda `[]`); botones de
+  "Resolver" quedan para la Sesión 9 (acá solo el listado de alertas); sin
+  librería de gráficos nueva (tablas simples). Enlaces "Seguimiento" agregados
+  en `GroupsListPage`/`StudentsListPage` sin gating de rol. **Nota de
+  reintegración:** la primera corrida abrió el PR #41 apilado sobre la rama de la
+  Sesión 7; al mergearse la Sesión 7 a `develop` y borrarse esa rama, GitHub
+  auto-cerró el #41 sin merge. Este trabajo se rebaseó sobre `develop` actual y
+  se reconció contra el spec formal `08`, que no existía en la primera corrida.
+  Verificación real desde `web/`: `npx oxlint` → 0 errores (1 warning
+  preexistente en `button.tsx`); `npm run typecheck` → OK;
+  `npm run test -- --run` → 115/115 en verde; `npm run build` → OK (warning de
+  tamaño de chunk preexistente).
 - [ ] **Sesión 9** — Flujos de aprobación y trazabilidad en la UI
   Resumen:
 
