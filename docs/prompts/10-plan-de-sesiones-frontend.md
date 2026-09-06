@@ -96,8 +96,43 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` →
   OK; `npm run test -- --run` → verde; `npm run build` → OK (mismo warning de
   tamaño de chunk preexistente).
-- [ ] **Sesión 9** — Flujos de aprobación y trazabilidad en la UI
-  Resumen:
+- [x] **Sesión 9** — Flujos de aprobación y trazabilidad en la UI
+  Resumen: Sobre `StudentTrackingPage` de la Sesión 8, botones "Aprobar" /
+  "Rechazar" por adaptación con `requires_external_approval && approved ===
+  null`, un badge de estado (Aprobada / Rechazada / Pendiente / Vigente / No
+  vigente) que respeta que `is_effective` reemplaza al badge de aprobación
+  cuando no aplica (spec §3); el aprobar/rechazar actualiza en el lugar con
+  la respuesta del endpoint —**no** hay refetch del aggregate `tracking`, que
+  el backend cachea ~60s. Se agregó `BarrierAccommodationsPanel` colapsable
+  por barrera que carga on-demand `GET /barriers/{id}/accommodations`, ofrece
+  el `<select>` sólo con adaptaciones del propio alumno (única lista
+  conocida) y respeta la regla de cuatro ojos escondiendo el botón
+  "Validar" cuando `proposed_by_id === user.id` (no un botón deshabilitado).
+  Nuevo `StudentHistoryPage` en `/alumnos/:id/historial` con paginación
+  server-side (`Paginated<T>` como envelope único en `types.ts`), origen
+  "Sistema" para entradas con `origin: system` (nunca "Usuario #null"), y
+  disclosure por fila que imprime `changes` como JSON. Nuevo helper en
+  `permissions.ts`: `canProposeBarrierAccommodation` (teacher/psychopedagogue
+  — **director deliberadamente excluído** por `BarrierPolicy::update`);
+  `canApproveAccommodation`, `canValidateBarrierAccommodation` y
+  `canViewStudentHistory` reutilizan los helpers forward-looking que la
+  Sesión 7 ya había agregado a `permissions.ts` (no se duplicaron).
+  `Accommodation.approved` pasa a `boolean | null` (antes estaba tipado como
+  `boolean` a secas, incorrecto según el ResourceJSON). El spec
+  `09-frontend-flujos-aprobacion-trazabilidad.md` sí existía en `origin/main`
+  (commit `5090014`) — se trajo intacto a la rama. **Se desarrolló apilada
+  sobre `feature/frontend-sesion-08-seguimiento-institucional`** antes de que
+  esa rama mergeara a `develop`; al integrar (PR #46 mergeado primero) se
+  resolvió a mano el mismo rename de permisos que ya había resuelto la
+  Sesión 8 en `GroupsListPage`/`StudentsListPage`/`StudentFormPage`/
+  `permissions.ts` (tomando la versión ya consolidada de `develop` y
+  agregándole únicamente `canProposeBarrierAccommodation`, que no existía
+  todavía). Nada quedó pendiente; los seis criterios de aceptación del §7
+  están cubiertos. Verificación real desde `web/` tras resolver la
+  integración con `develop`: `npx oxlint` → 0 errores (mismo warning
+  preexistente en `button.tsx`); `npm run typecheck` → OK;
+  `npm run test -- --run` → verde; `npm run build` → OK (mismo warning de
+  tamaño de chunk preexistente).
 
 ## 5. Explícitamente fuera de este plan
 

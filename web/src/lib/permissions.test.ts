@@ -5,6 +5,7 @@ import {
   canDeleteStudent,
   canManageGroups,
   canManageStudents,
+  canProposeBarrierAccommodation,
   canResolveAlert,
   canValidateBarrierAccommodation,
   canViewAdoptionDashboard,
@@ -115,6 +116,13 @@ const cases: {
     director: true,
     psychopedagogue: false,
     teacher: false,
+  },
+  {
+    name: "canProposeBarrierAccommodation",
+    fn: canProposeBarrierAccommodation,
+    director: false,
+    psychopedagogue: true,
+    teacher: true,
   },
 ]
 

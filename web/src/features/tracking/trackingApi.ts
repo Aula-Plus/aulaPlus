@@ -1,5 +1,16 @@
 import { api } from "@/lib/api"
-import type { Alert, Comment, CommentTone, GroupTracking, Role, StudentTracking } from "@/types"
+import type {
+  Accommodation,
+  Alert,
+  AuditLogEntry,
+  BarrierAccommodationLink,
+  Comment,
+  CommentTone,
+  GroupTracking,
+  Paginated,
+  Role,
+  StudentTracking,
+} from "@/types"
 
 /**
  * Data layer for the institutional tracking feature (Sesión 8), talking to the
@@ -77,4 +88,71 @@ export async function fetchGroupAlerts(groupId: number): Promise<Alert[]> {
 export async function resolveAlert(alertId: number): Promise<Alert> {
   const { data } = await api.post<{ data: Alert }>(`/api/v1/alerts/${alertId}/resolve`)
   return data.data
+}
+
+// ── Accommodation approval (Sesión 9) ─────────────────────────────────────
+// Both endpoints return the updated AccommodationResource wrapped in `{ data }`.
+// The 422 business-state precondition (docs/prompts/03 §3) is checked by the
+// server; callers should only invoke these when the UI shows the buttons.
+
+export async function approveAccommodation(accommodationId: number): Promise<Accommodation> {
+  const { data } = await api.post<{ data: Accommodation }>(
+    `/api/v1/accommodations/${accommodationId}/approve`,
+  )
+  return data.data
+}
+
+export async function rejectAccommodation(accommodationId: number): Promise<Accommodation> {
+  const { data } = await api.post<{ data: Accommodation }>(
+    `/api/v1/accommodations/${accommodationId}/reject`,
+  )
+  return data.data
+}
+
+// ── Barrier ↔ Accommodation link (Sesión 9) ──────────────────────────────
+
+export async function fetchBarrierAccommodations(
+  barrierId: number,
+): Promise<BarrierAccommodationLink[]> {
+  const { data } = await api.get<{ data: BarrierAccommodationLink[] }>(
+    `/api/v1/barriers/${barrierId}/accommodations`,
+  )
+  return data.data
+}
+
+export async function linkAccommodationToBarrier(
+  barrierId: number,
+  accommodationId: number,
+): Promise<BarrierAccommodationLink> {
+  const { data } = await api.post<{ data: BarrierAccommodationLink }>(
+    `/api/v1/barriers/${barrierId}/accommodations`,
+    { accommodation_id: accommodationId },
+  )
+  return data.data
+}
+
+export async function validateBarrierAccommodation(
+  barrierId: number,
+  accommodationId: number,
+): Promise<BarrierAccommodationLink> {
+  const { data } = await api.post<{ data: BarrierAccommodationLink }>(
+    `/api/v1/barriers/${barrierId}/accommodations/${accommodationId}/validate`,
+  )
+  return data.data
+}
+
+// ── Student audit history (Sesión 9) ─────────────────────────────────────
+// The only paginated endpoint in the frontend so far — return the whole
+// Paginated<T> envelope (docs/prompts/09 §2), never just the data array, so
+// callers do not have to re-implement pagination on top of `meta`.
+
+export async function fetchStudentHistory(
+  studentId: number,
+  page = 1,
+): Promise<Paginated<AuditLogEntry>> {
+  const { data } = await api.get<Paginated<AuditLogEntry>>(
+    `/api/v1/students/${studentId}/history`,
+    { params: { page } },
+  )
+  return data
 }

@@ -8,6 +8,7 @@ import { GroupFormPage } from "@/features/groups/GroupFormPage"
 import { StudentsListPage } from "@/features/students/StudentsListPage"
 import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
+import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 
@@ -52,6 +53,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <StudentTrackingPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/alumnos/:id/historial"
+            element={
+              <ProtectedLayout>
+                <StudentHistoryPage />
               </ProtectedLayout>
             }
           />

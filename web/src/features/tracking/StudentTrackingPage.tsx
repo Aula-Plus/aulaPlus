@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canResolveAlert } from "@/lib/permissions"
+import {
+  canApproveAccommodation,
+  canResolveAlert,
+  canViewStudentHistory,
+} from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,10 +14,12 @@ import {
   alertSeverityLabels,
   alertTypeLabels,
   assessmentTypeLabels,
+  type Accommodation,
   type Alert,
   type Comment,
   type StudentTracking,
 } from "@/types"
+import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput } from "./trackingApi"
@@ -29,6 +35,8 @@ export function StudentTrackingPage() {
   const studentId = Number(id)
   const { user } = useAuth()
   const showResolve = canResolveAlert(user)
+  const showApprove = canApproveAccommodation(user)
+  const showHistoryLink = canViewStudentHistory(user)
 
   const [tracking, setTracking] = useState<StudentTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
@@ -63,6 +71,35 @@ export function StudentTrackingPage() {
     await loadTracking()
   }
 
+  /**
+   * Approve/reject a single accommodation IN PLACE using the response payload,
+   * not a full `loadTracking()` refetch (docs/prompts/09 §3). The tracking
+   * aggregate is cached ~60s on the server, so a refetch right after the write
+   * may still return the old value; splicing the returned Accommodation into
+   * local state avoids that stale window entirely.
+   */
+  function replaceAccommodation(next: Accommodation) {
+    setTracking((current) => {
+      if (!current || !current.accommodations) return current
+      return {
+        ...current,
+        accommodations: current.accommodations.map((accommodation) =>
+          accommodation.id === next.id ? next : accommodation,
+        ),
+      }
+    })
+  }
+
+  async function handleApprove(accommodationId: number) {
+    const updated = await trackingApi.approveAccommodation(accommodationId)
+    replaceAccommodation(updated)
+  }
+
+  async function handleReject(accommodationId: number) {
+    const updated = await trackingApi.rejectAccommodation(accommodationId)
+    replaceAccommodation(updated)
+  }
+
   if (error) {
     return <p className="text-sm text-destructive">{error}</p>
   }
@@ -80,6 +117,16 @@ export function StudentTrackingPage() {
           ← Volver a alumnos
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">Seguimiento — {student.full_name}</h1>
+        {showHistoryLink && (
+          <p className="mt-1">
+            <Link
+              className="text-sm text-primary underline-offset-4 hover:underline"
+              to={`/alumnos/${studentId}/historial`}
+            >
+              Ver historial de auditoría →
+            </Link>
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -159,14 +206,45 @@ export function StudentTrackingPage() {
             <p className="text-muted-foreground">Sin adaptaciones vigentes.</p>
           ) : (
             <ul className="grid gap-2">
-              {tracking.accommodations.map((accommodation) => (
-                <li key={accommodation.id} className="rounded-md border p-3 text-sm">
-                  <span className="font-medium">{accommodation.type}</span>
-                  {accommodation.description && (
-                    <p className="text-muted-foreground">{accommodation.description}</p>
-                  )}
-                </li>
-              ))}
+              {tracking.accommodations.map((accommodation) => {
+                const pendingApproval =
+                  accommodation.requires_external_approval && accommodation.approved === null
+                return (
+                  <li
+                    key={accommodation.id}
+                    className="rounded-md border p-3 text-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="font-medium">{accommodation.type}</span>
+                        {accommodation.description && (
+                          <p className="text-muted-foreground">{accommodation.description}</p>
+                        )}
+                      </div>
+                      <AccommodationStatusBadge accommodation={accommodation} />
+                    </div>
+                    {pendingApproval && showApprove && (
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleApprove(accommodation.id)}
+                        >
+                          Aprobar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReject(accommodation.id)}
+                        >
+                          Rechazar
+                        </Button>
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </section>
@@ -185,6 +263,10 @@ export function StudentTrackingPage() {
                   {barrier.coping_strategy && (
                     <p className="text-muted-foreground">Estrategia: {barrier.coping_strategy}</p>
                   )}
+                  <BarrierAccommodationsPanel
+                    barrierId={barrier.id}
+                    studentAccommodations={tracking.accommodations ?? []}
+                  />
                 </li>
               ))}
             </ul>
@@ -224,6 +306,48 @@ export function StudentTrackingPage() {
         title="Comentarios del alumno"
       />
     </div>
+  )
+}
+
+/**
+ * Status pill for an accommodation. Two independent axes:
+ *   - When `requires_external_approval`: show the approval decision
+ *     ("Aprobada" / "Rechazada") or, if still `null`, "Pendiente de
+ *     aprobación".
+ *   - Otherwise: fall back to the vigency flag `is_effective` — no approval
+ *     badge is added when approval does not apply (docs/prompts/09 §3).
+ */
+function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
+  if (accommodation.requires_external_approval) {
+    if (accommodation.approved === true) {
+      return (
+        <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+          Aprobada
+        </span>
+      )
+    }
+    if (accommodation.approved === false) {
+      return (
+        <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+          Rechazada
+        </span>
+      )
+    }
+    return (
+      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+        Pendiente de aprobación
+      </span>
+    )
+  }
+
+  return accommodation.is_effective ? (
+    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      Vigente
+    </span>
+  ) : (
+    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      No vigente
+    </span>
   )
 }
 

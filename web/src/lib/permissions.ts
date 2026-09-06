@@ -122,6 +122,18 @@ export function canApproveAccommodation(user: User | null): boolean {
 }
 
 /**
+ * Roles allowed to propose a Barrier↔Accommodation link. Mirror of
+ * `BarrierPolicy::update` (role portion, reused by
+ * `AttachBarrierAccommodationRequest::authorize` — see the request class):
+ * teacher and psychopedagogue. **Director is deliberately excluded** here to
+ * match the backend Policy (BarrierPolicy explicitly does NOT list director
+ * for create/update/delete — see the class docblock).
+ */
+export function canProposeBarrierAccommodation(user: User | null): boolean {
+  return hasAnyRole(user, ["teacher", "psychopedagogue"])
+}
+
+/**
  * Validate a barrier↔accommodation link. Director or psychopedagogue, AND the
  * validator must not be the person who proposed it (four-eyes rule). Mirror of
  * `BarrierAccommodationController::validateLink`.
