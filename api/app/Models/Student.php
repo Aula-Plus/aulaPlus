@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\StudentStatus;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,7 +16,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * They are records managed by the school staff (rosters, profiles, tracking).
  * Skeleton only for now; pedagogical tracking fields come later.
  */
-#[Fillable(['first_name', 'last_name', 'birth_date', 'group_id'])]
+#[Fillable([
+    'first_name',
+    'last_name',
+    'birth_date',
+    'group_id',
+    'status',
+    'family_contact_name',
+    'family_contact_phone',
+    'family_contact_email',
+    'pedagogical_notes',
+])]
 class Student extends Model
 {
     /** @use HasFactory<StudentFactory> */
@@ -23,10 +34,15 @@ class Student extends Model
 
     protected $table = 'students';
 
+    protected $attributes = [
+        'status' => 'active',
+    ];
+
     protected function casts(): array
     {
         return [
             'birth_date' => 'date',
+            'status' => StudentStatus::class,
         ];
     }
 
