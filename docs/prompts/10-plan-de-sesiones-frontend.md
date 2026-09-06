@@ -38,8 +38,32 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
 
 ## 4. Checklist de progreso
 
-- [ ] **Sesión 7** — Roles y permisos en la UI
-  Resumen:
+- [x] **Sesión 7** — Roles y permisos en la UI
+  Resumen: Se creó `web/src/lib/permissions.ts` con las funciones puras de la §2
+  del spec (`hasRole`, `hasAnyRole`, `isDirector`, `isPsychopedagogue`,
+  `isTeacher`, `isSchoolWideStaff`, `canManageGroups`, `canDeleteGroup`,
+  `canManageStudents`, `canDeleteStudent`, `canViewClinicalProfileUX`) más los
+  helpers forward-looking para las Sesiones 8/9 (`canResolveAlert`,
+  `canApproveAccommodation`, `canValidateBarrierAccommodation`,
+  `canViewStudentHistory`, `canViewAdoptionDashboard`), cada una con comentario
+  de una línea citando la Policy/controller de backend que refleja. Se
+  reemplazaron los chequeos inline en `GroupsListPage` (→ `canManageGroups`),
+  `StudentsListPage` (→ `canManageStudents`) y `StudentFormPage`
+  (→ `canViewClinicalProfileUX` + `canDeleteStudent`); ningún componente de
+  `features/groups` ni `features/students` calcula rol inline. Tests:
+  `permissions.test.ts` (tabla rol→función, incluye `user === null`) y los tres
+  tests de página existentes siguen pasando sin cambios de aserción.
+  **Auditoría contra Policies:** confirmado contra el código real de
+  `GroupPolicy`/`StudentPolicy` — el frontend previo ya coincidía, incluido
+  `StudentPolicy::delete` = solo `director` (NO psicopedagogo); no hubo
+  discrepancia de comportamiento que corregir, el cambio es de consolidación.
+  **Fuera de alcance (confirmado, no asumido):** no hay `UserController` ni ruta
+  `/api/users` en `api/routes/api.php` (solo `/me`), así que no se construyó UI
+  de gestión de usuarios; catálogo curricular sin tocar.
+  **Verificación real desde `web/`:** `npx oxlint` → 0 errores (1 warning
+  preexistente en `button.tsx`, ajeno); `npm run typecheck` → OK;
+  `npm run test -- --run` → todos en verde; `npm run build` → OK (warning de
+  tamaño de chunk preexistente). PR #40 contra `develop`.
 - [ ] **Sesión 8** — Seguimiento institucional en la UI
   Resumen:
 - [ ] **Sesión 9** — Flujos de aprobación y trazabilidad en la UI

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
+import { canManageStudents } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
@@ -10,8 +11,7 @@ import type { StudentFormOutletContext } from "./StudentFormPage"
 
 export function StudentsListPage() {
   const { user } = useAuth()
-  const canManage =
-    user?.roles.some((role) => role === "director" || role === "psychopedagogue") ?? false
+  const canManage = canManageStudents(user)
   const [students, setStudents] = useState<Student[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 

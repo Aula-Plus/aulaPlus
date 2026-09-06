@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
+import { canManageGroups } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import * as groupsApi from "./groupsApi"
@@ -9,7 +10,7 @@ import type { GroupFormOutletContext } from "./GroupFormPage"
 
 export function GroupsListPage() {
   const { user } = useAuth()
-  const isDirector = user?.roles.includes("director") ?? false
+  const canManage = canManageGroups(user)
   const [groups, setGroups] = useState<Group[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,7 +29,7 @@ export function GroupsListPage() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Clases</h1>
-        {isDirector && (
+        {canManage && (
           <Button asChild>
             <Link to="/clases/nueva">Nueva clase</Link>
           </Button>
@@ -49,7 +50,7 @@ export function GroupsListPage() {
               <TableHead>Nivel</TableHead>
               <TableHead>Año</TableHead>
               <TableHead>Docentes</TableHead>
-              {isDirector && <TableHead />}
+              {canManage && <TableHead />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -63,7 +64,7 @@ export function GroupsListPage() {
                     ? group.teachers.map((teacher) => teacher.name).join(", ")
                     : "—"}
                 </TableCell>
-                {isDirector && (
+                {canManage && (
                   <TableCell className="text-right">
                     <Link
                       className="text-primary underline-offset-4 hover:underline"
