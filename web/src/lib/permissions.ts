@@ -6,23 +6,17 @@ import type { Role, User } from "@/types"
  * IMPORTANT — this is a UX layer, not a security boundary. The real
  * authorization decision always lives in the backend Policies
  * (`api/app/Policies/*`), enforced server-side and never trusting the client
- * (see `CLAUDE.md` → "Security rules"). These helpers only decide which UI to
- * render (hide a button, hide a field) so users are not shown affordances that
- * the API would reject anyway.
+ * (see `CLAUDE.md` → "Non-negotiable"). These helpers only decide which UI to
+ * render (hide a button, hide a field); a helper must never be the reason
+ * something is or isn't accessible.
  *
- * Each predicate mirrors the **role portion** of the matching Policy method.
- * The Policies also apply per-record tenant/ownership checks
- * (`sharesSchool`, `teachesGroup`, `teachesStudent`) that depend on data the
- * frontend does not have; those cannot be reproduced here and are deliberately
- * left to the server. When a helper says it mirrors `FooPolicy::bar`, it means
- * "the role-based half of that method" — the server still runs the whole thing.
+ * All functions are pure: they take `User | null` and never fetch or depend on
+ * React context, so they are trivial to test. Each predicate mirrors the
+ * **role portion** of the matching backend Policy. The Policies also apply
+ * per-record tenant checks (`school_id` via `SchoolScope`) that the frontend
+ * cannot and need not reproduce — the SPA only ever sees its own school's data.
  *
- * Kept intentionally in sync with `App\Enums\Role` (English identifiers) and
- * the two reference Policies audited for Session 7:
- *   - GroupPolicy:   create/update/delete → director only.
- *   - StudentPolicy: create/update → school-wide (director + psychopedagogue);
- *                    delete → director only;
- *                    viewClinicalProfile → school-wide.
+ * Kept in sync with `App\Enums\Role` (English identifiers).
  */
 
 /**
@@ -31,113 +25,100 @@ import type { Role, User } from "@/types"
  */
 export const SCHOOL_WIDE_ROLES: readonly Role[] = ["director", "psychopedagogue"]
 
+// ── Low-level role helpers ──────────────────────────────────────────────────
+
 /** True when the user holds the given role. */
-export function hasRole(user: User | null | undefined, role: Role): boolean {
+export function hasRole(user: User | null, role: Role): boolean {
   return user?.roles.includes(role) ?? false
 }
 
 /** True when the user holds at least one of the given roles. */
-export function hasAnyRole(user: User | null | undefined, roles: readonly Role[]): boolean {
+export function hasAnyRole(user: User | null, roles: readonly Role[]): boolean {
   return user?.roles.some((role) => roles.includes(role)) ?? false
 }
 
 /** Mirror of `$user->hasRole('director')`. */
-export function isDirector(user: User | null | undefined): boolean {
+export function isDirector(user: User | null): boolean {
   return hasRole(user, "director")
 }
 
+/** Mirror of `$user->hasRole('psychopedagogue')`. */
+export function isPsychopedagogue(user: User | null): boolean {
+  return hasRole(user, "psychopedagogue")
+}
+
+/** Mirror of `$user->hasRole('teacher')`. */
+export function isTeacher(user: User | null): boolean {
+  return hasRole(user, "teacher")
+}
+
 /**
- * Mirror of `$user->hasAnyRole(Role::schoolWideValues())` — director or
- * psychopedagogue. These roles get school-wide access; a teacher does not.
+ * Director or psychopedagogue. Mirror of
+ * `$user->hasAnyRole(Role::schoolWideValues())` — the roles with school-wide
+ * access. A teacher is not school-wide staff.
  */
-export function isSchoolWide(user: User | null | undefined): boolean {
+export function isSchoolWideStaff(user: User | null): boolean {
   return hasAnyRole(user, SCHOOL_WIDE_ROLES)
 }
 
-// ── Groups ────────────────────────────────────────────────────────────────
+// ── Groups ──────────────────────────────────────────────────────────────────
 
-/** Mirror of `GroupPolicy::create` (role portion): director only. */
-export function canCreateGroup(user: User | null | undefined): boolean {
+/** Create/edit a Group. Mirror of `GroupPolicy::create`/`update` (role portion): director only. */
+export function canManageGroups(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/** Delete a Group. Mirror of `GroupPolicy::delete` (role portion): director only. */
+export function canDeleteGroup(user: User | null): boolean {
+  return isDirector(user)
+}
+
+// ── Students ────────────────────────────────────────────────────────────────
+
+/** Create/edit a Student. Mirror of `StudentPolicy::create`/`update` (role portion): school-wide staff. */
+export function canManageStudents(user: User | null): boolean {
+  return isSchoolWideStaff(user)
+}
+
+/**
+ * Delete a Student. Mirror of `StudentPolicy::delete` (role portion):
+ * **director only** — note this is narrower than create/edit, which a
+ * psychopedagogue may also do.
+ */
+export function canDeleteStudent(user: User | null): boolean {
   return isDirector(user)
 }
 
 /**
- * Mirror of `GroupPolicy::update`/`delete` (role portion): director only.
- * (The server additionally requires the group to share the user's school.)
- */
-export function canEditGroup(user: User | null | undefined): boolean {
-  return isDirector(user)
-}
-
-// ── Students ──────────────────────────────────────────────────────────────
-
-/** Mirror of `StudentPolicy::create` (role portion): school-wide roles. */
-export function canCreateStudent(user: User | null | undefined): boolean {
-  return isSchoolWide(user)
-}
-
-/**
- * Mirror of `StudentPolicy::update` (role portion): school-wide roles.
- * (The server additionally requires the student to share the user's school.)
- */
-export function canEditStudent(user: User | null | undefined): boolean {
-  return isSchoolWide(user)
-}
-
-/**
- * Mirror of `StudentPolicy::delete` (role portion): **director only** — note
- * this is narrower than create/update, which a psychopedagogue may also do.
- * (The server additionally requires the student to share the user's school.)
- */
-export function canDeleteStudent(user: User | null | undefined): boolean {
-  return isDirector(user)
-}
-
-/**
+ * UX heuristic: whether to show the clinical-profile block in the student form.
  * Mirror of `StudentPolicy::viewClinicalProfile` (role portion): school-wide
- * roles. Gates the sensitive clinical/learning-profile fields
- * (learning_profile, individual_profile, tracking_notes, related_documents)
- * — both showing them and letting them be edited, since editing a student is
- * itself a school-wide action. A teacher who can view a student never sees or
- * edits these fields.
+ * staff. This does NOT filter data — the sensitive fields already arrive absent
+ * from the backend when they don't apply (see `StudentResource`); this only
+ * decides whether to render the edit inputs.
  */
-export function canAccessClinicalProfile(user: User | null | undefined): boolean {
-  return isSchoolWide(user)
+export function canViewClinicalProfileUX(user: User | null): boolean {
+  return isSchoolWideStaff(user)
 }
 
-// ── Institutional tracking (Sesión 8) ───────────────────────────────────────
+// ── Forward-looking helpers (Sessions 8 & 9) ────────────────────────────────
+// Added now, though nothing uses them yet, so the later sessions import them
+// instead of re-deriving the same role logic (same rationale as
+// `User::teachesGroup`/`teachesStudent` in `docs/prompts/02-roles-permisos.md` §3).
 
 /**
- * Mirror of `SchoolPolicy::viewAdoptionDashboard` (role portion): director
- * only. The server additionally requires the school to be the user's own
- * (`$user->school_id === $school->id`), which the frontend cannot re-derive —
- * it only ever requests its own school's dashboard.
+ * Resolve an alert. Director or psychopedagogue.
+ * Mirror of `AlertPolicy::resolve` → `StudentPolicy::viewClinicalProfile`.
  */
-export function canViewAdoptionDashboard(user: User | null | undefined): boolean {
-  return isDirector(user)
+export function canResolveAlert(user: User | null): boolean {
+  return isSchoolWideStaff(user)
 }
 
 /**
- * Mirror of `AlertPolicy::resolve` (role portion), which delegates to
- * `StudentPolicy::viewClinicalProfile`: school-wide roles. Alerts are only
- * ever returned to those roles anyway, so this gates the resolve affordance to
- * match. The server re-checks same-school ownership per alert.
+ * Approve/reject an accommodation. Director or psychopedagogue.
+ * Mirror of `AccommodationPolicy::approve`.
  */
-export function canResolveAlert(user: User | null | undefined): boolean {
-  return isSchoolWide(user)
-}
-
-// ── Approval flows & traceability (Sesión 9) ────────────────────────────────
-
-/**
- * Mirror of `AccommodationPolicy::approve` / `::reject` (role portion):
- * school-wide roles. The server additionally requires the accommodation to
- * share the user's school AND (as a 422 business-state precondition, not
- * authorization) `requires_external_approval === true` and `approved === null`
- * — the UI mirrors those preconditions before showing the buttons.
- */
-export function canApproveAccommodation(user: User | null | undefined): boolean {
-  return isSchoolWide(user)
+export function canApproveAccommodation(user: User | null): boolean {
+  return isSchoolWideStaff(user)
 }
 
 /**
@@ -148,33 +129,34 @@ export function canApproveAccommodation(user: User | null | undefined): boolean 
  * match the backend Policy (BarrierPolicy explicitly does NOT list director
  * for create/update/delete — see the class docblock).
  */
-export function canProposeBarrierAccommodation(user: User | null | undefined): boolean {
+export function canProposeBarrierAccommodation(user: User | null): boolean {
   return hasAnyRole(user, ["teacher", "psychopedagogue"])
 }
 
 /**
- * Mirror of `BarrierPolicy::validate` (role portion) plus the four-eyes
- * business-state precondition (validator ≠ proposer, which the server enforces
- * with a 422). School-wide roles may validate, EXCEPT the same user who
- * proposed the link — that user never sees a "Validar" button (the spec is
- * explicit: not disabled with a tooltip, absent).
- *
- * `proposedById` is the pivot's `proposed_by_id`. When the current user has no
- * id (unauthenticated), the answer is `false` regardless of proposer.
+ * Validate a barrier↔accommodation link. Director or psychopedagogue, AND the
+ * validator must not be the person who proposed it (four-eyes rule). Mirror of
+ * `BarrierAccommodationController::validateLink`.
  */
 export function canValidateBarrierAccommodation(
-  user: User | null | undefined,
+  user: User | null,
   proposedById: number,
 ): boolean {
-  if (!user || !isSchoolWide(user)) return false
-  return user.id !== proposedById
+  return isSchoolWideStaff(user) && user?.id !== proposedById
 }
 
 /**
- * Mirror of `StudentHistoryController`'s `authorize('view-clinical-profile',
- * ...)` (role portion): school-wide roles. The server additionally requires
- * same-school access to the student itself.
+ * View a student's tracking history. Director or psychopedagogue.
+ * Mirror of `StudentHistoryController` (school-wide staff).
  */
-export function canViewStudentHistory(user: User | null | undefined): boolean {
-  return canAccessClinicalProfile(user)
+export function canViewStudentHistory(user: User | null): boolean {
+  return isSchoolWideStaff(user)
+}
+
+/**
+ * View the adoption dashboard. Director only.
+ * Mirror of `SchoolPolicy::viewAdoptionDashboard`.
+ */
+export function canViewAdoptionDashboard(user: User | null): boolean {
+  return isDirector(user)
 }

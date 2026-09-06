@@ -63,7 +63,36 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
 - [ ] **Sesión 4** — Seguimiento institucional
   Resumen:
 - [ ] **Sesión 5** — Asistente de IA docente
-  Resumen:
+  Resumen: Implementado el asistente de IA "propone, no decide": entidad
+  `AIProposal` (tenant-scoped, Auditable, autoría explícita vía
+  `requested_by_id`), enums `AIProposalType`/`AIProposalStatus`,
+  `AIProposalPolicy` (reusa `teachesGroup` + roles school-wide; solo el
+  solicitante aplica/descarta). `BuildProposalContext` arma el contexto
+  minimizando PII (resumen agregado y anonimizado del grupo, alumno objetivo
+  como `Student #1`, nunca `full_name`); `GenerateAIProposalJob` (ShouldQueue,
+  cliente HTTP nativo contra Anthropic, timeout 60s, 2 reintentos de red,
+  marca `error` sin crashear ante JSON inválido/fuera de schema, envuelto en
+  `Tenancy::forSchool`); `ApplyProposal` crea AnnualPlan/Unit/ClassSession/
+  Assessment en transacción + `usage_events` `ai_proposal.applied`. Endpoints
+  v1 (`generate` 202 con `throttle:ai-proposal-generate` 20/h por school,
+  `show`, `apply`, `discard`) con `GenerateAIProposalRequest` (un solo
+  FormRequest, ruleset por tipo, valida pertenencia group/school de todo id
+  referenciado). Decisiones asumidas y documentadas en código: schema de
+  salida por tipo para los 3 tipos que el spec no detallaba; fallbacks para
+  columnas NOT NULL de Sesión 1 al aplicar (p.ej. `class_sessions.date`,
+  `units.position`, `annual_plans.language`) ya que el schema de sesión del
+  modelo no las trae; `discard` gateado igual que `apply` por simetría;
+  heurística v1 de subárbol curricular (backbone + match por subject/focus).
+  `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` en `.env.example` sin modelo
+  hardcodeado. Resultado: 22 tests nuevos en verde (168 en total, +22), Pint
+  limpio (168 tests, 3 corridas consecutivas en verde). Verificado en este
+  entorno con `php artisan test` sobre SQLite en memoria (Sail/Docker no
+  disponible acá). Único cambio fuera de Sesión 5: un fix de determinismo de
+  una línea en `StudentHistoryTest` (Sesión 3), que era flaky ~1/3 de las
+  corridas porque `AccommodationFactory` elige `focus_area` al azar y el
+  `update` del test a veces quedaba no-op (sin log `updated`); se fija el
+  `focus_area` inicial a un valor distinto del que setea el `update`. Es
+  test-only, no toca código de producción de Sesiones 1-4.
 
 ## 5. Explícitamente fuera de este plan
 

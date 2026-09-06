@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, Outlet } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canCreateGroup, canEditGroup } from "@/lib/permissions"
+import { canManageGroups } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import * as groupsApi from "./groupsApi"
@@ -10,8 +10,7 @@ import type { GroupFormOutletContext } from "./GroupFormPage"
 
 export function GroupsListPage() {
   const { user } = useAuth()
-  const showCreate = canCreateGroup(user)
-  const showEdit = canEditGroup(user)
+  const canManage = canManageGroups(user)
   const [groups, setGroups] = useState<Group[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,7 +29,7 @@ export function GroupsListPage() {
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Clases</h1>
-        {showCreate && (
+        {canManage && (
           <Button asChild>
             <Link to="/clases/nueva">Nueva clase</Link>
           </Button>
@@ -73,7 +72,7 @@ export function GroupsListPage() {
                     >
                       Seguimiento
                     </Link>
-                    {showEdit && (
+                    {canManage && (
                       <Link
                         className="text-primary underline-offset-4 hover:underline"
                         to={`/clases/${group.id}`}
