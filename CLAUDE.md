@@ -32,6 +32,20 @@ docs/  → ARCHITECTURE.md — living source of truth.
 
 Two independently deployable apps. See `docs/ARCHITECTURE.md` for the full brief.
 
+## Functional spec sources
+
+- `docs/prompts/01-10` — the implementation spec actually being built, session by
+  session (backend 01-06, frontend 07-10). This is what session branches follow.
+- `../aulaplus-documento-vivo/documento_aulaplus.html` (sibling repo, 29 screens) —
+  the detailed product-vision document, actively **under revision** between
+  product and design (not code, not this repo's architecture). Treat it as a
+  strong draft: some screens carry explicit open items (e.g. "nombre a definir",
+  "decisión pendiente") that are not yet decided even at the product level. When a
+  session's spec in `docs/prompts` draws on a screen from that document, note
+  which decisions were treated as final vs. assumed, the same way session
+  summaries already record assumptions/discrepancies.
+- `docs/flujos/` — older, superseded business vision. Historical context only.
+
 ## Stack
 
 - **Backend:** Laravel 13 (PHP 8.3+), PostgreSQL, Sanctum (SPA cookie auth),
@@ -131,8 +145,15 @@ skeleton is done, until explicitly asked:
   product level.
 - Project/assignment entity and its relation to students — undecided
   (multi-submission, multi-grade design not settled).
-- AI evaluations, lesson/curriculum planning, and communications features in
-  general — the current scope is the auth/tenancy/roles/CI skeleton.
+- Communications features in general (e.g. screen "Mensajes").
+- Curriculum planning and AI-assisted class/evaluation generation (`AnnualPlan`,
+  `Unit`, `ClassSession`, `Assessment` — data layer exists, no API surface yet) —
+  this is Session 5 (`docs/prompts/05-asistente-ia-docente.md`), planned but not
+  started. Not "out of scope", just not yet built.
+- "PTP y enriquecimiento" (screen 9 of the living document) — explicitly deferred:
+  it's unclear whether it's a new entity or a relabeling of
+  Accommodation/Barrier, and it depends on the annual-plan/curriculum module
+  above.
 
 ## Working in this repo
 
@@ -142,6 +163,4 @@ skeleton is done, until explicitly asked:
 - Before committing frontend changes (from `web/`): `npm run lint`,
   `npm run typecheck`, `npm run test`, `npm run build`.
 - CI (`.github/workflows/ci.yml`) runs all of the above on every PR to `main`.
-- Do **not** implement business features (AI evaluaciones, planificaciones,
-  comunicaciones) until asked — the current scope is the auth/tenancy/roles/CI
-  skeleton.
+- Do **not** implement features listed under "Out of scope for now" until asked.
