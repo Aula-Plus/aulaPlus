@@ -151,6 +151,11 @@ class ApplyProposal
             'purpose' => $raw['purpose'] ?? null,
             'duration_minutes' => $raw['duration_minutes'] ?? null,
             'content' => $raw['content'] ?? null,
+            // administered_at is NOT NULL (Session 6). An applied AI draft hasn't
+            // been taken yet, so default to today — the teacher can edit it via
+            // PATCH /assessments/{assessment}. Same fallback pattern Session 5
+            // already uses for other NOT NULL columns not in the model's schema.
+            'administered_at' => now()->toDateString(),
         ]);
 
         $this->syncCurricularItems($assessment, $raw['suggested_curricular_items'] ?? []);

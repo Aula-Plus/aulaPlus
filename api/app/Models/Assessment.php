@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['group_id', 'teacher_id', 'type', 'purpose', 'duration_minutes', 'content', 'variant_number'])]
+#[Fillable(['group_id', 'teacher_id', 'type', 'purpose', 'duration_minutes', 'content', 'variant_number', 'administered_at'])]
 class Assessment extends Model
 {
     /** @use HasFactory<AssessmentFactory> */
@@ -27,6 +27,7 @@ class Assessment extends Model
         return [
             'type' => AssessmentType::class,
             'content' => 'array',
+            'administered_at' => 'date',
         ];
     }
 
@@ -43,6 +44,11 @@ class Assessment extends Model
     public function classSessions(): HasMany
     {
         return $this->hasMany(ClassSession::class);
+    }
+
+    public function results(): HasMany
+    {
+        return $this->hasMany(AssessmentResult::class);
     }
 
     public function curricularItems(): BelongsToMany

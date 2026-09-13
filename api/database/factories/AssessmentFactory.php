@@ -30,6 +30,7 @@ class AssessmentFactory extends Factory
             'duration_minutes' => fake()->numberBetween(20, 90),
             'content' => null,
             'variant_number' => 1,
+            'administered_at' => fake()->dateTimeBetween('-6 months', 'now')->format('Y-m-d'),
         ];
     }
 }

@@ -4,6 +4,8 @@ use App\Http\Controllers\AccommodationApprovalController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
+use App\Http\Controllers\AssessmentController;
+use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
@@ -13,6 +15,7 @@ use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
+use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\TeacherOptionsController;
 use Illuminate\Support\Facades\Route;
@@ -81,5 +84,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/ai-proposals/{ai_proposal}', [AIProposalController::class, 'show']);
         Route::post('/ai-proposals/{ai_proposal}/apply', [AIProposalController::class, 'apply']);
         Route::post('/ai-proposals/{ai_proposal}/discard', [AIProposalController::class, 'discard']);
+
+        // Session 6: assessments CRUD + per-student results (docs/prompts/
+        // 13-evaluaciones-resultados.md). Fills the gap left by Session 1
+        // (Assessment had a model/policy but no endpoints) and adds the
+        // AssessmentResult entity that Perfil de alumno's chart consumes.
+        Route::get('/groups/{group}/assessments', [AssessmentController::class, 'index']);
+        Route::post('/groups/{group}/assessments', [AssessmentController::class, 'store']);
+        Route::patch('/assessments/{assessment}', [AssessmentController::class, 'update']);
+        Route::delete('/assessments/{assessment}', [AssessmentController::class, 'destroy']);
+
+        Route::get('/assessments/{assessment}/results', [AssessmentResultController::class, 'index']);
+        Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store']);
+        Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
     });
 });
