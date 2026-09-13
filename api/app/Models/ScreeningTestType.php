@@ -53,9 +53,21 @@ class ScreeningTestType extends Model
      * this type with `approved === true`. A pending or rejected design is never
      * used to compute results (spec §1). Null when the type has no approved
      * design yet.
+     *
+     * When the `designs` relation is already loaded (e.g. eager-loaded by the
+     * type listing endpoint) the in-force design is resolved from that
+     * in-memory collection, so listing N types with their current design stays
+     * a single extra query instead of an N+1.
      */
     public function currentApprovedDesign(): ?ScreeningTestDesign
     {
+        if ($this->relationLoaded('designs')) {
+            return $this->designs
+                ->where('approved', true)
+                ->sortByDesc('id')
+                ->first();
+        }
+
         return $this->designs()
             ->where('approved', true)
             ->orderByDesc('id')

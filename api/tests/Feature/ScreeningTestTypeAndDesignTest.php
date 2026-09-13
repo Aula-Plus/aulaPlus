@@ -6,6 +6,7 @@ use App\Models\School;
 use App\Models\ScreeningTestDesign;
 use App\Models\ScreeningTestType;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -180,4 +181,40 @@ it('returns 422 when approving a design that was already decided', function () {
 
     $this->postJson("/api/v1/screening-test-designs/{$design->id}/approve")->assertStatus(422);
     $this->postJson("/api/v1/screening-test-designs/{$design->id}/reject")->assertStatus(422);
+});
+
+// docs/prompts/11-pruebas-de-sondeo.md §1: the type listing carries each type's
+// current design. Regression — resolving that design must not cost one query
+// per type (N+1); the endpoint eager-loads the approved designs instead.
+it('lists types with their current design without an N+1', function () {
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
+
+    $makeTypeWithDesign = function () use ($school): void {
+        $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+        ScreeningTestDesign::factory()->for($type, 'type')->approved()->create();
+    };
+
+    $makeTypeWithDesign();
+
+    // Warm up per-request caches (authenticated user's roles, etc.) so the
+    // measurements below capture only the listing's own queries.
+    DB::connection()->enableQueryLog();
+    $this->getJson('/api/v1/screening-test-types')->assertOk();
+
+    DB::connection()->flushQueryLog();
+    $this->getJson('/api/v1/screening-test-types')->assertOk()->assertJsonCount(1, 'data');
+    $countForOne = count(DB::connection()->getQueryLog());
+
+    $makeTypeWithDesign();
+    $makeTypeWithDesign();
+
+    DB::connection()->flushQueryLog();
+    $this->getJson('/api/v1/screening-test-types')->assertOk()->assertJsonCount(3, 'data');
+    $countForThree = count(DB::connection()->getQueryLog());
+    DB::connection()->disableQueryLog();
+
+    // Constant query count regardless of the number of types => no N+1.
+    expect($countForThree)->toBe($countForOne);
 });

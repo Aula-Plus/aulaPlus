@@ -20,8 +20,14 @@ class ScreeningTestTypeController extends Controller
     {
         $this->authorize('viewAny', ScreeningTestType::class);
 
-        // SchoolScope already constrains this to the current tenant.
-        $types = ScreeningTestType::query()->orderByDesc('id')->get();
+        // SchoolScope already constrains this to the current tenant. Eager-load
+        // the approved designs so the resource resolves each type's in-force
+        // design from memory (see ScreeningTestType::currentApprovedDesign)
+        // instead of firing one query per type.
+        $types = ScreeningTestType::query()
+            ->with(['designs' => fn ($query) => $query->where('approved', true)])
+            ->orderByDesc('id')
+            ->get();
 
         return ScreeningTestTypeResource::collection($types);
     }
