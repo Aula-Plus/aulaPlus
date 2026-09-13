@@ -198,3 +198,40 @@ it('keeps the role-based visibility rule unchanged for author_only=false comment
     $psychopedagogueIds = Comment::query()->visibleToRole($psychopedagogue)->pluck('id');
     expect($psychopedagogueIds)->toContain($public->id)->toContain($restricted->id);
 });
+
+// docs/prompts/19-comentarios-alcance.md §1 regression: an explicit empty
+// `visible_to: []` must not diverge between the two visibility paths.
+// isVisibleTo() treats empty as visible-to-all, but scopeVisibleToRole() only
+// matches `visible_to IS NULL`; a stored `[]` would show in the tracking view
+// yet vanish from the list endpoint. The store request normalizes `[]` to null
+// so both paths agree.
+it('normalizes an empty visible_to array to null so both visibility paths agree', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $group->teachers()->attach($teacher);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+
+    Sanctum::actingAs($psychopedagogue);
+    $this->postJson("/api/v1/students/{$student->id}/comments", [
+        'content' => 'Sin restricción de rol',
+        'visible_to' => [],
+    ])
+        ->assertCreated()
+        ->assertJsonPath('data.visible_to', null);
+
+    $comment = Comment::first();
+    expect($comment->visible_to)->toBeNull();
+
+    // Both paths agree: visible to a teacher who is not the author.
+    expect($comment->isVisibleTo($teacher))->toBeTrue()
+        ->and(Comment::query()->visibleToRole($teacher)->pluck('id'))->toContain($comment->id);
+
+    // And the list endpoint returns it to that teacher.
+    Sanctum::actingAs($teacher);
+    $this->getJson("/api/v1/students/{$student->id}/comments")
+        ->assertOk()
+        ->assertJsonPath('data.0.content', 'Sin restricción de rol');
+});

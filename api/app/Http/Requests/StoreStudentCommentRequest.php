@@ -38,6 +38,17 @@ class StoreStudentCommentRequest extends FormRequest
     {
         if ($this->boolean('author_only')) {
             $this->merge(['visible_to' => null]);
+
+            return;
+        }
+
+        // Normalize an explicit empty array to null so it means the same thing
+        // ("visible to every role") in both visibility paths: Comment::isVisibleTo()
+        // treats empty as visible-to-all, but Comment::scopeVisibleToRole() only
+        // matches on `visible_to IS NULL` — a stored `[]` would diverge between
+        // the two and break the invariant their docblocks promise.
+        if ($this->input('visible_to') === []) {
+            $this->merge(['visible_to' => null]);
         }
     }
 
