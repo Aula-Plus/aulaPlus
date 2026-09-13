@@ -20,11 +20,13 @@ construida con el mismo rigor que el resto del dominio (migración, modelo,
 factory, Policy, FormRequest, Controller, tests), no como un atajo.
 
 **No es** el asistente de generación de evaluaciones con IA de
-`docs/prompts/05-asistente-ia-docente.md` (Sesión 5, pantallas 16-17 del
-documento vivo — "Nueva evaluación"/"Evaluación generada"). Esto es el CRUD
-llano: elegir tipo, fecha, y cargar una nota por alumno. La Sesión 5, cuando se
-haga, escribe en el mismo `content`/`Assessment` que esta sesión ya deja
-armado — no hay que rehacer nada.
+`docs/prompts/05-asistente-ia-docente.md` (Sesión 5, ya mergeada a `develop`
+— motor de `AIProposal`, no la UI). Lo que falta es la curricular/pantallas
+16-17 del documento vivo ("Nueva evaluación"/"Evaluación generada"), que
+consumirían ese motor para poblar `content` — fuera de alcance acá. Esto es
+el CRUD llano: elegir tipo, fecha, y cargar una nota por alumno. Cuando esa
+pieza curricular se construya, escribe en el mismo `content`/`Assessment`
+que esta sesión ya deja armado — no hay que rehacer nada.
 
 ## 1. Completar `Assessment`
 
