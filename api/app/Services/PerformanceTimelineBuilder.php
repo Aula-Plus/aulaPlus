@@ -85,11 +85,16 @@ class PerformanceTimelineBuilder
         /** @var Collection<int, array{date: Carbon, mark: array<string, mixed>}> $entries */
         $entries = collect();
 
+        // Parse the window bounds once (not once per row) for the PHP-filtered
+        // sources; the query-filtered sources use the raw strings via whereDate.
+        $fromBound = $from !== null ? Carbon::parse($from)->startOfDay() : null;
+        $toBound = $to !== null ? Carbon::parse($to)->endOfDay() : null;
+
         if (Gate::forUser($user)->allows('view-clinical-profile', $student)) {
-            $this->appendClinicalMarks($entries, $student, $from, $to);
+            $this->appendClinicalMarks($entries, $student, $fromBound, $toBound);
         }
 
-        $this->appendConcerningComments($entries, $student, $user, $from, $to);
+        $this->appendConcerningComments($entries, $student, $user, $fromBound, $toBound);
         $this->appendCalendarEvents($entries, $from, $to);
 
         // Single flat array, chronological. All mark dates are UTC ISO-8601, so
@@ -109,7 +114,7 @@ class PerformanceTimelineBuilder
      *
      * @param  Collection<int, array{date: Carbon, mark: array<string, mixed>}>  $entries
      */
-    protected function appendClinicalMarks(Collection $entries, Student $student, ?string $from, ?string $to): void
+    protected function appendClinicalMarks(Collection $entries, Student $student, ?Carbon $from, ?Carbon $to): void
     {
         // withTrashed(): a deactivation/override event inside the window must
         // still surface even if the accommodation was soft-deleted afterwards
@@ -198,7 +203,7 @@ class PerformanceTimelineBuilder
      *
      * @param  Collection<int, array{date: Carbon, mark: array<string, mixed>}>  $entries
      */
-    protected function appendConcerningComments(Collection $entries, Student $student, User $user, ?string $from, ?string $to): void
+    protected function appendConcerningComments(Collection $entries, Student $student, User $user, ?Carbon $from, ?Carbon $to): void
     {
         $comments = $student->comments()
             ->where('tone', CommentTone::Concerning->value)
@@ -245,21 +250,21 @@ class PerformanceTimelineBuilder
 
     /**
      * Inclusive date-window test used for the sources filtered in PHP
-     * (small, relation-loaded collections). `to` covers the whole day, so the
-     * behaviour matches the query-level `whereDate` used for the larger
-     * sources.
+     * (small, relation-loaded collections). The bounds are pre-parsed by the
+     * caller ($from at start-of-day, $to at end-of-day) so the behaviour matches
+     * the query-level `whereDate` used for the larger sources.
      */
-    protected function inRange(?Carbon $date, ?string $from, ?string $to): bool
+    protected function inRange(?Carbon $date, ?Carbon $from, ?Carbon $to): bool
     {
         if ($date === null) {
             return false;
         }
 
-        if ($from !== null && $date->lt(Carbon::parse($from)->startOfDay())) {
+        if ($from !== null && $date->lt($from)) {
             return false;
         }
 
-        if ($to !== null && $date->gt(Carbon::parse($to)->endOfDay())) {
+        if ($to !== null && $date->gt($to)) {
             return false;
         }
 
