@@ -6,6 +6,7 @@ use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Collection;
 
 /**
  * Upserting a batch of results for one assessment (docs/prompts/13-
@@ -19,6 +20,9 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class StoreAssessmentResultsRequest extends FormRequest
 {
+    /** @var Collection<int, int>|null */
+    protected ?Collection $enrolledStudentIds = null;
+
     public function authorize(): bool
     {
         /** @var Assessment $assessment */
@@ -42,22 +46,36 @@ class StoreAssessmentResultsRequest extends FormRequest
 
     /**
      * Reject (422) any student_id that isn't enrolled in the assessment's group.
+     *
+     * The set of enrolled student ids is loaded once (not once per row) so a
+     * full-class batch stays a single membership query instead of an N+1.
      */
     protected function studentBelongsToGroup(): Closure
     {
-        /** @var Assessment $assessment */
-        $assessment = $this->route('assessment');
+        $enrolledIds = $this->enrolledStudentIds();
 
-        return function (string $attribute, mixed $value, Closure $fail) use ($assessment): void {
-            $belongs = $assessment->group()
-                ->first()
-                ?->students()
-                ->whereKey($value)
-                ->exists();
-
-            if (! $belongs) {
+        return function (string $attribute, mixed $value, Closure $fail) use ($enrolledIds): void {
+            if (! $enrolledIds->contains((int) $value)) {
                 $fail('El alumno no pertenece al grupo de la evaluación.');
             }
         };
+    }
+
+    /**
+     * Ids of the students enrolled in the assessment's group, resolved once and
+     * memoized for the lifetime of the request.
+     *
+     * @return Collection<int, int>
+     */
+    protected function enrolledStudentIds(): Collection
+    {
+        return $this->enrolledStudentIds ??= (function (): Collection {
+            /** @var Assessment $assessment */
+            $assessment = $this->route('assessment');
+
+            return $assessment->group
+                ? $assessment->group->students()->pluck('students.id')->map(intval(...))
+                : collect();
+        })();
     }
 }
