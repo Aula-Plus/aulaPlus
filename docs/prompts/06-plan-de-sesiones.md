@@ -139,7 +139,31 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
 - [ ] **Sesión 12** — Columna agregada en Grupos (`22-grupos-listado.md`)
   Resumen:
 - [ ] **Sesión 13** — Pruebas de sondeo (`11-pruebas-de-sondeo.md`)
-  Resumen:
+  Resumen: Implementado el subsistema de pruebas de sondeo (`ScreeningTest*`),
+  independiente de las demás sesiones. Cuatro entidades tenant-scoped
+  (`BelongsToSchool` + `Auditable`): `ScreeningTestType` (catálogo por colegio),
+  `ScreeningTestDesign` (cortes + significados, patrón tri-estado
+  `approved` null/true/false igual que `Accommodation`, aprobación/rechazo
+  director-only reutilizando el patrón de `AccommodationApprovalController`),
+  `ScreeningTestApplication` y `ScreeningTestResult`. Al crear una aplicación se
+  generan resultados con `code` secuencial (`"01"`, `"02"`…) por orden
+  alfabético de `full_name` de los alumnos activos del grupo (soft-deletes
+  cubren "alumno dado de baja"; renumera desde `"01"` por aplicación). El
+  `color` se calcula (`ScreeningColor::fromScore`, corte inclusivo en ambos
+  extremos, rojo gana el empate) y se **persiste** al cargar el puntaje contra
+  el diseño aprobado vigente — nunca se recalcula en lectura, así que aprobar un
+  diseño nuevo no altera colores ya cargados. 4 Policies school-wide sin
+  excepción para `teacher`; roster (código→alumno) y resultados-por-código son
+  **solo psicopedagogía** (el director no ve el mapeo), crear tipo/diseño/
+  aplicación y cargar puntaje también psicopedagogía, aprobar/rechazar diseño
+  solo dirección. Validación en FormRequests (incl. `cutoff_high >= cutoff_low`
+  y `screening_test_type_id` acotado al colegio del usuario); precondiciones de
+  negocio (sin diseño aprobado, diseño ya resuelto) responden 422. El
+  `ScreeningTestResultResource` nunca expone `student_id`/nombre. Verificado en
+  este entorno con `php artisan test` sobre SQLite en memoria (no hay Docker/
+  Sail acá): 197 tests en verde (+29 nuevos), Pint limpio. Sin cambios fuera del
+  módulo. Pendiente/diferido por spec: mostrar resultados dentro de
+  `GET /students|groups/{..}/tracking` y cualquier vínculo con PTP.
 
 ## 5. Explícitamente fuera de este plan
 

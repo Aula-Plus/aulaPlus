@@ -10,6 +10,11 @@ use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupTrackingController;
+use App\Http\Controllers\ScreeningTestApplicationController;
+use App\Http\Controllers\ScreeningTestDesignApprovalController;
+use App\Http\Controllers\ScreeningTestDesignController;
+use App\Http\Controllers\ScreeningTestResultController;
+use App\Http\Controllers\ScreeningTestTypeController;
 use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
@@ -81,5 +86,23 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/ai-proposals/{ai_proposal}', [AIProposalController::class, 'show']);
         Route::post('/ai-proposals/{ai_proposal}/apply', [AIProposalController::class, 'apply']);
         Route::post('/ai-proposals/{ai_proposal}/discard', [AIProposalController::class, 'discard']);
+
+        // Session 13: screening tests ("pruebas de sondeo", docs/prompts/
+        // 11-pruebas-de-sondeo.md). School-wide, psychopedagogy-led module;
+        // teachers see nothing here. Catalog + versioned design with the same
+        // draft/approval pattern as Accommodation, then application to a group
+        // with anonymous per-application codes and score-driven color bands.
+        Route::get('/screening-test-types', [ScreeningTestTypeController::class, 'index']);
+        Route::post('/screening-test-types', [ScreeningTestTypeController::class, 'store']);
+        Route::post('/screening-test-types/{type}/designs', [ScreeningTestDesignController::class, 'store']);
+        Route::post('/screening-test-designs/{design}/approve', [ScreeningTestDesignApprovalController::class, 'approve']);
+        Route::post('/screening-test-designs/{design}/reject', [ScreeningTestDesignApprovalController::class, 'reject']);
+
+        Route::get('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'index']);
+        Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store']);
+        Route::get('/screening-test-applications/{application}/roster', [ScreeningTestApplicationController::class, 'roster']);
+        Route::get('/screening-test-applications/{application}/results', [ScreeningTestApplicationController::class, 'results']);
+
+        Route::patch('/screening-test-results/{result}', [ScreeningTestResultController::class, 'update']);
     });
 });
