@@ -17,8 +17,12 @@ it('serializes a group with its teachers', function () {
     $group->teachers()->attach($teacher);
     $group->load('teachers');
 
-    $array = (new GroupResource($group))->toArray(request());
+    // resolve() applies the conditional-field filtering (whenLoaded, when),
+    // giving the final serialized shape a client actually receives.
+    $array = (new GroupResource($group))->resolve(request());
 
+    // active_tracking_count is only present when the controller computed it
+    // for the listing; a bare resource omits it rather than emitting a 0.
     expect($array)->toBe([
         'id' => $group->id,
         'name' => '3° A',
@@ -34,5 +38,17 @@ it('serializes a group without teachers as an empty list', function () {
     $school = School::factory()->create();
     $group = Group::factory()->create(['school_id' => $school->id])->load('teachers');
 
-    expect((new GroupResource($group))->toArray(request())['teachers'])->toBe([]);
+    expect((new GroupResource($group))->resolve(request())['teachers'])->toBe([]);
+});
+
+it('includes active_tracking_count (as int) when it has been set on the group', function () {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id])->load('teachers');
+    // Mirrors what GroupController::index sets before serializing.
+    $group->active_tracking_count = 3;
+
+    $array = (new GroupResource($group))->resolve(request());
+
+    expect($array)->toHaveKey('active_tracking_count')
+        ->and($array['active_tracking_count'])->toBe(3);
 });
