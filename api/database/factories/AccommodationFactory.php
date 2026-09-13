@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\AccommodationCategory;
 use App\Models\Accommodation;
 use App\Models\Student;
 use App\Models\User;
@@ -24,6 +25,7 @@ class AccommodationFactory extends Factory
         return [
             'student_id' => Student::factory(),
             'type' => fake()->randomElement(['extra_time', 'adapted_material', 'visual_support']),
+            'category' => fake()->randomElement(AccommodationCategory::values()),
             'active' => true,
             'description' => fake()->paragraph(),
             'focus_area' => fake()->randomElement(['literacy', 'mathematics', 'attention']),

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Accommodation;
+use App\Models\AccommodationInstanceOverride;
 use App\Models\AnnualPlan;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
@@ -32,7 +33,11 @@ it('never leaks a domain record across schools', function () {
     $assessmentA = Assessment::factory()->create(['group_id' => $groupA->id]);
     AssessmentResult::factory()->create(['assessment_id' => $assessmentA->id, 'student_id' => $studentA->id]);
     ClassSession::factory()->create(['group_id' => $groupA->id]);
-    Accommodation::factory()->create(['student_id' => $studentA->id]);
+    $accommodationA = Accommodation::factory()->create(['student_id' => $studentA->id]);
+    AccommodationInstanceOverride::factory()->create([
+        'accommodation_id' => $accommodationA->id,
+        'assessment_id' => $assessmentA->id,
+    ]);
     Barrier::factory()->create(['student_id' => $studentA->id]);
     TechnicalReport::factory()->create(['student_id' => $studentA->id]);
     CalendarEvent::factory()->create(['school_id' => $schoolA->id]);
@@ -51,6 +56,7 @@ it('never leaks a domain record across schools', function () {
         ->and(AssessmentResult::count())->toBe(1)
         ->and(ClassSession::count())->toBe(1)
         ->and(Accommodation::count())->toBe(1)
+        ->and(AccommodationInstanceOverride::count())->toBe(1)
         ->and(Barrier::count())->toBe(1)
         ->and(TechnicalReport::count())->toBe(1)
         ->and(CalendarEvent::count())->toBe(1);
@@ -64,6 +70,7 @@ it('never leaks a domain record across schools', function () {
         ->and(AssessmentResult::count())->toBe(0)
         ->and(ClassSession::count())->toBe(0)
         ->and(Accommodation::count())->toBe(0)
+        ->and(AccommodationInstanceOverride::count())->toBe(0)
         ->and(Barrier::count())->toBe(0)
         ->and(TechnicalReport::count())->toBe(0)
         ->and(CalendarEvent::count())->toBe(1);

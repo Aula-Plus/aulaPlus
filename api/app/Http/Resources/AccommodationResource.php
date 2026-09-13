@@ -20,6 +20,7 @@ class AccommodationResource extends JsonResource
             'id' => $this->id,
             'student_id' => $this->student_id,
             'type' => $this->type,
+            'category' => $this->category?->value,
             'active' => $this->active,
             'description' => $this->description,
             'focus_area' => $this->focus_area,
