@@ -121,32 +121,35 @@ backend, resultado real de lint/typecheck/test/build).
 Sesiones 10-17: mismo criterio de granularidad chica que el backend
 (`06-plan-de-sesiones.md` §1) — Perfil de grupo y Perfil de alumno son el
 foco; todo lo demás existe para que esas dos pantallas tengan datos reales.
-Solo la Sesión 10 tiene spec escrito todavía; el resto son placeholders del
-roadmap hasta que se diseñen (mismo proceso: preguntas → diseño → spec).
+Todas tienen spec escrito.
 
 - [ ] **Sesión 10** — Evaluaciones y resultados, carga mínima
   (`14-frontend-evaluaciones-resultados.md`)
   Resumen: (depende del backend de `13-evaluaciones-resultados.md`, Sesión 6
   backend).
-- [ ] **Sesión 11** — Seguimiento programado en la UI (spec pendiente)
+- [ ] **Sesión 11** — Seguimiento programado en la UI
+  (`23-frontend-seguimiento-programado.md`)
   Resumen: (depende del backend de `17-seguimiento-programado.md`, Sesión 7
   backend).
 - [ ] **Sesión 12** — Categoría de ajuste y desactivar por instancia en la UI
-  (spec pendiente)
+  (`24-frontend-ajustes-categoria-instancia.md`)
   Resumen: (depende del backend de `18-ajustes-categoria-instancia.md`,
   Sesión 8 backend).
 - [ ] **Sesión 13** — Alcance de comentarios en la UI (4 opciones, badge
-  "Privado") (spec pendiente)
+  "Privado") (`25-frontend-comentarios-alcance.md`)
   Resumen: (depende del backend de `19-comentarios-alcance.md`, Sesión 9
   backend).
-- [ ] **Sesión 14** — Perfil de alumno: gráfico de desempeño (spec pendiente)
+- [ ] **Sesión 14** — Perfil de alumno: gráfico de desempeño
+  (`26-frontend-perfil-de-alumno.md`)
   Resumen: (depende de las Sesiones 11-13 de este archivo y del backend de
   `20-linea-tiempo-alumno.md`, Sesión 10 backend; agrega Recharts como
   dependencia nueva de `web/`).
-- [ ] **Sesión 15** — Perfil de grupo en la UI (spec pendiente)
+- [ ] **Sesión 15** — Perfil de grupo en la UI
+  (`27-frontend-perfil-de-grupo.md`)
   Resumen: (depende del backend de `21-perfil-de-grupo.md`, Sesión 11
   backend, y reusa componentes de las Sesiones 11-14 de este archivo).
-- [ ] **Sesión 16** — Columna agregada en Grupos, UI (spec pendiente)
+- [ ] **Sesión 16** — Columna agregada en Grupos, UI
+  (`28-frontend-grupos-listado.md`)
   Resumen: (depende del backend de `22-grupos-listado.md`, Sesión 12
   backend).
 - [ ] **Sesión 17** — Pruebas de sondeo en la UI
