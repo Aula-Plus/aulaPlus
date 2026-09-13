@@ -10,7 +10,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * The anonymised view of a result (docs/prompts/11-pruebas-de-sondeo.md §3):
  * by code only, NEVER carrying `student_id` or the student's name. The
  * code -> student mapping is exposed solely by the roster endpoint
- * (ScreeningTestRosterController). Do not add `student_id` here.
+ * (ScreeningTestApplicationController::roster). Do not add `student_id` here.
  *
  * @mixin ScreeningTestResult
  */
