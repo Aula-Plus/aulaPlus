@@ -125,7 +125,25 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   `focus_area` inicial a un valor distinto del que setea el `update`. Es
   test-only, no toca código de producción de Sesiones 1-4.
 - [ ] **Sesión 6** — Evaluaciones y resultados (`13-evaluaciones-resultados.md`)
-  Resumen:
+  Resumen: Cerrado el hueco de Sesión 1: `Assessment` ahora tiene CRUD completo
+  (`GET`/`POST /groups/{group}/assessments`, `PATCH`/`DELETE /assessments/{assessment}`)
+  con nueva columna `administered_at` (date, not null, migración aparte) sumada
+  al `#[Fillable]`/cast/factory. El chequeo de grupo puntual (`teachesGroup`) va
+  en `StoreAssessmentRequest`, sin tocar la `AssessmentPolicy` de Sesión 2.
+  Entidad nueva `AssessmentResult` (`BelongsToSchool` + `Auditable` +
+  `TracksAuthorship`, único `(assessment_id, student_id)`) con migración, modelo,
+  factory, `AssessmentResultPolicy` (view school-wide / create-update solo el
+  teacher dueño), `StoreAssessmentResultsRequest` (upsert en batch, valida
+  pertenencia al grupo vía pivot `group_student`), Controller y Resources.
+  `POST /assessments/{assessment}/results` hace upsert por `(assessment, student)`;
+  `GET /students/{student}/results` devuelve el timeline ordenado por
+  `administered_at` (lo que consumirá el gráfico de Perfil de alumno). Asumido:
+  rango de `score` `0–999.99` (el spec no fija escala) y fallback
+  `administered_at = today()` en `ApplyProposal` de Sesión 5 (borrador de IA aún
+  no tomado; editable por PATCH) para no romper esa acción con la nueva columna
+  NOT NULL. 24 tests nuevos; suite completa 191/191 en verde (2 corridas
+  consecutivas), Pint limpio. Verificado con `php artisan test` sobre SQLite en
+  memoria (sin Sail/Docker en este entorno).
 - [ ] **Sesión 7** — Seguimiento programado (`17-seguimiento-programado.md`)
   Resumen:
 - [ ] **Sesión 8** — Categoría de ajuste y desactivación por instancia (`18-ajustes-categoria-instancia.md`)

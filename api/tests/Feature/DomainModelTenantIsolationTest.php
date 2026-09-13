@@ -3,6 +3,7 @@
 use App\Models\Accommodation;
 use App\Models\AnnualPlan;
 use App\Models\Assessment;
+use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\CalendarEvent;
 use App\Models\ClassSession;
@@ -28,7 +29,8 @@ it('never leaks a domain record across schools', function () {
     $studentA = Student::factory()->create(['school_id' => $schoolA->id]);
     $annualPlanA = AnnualPlan::factory()->create(['group_id' => $groupA->id]);
     Unit::factory()->create(['annual_plan_id' => $annualPlanA->id]);
-    Assessment::factory()->create(['group_id' => $groupA->id]);
+    $assessmentA = Assessment::factory()->create(['group_id' => $groupA->id]);
+    AssessmentResult::factory()->create(['assessment_id' => $assessmentA->id, 'student_id' => $studentA->id]);
     ClassSession::factory()->create(['group_id' => $groupA->id]);
     Accommodation::factory()->create(['student_id' => $studentA->id]);
     Barrier::factory()->create(['student_id' => $studentA->id]);
@@ -46,6 +48,7 @@ it('never leaks a domain record across schools', function () {
         ->and(Student::count())->toBe(1)
         ->and(AnnualPlan::count())->toBe(1)
         ->and(Assessment::count())->toBe(1)
+        ->and(AssessmentResult::count())->toBe(1)
         ->and(ClassSession::count())->toBe(1)
         ->and(Accommodation::count())->toBe(1)
         ->and(Barrier::count())->toBe(1)
@@ -58,6 +61,7 @@ it('never leaks a domain record across schools', function () {
         ->and(Student::count())->toBe(1)
         ->and(AnnualPlan::count())->toBe(0)
         ->and(Assessment::count())->toBe(0)
+        ->and(AssessmentResult::count())->toBe(0)
         ->and(ClassSession::count())->toBe(0)
         ->and(Accommodation::count())->toBe(0)
         ->and(Barrier::count())->toBe(0)
