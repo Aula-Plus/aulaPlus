@@ -207,7 +207,25 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
 - [ ] **Sesión 11** — Perfil de grupo (`21-perfil-de-grupo.md`)
   Resumen:
 - [ ] **Sesión 12** — Columna agregada en Grupos (`22-grupos-listado.md`)
-  Resumen:
+  Resumen: Agregado `active_tracking_count` al listado `GET /api/groups` (ruta
+  base, sin prefijo `v1`): conteo agregado de alumnos con seguimiento activo
+  por grupo (Accommodation efectiva, Barrier activa, Alert sin resolver o
+  ScheduledFollowUp sin resolver — unión de alumnos, nunca suma de conteos).
+  Se calcula en `GroupController::index` con cuatro consultas agregadas (una
+  por tabla, join a `group_student`), sin N+1; la condición `isEffective()` se
+  replica en SQL (`active AND (!requires_external_approval OR approved)`) en
+  vez de fila por fila. Sólo agregado: nunca nombres/PII. `GroupResource` lo
+  incluye condicionalmente (via `when`), sólo en el listado; `show/store/
+  update` lo omiten en vez de exponer un 0 engañoso, y respeta las global
+  scopes (SchoolScope + soft-deletes de Accommodation/Barrier). 9 tests nuevos
+  (unión cuenta 1, grupo sin seguimiento da 0, columna para `teacher`, las 4
+  fuentes + estados inactivos/resueltos, accommodation pendiente de aprobación
+  no cuenta, no expone nombres/detalle clínico, aislamiento cross-school, y
+  conteo de queries constante ante más grupos = sin N+1). Suite completa
+  188/188 en verde y Pint limpio. Verificado en este entorno con `php artisan
+  test` sobre SQLite en memoria (sin Docker/Sail); requirió `APP_KEY` local
+  (`.env`, gitignored). Rama apilada: mergeó `feature/sesion-07-seguimiento-
+  programado` (dependencia, aún no en `develop`) antes de implementar.
 - [ ] **Sesión 13** — Pruebas de sondeo (`11-pruebas-de-sondeo.md`)
   Resumen: Implementado el subsistema de pruebas de sondeo (`ScreeningTest*`),
   independiente de las demás sesiones. Cuatro entidades tenant-scoped
