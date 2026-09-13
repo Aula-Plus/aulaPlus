@@ -126,8 +126,26 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   test-only, no toca código de producción de Sesiones 1-4.
 - [ ] **Sesión 6** — Evaluaciones y resultados (`13-evaluaciones-resultados.md`)
   Resumen:
-- [ ] **Sesión 7** — Seguimiento programado (`17-seguimiento-programado.md`)
-  Resumen:
+- [x] **Sesión 7** — Seguimiento programado (`17-seguimiento-programado.md`)
+  Resumen: Entidad `ScheduledFollowUp` completa (tenant-scoped vía
+  `BelongsToSchool`, `Auditable` con `description`/`resolution_note` excluidos
+  del diff — regla de seguridad 11): migración, modelo, factory, Resource,
+  `ScheduledFollowUpPolicy` nueva (no reusa `AccommodationPolicy`: exige
+  relación real con el alumno — `teachesStudent || rol school-wide`, y mismo
+  colegio; `resolve` = misma regla que `create`, no es aprobación de cuatro
+  ojos), dos FormRequests (`Store`/`Resolve`) y controlador con 3 endpoints v1
+  (`POST`/`GET /students/{student}/scheduled-follow-ups`, `POST
+  /scheduled-follow-ups/{followUp}/resolve`). `is_overdue` se calcula
+  server-side en el Resource (`!resolved && due_date <= today` en la zona
+  horaria de la app, `config('app.timezone')` = UTC), nunca en el cliente. El
+  `index` devuelve todos por defecto y sólo filtra si viene `?resolved`
+  (decisión del cliente, no del backend). 11 tests nuevos (rol/tenant, los tres
+  casos de `is_overdue`, aislamiento cross-school, redacción del audit diff);
+  suite completa 179/179 en verde y Pint limpio. Verificado en este entorno con
+  `php artisan test` sobre SQLite en memoria (sin Docker/Sail); requirió generar
+  `APP_KEY` local (`.env`, gitignored) para las pruebas de auth preexistentes.
+  Sin vínculo estructural a `Accommodation`/`Barrier` todavía, según la decisión
+  de alcance del spec.
 - [ ] **Sesión 8** — Categoría de ajuste y desactivación por instancia (`18-ajustes-categoria-instancia.md`)
   Resumen:
 - [ ] **Sesión 9** — Alcance de comentarios (`19-comentarios-alcance.md`)
