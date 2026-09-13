@@ -40,12 +40,17 @@ class ScheduledFollowUpController extends Controller
      * GET /api/v1/groups/{group}/scheduled-follow-ups?overdue=true — the
      * follow-ups of a group's students (docs/prompts/21-perfil-de-grupo.md
      * §4). Endpoint access is GroupPolicy::view (enforced by the FormRequest:
-     * a teacher who does not lead the group gets 403); each follow-up is then
-     * included only if the user passes ScheduledFollowUpPolicy::view for that
-     * particular student — for a teacher leading the group this naturally
-     * covers all of its students. Optional ?overdue=true narrows to overdue
-     * ones (is_overdue computed server-side, app timezone — never trusting a
-     * client-computed flag).
+     * a teacher who does not lead the group gets 403).
+     *
+     * Per-follow-up authorization is not repeated per row: ScheduledFollowUpPolicy
+     * ::view grants access to a student iff the caller shares the school AND
+     * (teaches the student OR is school-wide). Every student here belongs to
+     * this group and the caller already passed GroupPolicy::view, so a teacher
+     * leading the group teaches all of them and a school-wide role covers them
+     * anyway — the per-row check was always true and only cost an N+1
+     * (teachesStudent fires one query per follow-up). Optional ?overdue=true
+     * narrows to overdue ones (is_overdue computed server-side, app timezone —
+     * never trusting a client-computed flag).
      */
     public function indexForGroup(GroupScheduledFollowUpsRequest $request, Group $group): AnonymousResourceCollection
     {
@@ -53,10 +58,8 @@ class ScheduledFollowUpController extends Controller
 
         $followUps = ScheduledFollowUp::query()
             ->whereIn('student_id', $studentIds)
-            ->with('student')
             ->latest()
-            ->get()
-            ->filter(fn (ScheduledFollowUp $followUp): bool => $request->user()->can('view', $followUp));
+            ->get();
 
         if ($request->boolean('overdue')) {
             $followUps = $followUps->filter->isOverdue();
