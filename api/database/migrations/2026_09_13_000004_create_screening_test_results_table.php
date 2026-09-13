@@ -33,6 +33,9 @@ return new class extends Migration
 
             $table->unique(['screening_test_application_id', 'code']);
             $table->index('school_id');
+            // FK columns are not auto-indexed on PostgreSQL; index student_id
+            // for the cascade on student delete and any by-student lookup.
+            $table->index('student_id');
         });
     }
 

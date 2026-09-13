@@ -23,6 +23,12 @@ use Illuminate\Support\Facades\DB;
  * The domain model has no `status` column (a withdrawn student is soft-deleted
  * — see the students-table refactor migration), so soft-deleted students are
  * already excluded by the SoftDeletes global scope on Student.
+ *
+ * The roster is scoped to the group's `school_year`, matching the convention in
+ * Student::groupForYear()/StudentController: `group_student` is historized
+ * per school year (unique on student_id + school_year), so an unscoped query
+ * would return a prior-year enrolment of the same student as a second row and
+ * assign it a second `code`. Scoping by year keeps one code per student.
  */
 class CreateScreeningTestApplication
 {
@@ -41,6 +47,7 @@ class CreateScreeningTestApplication
             ]);
 
             $students = $group->students()
+                ->wherePivot('school_year', $group->school_year)
                 ->orderBy('students.full_name')
                 ->orderBy('students.id')
                 ->get();

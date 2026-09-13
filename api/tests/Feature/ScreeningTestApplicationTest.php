@@ -73,6 +73,28 @@ it('creates one result per active student with sequential codes in alphabetical 
     expect($application->results()->whereNotNull('score')->count())->toBe(0);
 });
 
+it('counts each student once, scoped to the group school year', function () {
+    ['school' => $school, 'group' => $group, 'students' => $students] = screeningGroupWithStudents();
+    // Ana was also enrolled in this same group a prior year (a second
+    // group_student row). An unscoped roster would give her two codes; the
+    // roster is scoped to the group's school_year, so she appears exactly once.
+    $group->students()->attach($students['ana']->id, ['school_year' => now()->year - 1]);
+
+    $type = approvedTypeForSchool($school);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
+
+    $this->postJson("/api/v1/groups/{$group->id}/screening-test-applications", [
+        'screening_test_type_id' => $type->id,
+    ])
+        ->assertCreated()
+        ->assertJsonPath('data.results_count', 3);
+
+    $application = ScreeningTestApplication::query()->firstOrFail();
+    expect($application->results()->count())->toBe(3);
+    expect($application->results()->where('student_id', $students['ana']->id)->count())->toBe(1);
+});
+
 it('cannot create an application when the type has no approved design in force', function () {
     $school = School::factory()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
