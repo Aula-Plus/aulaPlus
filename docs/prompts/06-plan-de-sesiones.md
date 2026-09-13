@@ -203,7 +203,24 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   aún no están mergeados, pero Sesión 9 solo depende de Sesión 4 (ya presente),
   así que no hubo bloqueo.
 - [ ] **Sesión 10** — Línea de tiempo de desempeño del alumno (`20-linea-tiempo-alumno.md`)
-  Resumen:
+  Resumen: `GET /api/v1/students/{student}/performance-timeline?from=&to=`
+  (agregador read-only para el gráfico de Perfil de alumno). Devuelve `results`
+  (reusa la regla de Sesión 6, ordenado por `administered_at`) + un único array
+  `marks` con las seis fuentes: `accommodation_activated` (Accommodation.created_at),
+  `accommodation_deactivated` (derivado de `audit_logs` de Sesión 3 — diff de
+  `active` true→false, sin columna `deactivated_at` redundante),
+  `accommodation_instance_override` (Sesión 8), `barrier_registered`,
+  `concerning_comment` (tono `concerning` respetando `visible_to`/`author_only`
+  de Sesión 9) y `calendar_event` (a nivel colegio, sin vínculo inventado).
+  Autorización igual que `tracking` (StudentPolicy::view, vía FormRequest); los
+  cuatro tipos clínicos se omiten por completo si el usuario no pasa
+  `view-clinical-profile`, y `concerning_comment` depende solo de la visibilidad
+  del comentario (eje ortogonal al gate clínico). `calendar_event` siempre
+  presente. Lógica en `App\Services\PerformanceTimelineBuilder`; validación de
+  `from`/`to` en FormRequest. 11 tests nuevos (222 en total, +11), Pint limpio.
+  Rama apilada sobre `develop` + merge de Sesión 8 (incluye 6) y Sesión 9, que
+  aún no están mergeadas a `develop`. Verificado con `php artisan test` (SQLite
+  en memoria; sin Sail/Docker en este entorno cloud).
 - [ ] **Sesión 11** — Perfil de grupo (`21-perfil-de-grupo.md`)
   Resumen:
 - [ ] **Sesión 12** — Columna agregada en Grupos (`22-grupos-listado.md`)
