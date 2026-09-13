@@ -1,9 +1,10 @@
 # Sesión 9 (backend) — Alcance de comentarios: "solo quien escribe" y contador reservado
 
 **Depende de:** Sesión 4 (`Comment`, `visible_to`).
-**Bloquea a:** Sesión 10 (línea de tiempo del alumno, que filtra comentarios
-"concerning" con esta misma regla) y Sesión 11 (Perfil de grupo, que
-consume el contador corregido).
+**Bloquea a:** Sesión 10 (backend, `20-linea-tiempo-alumno.md` — línea de
+tiempo del alumno, que filtra comentarios "concerning" con esta misma regla)
+y Sesión 11 (backend, `21-perfil-de-grupo.md` — consume el contador
+corregido). También bloquea a la Sesión 13 (frontend, este mismo módulo).
 **Contexto persistente:** ya cargado desde `CLAUDE.md`. Ver también
 `aulaplus-documento-vivo/documento_aulaplus.html`, decisión "E1 · Eitán"
 (pantallas 3 y 4) y "D3 + Eitán" (pantallas 3 y 4).
@@ -61,11 +62,17 @@ comentarios de otros docentes, pero el **conteo** es exclusivo de
 psicopedagogía/dirección — "el número ancla, el contenido no". Esto es un
 bug a corregir, no una feature nueva (ya estaba mal desde la Sesión 4).
 
-Cambio en `GroupTrackingResource` (o donde arme la respuesta): omitir la
-clave `comments_count` por completo (no `0`, no `null` — omitirla) cuando el
-usuario no pasa una verificación school-wide (`$user->hasAnyRole(Role::schoolWideValues())`).
-Mismo patrón de "se omite la clave, no se devuelve un valor falso" que ya se
-usa para `marks` en el resto del dominio clínico.
+Cambio en `GroupTrackingResource`: hoy simplemente devuelve
+`$this->resource['comments_count']` tal cual se lo pasa
+`GroupTrackingController::show` (que lo calcula con un `Comment::query()->count()`
+plano, sin filtrar por `visible_to`/`author_only` — eso es correcto, el
+"número ancla" cuenta todos los comentarios, lo que hay que restringir es
+quién *recibe* la clave). Envolver esa clave en
+`$this->when($user->hasAnyRole(Role::schoolWideValues()), fn () => ...)` para
+omitirla por completo (no `0`, no `null`) cuando el usuario no pasa la
+verificación school-wide. Mismo patrón de "se omite la clave, no se devuelve
+un valor falso" que ya usa `StudentTrackingResource` vía `Gate::allows('view-clinical-profile', ...)`
+para `accommodations`/`barriers`/`alerts`.
 
 ## 3. Tests
 

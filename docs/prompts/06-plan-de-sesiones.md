@@ -38,11 +38,15 @@ Sesión 12 → 22-grupos-listado.md                  (columna agregada en el lis
 Sesión 13 → 11-pruebas-de-sondeo.md               (sin relación con las anteriores; última por prioridad de producto, no por dependencia)
 ```
 
-Dependencias reales (no todas son estrictamente secuenciales): 6, 7, 8 y 9 son
-independientes entre sí y podrían correrse en cualquier orden relativo. 10
-necesita 6+8+9 mergeadas. 11 necesita 4+6+7+8+9 mergeadas. 12 necesita 4+7.
-13 (sondeo) es independiente de todas las anteriores — sigue última solo por
-prioridad de producto (los perfiles son de uso diario; el sondeo, ocasional).
+Dependencias reales (no todas son estrictamente secuenciales): 6, 7 y 9 son
+independientes entre sí y podrían correrse en cualquier orden relativo. 8
+**no** es independiente del resto — depende de 6 (`18-ajustes-categoria-
+instancia.md` necesita el CRUD real de `Assessment` para que la "instancia"
+de `AccommodationInstanceOverride` sea una evaluación concreta, no una
+etiqueta libre; ver el encabezado de ese archivo). 10 necesita 6+8+9
+mergeadas. 11 necesita 4+6+7+8+9 mergeadas. 12 necesita 4+7. 13 (sondeo) es
+independiente de todas las anteriores — sigue última solo por prioridad de
+producto (los perfiles son de uso diario; el sondeo, ocasional).
 
 ## 2. Cómo correr cada sesión
 

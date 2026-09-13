@@ -2,9 +2,12 @@
 
 **Depende de:** Sesión 1 (modelo de dominio — `Assessment` y `AssessmentPolicy`
 ya existen), Sesión 2 (roles/Policies), Sesión 3 (`Auditable`).
-**Bloquea a:** Sesión 7 (backend, "Perfil de alumno") — el gráfico de
-desempeño de esa pantalla necesita los resultados que esta sesión expone.
-También bloquea a la Sesión 10 (frontend, este mismo módulo).
+**Bloquea a:** Sesión 8 (backend, `18-ajustes-categoria-instancia.md` —
+necesita el CRUD real de `Assessment` para que la "instancia" de
+`AccommodationInstanceOverride` sea una evaluación concreta) y Sesión 10
+(backend, `20-linea-tiempo-alumno.md`) — el gráfico de desempeño de Perfil de
+alumno necesita los resultados que esta sesión expone. También bloquea a la
+Sesión 10 (frontend, este mismo módulo).
 **Contexto persistente:** ya cargado desde `CLAUDE.md`.
 
 ## Objetivo
@@ -39,8 +42,9 @@ Schema::table('assessments', function (Blueprint $table) {
 ```
 
 No hay datos reales en producción todavía (piloto no arrancó), así que
-`not null` sin backfill es seguro; si algún seeder/factory ya crea
-`Assessment`, actualizarlo para setear `administered_at`.
+`not null` sin backfill es seguro; el `AssessmentFactory` existente
+(`api/database/factories/AssessmentFactory.php`) sí crea `Assessment` sin este
+campo hoy — hay que actualizarlo para que lo setee.
 
 Agregar `administered_at` al `#[Fillable]` del modelo.
 
@@ -76,7 +80,7 @@ el único punto de verdad de tenancy en esa jerarquía puntual). `Auditable`:
 |---|---|---|
 | school_id | FK | |
 | assessment_id | FK → assessments | |
-| student_id | FK → students | debe pertenecer al `group_id` de la evaluación — validar en el FormRequest |
+| student_id | FK → students | debe pertenecer al grupo de la evaluación — validar en el FormRequest. `Student` no tiene un `group_id` propio: la pertenencia es vía el pivot `group_student` (`$assessment->group->students()->whereKey($studentId)->exists()`), historizado por `school_year` — no asumir una FK directa |
 | score | decimal(5,2) | requerido |
 | feedback | text, nullable | comentario opcional del docente sobre esa nota puntual |
 | created_by_id | FK → users | |

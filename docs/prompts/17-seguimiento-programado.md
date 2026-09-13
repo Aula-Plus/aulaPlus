@@ -1,8 +1,9 @@
 # Sesión 7 (backend) — Seguimiento programado
 
 **Depende de:** Sesión 1-4 (dominio, roles, auditoría, seguimiento).
-**Bloquea a:** Sesión 11 (Perfil de grupo — lista los seguimientos vencidos
-del grupo) y, opcionalmente, a la UI de Perfil de alumno (Sesión 10
+**Bloquea a:** Sesión 11 (backend, `21-perfil-de-grupo.md` — lista los
+seguimientos vencidos del grupo). También bloquea a la Sesión 11 (frontend,
+este mismo módulo) y, opcionalmente, a la UI de Perfil de alumno (Sesión 14
 frontend), que puede mostrar los seguimientos del alumno en su propia
 sección.
 **Contexto persistente:** ya cargado desde `CLAUDE.md`. Ver también

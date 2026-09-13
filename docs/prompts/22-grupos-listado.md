@@ -2,17 +2,20 @@
 
 **Depende de:** Sesión 4 (`Accommodation`, `Barrier`, `Alert`), Sesión 7
 (`ScheduledFollowUp`).
-**Bloquea a:** Sesión 14 (frontend, "Grupos").
+**Bloquea a:** Sesión 16 (frontend, "Grupos").
 **Contexto persistente:** ya cargado desde `CLAUDE.md`. Ver también
 `aulaplus-documento-vivo/documento_aulaplus.html`, pantalla 2 ("Grupos"),
 decisión "Línea roja".
 
 ## Objetivo
 
-Sesión chica: agregar al listado de grupos (`GET /api/v1/groups`, ya
-existente) cuántos alumnos del grupo tienen seguimiento activo — agregado,
-nunca nómina, visible para cualquier rol que vea el listado (docente
-incluido).
+Sesión chica: agregar al listado de grupos (`GET /api/groups`, ya
+existente — **sin** prefijo `v1`: la ruta base de `groups` se declaró en la
+Sesión 1 vía `Route::apiResource('groups', GroupController::class)`, fuera
+del grupo `Route::prefix('v1')` que agregaron las Sesiones 3+; verificar
+`routes/api.php` antes de cablear el frontend contra la ruta equivocada)
+cuántos alumnos del grupo tienen seguimiento activo — agregado, nunca
+nómina, visible para cualquier rol que vea el listado (docente incluido).
 
 ## 1. Definición de "seguimiento activo"
 
@@ -39,6 +42,14 @@ Sugerencia de forma de cálculo: por cada una de las cuatro tablas, un query
 `student_id` distintos con la condición correspondiente, después unir los
 sets en PHP por `group_id` (unión de alumnos, no suma de conteos — un
 alumno con accommodation Y alerta abierta cuenta una sola vez).
+
+La condición de `Accommodation` no es una columna simple: `isEffective()` es
+`active && (!requires_external_approval || approved === true)` (método PHP en
+el modelo, `app/Models/Accommodation.php`) — para el query agregado hay que
+replicar esa misma condición en el `WHERE` SQL
+(`active = true and (requires_external_approval = false or approved = true)`),
+no llamar `$accommodation->isEffective()` fila por fila, que reintroduciría
+el N+1 que esta sesión busca evitar.
 
 ## 3. Tests
 

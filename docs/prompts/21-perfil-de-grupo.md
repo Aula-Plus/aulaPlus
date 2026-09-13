@@ -4,7 +4,7 @@
 (`AssessmentResult`), Sesión 7 (`ScheduledFollowUp`), Sesión 8
 (`Accommodation.category`, `AccommodationInstanceOverride`), Sesión 9
 (`comments_count` corregido, `Comment.author_only`).
-**Bloquea a:** Sesión 13 (frontend, "Perfil de grupo").
+**Bloquea a:** Sesión 15 (frontend, "Perfil de grupo").
 **Contexto persistente:** ya cargado desde `CLAUDE.md`. Ver también
 `aulaplus-documento-vivo/documento_aulaplus.html`, pantalla 3 ("Perfil de
 grupo").
@@ -90,8 +90,12 @@ Reglas de armado:
 
 Confirmar (y corregir si no es así) que el listado de alumnos que ya arma
 `GroupTrackingController` está ordenado alfabéticamente por `full_name`, no
-por ningún indicador (alertas abiertas, accommodations). Si ya lo está, no
-hay cambio — dejar un test que lo confirme explícitamente para que no se
+por ningún indicador (alertas abiertas, accommodations). **Verificado ahora
+contra el código real: no lo está** — el método hace
+`$group->students()->get()` sin ningún `orderBy`, así que el orden depende
+del join sobre el pivot `group_student` (efectivamente orden de inserción).
+Corregir agregando `orderBy('full_name')` (o el mecanismo equivalente sobre
+la relación) y dejar un test que lo confirme explícitamente para que no se
 rompa sin querer más adelante.
 
 ## 4. Seguimientos programados del grupo
@@ -111,10 +115,18 @@ para un teacher esto naturalmente se reduce a los alumnos que dicta.
 - Las marcas de `performance-timeline` de grupo nunca incluyen `student_id`
   ni ningún identificador de alumno.
 - El listado de alumnos del grupo está alfabético.
-- `scheduled-follow-ups` de grupo: un teacher solo ve las de los alumnos que
-  dicta, aunque pida el endpoint sobre un grupo donde hay otros alumnos que
-  no dicta (caso de grupos compartidos entre docentes de distintas
-  materias, si el dominio lo permite — verificar contra el modelo real).
+- `scheduled-follow-ups` de grupo: un teacher que dicta el grupo (aparece en
+  el pivot `group_teacher` para ese grupo) ve los seguimientos de **todos**
+  los alumnos del grupo. **Verificado contra el modelo real: no existe hoy
+  el escenario de "grupo compartido donde el docente dicta a algunos
+  alumnos y a otros no"** — `teachesGroup`/`teachesStudent` son chequeos a
+  nivel de grupo completo (`group_teacher` no tiene columna `subject`, y
+  `group_student` obliga `unique(student_id, school_year)`, es decir un
+  alumno pertenece a un solo grupo por año). El test relevante es más simple
+  de lo que sugería una versión anterior de este archivo: un teacher que
+  **no** dicta el grupo en absoluto (no está en `group_teacher` para ese
+  grupo) no puede pedir el endpoint sobre él (403, `GroupPolicy`/`view`), y
+  uno que sí lo dicta ve los seguimientos de todos sus alumnos.
 
 ## 6. Criterios de aceptación
 

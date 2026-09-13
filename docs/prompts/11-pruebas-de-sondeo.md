@@ -7,8 +7,8 @@
 independiente y quedó más atrás en la cola solo por prioridad de producto
 (los perfiles de alumno/grupo son de uso diario; el sondeo se aplica un par
 de veces al año), no por una dependencia técnica real.
-**Bloquea a:** la sesión de frontend "Pruebas de sondeo"
-(`12-frontend-pruebas-de-sondeo.md`) y, más adelante, la sesión que muestre
+**Bloquea a:** Sesión 17 (frontend, "Pruebas de sondeo",
+`12-frontend-pruebas-de-sondeo.md`) y, más adelante, la sesión que muestre
 resultados de sondeo dentro de Perfil de alumno/grupo (todavía no planificada).
 **Contexto persistente:** ya cargado desde `CLAUDE.md` — ver también
 `aulaplus-documento-vivo/documento_aulaplus.html`, pantallas 7 ("Pruebas de

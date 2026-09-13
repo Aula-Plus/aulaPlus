@@ -5,7 +5,7 @@ es la línea principal), Sesión 8 (`18-ajustes-categoria-instancia.md` —
 `AccommodationInstanceOverride` es una de las marcas), Sesión 9
 (`19-comentarios-alcance.md` — filtra comentarios "concerning" con
 `author_only`/`visible_to`).
-**Bloquea a:** Sesión 12 (frontend, "Perfil de alumno" — el gráfico).
+**Bloquea a:** Sesión 14 (frontend, "Perfil de alumno" — el gráfico).
 **Contexto persistente:** ya cargado desde `CLAUDE.md`. Ver también
 `aulaplus-documento-vivo/documento_aulaplus.html`, pantalla 4, decisiones
 "G12 · Galia" y "G6 + Eitán".

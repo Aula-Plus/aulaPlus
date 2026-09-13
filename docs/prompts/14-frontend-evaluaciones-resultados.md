@@ -3,7 +3,7 @@
 **Depende de:** Sesión 7 (frontend, `permissions.ts`), Sesión 8 (frontend,
 convenciones de `features/*/*.Api.ts`), y del backend de
 `docs/prompts/13-evaluaciones-resultados.md` (Sesión 6 backend) ya mergeado.
-**Bloquea a:** Sesión 11 (frontend, "Perfil de alumno") — el gráfico de esa
+**Bloquea a:** Sesión 14 (frontend, "Perfil de alumno") — el gráfico de esa
 sesión consume `GET /students/{student}/results`, que esta sesión no muestra
 todavía pero cuyo dato ya deja cargable.
 **Contexto persistente:** ya cargado desde `CLAUDE.md`.

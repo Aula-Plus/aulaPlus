@@ -153,8 +153,3 @@ roadmap hasta que se diseñen (mismo proceso: preguntas → diseño → spec).
   (`12-frontend-pruebas-de-sondeo.md`)
   Resumen: (depende del backend de `11-pruebas-de-sondeo.md`, Sesión 13
   backend — última por prioridad de producto, no por dependencia técnica).
-- [ ] **Sesión 12** — Pruebas de sondeo en la UI
-  (`12-frontend-pruebas-de-sondeo.md`)
-  Resumen: (depende del backend de `11-pruebas-de-sondeo.md`, Sesión 8
-  backend — reordenada detrás de Evaluaciones/Perfil de alumno por
-  prioridad de producto, no por dependencia técnica).
