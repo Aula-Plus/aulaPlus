@@ -30,7 +30,11 @@ class GroupTrackingController extends Controller
 
         $since = now()->subDays(self::TREND_PERIOD_DAYS);
 
-        $students = $group->students()->get()->map(fn ($student) => [
+        // Alphabetical by full_name, never by any indicator (open alerts,
+        // accommodations): the group profile lists students, it does not rank
+        // them (docs/prompts/21-perfil-de-grupo.md §3). Qualify the column —
+        // the relation resolves through a join over the group_student pivot.
+        $students = $group->students()->orderBy('students.full_name')->get()->map(fn ($student) => [
             'id' => $student->id,
             'full_name' => $student->full_name,
             'open_alerts_count' => Alert::query()->where('student_id', $student->id)->where('resolved', false)->count(),

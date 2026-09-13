@@ -13,6 +13,7 @@ use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
+use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\StudentCommentController;
@@ -86,6 +87,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'index']);
         Route::post('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'store']);
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
+
+        // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-
+        // grupo.md). All read-only and strictly aggregate — accommodations
+        // summarized by type (never a roster), a group performance line with
+        // count-by-(type,date) marks (never a student identifier), and the
+        // group's scheduled follow-ups filtered per-student by policy.
+        Route::get('/groups/{group}/accommodations-summary', [GroupProfileController::class, 'accommodationsSummary']);
+        Route::get('/groups/{group}/performance-timeline', [GroupProfileController::class, 'performanceTimeline']);
+        Route::get('/groups/{group}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'indexForGroup']);
 
         // Session 5: AI teaching assistant (docs/prompts/05-asistente-ia-
         // docente.md). The assistant proposes drafts; the teacher applies or

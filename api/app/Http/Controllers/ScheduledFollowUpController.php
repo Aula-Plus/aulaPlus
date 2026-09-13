@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\GroupScheduledFollowUpsRequest;
 use App\Http\Requests\ResolveScheduledFollowUpRequest;
 use App\Http\Requests\StoreScheduledFollowUpRequest;
 use App\Http\Resources\ScheduledFollowUpResource;
+use App\Models\Group;
 use App\Models\ScheduledFollowUp;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
@@ -32,6 +34,35 @@ class ScheduledFollowUpController extends Controller
         }
 
         return ScheduledFollowUpResource::collection($query->get());
+    }
+
+    /**
+     * GET /api/v1/groups/{group}/scheduled-follow-ups?overdue=true — the
+     * follow-ups of a group's students (docs/prompts/21-perfil-de-grupo.md
+     * §4). Endpoint access is GroupPolicy::view (enforced by the FormRequest:
+     * a teacher who does not lead the group gets 403); each follow-up is then
+     * included only if the user passes ScheduledFollowUpPolicy::view for that
+     * particular student — for a teacher leading the group this naturally
+     * covers all of its students. Optional ?overdue=true narrows to overdue
+     * ones (is_overdue computed server-side, app timezone — never trusting a
+     * client-computed flag).
+     */
+    public function indexForGroup(GroupScheduledFollowUpsRequest $request, Group $group): AnonymousResourceCollection
+    {
+        $studentIds = $group->students()->pluck('students.id');
+
+        $followUps = ScheduledFollowUp::query()
+            ->whereIn('student_id', $studentIds)
+            ->with('student')
+            ->latest()
+            ->get()
+            ->filter(fn (ScheduledFollowUp $followUp): bool => $request->user()->can('view', $followUp));
+
+        if ($request->boolean('overdue')) {
+            $followUps = $followUps->filter->isOverdue();
+        }
+
+        return ScheduledFollowUpResource::collection($followUps->values());
     }
 
     public function store(StoreScheduledFollowUpRequest $request, Student $student): JsonResponse
