@@ -51,6 +51,11 @@ class Assessment extends Model
         return $this->hasMany(AssessmentResult::class);
     }
 
+    public function instanceOverrides(): HasMany
+    {
+        return $this->hasMany(AccommodationInstanceOverride::class);
+    }
+
     public function curricularItems(): BelongsToMany
     {
         return $this->belongsToMany(CurricularItem::class, 'assessment_curricular_item')

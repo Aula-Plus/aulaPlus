@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AccommodationCategory;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\TracksAuthorship;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -23,6 +25,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'student_id',
     'type',
+    'category',
     'active',
     'description',
     'focus_area',
@@ -42,6 +45,7 @@ class Accommodation extends Model
     protected function casts(): array
     {
         return [
+            'category' => AccommodationCategory::class,
             'active' => 'boolean',
             'llm_rule' => 'array',
             'requires_external_approval' => 'boolean',
@@ -74,6 +78,11 @@ class Accommodation extends Model
     public function deletedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by_id');
+    }
+
+    public function instanceOverrides(): HasMany
+    {
+        return $this->hasMany(AccommodationInstanceOverride::class);
     }
 
     public function barriers(): BelongsToMany

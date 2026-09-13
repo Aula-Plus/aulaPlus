@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AccommodationApprovalController;
+use App\Http\Controllers\AccommodationController;
+use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
@@ -129,5 +131,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/screening-test-applications/{application}/results', [ScreeningTestApplicationController::class, 'results']);
 
         Route::patch('/screening-test-results/{result}', [ScreeningTestResultController::class, 'update']);
+
+        // Session 8: accommodation category + per-instance deactivation
+        // (docs/prompts/18-ajustes-categoria-instancia.md). Adds the missing
+        // Accommodation create/edit endpoints (where `category` is enforced)
+        // and the AccommodationInstanceOverride entity — deactivating an
+        // accommodation for one assessment, with a mandatory reason.
+        Route::post('/students/{student}/accommodations', [AccommodationController::class, 'store']);
+        Route::patch('/accommodations/{accommodation}', [AccommodationController::class, 'update']);
+
+        Route::post('/accommodations/{accommodation}/instance-overrides', [AccommodationInstanceOverrideController::class, 'store']);
+        Route::get('/assessments/{assessment}/instance-overrides', [AccommodationInstanceOverrideController::class, 'index']);
     });
 });

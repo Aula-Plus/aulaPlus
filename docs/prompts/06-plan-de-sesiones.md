@@ -164,8 +164,19 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   `APP_KEY` local (`.env`, gitignored) para las pruebas de auth preexistentes.
   Sin vínculo estructural a `Accommodation`/`Barrier` todavía, según la decisión
   de alcance del spec.
-- [ ] **Sesión 8** — Categoría de ajuste y desactivación por instancia (`18-ajustes-categoria-instancia.md`)
-  Resumen:
+- [x] **Sesión 8** — Categoría de ajuste y desactivación por instancia (`18-ajustes-categoria-instancia.md`)
+  Resumen: Nuevo enum `AccommodationCategory` (access/content/criteria) + columna
+  `category` en `accommodations` (nullable en DB, requerida en escritura). Se
+  agregó el endpoint de creación/edición de `Accommodation` que faltaba desde
+  Sesión 1 (`StoreAccommodationRequest`/`UpdateAccommodationRequest`,
+  `AccommodationController`, rutas POST `/students/{student}/accommodations` y
+  PATCH `/accommodations/{accommodation}`), reutilizando `AccommodationPolicy`
+  sin endurecerla. Nueva entidad `AccommodationInstanceOverride` (tenant-scoped,
+  Auditable, `reason` fuera del diff) con migración, modelo, factory, Policy,
+  FormRequest, Controller, Resource y rutas: crear solo el teacher dueño del
+  assessment (403 si no; 422 si la accommodation no es de un alumno del grupo),
+  listado por assessment con visibilidad del dueño + roles school-wide. Rama
+  parte de `develop` + merge de Sesión 6. 206/206 tests en verde, Pint limpio.
 - [ ] **Sesión 9** — Alcance de comentarios (`19-comentarios-alcance.md`)
   Resumen: Agregado el cuarto alcance "solo quien escribe" a `Comment` vía
   columna `author_only` (migración nueva, boolean default false, cast a
