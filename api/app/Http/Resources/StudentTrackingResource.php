@@ -46,7 +46,7 @@ class StudentTrackingResource extends JsonResource
         $canViewClinicalProfile = Gate::forUser($user)->allows('view-clinical-profile', $student);
 
         $visibleComments = collect($this->resource['comments'])
-            ->filter(fn ($comment) => $comment->isVisibleToRoles($user->getRoleNames()->all()))
+            ->filter(fn ($comment) => $comment->isVisibleTo($user))
             ->values();
 
         $accommodations = collect($this->resource['accommodations']);
