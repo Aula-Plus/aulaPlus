@@ -64,16 +64,27 @@ Reglas de armado:
   (`CalendarEvent` no está vinculado a alumno/grupo en el modelo actual — es
   a nivel de colegio, ej. "recreo largo", "período de exámenes"; no inventar
   un vínculo que no existe).
-- **Todo el bloque `marks` de accommodations/barriers se omite por completo**
-  (no un array vacío con footnote — se omite la clave) si el usuario no pasa
-  `Gate::allows('view-clinical-profile', $student)`, igual que el resto del
-  dominio clínico.
+- `marks` es un único array, siempre presente en la respuesta (nunca se omite
+  la clave completa) — lo que varía por autorización es **qué tipos de marca
+  contiene**, no si el array existe:
+  - `accommodation_activated`/`accommodation_deactivated`/
+    `accommodation_instance_override`/`barrier_registered`: solo se incluyen
+    si el usuario pasa `Gate::allows('view-clinical-profile', $student)` —
+    ausentes por completo (no un array vacío con footnote) si no, igual que
+    el resto del dominio clínico.
+  - `concerning_comment`: no depende del gate clínico — depende únicamente de
+    si el comentario es visible para el usuario (`visible_to`/`author_only`,
+    Sesión 9), el mismo eje de autorización que ya usa `Comment`, ortogonal a
+    `view-clinical-profile`.
+  - `calendar_event`: siempre presente (no está gateado, es a nivel de
+    colegio).
 
 ## 2. Tests
 
 - `performance-timeline`: un teacher sin `view-clinical-profile` no recibe
-  `marks` de accommodations/barriers pero sí recibe `results` y
-  `calendar_event`.
+  marcas `accommodation_*`/`barrier_registered` en `marks`, pero sí recibe
+  `results`, `calendar_event`, y `concerning_comment` cuando el comentario es
+  visible para él (independiente del gate clínico).
 - `accommodation_deactivated` aparece en `marks` cuando `active` pasa de
   `true` a `false`, con la fecha del `AuditLog` correspondiente, y no
   aparece si la accommodation nunca se desactivó.

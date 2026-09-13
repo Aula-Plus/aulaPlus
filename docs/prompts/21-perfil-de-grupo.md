@@ -79,12 +79,22 @@ Reglas de armado:
   por `(tipo, fecha)` en vez de listadas una por una.
 - `calendar_event`: igual que en la Sesión 10, sin agregación (ya es a nivel
   de colegio, no por alumno).
-- Todo el bloque `marks` de accommodation/barrier se omite completo (no
-  vacío) si el usuario no pasa `view-clinical-profile` para *ningún* alumno
-  del grupo — si lo pasa para al menos uno (ej. teacher que dicta a algunos
-  alumnos con perfil clínico visible), el conteo agregado igual no expone
-  nada nuevo porque ya es agregado; no hace falta filtrar por alumno acá
-  como si fuera detalle individual.
+- `marks` es un único array, siempre presente (nunca se omite la clave
+  completa) — lo que varía por autorización es qué tipos de marca contiene,
+  igual que en la Sesión 10 (`20-linea-tiempo-alumno.md` §1):
+  - `accommodation_activated`/`accommodation_deactivated`/
+    `barrier_registered`: ausentes por completo si el usuario no pasa
+    `view-clinical-profile` para *ningún* alumno del grupo — si lo pasa para
+    al menos uno (ej. teacher que dicta a algunos alumnos con perfil clínico
+    visible), sí se incluyen; el conteo agregado igual no expone nada nuevo
+    porque ya es agregado, no hace falta filtrar por alumno acá como si
+    fuera detalle individual.
+  - `concerning_comment`: no depende del gate clínico, depende de
+    `visible_to`/`author_only` de cada comentario agregado (Sesión 9) — un
+    comentario que no es visible para el usuario no aporta a ningún conteo,
+    independientemente de si el usuario tiene `view-clinical-profile`.
+  - `calendar_event`: siempre presente, sin condición de autorización
+    adicional (ya lo cubre `GroupPolicy::view` sobre el propio grupo).
 
 ## 3. Sin ranking
 
