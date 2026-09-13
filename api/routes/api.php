@@ -17,6 +17,7 @@ use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
+use App\Http\Controllers\StudentPerformanceTimelineController;
 use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\TeacherOptionsController;
@@ -99,6 +100,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/assessments/{assessment}/results', [AssessmentResultController::class, 'index']);
         Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store']);
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
+
+        // Session 10: performance timeline (docs/prompts/20-linea-tiempo-
+        // alumno.md). Read-only aggregator over the results line + six mark
+        // sources (Sessions 3/6/8/9 + Barrier/CalendarEvent); same auth as the
+        // tracking view, with clinical mark types gated per-user in the builder.
+        Route::get('/students/{student}/performance-timeline', [StudentPerformanceTimelineController::class, 'show']);
 
         // Session 8: accommodation category + per-instance deactivation
         // (docs/prompts/18-ajustes-categoria-instancia.md). Adds the missing
