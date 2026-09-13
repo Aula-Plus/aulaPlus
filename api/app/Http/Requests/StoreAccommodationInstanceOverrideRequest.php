@@ -49,6 +49,12 @@ class StoreAccommodationInstanceOverrideRequest extends FormRequest
                 Rule::exists('assessments', 'id')->where(
                     fn ($query) => $query->where('school_id', $this->user()->school_id)
                 ),
+                // One override per (accommodation, assessment): a repeat POST
+                // would otherwise hit the DB unique constraint and surface as a
+                // 500 instead of a clean 422.
+                Rule::unique('accommodation_instance_overrides', 'assessment_id')->where(
+                    fn ($query) => $query->where('accommodation_id', $this->route('accommodation')->id)
+                ),
             ],
             'reason' => ['required', 'string'],
         ];

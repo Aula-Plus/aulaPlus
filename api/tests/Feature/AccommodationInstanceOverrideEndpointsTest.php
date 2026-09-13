@@ -62,6 +62,27 @@ it('lets the owning teacher deactivate an accommodation for their assessment', f
     ]);
 });
 
+it('rejects a duplicate override for the same assessment (422, not 500)', function () {
+    $school = School::factory()->create();
+    ['teacher' => $teacher, 'accommodation' => $accommodation, 'assessment' => $assessment] = overrideGraph($school);
+    Sanctum::actingAs($teacher);
+
+    $payload = [
+        'assessment_id' => $assessment->id,
+        'reason' => 'No aplica en esta evaluación oral.',
+    ];
+
+    $this->postJson("/api/v1/accommodations/{$accommodation->id}/instance-overrides", $payload)
+        ->assertCreated();
+
+    // A repeat POST must be a clean validation error, not a DB-constraint 500.
+    $this->postJson("/api/v1/accommodations/{$accommodation->id}/instance-overrides", $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrorFor('assessment_id');
+
+    $this->assertDatabaseCount('accommodation_instance_overrides', 1);
+});
+
 it('requires a reason (422)', function () {
     $school = School::factory()->create();
     ['teacher' => $teacher, 'accommodation' => $accommodation, 'assessment' => $assessment] = overrideGraph($school);

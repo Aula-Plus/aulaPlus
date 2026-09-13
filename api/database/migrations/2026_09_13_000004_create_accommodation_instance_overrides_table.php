@@ -30,6 +30,9 @@ return new class extends Migration
             // One override per accommodation per assessment instance.
             $table->unique(['accommodation_id', 'assessment_id']);
             $table->index(['school_id', 'assessment_id']);
+            // FK columns are not auto-indexed on PostgreSQL; index the author
+            // for "overrides recorded by user X" lookups and cascade safety.
+            $table->index('deactivated_by_id');
         });
     }
 
