@@ -107,6 +107,11 @@ class Student extends Model
         return $this->hasMany(Alert::class);
     }
 
+    public function scheduledFollowUps(): HasMany
+    {
+        return $this->hasMany(ScheduledFollowUp::class);
+    }
+
     /**
      * The group this student belongs to for a given school year (defaults to
      * the current year). Convenience accessor over the group_student pivot.

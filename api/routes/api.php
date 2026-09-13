@@ -12,6 +12,7 @@ use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupTrackingController;
+use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
@@ -75,6 +76,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
 
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
+
+        // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
+        // programado.md). A person schedules a follow-up on a student for a
+        // date; it is scheduled by a person and never expires on its own.
+        // `is_overdue` is computed server-side by the resource.
+        Route::get('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'index']);
+        Route::post('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'store']);
+        Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
         // Session 5: AI teaching assistant (docs/prompts/05-asistente-ia-
         // docente.md). The assistant proposes drafts; the teacher applies or
