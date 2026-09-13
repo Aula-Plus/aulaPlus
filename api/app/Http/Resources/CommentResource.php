@@ -24,6 +24,7 @@ class CommentResource extends JsonResource
             'content' => $this->content,
             'tone' => $this->tone?->value,
             'visible_to' => $this->visible_to,
+            'author_only' => $this->author_only,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }
