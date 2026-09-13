@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * A follow-up someone scheduled on a student for a given date
- * (docs/prompts/17-seguimiento-programado.md). "Se programa, no vence solo":
+ * (docs/prompts/17-seguimiento-programado.md). It is scheduled by a person and
  * nothing expires on its own — this is the only entity that models a person
  * asking to revisit a case on a date. Deliberately generic (student + free
  * description + date), with no structural link to Accommodation/Barrier yet.

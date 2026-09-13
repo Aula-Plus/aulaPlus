@@ -76,8 +76,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
         // programado.md). A person schedules a follow-up on a student for a
-        // date; "se programa, no vence solo". `is_overdue` is computed
-        // server-side by the resource.
+        // date; it is scheduled by a person and never expires on its own.
+        // `is_overdue` is computed server-side by the resource.
         Route::get('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'index']);
         Route::post('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'store']);
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
