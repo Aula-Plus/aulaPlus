@@ -221,8 +221,36 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   Rama apilada sobre `develop` + merge de Sesión 8 (incluye 6) y Sesión 9, que
   aún no están mergeadas a `develop`. Verificado con `php artisan test` (SQLite
   en memoria; sin Sail/Docker en este entorno cloud).
-- [ ] **Sesión 11** — Perfil de grupo (`21-perfil-de-grupo.md`)
-  Resumen:
+- [x] **Sesión 11** — Perfil de grupo (`21-perfil-de-grupo.md`)
+  Resumen: Tres agregadores nuevos de solo lectura para "Perfil de grupo", todos
+  estrictamente agregados (nunca nómina, nunca un `student_id` en la respuesta):
+  `GET /groups/{group}/accommodations-summary` (ajustes efectivos agrupados por
+  `type`, `student_count` cuenta alumnos distintos no filas; sin gate clínico
+  extra porque no nombra alumnos), `GET /groups/{group}/performance-timeline`
+  (un punto por `Assessment` con resultados cargados — `average_score`/
+  `results_count` — más `marks` agregadas por (tipo, fecha):
+  `accommodation_activated`/`_deactivated` (esta última derivada del `AuditLog`
+  cuando `active` pasa true→false, sin columna nueva)/`barrier_registered` sólo
+  si el usuario pasa `view-clinical-profile` para al menos un alumno del grupo;
+  `concerning_comment` según `visible_to`/`author_only` de cada comentario,
+  ortogonal al gate clínico; `calendar_event` siempre) y
+  `GET /groups/{group}/scheduled-follow-ups?overdue=true` (seguimientos de los
+  alumnos del grupo, filtrados por `ScheduledFollowUpPolicy::view` por alumno).
+  Autorización vía `GroupPolicy::view` (un teacher que no dicta el grupo → 403),
+  en FormRequests nuevos (`GroupPerformanceTimelineRequest`,
+  `GroupScheduledFollowUpsRequest`, valida `from`/`to`/`overdue`). Corregido §3:
+  `GroupTrackingController` ahora ordena el listado de alumnos por
+  `students.full_name` (antes sin `orderBy`), con test de regresión. Rama parte
+  de `develop` + merges de Sesiones 8 (incluye 6), 7 y 9 (conflicto sólo en este
+  archivo, resuelto conservando los resúmenes de 6/7/8/9). 19 tests nuevos; suite
+  completa 241/241 en verde (2 corridas), Pint limpio. Verificado con
+  `php artisan test` sobre SQLite en memoria (sin Sail/Docker en el entorno
+  cloud). Supuestos documentados: `concerning_comment` agrega los comentarios de
+  los alumnos del grupo (mismas fuentes que Sesión 10, a nivel alumno), no los
+  comentarios a nivel `Group`; `from`/`to` filtran resultados y marcas; el shape
+  de los dos agregadores nuevos es plano (array / `{results, marks}`) siguiendo
+  el spec literal, mientras que scheduled-follow-ups reutiliza
+  `ScheduledFollowUpResource` (envuelto en `data`).
 - [ ] **Sesión 12** — Columna agregada en Grupos (`22-grupos-listado.md`)
   Resumen: Agregado `active_tracking_count` al listado `GET /api/groups` (ruta
   base, sin prefijo `v1`): conteo agregado de alumnos con seguimiento activo

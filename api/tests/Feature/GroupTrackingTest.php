@@ -70,6 +70,29 @@ it('reports the group trend: assessments and comments count within the period', 
         ->assertJsonPath('data.trend.comments_count', 1);
 });
 
+// docs/prompts/21-perfil-de-grupo.md §3: the student list is ordered
+// alphabetically by full_name, never by any indicator (open alerts,
+// accommodations) — the group profile lists students, it does not rank them.
+it('lists the group students alphabetically by full_name, not by insertion order', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+
+    // Attach out of alphabetical order so insertion order != alphabetical.
+    $zoe = Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Zoe Álvarez']);
+    $ana = Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Ana Gómez']);
+    $marco = Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Marco Díaz']);
+    $zoe->groups()->attach($group, ['school_year' => now()->year]);
+    $ana->groups()->attach($group, ['school_year' => now()->year]);
+    $marco->groups()->attach($group, ['school_year' => now()->year]);
+
+    Sanctum::actingAs($director);
+    $response = $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk();
+
+    $names = collect($response->json('data.students'))->pluck('full_name')->all();
+    expect($names)->toBe(['Ana Gómez', 'Marco Díaz', 'Zoe Álvarez']);
+});
+
 it('forbids a teacher who does not lead the group from viewing its tracking page', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
