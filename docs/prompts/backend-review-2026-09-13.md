@@ -29,7 +29,7 @@ recommendations rather than applied.
 | 6  | `feature/sesion-06-evaluaciones-resultados` (#59) | 191 → 191 | 1 | 1 (+1 already landed) |
 | 7  | `feature/sesion-07-seguimiento-programado` (#60) | 179 → 179 | 1 | 0 |
 | 8  | `feature/sesion-08-ajustes-categoria-instancia` (#63) | 206 → 207 | 1 | 1 |
-| 9  | `feature/sesion-09-comentarios-alcance` (#61) | 173 → 173 | 0 | 0 |
+| 9  | `feature/sesion-09-comentarios-alcance` (#61) | 173 → 174 | 1 | 0 |
 | 10 | `feature/sesion-10-linea-tiempo-alumno` (#65) | 222 → 222 | 0 | 1 |
 | 11 | `feature/sesion-11-perfil-de-grupo` (#66) | 241 → 241 | 0 | 1 |
 | 12 | `feature/sesion-12-grupos-listado` (#64) | 188 → 188 | 0 | 0 |
@@ -126,7 +126,19 @@ concrete defects and safe optimizations plus design/product recommendations.
 
 ## Sesión 9 — Comentarios / alcance "solo quien escribe" (PR #61)
 
-**Tests:** 173 → 173. **No changes required — clean and secure.**
+**Tests:** 173 → 174 (added 1 regression test).
+
+**Defects fixed**
+- `visible_to: []` diverged between the two visibility paths. `Comment::isVisibleTo()`
+  treats an empty `visible_to` as *visible to every role* (`empty()` → `true`), but
+  `Comment::scopeVisibleToRole()` only matches `visible_to IS NULL` — their docblocks
+  promise the two stay in sync. A comment stored with an explicit `visible_to: []`
+  therefore appeared in the student tracking view (PHP path) yet vanished from the
+  dedicated comment-list endpoints (DB scope). Normalized `[]` → `null` in the
+  student/group comment store requests so the "visible to all" default has one
+  representation and both paths agree; regression test added (verified: without the
+  fix the endpoint returns `[]` and the test fails). Fix committed as
+  `fix(api): normalize empty visible_to array to null on comment create`.
 
 **Verified**
 - `author_only` scope enforced in server code across all three comment-surfacing
@@ -143,6 +155,10 @@ concrete defects and safe optimizations plus design/product recommendations.
 - Pre-existing (widened, not introduced): student tracking applies
   `RECENT_COMMENTS_LIMIT` before visibility filtering, so a viewer can get fewer
   than 10 visible comments. Not a leak.
+- Defense-in-depth (not applied): the store-request `[]`→`null` fix closes the
+  only API path that could persist an empty `visible_to`, but `scopeVisibleToRole()`
+  could also treat an empty JSON array as `IS NULL` to stay robust against `[]`
+  arriving via seeders/imports outside the FormRequests.
 
 ## Sesión 10 — Línea de tiempo de alumno (PR #65)
 
