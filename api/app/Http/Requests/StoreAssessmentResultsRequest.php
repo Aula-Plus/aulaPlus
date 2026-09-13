@@ -56,7 +56,7 @@ class StoreAssessmentResultsRequest extends FormRequest
 
         return function (string $attribute, mixed $value, Closure $fail) use ($enrolledIds): void {
             if (! $enrolledIds->contains((int) $value)) {
-                $fail('El alumno no pertenece al grupo de la evaluación.');
+                $fail('The selected student does not belong to the assessment group.');
             }
         };
     }

@@ -19,12 +19,16 @@ return new class extends Migration
     {
         Schema::table('assessments', function (Blueprint $table) {
             $table->date('administered_at')->after('variant_number');
+            // Backs the student performance timeline (Session 10), which both
+            // filters and orders assessments by administered_at within a school.
+            $table->index(['school_id', 'administered_at']);
         });
     }
 
     public function down(): void
     {
         Schema::table('assessments', function (Blueprint $table) {
+            $table->dropIndex(['school_id', 'administered_at']);
             $table->dropColumn('administered_at');
         });
     }
