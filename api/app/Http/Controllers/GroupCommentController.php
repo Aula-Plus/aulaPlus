@@ -37,6 +37,7 @@ class GroupCommentController extends Controller
             'content' => $request->validated('content'),
             'tone' => $request->validated('tone'),
             'visible_to' => $request->validated('visible_to'),
+            'author_only' => $request->boolean('author_only'),
         ]);
 
         return (new CommentResource($comment))->response()->setStatusCode(201);

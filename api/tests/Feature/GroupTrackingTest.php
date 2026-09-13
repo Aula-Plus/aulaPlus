@@ -78,3 +78,45 @@ it('forbids a teacher who does not lead the group from viewing its tracking page
 
     $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertForbidden();
 });
+
+// docs/prompts/19-comentarios-alcance.md §2: the group comments count ("el
+// número ancla") is exclusive to psychopedagogue/director. A teacher leading
+// the group still sees the page and the assessments count, but the
+// comments_count KEY is omitted entirely — not a 0, not a null.
+it('omits the comments_count key for a teacher leading the group', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $group->teachers()->attach($teacher);
+    Comment::factory()->forSubject($group)->create();
+    Sanctum::actingAs($teacher);
+
+    $response = $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk();
+
+    $trend = $response->json('data.trend');
+    expect($trend)
+        ->toHaveKey('assessments_count')
+        ->and($trend)->not->toHaveKey('comments_count');
+});
+
+// Regression for §2: gating who *receives* the key must not change what it
+// *counts*. Psychopedagogue/director still get the full period total, private
+// comments (visible_to-restricted and author_only) included.
+it('still gives psychopedagogue/director the full comments_count, private comments included', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+
+    Comment::factory()->forSubject($group)->create(['author_id' => $psychopedagogue->id]);
+    Comment::factory()->forSubject($group)->visibleTo(['psychopedagogue'])->create(['author_id' => $psychopedagogue->id]);
+    Comment::factory()->forSubject($group)->authorOnly()->create(['author_id' => $psychopedagogue->id]);
+
+    Sanctum::actingAs($director);
+    $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()
+        ->assertJsonPath('data.trend.comments_count', 3);
+
+    Sanctum::actingAs($psychopedagogue);
+    $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()
+        ->assertJsonPath('data.trend.comments_count', 3);
+});

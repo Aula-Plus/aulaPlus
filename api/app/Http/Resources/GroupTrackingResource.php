@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\Role;
 use App\Models\Group;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -23,6 +24,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * /students/{id}/tracking, which re-applies StudentPolicy::viewClinicalProfile
  * per viewer (see StudentTrackingResource).
  *
+ * The one role-gated field here is the trend `comments_count` (docs/prompts/
+ * 19-comentarios-alcance.md §2): "el número ancla, el contenido no" — a
+ * teacher may read the *content* of other teachers' comments, but the raw
+ * *count* over the period (private comments included) belongs to
+ * psychopedagogue/director only. It is omitted entirely (not 0, not null) for
+ * anyone outside those school-wide roles, the same "drop the key, never return
+ * a falsy value" pattern StudentTrackingResource uses for clinical detail.
+ *
  * @mixin array{
  *     group: Group,
  *     students: iterable,
@@ -38,6 +47,8 @@ class GroupTrackingResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $user = $request->user();
+
         return [
             'group' => new GroupResource($this->resource['group']),
             'students' => collect($this->resource['students'])->map(fn (array $summary) => [
@@ -49,7 +60,10 @@ class GroupTrackingResource extends JsonResource
             'trend' => [
                 'period_days' => $this->resource['period_days'],
                 'assessments_count' => $this->resource['assessments_count'],
-                'comments_count' => $this->resource['comments_count'],
+                'comments_count' => $this->when(
+                    $user->hasAnyRole(Role::schoolWideValues()),
+                    fn () => $this->resource['comments_count']
+                ),
             ],
         ];
     }
