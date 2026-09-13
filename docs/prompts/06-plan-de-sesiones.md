@@ -18,6 +18,37 @@ Este documento no es un prompt de implementación — es la guía de cómo usar 
 
 Cada sesión asume que la(s) anterior(es) están mergeadas y sus tests pasan. No paralelizar — aunque `04` y `05` parezcan independientes entre sí, `05` usa endpoints y patrones que se construyen en `04` (el perfil de seguimiento como contexto del prompt), así que van en serie igual.
 
+**Sesiones 6-13** se agregaron después, a partir de
+`aulaplus-documento-vivo/documento_aulaplus.html` (ver `CLAUDE.md`
+§"Functional spec sources"). Ninguna depende de la Sesión 5 (ya mergeada) —
+pueden correr en cualquier momento después de la 4. **Perfil de grupo y
+Perfil de alumno son el foco del producto** (uso diario, seguimiento de
+alumnos/grupos) — todo lo demás en esta tanda existe para que esas dos
+pantallas tengan datos reales, sin atajos. Sesiones deliberadamente chicas y
+de una sola pieza cada una (en vez de una sesión grande por pantalla), a
+pedido explícito:
+
+```
+Sesión 6  → 13-evaluaciones-resultados.md         (crea AssessmentResult)
+Sesión 7  → 17-seguimiento-programado.md          (crea ScheduledFollowUp)
+Sesión 8  → 18-ajustes-categoria-instancia.md     (Accommodation.category + override por instancia; depende de la 6)
+Sesión 9  → 19-comentarios-alcance.md             (Comment.author_only + fix de comments_count)
+Sesión 10 → 20-linea-tiempo-alumno.md             (agrega Sesión 6+8+9 → gráfico de alumno)
+Sesión 11 → 21-perfil-de-grupo.md                 (agrega Sesión 4+6+7+8+9 → agregados de grupo)
+Sesión 12 → 22-grupos-listado.md                  (columna agregada en el listado)
+Sesión 13 → 11-pruebas-de-sondeo.md               (sin relación con las anteriores; última por prioridad de producto, no por dependencia)
+```
+
+Dependencias reales (no todas son estrictamente secuenciales): 6, 7 y 9 son
+independientes entre sí y podrían correrse en cualquier orden relativo. 8
+**no** es independiente del resto — depende de 6 (`18-ajustes-categoria-
+instancia.md` necesita el CRUD real de `Assessment` para que la "instancia"
+de `AccommodationInstanceOverride` sea una evaluación concreta, no una
+etiqueta libre; ver el encabezado de ese archivo). 10 necesita 6+8+9
+mergeadas. 11 necesita 4+6+7+8+9 mergeadas. 12 necesita 4+7. 13 (sondeo) es
+independiente de todas las anteriores — sigue última solo por prioridad de
+producto (los perfiles son de uso diario; el sondeo, ocasional).
+
 ## 2. Cómo correr cada sesión
 
 Por sesión:
@@ -93,6 +124,22 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   `update` del test a veces quedaba no-op (sin log `updated`); se fija el
   `focus_area` inicial a un valor distinto del que setea el `update`. Es
   test-only, no toca código de producción de Sesiones 1-4.
+- [ ] **Sesión 6** — Evaluaciones y resultados (`13-evaluaciones-resultados.md`)
+  Resumen:
+- [ ] **Sesión 7** — Seguimiento programado (`17-seguimiento-programado.md`)
+  Resumen:
+- [ ] **Sesión 8** — Categoría de ajuste y desactivación por instancia (`18-ajustes-categoria-instancia.md`)
+  Resumen:
+- [ ] **Sesión 9** — Alcance de comentarios (`19-comentarios-alcance.md`)
+  Resumen:
+- [ ] **Sesión 10** — Línea de tiempo de desempeño del alumno (`20-linea-tiempo-alumno.md`)
+  Resumen:
+- [ ] **Sesión 11** — Perfil de grupo (`21-perfil-de-grupo.md`)
+  Resumen:
+- [ ] **Sesión 12** — Columna agregada en Grupos (`22-grupos-listado.md`)
+  Resumen:
+- [ ] **Sesión 13** — Pruebas de sondeo (`11-pruebas-de-sondeo.md`)
+  Resumen:
 
 ## 5. Explícitamente fuera de este plan
 
@@ -101,6 +148,8 @@ No hay sesiones para (ver también la sección "Out of scope for now" de `CLAUDE
 - Integración con SIGED.
 - Billing / planes / entitlements por módulo.
 - Boletín, Indicador de Progreso, Proyecto.
-- Frontend (React + Vite) — este set de prompts es solo API. El frontend necesita su propio set de prompts una vez que la API de estas 5 sesiones esté estable, para no estar generando UI contra un contrato que todavía se mueve.
+- Frontend (React + Vite) — este archivo cubre solo el backend/API; ver
+  `docs/prompts/10-plan-de-sesiones-frontend.md` para el set de prompts de
+  frontend, ya en curso.
 
 Cuando quieras encarar alguno de estos frentes, generamos el set de markdowns correspondiente siguiendo el mismo formato.

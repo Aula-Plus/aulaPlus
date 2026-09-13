@@ -4,7 +4,7 @@ Este documento no es un prompt de implementación — es la guía de cómo usar 
 
 ## 0. Por qué recién ahora
 
-`06-plan-de-sesiones.md` §5 decía explícitamente que el frontend necesitaba su propio set de prompts una vez que la API estuviera estable, para no construir UI contra un contrato que todavía se mueve. Al momento de escribir esto, las Sesiones 1 a 4 del backend (`01`-`04`) ya están mergeadas a `develop` con tests en verde — el contrato de las tres sesiones de este documento (roles/permisos, flujos de aprobación, seguimiento institucional) es estable. La Sesión 5 de backend (asistente de IA docente, `05-asistente-ia-docente.md`) **todavía no existe** — por eso no hay una sesión de frontend para eso todavía; se agrega cuando ese backend exista, siguiendo este mismo formato.
+`06-plan-de-sesiones.md` §5 decía explícitamente que el frontend necesitaba su propio set de prompts una vez que la API estuviera estable, para no construir UI contra un contrato que todavía se mueve. Al momento de escribir esto, las Sesiones 1 a 4 del backend (`01`-`04`) ya están mergeadas a `develop` con tests en verde — el contrato de las tres sesiones de este documento (roles/permisos, flujos de aprobación, seguimiento institucional) es estable. La Sesión 5 de backend (asistente de IA docente, `05-asistente-ia-docente.md`) **también ya está mergeada** (ver `06-plan-de-sesiones.md`), pero su UI no está entre las sesiones de este archivo todavía — ver §5.
 
 ## 1. Orden de ejecución (no es opcional, y no coincide con el orden del backend)
 
@@ -17,6 +17,24 @@ Este documento no es un prompt de implementación — es la guía de cómo usar 
 ```
 
 En el backend, la sesión de "flujos de aprobación" (`03`) se hizo antes que "seguimiento institucional" (`04`). En el frontend el orden se invierte a propósito: la Sesión 8 construye la primera pantalla donde `Accommodation`/`Barrier` son visibles en la UI; sin eso, los botones de aprobar/rechazar/validar de la Sesión 9 no tendrían dónde vivir. Ver `08-frontend-seguimiento-institucional.md` §0 para el detalle. No lo reordenes de nuevo.
+
+**Sesiones 10-17** se agregaron después, contraparte frontend de las
+Sesiones 6-13 de backend (`06-plan-de-sesiones.md`) derivadas de
+`aulaplus-documento-vivo/documento_aulaplus.html`. Mismo criterio de
+granularidad chica: Perfil de grupo y Perfil de alumno son el foco del
+producto, todo lo demás existe para que esas dos pantallas tengan datos
+reales.
+
+```
+Sesión 10 → 14-frontend-evaluaciones-resultados.md
+Sesión 11 → 23-frontend-seguimiento-programado.md
+Sesión 12 → 24-frontend-ajustes-categoria-instancia.md
+Sesión 13 → 25-frontend-comentarios-alcance.md
+Sesión 14 → 26-frontend-perfil-de-alumno.md      (gráfico de desempeño, introduce Recharts)
+Sesión 15 → 27-frontend-perfil-de-grupo.md
+Sesión 16 → 28-frontend-grupos-listado.md
+Sesión 17 → 12-frontend-pruebas-de-sondeo.md     (última por prioridad de producto)
+```
 
 ## 2. Cómo correr cada sesión
 
@@ -133,14 +151,30 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   preexistente en `button.tsx`); `npm run typecheck` → OK;
   `npm run test -- --run` → verde; `npm run build` → OK (mismo warning de
   tamaño de chunk preexistente).
+- [ ] **Sesión 10** — Evaluaciones y resultados, carga mínima (`14-frontend-evaluaciones-resultados.md`)
+  Resumen:
+- [ ] **Sesión 11** — Seguimiento programado en la UI (`23-frontend-seguimiento-programado.md`)
+  Resumen:
+- [ ] **Sesión 12** — Categoría de ajuste y desactivar por instancia en la UI (`24-frontend-ajustes-categoria-instancia.md`)
+  Resumen:
+- [ ] **Sesión 13** — Alcance de comentarios en la UI (`25-frontend-comentarios-alcance.md`)
+  Resumen:
+- [ ] **Sesión 14** — Perfil de alumno: gráfico de desempeño (`26-frontend-perfil-de-alumno.md`)
+  Resumen:
+- [ ] **Sesión 15** — Perfil de grupo en la UI (`27-frontend-perfil-de-grupo.md`)
+  Resumen:
+- [ ] **Sesión 16** — Columna agregada en Grupos, UI (`28-frontend-grupos-listado.md`)
+  Resumen:
+- [ ] **Sesión 17** — Pruebas de sondeo en la UI (`12-frontend-pruebas-de-sondeo.md`)
+  Resumen:
 
 ## 5. Explícitamente fuera de este plan
 
 No hay sesiones de frontend todavía para (ver también "Out of scope for now" de `CLAUDE.md`):
 
-- El asistente de IA docente (`05-asistente-ia-docente.md`) — su backend no existe todavía. Cuando exista, se agrega `11-frontend-asistente-ia-docente.md` siguiendo este mismo formato.
+- El asistente de IA docente (`05-asistente-ia-docente.md`) — el backend ya está mergeado (ver `06-plan-de-sesiones.md`, Sesión 5), pero su UI (generar/revisar/aplicar una `AIProposal`) todavía no se planificó como sesión de frontend. Cuando se encare, se agrega `18-frontend-asistente-ia-docente.md` siguiendo este mismo formato.
 - Gestión de usuarios (crear/editar/desactivar `User` por parte de un `director`) — no hay endpoint de backend (`UserController`) para eso todavía, aunque la matriz de permisos de `02-roles-permisos.md` lo mencione. Ver `07-frontend-roles-permisos.md` §4.
-- Cualquier gráfico real para el panel de adopción (`weekly_login_series`/`weekly_content_series`) — se muestran como tablas simples en la Sesión 8 porque el frontend no tiene ninguna librería de gráficos instalada; agregar una es una decisión aparte, no algo para colar dentro de estas sesiones.
-- Integración con SIGED, billing/entitlements, Boletín/Indicador de Progreso/Proyecto — mismos motivos que en el plan de backend.
+- Cualquier gráfico real para el panel de adopción (`weekly_login_series`/`weekly_content_series`) — se muestran como tablas simples en la Sesión 8. La Sesión 14 agrega Recharts para Perfil de alumno; reusarla acá es una mejora futura razonable, pero no está en el alcance de ninguna sesión planificada todavía.
+- Integración con SIGED, billing/entitlements, Boletín/Indicador de Progreso/Proyecto, Comunicaciones, currícula/planificación (`AnnualPlan`/`Unit`/`ClassSession` UI) — mismos motivos que en el plan de backend (`CLAUDE.md` §"Out of scope for now").
 
-Cuando el backend de la Sesión 5 esté listo, generamos el prompt de frontend correspondiente siguiendo el mismo formato.
+Cuando se encare alguno de estos frentes, generamos el prompt de frontend correspondiente siguiendo el mismo formato.
