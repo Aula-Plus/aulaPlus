@@ -23,12 +23,19 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * `visible_to` restricts which roles can see the comment in listings (e.g. a
  * psychopedagogue can keep a comment private to psychopedagogue/director). A
  * null/empty `visible_to` means visible to every role — see
- * {@see self::scopeVisibleToRole()} and {@see self::isVisibleToRoles()},
+ * {@see self::scopeVisibleToRole()} and {@see self::isVisibleTo()},
  * which must stay in sync (the scope filters at the DB level for the
  * dedicated list endpoints, the plain-PHP method filters an already-fetched,
  * app-cached collection for the student tracking view).
+ *
+ * `author_only` is the fourth, strictest scope (docs/prompts/19-comentarios-
+ * alcance.md §1): when true the comment is visible only to `author_id`,
+ * regardless of `visible_to` (which is forced to null in that case by the
+ * store FormRequests). It is a per-*person* restriction, not a role, so it
+ * cannot be expressed through `visible_to` — that is why it lives in its own
+ * column and is handled explicitly by both visibility methods below.
  */
-#[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'tone', 'visible_to'])]
+#[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'tone', 'visible_to', 'author_only'])]
 class Comment extends Model
 {
     /** @use HasFactory<CommentFactory> */
@@ -41,6 +48,7 @@ class Comment extends Model
         return [
             'tone' => CommentTone::class,
             'visible_to' => 'array',
+            'author_only' => 'boolean',
         ];
     }
 
@@ -55,21 +63,36 @@ class Comment extends Model
     }
 
     /**
-     * Restrict a query to comments visible to any of the given user's roles
-     * (or with no `visible_to` restriction at all). Used by the dedicated
-     * comment list endpoints, where filtering in the DB query is cheap and
-     * avoids fetching rows the user can never see.
+     * Restrict a query to comments the given user is allowed to see. Used by
+     * the dedicated comment list endpoints, where filtering in the DB query is
+     * cheap and avoids fetching rows the user can never see.
+     *
+     * Two independent cases, OR-ed together (must stay in sync with
+     * {@see self::isVisibleTo()}):
+     * - `author_only` comments: visible only to their author, and to no one
+     *   else regardless of role — this is stricter than any `visible_to` rule.
+     * - every other comment (`author_only = false`): the role-based rule —
+     *   visible when it has no `visible_to` restriction or lists one of the
+     *   user's roles.
      */
     public function scopeVisibleToRole(Builder $query, User $user): Builder
     {
         $roles = $user->getRoleNames()->all();
 
-        return $query->where(function (Builder $q) use ($roles): void {
-            $q->whereNull('visible_to');
+        return $query->where(function (Builder $outer) use ($roles, $user): void {
+            $outer->where(function (Builder $q) use ($user): void {
+                $q->where('author_only', true)
+                    ->where('author_id', $user->id);
+            })->orWhere(function (Builder $q) use ($roles): void {
+                $q->where('author_only', false)
+                    ->where(function (Builder $inner) use ($roles): void {
+                        $inner->whereNull('visible_to');
 
-            foreach ($roles as $role) {
-                $q->orWhereJsonContains('visible_to', $role);
-            }
+                        foreach ($roles as $role) {
+                            $inner->orWhereJsonContains('visible_to', $role);
+                        }
+                    });
+            });
         });
     }
 
@@ -77,16 +100,24 @@ class Comment extends Model
      * Same rule as {@see self::scopeVisibleToRole()}, evaluated in PHP against
      * an already-loaded model — used by the student tracking view, which
      * caches the raw (unfiltered) comment list and re-applies this filter on
-     * every request so the cache never leaks a role-restricted comment to a
-     * role that shouldn't see it.
+     * every request so the cache never leaks a restricted comment to a user
+     * who shouldn't see it.
+     *
+     * Takes the whole `User` (not just their roles) because `author_only`
+     * needs to know *who* is asking, not only their roles: "only the author"
+     * isolates a person, and two users can share the `teacher` role.
      */
-    public function isVisibleToRoles(array $roles): bool
+    public function isVisibleTo(User $user): bool
     {
+        if ($this->author_only) {
+            return $this->author_id === $user->id;
+        }
+
         if (empty($this->visible_to)) {
             return true;
         }
 
-        return count(array_intersect($this->visible_to, $roles)) > 0;
+        return count(array_intersect($this->visible_to, $user->getRoleNames()->all())) > 0;
     }
 
     /**

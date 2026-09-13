@@ -131,7 +131,30 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
 - [ ] **Sesión 8** — Categoría de ajuste y desactivación por instancia (`18-ajustes-categoria-instancia.md`)
   Resumen:
 - [ ] **Sesión 9** — Alcance de comentarios (`19-comentarios-alcance.md`)
-  Resumen:
+  Resumen: Agregado el cuarto alcance "solo quien escribe" a `Comment` vía
+  columna `author_only` (migración nueva, boolean default false, cast a
+  boolean). Cuando `author_only=true` el comentario es visible únicamente para
+  `author_id`, más restrictivo que cualquier rol; `visible_to` se fuerza a
+  `null` (mutuamente excluyentes) en `prepareForValidation` de ambos
+  FormRequests (`StoreStudentCommentRequest`/`StoreGroupCommentRequest`, campo
+  `author_only` opcional `boolean`). `Comment::scopeVisibleToRole` (DB) e
+  `isVisibleToRoles(array)` → renombrado a `isVisibleTo(User)` (necesita saber
+  *quién* pregunta, no solo sus roles), ambos actualizados y sincronizados;
+  único call site (`StudentTrackingResource`, Sesión 4) migrado al nuevo
+  método. Corregido el bug de la Sesión 4: `GroupTrackingResource` ahora omite
+  por completo la clave `trend.comments_count` (no `0`/`null`) para quien no es
+  school-wide, vía `$this->when($user->hasAnyRole(Role::schoolWideValues()))`
+  — el conteo sigue incluyendo comentarios privados (el filtro por período no
+  se tocó), solo se restringe quién recibe la clave. Añadidos helpers
+  `CommentFactory::authorOnly()` y `author_only` en `CommentResource`. Tests
+  nuevos (author_only invisible para todo otro rol incl. dirección/psico;
+  regresión de la regla por rol para `author_only=false`; teacher no recibe
+  `comments_count`; school-wide recibe el total con privados incluidos).
+  Suite completa 173/173 en verde y Pint limpio, corridos con `php artisan
+  test`/`./vendor/bin/pint` directamente (sin Sail/Docker en este entorno
+  cloud; SQLite en memoria). Nota: en `develop` los backends de Sesiones 6-8
+  aún no están mergeados, pero Sesión 9 solo depende de Sesión 4 (ya presente),
+  así que no hubo bloqueo.
 - [ ] **Sesión 10** — Línea de tiempo de desempeño del alumno (`20-linea-tiempo-alumno.md`)
   Resumen:
 - [ ] **Sesión 11** — Perfil de grupo (`21-perfil-de-grupo.md`)

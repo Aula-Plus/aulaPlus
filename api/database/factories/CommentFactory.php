@@ -30,6 +30,7 @@ class CommentFactory extends Factory
             'content' => fake()->paragraph(),
             'tone' => fake()->randomElement(CommentTone::cases()),
             'visible_to' => null,
+            'author_only' => false,
         ];
     }
 
@@ -50,5 +51,15 @@ class CommentFactory extends Factory
     public function visibleTo(array $roles): static
     {
         return $this->state(['visible_to' => $roles]);
+    }
+
+    /**
+     * The fourth scope: visible only to the author. Forces `visible_to` to
+     * null to mirror what the store FormRequest enforces (the two scopes are
+     * mutually exclusive).
+     */
+    public function authorOnly(): static
+    {
+        return $this->state(['author_only' => true, 'visible_to' => null]);
     }
 }
