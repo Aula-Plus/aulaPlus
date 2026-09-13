@@ -64,10 +64,12 @@ bug a corregir, no una feature nueva (ya estaba mal desde la Sesión 4).
 
 Cambio en `GroupTrackingResource`: hoy simplemente devuelve
 `$this->resource['comments_count']` tal cual se lo pasa
-`GroupTrackingController::show` (que lo calcula con un `Comment::query()->count()`
-plano, sin filtrar por `visible_to`/`author_only` — eso es correcto, el
-"número ancla" cuenta todos los comentarios, lo que hay que restringir es
-quién *recibe* la clave). Envolver esa clave en
+`GroupTrackingController::show`, que lo calcula ya filtrado por grupo y por
+los últimos `TREND_PERIOD_DAYS` (30 días) — **no tocar ese filtro**. Lo único
+que falta es que no filtra por `visible_to`/`author_only`, y eso es
+intencional: el "número ancla" cuenta todos los comentarios del período,
+comentarios privados incluidos, lo que hay que restringir es quién *recibe*
+la clave, no qué cuenta. Envolver esa clave en
 `$this->when($user->hasAnyRole(Role::schoolWideValues()), fn () => ...)` para
 omitirla por completo (no `0`, no `null`) cuando el usuario no pasa la
 verificación school-wide. Mismo patrón de "se omite la clave, no se devuelve

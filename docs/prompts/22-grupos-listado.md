@@ -62,8 +62,8 @@ el N+1 que esta sesión busca evitar.
 
 ## 4. Criterios de aceptación
 
-- [ ] `active_tracking_count` en `GET /api/v1/groups`, agregado y sin
-      exponer nombres.
+- [ ] `active_tracking_count` en `GET /api/groups` (**sin** prefijo `v1` —
+      ver Objetivo), agregado y sin exponer nombres.
 - [ ] Sin N+1 (verificado con test).
 - [ ] Todos los tests de la sección 3 en verde; `./vendor/bin/sail test`
       pasa completo.
