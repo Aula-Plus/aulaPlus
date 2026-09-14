@@ -315,6 +315,29 @@ export interface AuditLogEntry {
 }
 
 /**
+ * A scheduled follow-up on a student (`ScheduledFollowUpResource`, backend
+ * Sesión 7 — docs/prompts/17-seguimiento-programado.md). The concrete face of
+ * the rule "nothing expires on its own, someone scheduled it".
+ */
+export interface ScheduledFollowUp {
+  id: number
+  student_id: number
+  description: string
+  due_date: string
+  created_by_id: number
+  resolved: boolean
+  resolved_by_id: number | null
+  resolved_at: string | null
+  resolution_note: string | null
+  /**
+   * Computed server-side (`!resolved && due_date <= today`, app timezone).
+   * NEVER re-derive this condition in the client — read the boolean as-is.
+   */
+  is_overdue: boolean
+  created_at: string | null
+}
+
+/**
  * Wrapper for endpoints paginated with Laravel's default page paginator.
  * Currently only the audit history uses this — every other endpoint uses the
  * unpaginated `{ data: T[] }` sleeve. When a second paginated endpoint appears,

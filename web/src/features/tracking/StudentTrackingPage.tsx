@@ -21,6 +21,7 @@ import {
 } from "@/types"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
+import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput } from "./trackingApi"
 
@@ -299,6 +300,8 @@ export function StudentTrackingPage() {
           </Table>
         )}
       </section>
+
+      <ScheduledFollowUpsPanel studentId={studentId} />
 
       <CommentsPanel
         comments={comments ?? []}

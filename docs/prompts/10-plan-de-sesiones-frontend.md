@@ -174,8 +174,29 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` → OK;
   `npm run test -- --run` → 133 en verde; `npm run build` → OK (mismo warning de
   tamaño de chunk preexistente).
-- [ ] **Sesión 11** — Seguimiento programado en la UI (`23-frontend-seguimiento-programado.md`)
-  Resumen:
+- [x] **Sesión 11** — Seguimiento programado en la UI (`23-frontend-seguimiento-programado.md`)
+  Resumen: UI para crear/listar/resolver `ScheduledFollowUp` de un alumno,
+  embebida como sección "Seguimientos programados" dentro de
+  `StudentTrackingPage` (no pantalla nueva). Nuevos: tipo `ScheduledFollowUp` en
+  `types.ts` (con `is_overdue` calculado en servidor — el cliente nunca recalcula
+  fechas), `features/tracking/scheduledFollowUpsApi.ts` (archivo separado, no se
+  agrandó `trackingApi.ts`; envoltorio `{ data }`) y el componente
+  `ScheduledFollowUpsPanel` (mismo patrón self-fetching que
+  `BarrierAccommodationsPanel`): toggle "Mostrar resueltos" que cambia el query
+  param (`?resolved=false` ↔ sin param), formulario nuevo (`description` +
+  `due_date`), badge "Vencido" pintado directo desde `is_overdue`, y "Resolver"
+  con nota opcional inline (nunca manda `resolution_note: ""`; usa la respuesta,
+  sin refetch). Sin helper nuevo en `permissions.ts` (spec §3: los tres roles
+  pueden crear/ver/resolver, el límite real es el Controller). Contrato
+  verificado contra el backend real (Sesión 7): `ScheduledFollowUpController`,
+  `ScheduledFollowUpResource`, `Store`/`ResolveScheduledFollowUpRequest`.
+  **Dependencia:** se ramificó de `develop` y se mergeó
+  `feature/frontend-sesion-10-evaluaciones-resultados` (fast-forward, sin
+  conflictos) antes de implementar, ya que la Sesión 10 aún no estaba en
+  `develop`. Verificación real desde `web/` (`npm ci` primero): `npm run lint` →
+  0 errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` →
+  OK; `npm run test -- --run` → 140 tests en verde (17 archivos, +7 del panel
+  nuevo); `npm run build` → OK (mismo warning preexistente de tamaño de chunk).
 - [ ] **Sesión 12** — Categoría de ajuste y desactivar por instancia en la UI (`24-frontend-ajustes-categoria-instancia.md`)
   Resumen:
 - [ ] **Sesión 13** — Alcance de comentarios en la UI (`25-frontend-comentarios-alcance.md`)
