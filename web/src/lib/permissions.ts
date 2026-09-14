@@ -186,3 +186,21 @@ export function canViewStudentHistory(user: User | null): boolean {
 export function canViewAdoptionDashboard(user: User | null): boolean {
   return isDirector(user)
 }
+
+/**
+ * Show the create/edit-accommodation UI (docs/prompts/24 §3). Deliberately
+ * gated on the SAME roles that may already SEE accommodations
+ * (`canViewClinicalProfileUX` → school-wide staff), not on the looser backend
+ * `AccommodationPolicy::create`/`update` (which allow any authenticated role /
+ * anyone sharing a school).
+ *
+ * This is a UX decision, not a bug fix: (a) the accommodations section only
+ * exists for viewers with clinical access, so offering "create an accommodation"
+ * to someone who cannot even see the existing ones makes no sense; (b) it keeps
+ * field-level access role-consistent (CLAUDE.md security rule 11). The backend
+ * Policy remains the security boundary and is intentionally left untouched —
+ * hardening it is not this session's task.
+ */
+export function canManageAccommodations(user: User | null | undefined): boolean {
+  return canViewClinicalProfileUX(user ?? null)
+}

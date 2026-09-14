@@ -197,8 +197,31 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   0 errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` →
   OK; `npm run test -- --run` → 140 tests en verde (17 archivos, +7 del panel
   nuevo); `npm run build` → OK (mismo warning preexistente de tamaño de chunk).
-- [ ] **Sesión 12** — Categoría de ajuste y desactivar por instancia en la UI (`24-frontend-ajustes-categoria-instancia.md`)
-  Resumen:
+- [x] **Sesión 12** — Categoría de ajuste y desactivar por instancia en la UI (`24-frontend-ajustes-categoria-instancia.md`)
+  Resumen: Se agregó a `StudentTrackingPage` la UI de creación/edición de
+  `Accommodation` (que no existía) y la desactivación por instancia. Nuevos:
+  tipo `AccommodationCategory` + `accommodationCategoryLabels` y `AccommodationInput`
+  en `types.ts` (campo `category` requerido sumado a `Accommodation`);
+  `canManageAccommodations` en `permissions.ts` (gateado a `canViewClinicalProfileUX`
+  como decisión de UX, no endurece la Policy backend, más permisiva); tres
+  funciones en `trackingApi.ts` (`createAccommodation`, `updateAccommodation` —
+  `category` requerido también al editar—, `deactivateAccommodationForAssessment`);
+  y los componentes `AccommodationFormDialog` (Dialog + RHF + Zod, `category`
+  obligatoria vía `<Select>`, `active` solo en edición, refetch completo al
+  guardar) y `AccommodationInstanceOverrideForm` (`<select>` poblado desde
+  `tracking.recent_assessments` sin fetch extra, `reason` obligatorio, 403 del
+  backend mostrado como mensaje legible). Solo se ofrece "Desactivar para una
+  evaluación" en adaptaciones con `is_effective === true`. Contrato verificado
+  contra el backend real (Sesión 8): `AccommodationController`,
+  `AccommodationInstanceOverrideController`, `Store`/`UpdateAccommodationRequest`,
+  `StoreAccommodationInstanceOverrideRequest`, `AccommodationCategory` enum.
+  **Dependencia:** ramificado de `develop` y mergeado
+  `feature/frontend-sesion-11-seguimiento-programado` (sin conflictos) antes de
+  implementar, ya que la Sesión 11 aún no estaba en `develop`. Verificación real
+  desde `web/` (`npm ci` primero): `npm run lint` → 0 errores (mismo warning
+  preexistente en `button.tsx`); `npm run typecheck` → OK; `npm run test -- --run`
+  → 145 tests en verde (17 archivos, +5 tests de la Sesión 12); `npm run build`
+  → OK (mismo warning preexistente de tamaño de chunk).
 - [ ] **Sesión 13** — Alcance de comentarios en la UI (`25-frontend-comentarios-alcance.md`)
   Resumen:
 - [ ] **Sesión 14** — Perfil de alumno: gráfico de desempeño (`26-frontend-perfil-de-alumno.md`)

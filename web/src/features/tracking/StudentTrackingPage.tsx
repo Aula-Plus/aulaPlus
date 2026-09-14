@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
   canApproveAccommodation,
+  canManageAccommodations,
   canResolveAlert,
   canViewStudentHistory,
 } from "@/lib/permissions"
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
+  accommodationCategoryLabels,
   alertSeverityLabels,
   alertTypeLabels,
   assessmentTypeLabels,
@@ -19,6 +21,8 @@ import {
   type Comment,
   type StudentTracking,
 } from "@/types"
+import { AccommodationFormDialog } from "./AccommodationFormDialog"
+import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
@@ -37,11 +41,14 @@ export function StudentTrackingPage() {
   const { user } = useAuth()
   const showResolve = canResolveAlert(user)
   const showApprove = canApproveAccommodation(user)
+  const showManageAccommodations = canManageAccommodations(user)
   const showHistoryLink = canViewStudentHistory(user)
 
   const [tracking, setTracking] = useState<StudentTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
+  const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
 
   const loadTracking = useCallback(() => {
     return trackingApi
@@ -99,6 +106,25 @@ export function StudentTrackingPage() {
   async function handleReject(accommodationId: number) {
     const updated = await trackingApi.rejectAccommodation(accommodationId)
     replaceAccommodation(updated)
+  }
+
+  function handleNewAccommodation() {
+    setEditingAccommodation(null)
+    setAccommodationDialogOpen(true)
+  }
+
+  function handleEditAccommodation(accommodation: Accommodation) {
+    setEditingAccommodation(accommodation)
+    setAccommodationDialogOpen(true)
+  }
+
+  /**
+   * After creating/editing an accommodation, a full refetch is enough (§4):
+   * unlike approve/reject this writes a field no other path changes, so it does
+   * not race the ~60s server cache the way the in-place splice avoids.
+   */
+  function handleAccommodationSaved() {
+    loadTracking()
   }
 
   if (error) {
@@ -202,7 +228,14 @@ export function StudentTrackingPage() {
 
       {tracking.accommodations && (
         <section className="grid gap-3">
-          <h2 className="text-lg font-semibold">Adaptaciones vigentes</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Adaptaciones vigentes</h2>
+            {showManageAccommodations && (
+              <Button type="button" size="sm" onClick={handleNewAccommodation}>
+                Nueva adaptación
+              </Button>
+            )}
+          </div>
           {tracking.accommodations.length === 0 ? (
             <p className="text-muted-foreground">Sin adaptaciones vigentes.</p>
           ) : (
@@ -218,11 +251,28 @@ export function StudentTrackingPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <span className="font-medium">{accommodation.type}</span>
+                        {accommodation.category && (
+                          <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            {accommodationCategoryLabels[accommodation.category]}
+                          </span>
+                        )}
                         {accommodation.description && (
                           <p className="text-muted-foreground">{accommodation.description}</p>
                         )}
                       </div>
-                      <AccommodationStatusBadge accommodation={accommodation} />
+                      <div className="flex items-center gap-2">
+                        <AccommodationStatusBadge accommodation={accommodation} />
+                        {showManageAccommodations && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditAccommodation(accommodation)}
+                          >
+                            Editar
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     {pendingApproval && showApprove && (
                       <div className="mt-2 flex gap-2">
@@ -242,6 +292,12 @@ export function StudentTrackingPage() {
                           Rechazar
                         </Button>
                       </div>
+                    )}
+                    {accommodation.is_effective && (
+                      <AccommodationInstanceOverrideForm
+                        accommodationId={accommodation.id}
+                        assessments={tracking.recent_assessments}
+                      />
                     )}
                   </li>
                 )
@@ -308,6 +364,16 @@ export function StudentTrackingPage() {
         onCreate={handleCreateComment}
         title="Comentarios del alumno"
       />
+
+      {showManageAccommodations && (
+        <AccommodationFormDialog
+          open={accommodationDialogOpen}
+          onOpenChange={setAccommodationDialogOpen}
+          studentId={studentId}
+          accommodation={editingAccommodation}
+          onSaved={handleAccommodationSaved}
+        />
+      )}
     </div>
   )
 }

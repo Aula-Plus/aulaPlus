@@ -168,10 +168,25 @@ export interface AssessmentResult {
   updated_at: string | null
 }
 
+/**
+ * The three pedagogical categories of an accommodation (mirror of
+ * `App\Enums\AccommodationCategory`, docs/prompts/18 §1) — independent of the
+ * free-text `type`. English identifiers in code; the Spanish labels below are
+ * the only user-facing text, per CLAUDE.md.
+ */
+export type AccommodationCategory = "access" | "content" | "criteria"
+
+export const accommodationCategoryLabels: Record<AccommodationCategory, string> = {
+  access: "Acceso",
+  content: "Contenido",
+  criteria: "Criterio",
+}
+
 export interface Accommodation {
   id: number
   student_id: number
   type: string
+  category: AccommodationCategory
   active: boolean
   description: string | null
   focus_area: string | null
@@ -189,6 +204,21 @@ export interface Accommodation {
   created_by_id: number | null
   created_at: string | null
   updated_at: string | null
+}
+
+/**
+ * Body for creating/editing an Accommodation (docs/prompts/24 §2), matching
+ * `StoreAccommodationRequest`/`UpdateAccommodationRequest`. `category` is
+ * required on both create and edit (nullable in the DB only so pre-existing
+ * factories keep working — every new write must set it).
+ */
+export interface AccommodationInput {
+  type: string
+  description: string
+  focus_area: string
+  category: AccommodationCategory
+  requires_external_approval: boolean
+  active: boolean
 }
 
 export interface Barrier {
