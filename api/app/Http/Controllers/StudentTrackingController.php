@@ -43,6 +43,11 @@ class StudentTrackingController extends Controller
     {
         $this->authorize('view', $student);
 
+        // The Resource renders the student's classes, so the relation must be
+        // eager-loaded here — StudentResource exposes `groups` only whenLoaded,
+        // and the SPA's "Clases" row expects it present.
+        $student->load('groups');
+
         $cached = Cache::remember(
             "student-tracking.{$student->id}",
             60,

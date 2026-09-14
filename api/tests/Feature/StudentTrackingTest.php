@@ -92,6 +92,23 @@ it('serves student tracking through a serializing cache store on a cache hit', f
         ->assertJsonPath('data.recent_comments.0.content', 'Nota de seguimiento');
 });
 
+// The tracking page renders a "Clases" row from student.groups, so the
+// endpoint must return the student *with* its groups relation loaded —
+// otherwise StudentResource omits `groups` (whenLoaded) and the SPA crashes
+// on student.groups.map(undefined).
+it('includes the student groups in the tracking payload', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $group = Group::factory()->create(['school_id' => $school->id, 'name' => '3ro A']);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+    Sanctum::actingAs($director);
+
+    $response = $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk();
+
+    $response->assertJsonPath('data.student.groups.0.name', '3ro A');
+});
+
 it('forbids a teacher with no relation to the student from viewing their tracking page', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
