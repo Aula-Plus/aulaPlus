@@ -293,8 +293,22 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   **Dependencia:** ramificado de `origin/develop` y mergeado
   `origin/feature/frontend-sesion-14-perfil-de-alumno` (sin conflictos, trae el setup de
   Recharts) antes de implementar, ya que la Sesión 14 aún no estaba en `develop`.
-- [ ] **Sesión 16** — Columna agregada en Grupos, UI (`28-frontend-grupos-listado.md`)
-  Resumen:
+- [x] **Sesión 16** — Columna agregada en Grupos, UI (`28-frontend-grupos-listado.md`)
+  Resumen: nueva columna **"Seguimiento activo"** en `GroupsListPage`, entre "Docentes"
+  y las acciones, mostrando `active_tracking_count` como número informativo (sin badge de
+  severidad y **sin gate de rol** — el backend Sesión 12 la expone a cualquier rol,
+  docente incluido). El campo se agregó a la interfaz `Group` de `types.ts` como **opcional**
+  (`active_tracking_count?: number`): contra el contrato real, `GroupResource` lo emite sólo
+  en el listado (`GET /api/groups`) y lo omite en show/create/update vía `when()`, así que el
+  tipo compartido no puede afirmarlo siempre presente; la celda renderiza `?? 0` para que un
+  grupo sin seguimiento muestre `0` y nunca una celda vacía. Tests nuevos: docente ve la
+  columna y su número (sin ocultarse), y `0` se muestra como `0`. Verificación desde `web/`
+  (`npm ci`): `npm run lint` → 0 errores (solo el warning preexistente de `button.tsx`);
+  `npm run typecheck` → OK; `npm run test -- --run` → 172 tests en verde (21 archivos, +2);
+  `npm run build` → OK.
+  **Dependencia:** ramificado de `origin/develop` y mergeado
+  `origin/feature/frontend-sesion-15-perfil-de-grupo` (sin conflictos) antes de implementar,
+  ya que la Sesión 15 aún no estaba en `develop`.
 - [ ] **Sesión 17** — Pruebas de sondeo en la UI (`12-frontend-pruebas-de-sondeo.md`)
   Resumen:
 

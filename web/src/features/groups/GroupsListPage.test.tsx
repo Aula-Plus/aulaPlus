@@ -33,6 +33,7 @@ describe("GroupsListPage", () => {
         group_profile: null,
         related_documents: null,
         teachers: [{ id: 5, name: "Ana Ruiz" }],
+        active_tracking_count: 3,
       },
     ])
 
@@ -53,6 +54,7 @@ describe("GroupsListPage", () => {
         group_profile: null,
         related_documents: null,
         teachers: [],
+        active_tracking_count: 0,
       },
     ])
 
@@ -61,6 +63,53 @@ describe("GroupsListPage", () => {
     const row = (await screen.findByText("3° A")).closest("tr")
     expect(row).not.toBeNull()
     expect(row!.textContent).toContain("—")
+  })
+
+  it("shows the active tracking count for a teacher (no role gate)", async () => {
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([
+      {
+        id: 1,
+        name: "3° A",
+        level: "Primaria",
+        school_year: 2026,
+        group_profile: null,
+        related_documents: null,
+        teachers: [{ id: 5, name: "Ana Ruiz" }],
+        active_tracking_count: 4,
+      },
+    ])
+
+    renderList("teacher")
+
+    expect(await screen.findByText("Seguimiento activo")).toBeInTheDocument()
+    const row = (await screen.findByText("3° A")).closest("tr")
+    expect(row).not.toBeNull()
+    // Column order: Nombre, Nivel, Año, Docentes, Seguimiento activo, acciones.
+    const trackingCell = row!.querySelectorAll("td")[4]
+    expect(trackingCell).toHaveTextContent("4")
+  })
+
+  it("shows 0 for a group with no active tracking, not an empty cell", async () => {
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([
+      {
+        id: 1,
+        name: "3° A",
+        level: "Primaria",
+        school_year: 2026,
+        group_profile: null,
+        related_documents: null,
+        teachers: [{ id: 5, name: "Ana Ruiz" }],
+        active_tracking_count: 0,
+      },
+    ])
+
+    renderList("teacher")
+
+    const row = (await screen.findByText("3° A")).closest("tr")
+    expect(row).not.toBeNull()
+    const trackingCell = row!.querySelectorAll("td")[4]
+    expect(trackingCell).not.toBeNull()
+    expect(trackingCell).toHaveTextContent("0")
   })
 
   it("hides the create link for a teacher", async () => {
