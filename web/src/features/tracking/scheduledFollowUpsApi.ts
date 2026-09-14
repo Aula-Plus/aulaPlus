@@ -30,6 +30,25 @@ export async function fetchScheduledFollowUps(
   return data.data
 }
 
+/**
+ * List a group's scheduled follow-ups (backend Sesión 11 —
+ * docs/prompts/21-perfil-de-grupo.md §4). Passing `overdue` narrows to overdue
+ * ones with `?overdue=true` (the `is_overdue` flag is computed server-side).
+ * Backend access is GroupPolicy::view; each row is already filtered by
+ * ScheduledFollowUpPolicy per student, so the list only carries follow-ups the
+ * viewer may see. Resource-wrapped like the per-student list above.
+ */
+export async function fetchGroupScheduledFollowUps(
+  groupId: number,
+  overdue?: boolean,
+): Promise<ScheduledFollowUp[]> {
+  const { data } = await api.get<{ data: ScheduledFollowUp[] }>(
+    `/api/v1/groups/${groupId}/scheduled-follow-ups`,
+    overdue ? { params: { overdue: true } } : undefined,
+  )
+  return data.data
+}
+
 export async function createScheduledFollowUp(
   studentId: number,
   input: { description: string; due_date: string },

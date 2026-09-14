@@ -7,6 +7,7 @@ import type {
   BarrierAccommodationLink,
   Comment,
   CommentTone,
+  GroupAccommodationSummaryEntry,
   GroupTracking,
   Paginated,
   Role,
@@ -56,6 +57,22 @@ export async function fetchStudentTracking(studentId: number): Promise<StudentTr
 export async function fetchGroupTracking(groupId: number): Promise<GroupTracking> {
   const { data } = await api.get<{ data: GroupTracking }>(`/api/v1/groups/${groupId}/tracking`)
   return data.data
+}
+
+/**
+ * Perfil de grupo — active accommodations aggregated by type (backend Sesión 11,
+ * docs/prompts/27-frontend-perfil-de-grupo.md §3). The controller returns a
+ * plain JSON array (no `{ data }` envelope, unlike the Resource-wrapped
+ * endpoints above), so there is no `.data.data` unwrap here. Safe for any role
+ * that can see the group — it never names a student, so no clinical gate.
+ */
+export async function fetchGroupAccommodationsSummary(
+  groupId: number,
+): Promise<GroupAccommodationSummaryEntry[]> {
+  const { data } = await api.get<GroupAccommodationSummaryEntry[]>(
+    `/api/v1/groups/${groupId}/accommodations-summary`,
+  )
+  return data
 }
 
 export async function fetchStudentComments(studentId: number): Promise<Comment[]> {

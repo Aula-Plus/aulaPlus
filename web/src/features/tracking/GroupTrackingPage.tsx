@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Comment, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
+import { GroupAccommodationsSummary } from "./GroupAccommodationsSummary"
+import { GroupOverdueFollowUps } from "./GroupOverdueFollowUps"
+import { GroupPerformanceChart } from "./GroupPerformanceChart"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput } from "./trackingApi"
 
@@ -126,6 +129,12 @@ export function GroupTrackingPage() {
           </Table>
         )}
       </section>
+
+      <GroupAccommodationsSummary groupId={group.id} />
+
+      <GroupPerformanceChart groupId={group.id} studentCount={tracking.students.length} />
+
+      <GroupOverdueFollowUps groupId={group.id} />
 
       <CommentsPanel
         comments={comments ?? []}

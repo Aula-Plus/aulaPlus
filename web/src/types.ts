@@ -267,6 +267,93 @@ export const accommodationCategoryLabels: Record<AccommodationCategory, string> 
   criteria: "Criterio",
 }
 
+/**
+ * Perfil de grupo aggregates (backend Sesión 11 — docs/prompts/21-perfil-de-
+ * grupo.md; frontend docs/prompts/27-frontend-perfil-de-grupo.md). All three
+ * feed sections on the already-existing GroupTrackingPage; none is a roster.
+ */
+
+/**
+ * One row of GET /groups/{group}/accommodations-summary: the group's active
+ * accommodations aggregated by the free-text `type` (two accommodations may
+ * share a `category` yet be different concrete adjustments). `student_count`
+ * counts DISTINCT students. The endpoint never names a student — it is safe for
+ * any role that can see the group, with no extra clinical gate (spec §6).
+ */
+export interface GroupAccommodationSummaryEntry {
+  type: string
+  category: AccommodationCategory
+  student_count: number
+}
+
+/**
+ * One point of the group performance line: one per Assessment of the group (not
+ * per time window). `average_score` is the mean of its results; `results_count`
+ * is how many students have a score loaded (may be less than the group size).
+ */
+export interface GroupPerformanceResultPoint {
+  assessment_id: number
+  assessment_type: AssessmentType
+  /** ISO date (`YYYY-MM-DD`) — the parent assessment's `administered_at`. */
+  administered_at: string
+  average_score: number
+  results_count: number
+}
+
+/**
+ * The five group mark types. Unlike the student timeline (Sesión 14) there is
+ * NO `accommodation_instance_override` — the group aggregate is a count by
+ * (type, date), never a per-student instance (spec §2 note).
+ */
+export type GroupPerformanceMarkType =
+  | "accommodation_activated"
+  | "accommodation_deactivated"
+  | "barrier_registered"
+  | "concerning_comment"
+  | "calendar_event"
+
+export const groupPerformanceMarkTypeLabels: Record<GroupPerformanceMarkType, string> = {
+  accommodation_activated: "Adaptaciones activadas",
+  accommodation_deactivated: "Adaptaciones desactivadas",
+  barrier_registered: "Barreras registradas",
+  concerning_comment: "Comentarios preocupantes",
+  calendar_event: "Evento de calendario",
+}
+
+interface GroupPerformanceMarkBase {
+  /** ISO date (`YYYY-MM-DD`) of the aggregated events. */
+  date: string
+}
+
+/**
+ * Discriminated by `type` like {@see PerformanceMark}, but every variant is an
+ * AGGREGATE count — no `student_id`, no per-student identifier ever appears
+ * (spec §2 note, red line of pantalla 3: "agregado por tipo, nunca nómina").
+ */
+export type GroupPerformanceMark =
+  | (GroupPerformanceMarkBase & {
+      type: "accommodation_activated"
+      accommodation_type: string
+      count: number
+    })
+  | (GroupPerformanceMarkBase & {
+      type: "accommodation_deactivated"
+      accommodation_type: string
+      count: number
+    })
+  | (GroupPerformanceMarkBase & { type: "barrier_registered"; count: number })
+  | (GroupPerformanceMarkBase & { type: "concerning_comment"; count: number })
+  | (GroupPerformanceMarkBase & {
+      type: "calendar_event"
+      calendar_event_id: number
+      title: string
+    })
+
+export interface GroupPerformanceTimeline {
+  results: GroupPerformanceResultPoint[]
+  marks: GroupPerformanceMark[]
+}
+
 export interface Accommodation {
   id: number
   student_id: number
