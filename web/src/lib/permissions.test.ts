@@ -3,6 +3,7 @@ import {
   canApproveAccommodation,
   canDeleteGroup,
   canDeleteStudent,
+  canManageAssessments,
   canManageGroups,
   canManageStudents,
   canProposeBarrierAccommodation,
@@ -160,6 +161,31 @@ describe("permissions", () => {
       expect(isDirector(both)).toBe(true)
       expect(isSchoolWideStaff(both)).toBe(true)
       expect(isTeacher(both)).toBe(true)
+    })
+  })
+
+  describe("canManageAssessments (owning teacher of the group)", () => {
+    const groupLedBy = (...ids: number[]) => ({
+      teachers: ids.map((id) => ({ id, name: `Docente ${id}` })),
+    })
+
+    it("allows a teacher who leads the group", () => {
+      // teacher fixture has id 1.
+      expect(canManageAssessments(teacher, groupLedBy(1))).toBe(true)
+    })
+
+    it("denies a teacher who does not lead the group", () => {
+      expect(canManageAssessments(teacher, groupLedBy(99))).toBe(false)
+    })
+
+    it("denies school-wide staff — they get read-only access, never authorship", () => {
+      expect(canManageAssessments(director, groupLedBy(1))).toBe(false)
+      expect(canManageAssessments(psychopedagogue, groupLedBy(1))).toBe(false)
+    })
+
+    it("is false for a null user or a null group", () => {
+      expect(canManageAssessments(null, groupLedBy(1))).toBe(false)
+      expect(canManageAssessments(teacher, null)).toBe(false)
     })
   })
 

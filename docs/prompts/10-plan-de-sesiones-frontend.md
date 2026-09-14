@@ -151,8 +151,29 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   preexistente en `button.tsx`); `npm run typecheck` → OK;
   `npm run test -- --run` → verde; `npm run build` → OK (mismo warning de
   tamaño de chunk preexistente).
-- [ ] **Sesión 10** — Evaluaciones y resultados, carga mínima (`14-frontend-evaluaciones-resultados.md`)
-  Resumen:
+- [x] **Sesión 10** — Evaluaciones y resultados, carga mínima (`14-frontend-evaluaciones-resultados.md`)
+  Resumen: UI llana (sin IA de Bloque 2) para que el docente dueño de la clase
+  cree evaluaciones y cargue notas. Tipos `Assessment`/`AssessmentResult` en
+  `types.ts` (superset de los `Resource` reales de backend Sesión 6; se **reusó**
+  `AssessmentType`/`assessmentTypeLabels` ya existentes de la Sesión 8 en vez de
+  duplicarlos). Nuevo helper `canManageAssessments(user, group)` en
+  `permissions.ts` (rol `teacher` **y** miembro de `group.teachers` — espeja
+  `AssessmentPolicy::create` + el `teachesGroup` del FormRequest; director/psico
+  quedan solo-lectura, como en la Policy). `features/assessments/`:
+  `assessmentsApi.ts` (`/api/v1`) + `AssessmentsPage` (form tipo/fecha/propósito,
+  listado por `administered_at` desc) + `AssessmentResultsEditor` (tabla de la
+  clase con nota + devolución que hace **un único POST** con el array — upsert,
+  nunca N requests). Ruta `/clases/:id/evaluaciones` (el resto del producto rutéa
+  grupos bajo `/clases`, no `/grupos` como sugería el spec §4; se mantuvo la
+  convención real) enlazada desde `GroupsListPage` y `GroupTrackingPage`; el
+  roster/nombre de la clase salen del agregado `GET /groups/{id}/tracking` (única
+  fuente de alumnos del grupo visible al docente hoy). Tests nuevos:
+  `AssessmentsPage.test.tsx` (payload de creación, upsert de un solo POST,
+  solo-lectura sin `canManageAssessments`) y la fila de `canManageAssessments` en
+  `permissions.test.ts`. Verificación real desde `web/`: `npm run lint` → 0
+  errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` → OK;
+  `npm run test -- --run` → 133 en verde; `npm run build` → OK (mismo warning de
+  tamaño de chunk preexistente).
 - [ ] **Sesión 11** — Seguimiento programado en la UI (`23-frontend-seguimiento-programado.md`)
   Resumen:
 - [ ] **Sesión 12** — Categoría de ajuste y desactivar por instancia en la UI (`24-frontend-ajustes-categoria-instancia.md`)

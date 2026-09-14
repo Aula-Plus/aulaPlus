@@ -1,4 +1,4 @@
-import type { Role, User } from "@/types"
+import type { Group, Role, User } from "@/types"
 
 /**
  * Client-side role/permission helpers for the SPA.
@@ -98,6 +98,32 @@ export function canDeleteStudent(user: User | null): boolean {
  */
 export function canViewClinicalProfileUX(user: User | null): boolean {
   return isSchoolWideStaff(user)
+}
+
+// ── Assessments (Sesión 10) ─────────────────────────────────────────────────
+
+/**
+ * Create/edit an assessment and load its results for a group. Mirror of the
+ * two-layered backend rule (docs/prompts/13-evaluaciones-resultados.md §1):
+ * `AssessmentPolicy::create` requires the **teacher** role, and the
+ * `StoreAssessmentRequest`/`AssessmentResultPolicy` additionally require the
+ * teacher to actually lead the target group (`$user->teachesGroup($group)`).
+ *
+ * The frontend approximates that group-ownership check with the group's
+ * `teachers` list (the only teacher↔group link the SPA has). Director and
+ * psychopedagogue are intentionally excluded — they get read-only access to
+ * scores, they never author assessments. Like every helper here this is UX
+ * only; the Controller + Policy remain the security boundary.
+ */
+export function canManageAssessments(
+  user: User | null,
+  group: Pick<Group, "teachers"> | null,
+): boolean {
+  if (!user || !group) {
+    return false
+  }
+
+  return isTeacher(user) && group.teachers.some((teacher) => teacher.id === user.id)
 }
 
 // ── Forward-looking helpers (Sessions 8 & 9) ────────────────────────────────

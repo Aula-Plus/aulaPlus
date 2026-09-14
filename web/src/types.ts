@@ -129,6 +129,45 @@ export interface AssessmentSummary {
   created_at: string | null
 }
 
+/**
+ * Full Assessment representation returned by the CRUD endpoints
+ * (`GET/POST /api/v1/groups/{group}/assessments`,
+ * `PATCH /api/v1/assessments/{assessment}`). Mirror of `AssessmentResource`
+ * (backend Sesión 6, docs/prompts/13-evaluaciones-resultados.md §1) — the
+ * superset of the compact {@see AssessmentSummary} above. `variant_number`
+ * belongs to the Bloque 2 curricular flow and is not set by this session's
+ * plain form, but it is part of the resource so it is typed here.
+ */
+export interface Assessment {
+  id: number
+  group_id: number
+  teacher_id: number
+  type: AssessmentType
+  purpose: string | null
+  duration_minutes: number | null
+  variant_number: number | null
+  /** ISO date (`YYYY-MM-DD`). */
+  administered_at: string | null
+  created_at: string | null
+}
+
+/**
+ * One student's result on an assessment
+ * (`GET/POST /api/v1/assessments/{assessment}/results`). Mirror of
+ * `AssessmentResultResource` (backend Sesión 6). `score` is a decimal (0–999.99,
+ * up to two places) serialized by the backend; feedback is optional.
+ */
+export interface AssessmentResult {
+  id: number
+  assessment_id: number
+  student_id: number
+  score: number
+  feedback: string | null
+  created_by_id: number | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 export interface Accommodation {
   id: number
   student_id: number
