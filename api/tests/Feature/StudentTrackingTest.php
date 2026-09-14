@@ -57,6 +57,41 @@ it('gives a teacher only counts, never clinical detail, on the same student trac
         ->assertJsonMissingPath('data.alerts');
 });
 
+// Regression: the rest of the suite runs on the `array` cache store, which
+// never serializes, so it masked a production 500. The `database` store (like
+// file/redis) unserializes with Laravel's secure `serializable_classes => false`
+// default; caching hydrated Eloquent models there brought them back as
+// __PHP_Incomplete_Class, and StudentTrackingResource then called
+// isVisibleTo() on a string. The endpoint must survive a serializing store on
+// the *cache-hit* path.
+it('serves student tracking through a serializing cache store on a cache hit', function () {
+    config(['cache.default' => 'database']);
+    Cache::purge('database');
+
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    Accommodation::factory()->create(['student_id' => $student->id, 'active' => true]);
+    Barrier::factory()->create(['student_id' => $student->id, 'active' => true]);
+    Alert::factory()->create(['student_id' => $student->id, 'resolved' => false]);
+    Comment::factory()->forSubject($student)->create(['content' => 'Nota de seguimiento']);
+    Sanctum::actingAs($psychopedagogue);
+
+    // First request populates the cache from live models; the second reads the
+    // aggregation back through unserialize() — the path that used to 500.
+    $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk();
+    $response = $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk();
+
+    $response->assertJsonPath('data.accommodations_count', 1)
+        ->assertJsonPath('data.barriers_count', 1)
+        ->assertJsonPath('data.open_alerts_count', 1)
+        ->assertJsonCount(1, 'data.accommodations')
+        ->assertJsonCount(1, 'data.barriers')
+        ->assertJsonCount(1, 'data.alerts')
+        ->assertJsonCount(1, 'data.recent_comments')
+        ->assertJsonPath('data.recent_comments.0.content', 'Nota de seguimiento');
+});
+
 it('forbids a teacher with no relation to the student from viewing their tracking page', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
