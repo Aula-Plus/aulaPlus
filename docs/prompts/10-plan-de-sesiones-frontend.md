@@ -222,8 +222,33 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   preexistente en `button.tsx`); `npm run typecheck` → OK; `npm run test -- --run`
   → 145 tests en verde (17 archivos, +5 tests de la Sesión 12); `npm run build`
   → OK (mismo warning preexistente de tamaño de chunk).
-- [ ] **Sesión 13** — Alcance de comentarios en la UI (`25-frontend-comentarios-alcance.md`)
-  Resumen:
+- [x] **Sesión 13** — Alcance de comentarios en la UI (`25-frontend-comentarios-alcance.md`)
+  Resumen: `CommentsPanel` reemplaza el `fieldset` de checkboxes de rol (que
+  permitía combinaciones libres) por un `<Select>` de exactamente cuatro
+  opciones preestablecidas — "Todos los que ven este registro" (default),
+  "Solo dirección", "Solo psicopedagogía" y "Solo quien escribe". Un
+  `buildScopeFields` traduce el estado de UI (`CommentScopeOption`) al payload
+  real solo en el submit: `everyone` omite ambos campos (mantiene la regla de
+  la Sesión 8, nunca `[]`), `director`/`psychopedagogue` mandan
+  `visible_to: [rol]`, y `author_only` manda `author_only: true` — nunca los dos
+  juntos (ortogonales y mutuamente excluyentes, §1). En el listado, un comentario
+  con `author_only` muestra un badge "Privado" y oculta la línea "Visible para:
+  …" (excluyentes). Tipos: `Comment.author_only: boolean` y
+  `CommentInput.author_only?`; `GroupTracking.trend.comments_count` pasa a
+  opcional y `GroupTrackingPage` deja de renderizar la tarjeta "Comentarios
+  cargados" (y baja a una sola columna) cuando el backend omite la clave para un
+  viewer sin rol school-wide (§5). Contrato verificado contra el backend real
+  de la Sesión 9: `CommentResource` (`author_only`), `Store{Student,Group}
+  CommentRequest` (`prepareForValidation` fuerza `visible_to: null`) y
+  `GroupTrackingResource` (`$this->when(hasAnyRole(schoolWideValues()))`).
+  **Dependencia:** ramificado de `develop` y mergeado
+  `feature/frontend-sesion-12-ajustes-categoria-instancia` (sin conflictos)
+  antes de implementar, ya que la Sesión 12 aún no estaba en `develop`.
+  Verificación real desde `web/` (`npm ci` primero): `npm run lint` → 0 errores
+  (mismo warning preexistente en `button.tsx`); `npm run typecheck` → OK;
+  `npm run test -- --run` → 150 tests en verde (17 archivos, +5 sobre la
+  Sesión 12); `npm run build` → OK (mismo warning preexistente de tamaño de
+  chunk).
 - [ ] **Sesión 14** — Perfil de alumno: gráfico de desempeño (`26-frontend-perfil-de-alumno.md`)
   Resumen:
 - [ ] **Sesión 15** — Perfil de grupo en la UI (`27-frontend-perfil-de-grupo.md`)

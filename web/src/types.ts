@@ -76,6 +76,14 @@ export interface Comment {
    * can see the parent record. Never an empty array from the API.
    */
   visible_to: Role[] | null
+  /**
+   * When `true`, the comment is visible only to its `author_id` — stricter than
+   * any `visible_to` value (which the backend forces to `null` in that case).
+   * Mutually exclusive with `visible_to` (docs/prompts/19-comentarios-alcance.md
+   * §1). The backend already filters comments by viewer, so an `author_only`
+   * comment reaches the client only when the viewer is its own author.
+   */
+  author_only: boolean
   created_at: string | null
 }
 
@@ -266,7 +274,12 @@ export interface GroupTracking {
   trend: {
     period_days: number
     assessments_count: number
-    comments_count: number
+    /**
+     * Omitted entirely (not `0`, not `null`) for a viewer without a school-wide
+     * role — the backend drops the key via `$this->when(...)`
+     * (docs/prompts/19-comentarios-alcance.md §5).
+     */
+    comments_count?: number
   }
 }
 

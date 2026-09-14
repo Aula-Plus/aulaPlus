@@ -36,6 +36,14 @@ export interface CommentInput {
    * default, safe behaviour.
    */
   visible_to?: Role[] | null
+  /**
+   * The fourth, strictest scope (docs/prompts/19-comentarios-alcance.md §1):
+   * when `true`, the comment is visible only to its author. Mutually exclusive
+   * with `visible_to` — CommentsPanel never builds a payload carrying both (the
+   * backend forces `visible_to` to null when this is true, but the client must
+   * not send them as if independent).
+   */
+  author_only?: boolean
 }
 
 export async function fetchStudentTracking(studentId: number): Promise<StudentTracking> {
