@@ -50,6 +50,7 @@ export function GroupsListPage() {
               <TableHead>Nivel</TableHead>
               <TableHead>Año</TableHead>
               <TableHead>Docentes</TableHead>
+              <TableHead>Seguimiento activo</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -64,6 +65,7 @@ export function GroupsListPage() {
                     ? group.teachers.map((teacher) => teacher.name).join(", ")
                     : "—"}
                 </TableCell>
+                <TableCell>{group.active_tracking_count ?? 0}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-4">
                     <Link

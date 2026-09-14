@@ -28,6 +28,18 @@ export interface Group {
   group_profile: unknown | null
   related_documents: unknown | null
   teachers: { id: number; name: string }[]
+  /**
+   * How many students in the group have active tracking (an effective
+   * accommodation, an active barrier, an open alert, or an unresolved
+   * scheduled follow-up) — aggregate only, never names a student. See
+   * `docs/prompts/22-grupos-listado.md` §1.
+   *
+   * Optional because the backend only computes it for the groups listing
+   * (`GET /api/groups`), where it is always a number (`0`, never null). It is
+   * omitted from the show/create/update responses (`GroupResource` guards it
+   * with `when()`), so the shared `Group` type marks it optional.
+   */
+  active_tracking_count?: number
 }
 
 export interface Student {
