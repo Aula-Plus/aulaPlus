@@ -1,6 +1,7 @@
 import { api } from "@/lib/api"
 import type {
   Accommodation,
+  AccommodationInput,
   Alert,
   AuditLogEntry,
   BarrierAccommodationLink,
@@ -107,6 +108,49 @@ export async function rejectAccommodation(accommodationId: number): Promise<Acco
     `/api/v1/accommodations/${accommodationId}/reject`,
   )
   return data.data
+}
+
+// ── Accommodation create/edit + per-instance deactivation (Sesión 12) ─────
+// docs/prompts/24-frontend-ajustes-categoria-instancia.md §1. Both write
+// endpoints return the AccommodationResource wrapped in `{ data }`. `category`
+// is required on create AND edit (the backend UpdateAccommodationRequest keeps
+// it required), so `updateAccommodation` sends the full body, not a partial.
+
+export async function createAccommodation(
+  studentId: number,
+  input: AccommodationInput,
+): Promise<Accommodation> {
+  const { data } = await api.post<{ data: Accommodation }>(
+    `/api/v1/students/${studentId}/accommodations`,
+    input,
+  )
+  return data.data
+}
+
+export async function updateAccommodation(
+  accommodationId: number,
+  input: AccommodationInput,
+): Promise<Accommodation> {
+  const { data } = await api.patch<{ data: Accommodation }>(
+    `/api/v1/accommodations/${accommodationId}`,
+    input,
+  )
+  return data.data
+}
+
+/**
+ * Deactivate an accommodation for one assessment instance. The backend only
+ * allows this to the teacher who owns the chosen assessment and answers 403
+ * otherwise (docs/prompts/24 §5) — the SPA can't check ownership beforehand, so
+ * the caller handles that error. Nothing in the SPA reads the created override
+ * back (its only reader is the Sesión 14 timeline, which brings its own type),
+ * so this returns void rather than speculating a shape into `types.ts`.
+ */
+export async function deactivateAccommodationForAssessment(
+  accommodationId: number,
+  input: { assessment_id: number; reason: string },
+): Promise<void> {
+  await api.post(`/api/v1/accommodations/${accommodationId}/instance-overrides`, input)
 }
 
 // ── Barrier ↔ Accommodation link (Sesión 9) ──────────────────────────────

@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { AxiosError } from "axios"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StudentTrackingPage } from "./StudentTrackingPage"
@@ -34,6 +35,7 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     id: 77,
     student_id: 3,
     type: "Tiempo extra en evaluaciones",
+    category: "access",
     active: true,
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
@@ -298,6 +300,157 @@ describe("StudentTrackingPage", () => {
     expect(
       within(panel.closest("li") as HTMLElement).queryByRole("button", { name: /validar/i }),
     ).not.toBeInTheDocument()
+  })
+
+  // ── Sesión 12: accommodation create/edit + per-instance deactivation ──────
+
+  it("does not allow submitting a new accommodation without a category", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = []
+    tracking.accommodations_count = 0
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const create = vi.spyOn(trackingApi, "createAccommodation").mockResolvedValue({
+      ...pendingAccommodation(),
+      id: 200,
+      category: "content",
+      requires_external_approval: false,
+      approved: null,
+      is_effective: true,
+    })
+
+    renderPage("director")
+
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /nueva adaptación/i }))
+
+    // Fill everything except the category, then try to save.
+    await userEvent.type(screen.getByLabelText(/^tipo$/i), "Lectura en voz alta")
+    await userEvent.type(screen.getByLabelText(/descripción/i), "El docente lee la consigna")
+    await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Comprensión")
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
+
+    // Exact match (not a substring regex) so it hits the error message, not the
+    // "Elegí una categoría…" placeholder option.
+    expect(await screen.findByText("Elegí una categoría")).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+
+    // Now choose a category and the write goes through with it.
+    await userEvent.selectOptions(screen.getByLabelText(/categoría/i), "content")
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
+
+    expect(create).toHaveBeenCalledWith(3, {
+      type: "Lectura en voz alta",
+      description: "El docente lee la consigna",
+      focus_area: "Comprensión",
+      category: "content",
+      requires_external_approval: false,
+      active: true,
+    })
+  })
+
+  it("hides 'Nueva adaptación' and 'Editar' from a viewer without clinical access", async () => {
+    // A teacher's payload omits the accommodations array entirely — the whole
+    // section (and its manage buttons) never renders.
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    await screen.findByText("Seguimiento — Juan Pérez")
+    expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument()
+  })
+
+  it("shows 'Desactivar para una evaluación' only on effective accommodations", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [
+      pendingAccommodation({
+        id: 1,
+        requires_external_approval: false,
+        approved: null,
+        is_effective: true,
+      }),
+      // Pending approval → not effective → no deactivation action.
+      pendingAccommodation({ id: 2, is_effective: false }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("director")
+
+    await screen.findByText("Seguimiento — Juan Pérez")
+    expect(
+      screen.getAllByRole("button", { name: /desactivar para una evaluación/i }),
+    ).toHaveLength(1)
+  })
+
+  it("populates the deactivation select from recent_assessments without an extra fetch", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [
+      pendingAccommodation({
+        id: 1,
+        requires_external_approval: false,
+        approved: null,
+        is_effective: true,
+      }),
+    ]
+    const fetchTracking = vi
+      .spyOn(trackingApi, "fetchStudentTracking")
+      .mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("director")
+
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
+
+    const select = screen.getByLabelText(/^evaluación$/i)
+    // The one recent assessment (id 10) is the only real option besides the
+    // placeholder — no assessments endpoint is called (there isn't one).
+    expect(within(select).getByRole("option", { name: /escrita/i })).toHaveValue("10")
+    // Only the initial mount fetch happened.
+    expect(fetchTracking).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows a readable message when deactivation is forbidden (not the assessment owner)", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [
+      pendingAccommodation({
+        id: 1,
+        requires_external_approval: false,
+        approved: null,
+        is_effective: true,
+      }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const forbidden = new AxiosError("Forbidden", "403", undefined, undefined, {
+      status: 403,
+      statusText: "Forbidden",
+      data: {},
+      headers: {},
+      config: { headers: undefined as never },
+    })
+    const deactivate = vi
+      .spyOn(trackingApi, "deactivateAccommodationForAssessment")
+      .mockRejectedValue(forbidden)
+
+    renderPage("psychopedagogue")
+
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
+    await userEvent.selectOptions(screen.getByLabelText(/^evaluación$/i), "10")
+    await userEvent.type(screen.getByLabelText(/motivo/i), "La evaluación es oral")
+    await userEvent.click(screen.getByRole("button", { name: /^desactivar$/i }))
+
+    expect(deactivate).toHaveBeenCalledWith(1, {
+      assessment_id: 10,
+      reason: "La evaluación es oral",
+    })
+    expect(
+      await screen.findByText(/solo el docente responsable de esa evaluación/i),
+    ).toBeInTheDocument()
   })
 
   it("creates a comment and reloads the comment list", async () => {
