@@ -11,6 +11,7 @@ import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
+import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 
 function App() {
   return (
@@ -69,6 +70,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupTrackingPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clases/:id/evaluaciones"
+            element={
+              <ProtectedLayout>
+                <AssessmentsPage />
               </ProtectedLayout>
             }
           />

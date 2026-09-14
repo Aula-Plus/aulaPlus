@@ -55,7 +55,15 @@ export function GroupTrackingPage() {
         <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/clases">
           ← Volver a clases
         </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Seguimiento — {group.name}</h1>
+        <div className="mt-1 flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-semibold">Seguimiento — {group.name}</h1>
+          <Link
+            className="text-sm text-primary underline-offset-4 hover:underline"
+            to={`/clases/${group.id}/evaluaciones`}
+          >
+            Evaluaciones
+          </Link>
+        </div>
       </div>
 
       <Card>

@@ -72,6 +72,12 @@ export function GroupsListPage() {
                     >
                       Seguimiento
                     </Link>
+                    <Link
+                      className="text-primary underline-offset-4 hover:underline"
+                      to={`/clases/${group.id}/evaluaciones`}
+                    >
+                      Evaluaciones
+                    </Link>
                     {canManage && (
                       <Link
                         className="text-primary underline-offset-4 hover:underline"
