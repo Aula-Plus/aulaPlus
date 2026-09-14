@@ -177,6 +177,83 @@ export interface AssessmentResult {
 }
 
 /**
+ * Student performance timeline (backend Sesión 10 — docs/prompts/20-linea-
+ * tiempo-alumno.md; frontend docs/prompts/26-frontend-perfil-de-alumno.md).
+ * Feeds the Perfil de alumno chart: the `results` performance line plus a
+ * single `marks` array whose *content* varies by authorization (clinical gate
+ * + comment visibility, both decided server-side) while the key is always
+ * present. The client never filters marks by role — it renders exactly what the
+ * response brings.
+ */
+export interface PerformanceResultPoint {
+  assessment_id: number
+  assessment_type: AssessmentType
+  /** ISO date (`YYYY-MM-DD`) — the parent assessment's `administered_at`. */
+  administered_at: string
+  score: number
+}
+
+export type PerformanceMarkType =
+  | "accommodation_activated"
+  | "accommodation_deactivated"
+  | "accommodation_instance_override"
+  | "barrier_registered"
+  | "concerning_comment"
+  | "calendar_event"
+
+export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
+  accommodation_activated: "Adaptación activada",
+  accommodation_deactivated: "Adaptación desactivada",
+  accommodation_instance_override: "Adaptación desactivada para esta evaluación",
+  barrier_registered: "Barrera registrada",
+  concerning_comment: "Comentario preocupante",
+  calendar_event: "Evento de calendario",
+}
+
+/**
+ * A distinct colour per mark type for the Perfil de alumno chart (spec §5: "un
+ * color distinto por type … no colores repetidos entre tipos"). Lives here,
+ * next to the labels, so Sesión 15 (Perfil de grupo) reuses the same palette
+ * this session fixes instead of reinventing one (docs/prompts/26 §Bloquea a).
+ */
+export const performanceMarkColors: Record<PerformanceMarkType, string> = {
+  accommodation_activated: "#16a34a", // green
+  accommodation_deactivated: "#dc2626", // red
+  accommodation_instance_override: "#d97706", // amber
+  barrier_registered: "#7c3aed", // violet
+  concerning_comment: "#db2777", // pink
+  calendar_event: "#0891b2", // cyan
+}
+
+interface PerformanceMarkBase {
+  /** ISO-8601 datetime (UTC) of the underlying event. */
+  date: string
+}
+
+/**
+ * Discriminated by `type` (same pattern the domain uses elsewhere, e.g.
+ * `AuditAction`) so each variant carries only the fields the backend actually
+ * sends for it — no single type with ten optional columns.
+ */
+export type PerformanceMark =
+  | (PerformanceMarkBase & { type: "accommodation_activated"; accommodation_id: number })
+  | (PerformanceMarkBase & { type: "accommodation_deactivated"; accommodation_id: number })
+  | (PerformanceMarkBase & {
+      type: "accommodation_instance_override"
+      accommodation_id: number
+      assessment_id: number
+      reason: string
+    })
+  | (PerformanceMarkBase & { type: "barrier_registered"; barrier_id: number })
+  | (PerformanceMarkBase & { type: "concerning_comment"; comment_id: number })
+  | (PerformanceMarkBase & { type: "calendar_event"; calendar_event_id: number; title: string })
+
+export interface StudentPerformanceTimeline {
+  results: PerformanceResultPoint[]
+  marks: PerformanceMark[]
+}
+
+/**
  * The three pedagogical categories of an accommodation (mirror of
  * `App\Enums\AccommodationCategory`, docs/prompts/18 §1) — independent of the
  * free-text `type`. English identifiers in code; the Spanish labels below are
