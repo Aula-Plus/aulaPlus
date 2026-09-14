@@ -1,10 +1,11 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { StudentTrackingPage } from "./StudentTrackingPage"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as trackingApi from "./trackingApi"
+import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import type { Accommodation, Role, StudentTracking } from "@/types"
 
 function baseTracking(): StudentTracking {
@@ -66,6 +67,12 @@ function renderPage(role: Role, userId = 1) {
 }
 
 describe("StudentTrackingPage", () => {
+  beforeEach(() => {
+    // The embedded ScheduledFollowUpsPanel self-fetches on mount; stub it so
+    // these tests (about alerts/accommodations/comments) don't hit the network.
+    vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
