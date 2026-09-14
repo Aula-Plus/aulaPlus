@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   CartesianGrid,
   ComposedChart,
@@ -82,20 +82,26 @@ export function StudentPerformanceChart({ studentId }: StudentPerformanceChartPr
 
   const { from, to } = range
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    // Guard against an out-of-order response: changing `from` then `to` fires
+    // two fetches, and the slower one must not clobber the newer selection.
+    // The cleanup flips `ignore` so a stale in-flight request is dropped (same
+    // pattern as AuthProvider).
+    let ignore = false
     setError(null)
-    try {
-      const data = await fetchStudentPerformanceTimeline(studentId, { from, to })
-      setTimeline(data)
-    } catch {
-      setError("No pudimos cargar el desempeño del alumno.")
-      setTimeline(null)
+    fetchStudentPerformanceTimeline(studentId, { from, to })
+      .then((data) => {
+        if (!ignore) setTimeline(data)
+      })
+      .catch(() => {
+        if (ignore) return
+        setError("No pudimos cargar el desempeño del alumno.")
+        setTimeline(null)
+      })
+    return () => {
+      ignore = true
     }
   }, [studentId, from, to])
-
-  useEffect(() => {
-    load()
-  }, [load])
 
   return (
     <section className="grid gap-4">
