@@ -128,3 +128,25 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+ * Print-only isolation for the screening-test roster sheet (docs/prompts/
+ * 12-frontend-pruebas-de-sondeo.md §5) — a plain @media print rule, no PDF
+ * library. The classic "print one element" trick: hide everything's ink with
+ * visibility (layout untouched), re-show the sheet and its descendants, and
+ * float the sheet to the page origin so it prints on its own.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .screening-roster-sheet,
+  .screening-roster-sheet * {
+    visibility: visible;
+  }
+  .screening-roster-sheet {
+    position: absolute;
+    inset: 0;
+    padding: 1rem;
+  }
+}

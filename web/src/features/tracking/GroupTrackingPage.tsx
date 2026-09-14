@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import { useAuth } from "@/features/auth/AuthContext"
+import { canManageScreeningTests } from "@/lib/permissions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Comment, GroupTracking } from "@/types"
@@ -13,6 +15,8 @@ import type { CommentInput } from "./trackingApi"
 export function GroupTrackingPage() {
   const { id } = useParams<{ id: string }>()
   const groupId = Number(id)
+  const { user } = useAuth()
+  const canScreen = canManageScreeningTests(user)
 
   const [tracking, setTracking] = useState<GroupTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
@@ -60,12 +64,22 @@ export function GroupTrackingPage() {
         </Link>
         <div className="mt-1 flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold">Seguimiento — {group.name}</h1>
-          <Link
-            className="text-sm text-primary underline-offset-4 hover:underline"
-            to={`/clases/${group.id}/evaluaciones`}
-          >
-            Evaluaciones
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              className="text-sm text-primary underline-offset-4 hover:underline"
+              to={`/clases/${group.id}/evaluaciones`}
+            >
+              Evaluaciones
+            </Link>
+            {canScreen && (
+              <Link
+                className="text-sm text-primary underline-offset-4 hover:underline"
+                to={`/clases/${group.id}/pruebas-de-sondeo`}
+              >
+                Pruebas de sondeo
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 

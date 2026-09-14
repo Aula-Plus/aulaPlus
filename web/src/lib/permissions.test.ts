@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
   canApproveAccommodation,
+  canApproveScreeningTestDesign,
   canDeleteGroup,
   canDeleteStudent,
   canManageAssessments,
   canManageGroups,
+  canManageScreeningTests,
   canManageStudents,
   canProposeBarrierAccommodation,
   canResolveAlert,
@@ -124,6 +126,20 @@ const cases: {
     director: false,
     psychopedagogue: true,
     teacher: true,
+  },
+  {
+    name: "canManageScreeningTests",
+    fn: canManageScreeningTests,
+    director: false,
+    psychopedagogue: true,
+    teacher: false,
+  },
+  {
+    name: "canApproveScreeningTestDesign",
+    fn: canApproveScreeningTestDesign,
+    director: true,
+    psychopedagogue: false,
+    teacher: false,
   },
 ]
 

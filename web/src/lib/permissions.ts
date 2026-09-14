@@ -204,3 +204,30 @@ export function canViewAdoptionDashboard(user: User | null): boolean {
 export function canManageAccommodations(user: User | null | undefined): boolean {
   return canViewClinicalProfileUX(user ?? null)
 }
+
+// ── Screening tests / pruebas de sondeo (Sesión 17) ─────────────────────────
+
+/**
+ * Manage the screening-test module: create a type, author/edit a design, apply
+ * a test to a group, load results, and view the code→student roster. Mirror of
+ * the role portion shared by `ScreeningTestTypePolicy::create`,
+ * `ScreeningTestDesignPolicy::create`, `ScreeningTestApplicationPolicy::create`
+ * /`viewRoster`/`viewResults` and `ScreeningTestResultPolicy::update` — all
+ * **psychopedagogy only**. No helper here ever enables `teacher`: this module
+ * has no teacher view at all (docs/prompts/12-frontend-pruebas-de-sondeo.md §3,
+ * the same "línea roja" applied to PTP/ajustes in earlier sessions).
+ */
+export function canManageScreeningTests(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}
+
+/**
+ * Approve/reject a screening-test design. Mirror of
+ * `ScreeningTestDesignPolicy::approve`/`reject` (role portion): **director
+ * only**. The mirror of `canApproveAccommodation`'s director half — but note
+ * that helper also allows psychopedagogue, whereas design approval is stricter
+ * (director alone), so this is its own predicate rather than a reuse.
+ */
+export function canApproveScreeningTestDesign(user: User | null): boolean {
+  return isDirector(user)
+}

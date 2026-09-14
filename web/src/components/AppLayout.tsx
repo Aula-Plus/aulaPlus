@@ -1,7 +1,11 @@
 import type { ReactNode } from "react"
 import { NavLink } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canViewAdoptionDashboard } from "@/lib/permissions"
+import {
+  canApproveScreeningTestDesign,
+  canManageScreeningTests,
+  canViewAdoptionDashboard,
+} from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 
 const baseNavItems = [
@@ -13,10 +17,17 @@ const baseNavItems = [
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth()
 
-  // The adoption dashboard is director-only (UX gate; the server enforces it).
-  const navItems = canViewAdoptionDashboard(user)
-    ? [...baseNavItems, { to: "/adopcion", label: "Adopción" }]
-    : baseNavItems
+  // Both nav gates are UX only; the server enforces access on every request.
+  const navItems = [
+    ...baseNavItems,
+    // The screening-test design screen is for psychopedagogy (manage) and
+    // direction (approve) — docs/prompts/12 §4.
+    ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
+      ? [{ to: "/pruebas-de-sondeo/tipos", label: "Pruebas de sondeo" }]
+      : []),
+    // The adoption dashboard is director-only.
+    ...(canViewAdoptionDashboard(user) ? [{ to: "/adopcion", label: "Adopción" }] : []),
+  ]
 
   return (
     <div className="min-h-svh">

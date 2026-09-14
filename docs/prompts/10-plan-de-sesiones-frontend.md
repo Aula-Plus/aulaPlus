@@ -309,8 +309,31 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   **Dependencia:** ramificado de `origin/develop` y mergeado
   `origin/feature/frontend-sesion-15-perfil-de-grupo` (sin conflictos) antes de implementar,
   ya que la Sesión 15 aún no estaba en `develop`.
-- [ ] **Sesión 17** — Pruebas de sondeo en la UI (`12-frontend-pruebas-de-sondeo.md`)
-  Resumen:
+- [x] **Sesión 17** — Pruebas de sondeo en la UI (`12-frontend-pruebas-de-sondeo.md`)
+  Resumen: nuevo feature `features/screening-tests/` con dos pantallas — diseño
+  (`ScreeningTestDesignPage`, ruta `/pruebas-de-sondeo/tipos`: crear tipo, autorar
+  diseño con validación Zod `cutoff_low < cutoff_high`, aprobar/rechazar via el
+  `ScreeningTestDesignCard`) y aplicación (`ScreeningTestApplicationPage`, ruta
+  `/clases/:id/pruebas-de-sondeo` siguiendo la convención real `/clases`, no
+  `/grupos` del draft §5): `<select>` de tipos **filtrado a `current_design`
+  no nulo**, hoja imprimible código+nombre exclusiva de psicopedagogía
+  (`@media print` en `index.css`, sin librería de PDF) y carga de puntaje por
+  **código** (`ScreeningTestResultsEditor`, PATCH al perder foco, semáforo pintado
+  desde el color que confirma el backend, nunca recalculado). Nuevos helpers
+  `canManageScreeningTests` (psicopedagogía) y `canApproveScreeningTestDesign`
+  (dirección) en `permissions.ts`; ningún helper habilita a `teacher`. Tipos en
+  `types.ts` + `screeningColorLabels`. **Contrato verificado contra el backend
+  real (Sesión 13):** el roster devuelve `full_name` (no `student_full_name` del
+  draft §2) y el `ScreeningTestResultResource` nunca lleva nombre. **Limitación
+  de contrato anotada:** la API no expone listado de diseños pendientes
+  (`approved === null`) — el type resource sólo trae el `current_design`
+  aprobado —, así que un diseño pendiente sólo se conoce como respuesta al POST
+  que lo crea (ver notas del PR). **Dependencia:** ramificado de `origin/develop`
+  y mergeado `origin/feature/frontend-sesion-16-grupos-listado` (sin conflictos)
+  antes de implementar. Verificación real desde `web/` (`npm ci`): `npm run lint`
+  → 0 errores (mismo warning preexistente en `button.tsx`); `npm run typecheck` →
+  OK; `npm run test -- --run` → 197 tests en verde (25 archivos, +25); `npm run
+  build` → OK (mismo warning preexistente de tamaño de chunk).
 
 ## 5. Explícitamente fuera de este plan
 
