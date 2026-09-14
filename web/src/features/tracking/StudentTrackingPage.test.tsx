@@ -7,6 +7,7 @@ import { StudentTrackingPage } from "./StudentTrackingPage"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as trackingApi from "./trackingApi"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import * as performanceApi from "./performanceApi"
 import type { Accommodation, Role, StudentTracking } from "@/types"
 
 function baseTracking(): StudentTracking {
@@ -70,9 +71,14 @@ function renderPage(role: Role, userId = 1) {
 
 describe("StudentTrackingPage", () => {
   beforeEach(() => {
-    // The embedded ScheduledFollowUpsPanel self-fetches on mount; stub it so
-    // these tests (about alerts/accommodations/comments) don't hit the network.
+    // The embedded ScheduledFollowUpsPanel and StudentPerformanceChart both
+    // self-fetch on mount; stub them so these tests (about alerts/
+    // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
+    vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
+      results: [],
+      marks: [],
+    })
   })
 
   afterEach(() => {

@@ -26,6 +26,7 @@ import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverri
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
+import { StudentPerformanceChart } from "./StudentPerformanceChart"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput } from "./trackingApi"
 
@@ -356,6 +357,8 @@ export function StudentTrackingPage() {
           </Table>
         )}
       </section>
+
+      <StudentPerformanceChart studentId={studentId} />
 
       <ScheduledFollowUpsPanel studentId={studentId} />
 

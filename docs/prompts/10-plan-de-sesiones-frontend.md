@@ -249,8 +249,30 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   `npm run test -- --run` → 150 tests en verde (17 archivos, +5 sobre la
   Sesión 12); `npm run build` → OK (mismo warning preexistente de tamaño de
   chunk).
-- [ ] **Sesión 14** — Perfil de alumno: gráfico de desempeño (`26-frontend-perfil-de-alumno.md`)
-  Resumen:
+- [x] **Sesión 14** — Perfil de alumno: gráfico de desempeño (`26-frontend-perfil-de-alumno.md`)
+  Resumen: nueva sección "Desempeño" en `StudentTrackingPage` (`StudentPerformanceChart`)
+  que consume `GET /students/{student}/performance-timeline` (backend Sesión 10) vía
+  `performanceApi.ts` (módulo aparte, mismo criterio que `scheduledFollowUpsApi.ts`).
+  Introduce **Recharts** como primera librería de gráficos: `ComposedChart` con la
+  línea de `results` (X por `administered_at`, Y por `score`) y cada `mark` como un
+  `ReferenceDot` sobre el eje X, con color distinto por tipo (paleta
+  `performanceMarkColors` en `types.ts`, reusable por Sesión 15) y tooltip nativo
+  (`<title>`) con label + fecha + detalle (`reason`/`title`). Dos `<Input type="date">`
+  (`from`/`to`, default = año lectivo actual vía `getCurrentSchoolYear()`) redisparan el
+  fetch; `results` vacío muestra "Sin evaluaciones en este rango." en vez de un gráfico
+  roto. El cliente **no** filtra marcas por rol — renderiza exactamente lo que trae la
+  respuesta (el gate clínico/visibilidad es del backend). Contrato verificado contra el
+  código real: la respuesta es `{ results, marks }` **sin** envoltorio `{ data }` (el
+  controlador usa `->resolve()`), a diferencia de lo que sugería `26` §4 — se siguió el
+  backend real. Tipos nuevos en `types.ts` (`PerformanceMark` discriminado por `type`,
+  etc.). Verificación desde `web/` (`npm ci`, luego `npm install recharts`):
+  `npm run lint` → 0 errores (solo el warning preexistente de `button.tsx`);
+  `npm run typecheck` → OK; `npm run test -- --run` → 159 tests en verde (18 archivos,
+  +9); `npm run build` → OK (warning de tamaño de chunk, ahora mayor por Recharts —
+  costo esperado de la primera librería de gráficos).
+  **Dependencia:** ramificado de `origin/develop` y mergeado
+  `origin/feature/frontend-sesion-13-comentarios-alcance` (sin conflictos) antes de
+  implementar, ya que la Sesión 13 aún no estaba en `develop`.
 - [ ] **Sesión 15** — Perfil de grupo en la UI (`27-frontend-perfil-de-grupo.md`)
   Resumen:
 - [ ] **Sesión 16** — Columna agregada en Grupos, UI (`28-frontend-grupos-listado.md`)
