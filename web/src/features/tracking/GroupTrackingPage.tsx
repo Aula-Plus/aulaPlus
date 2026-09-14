@@ -70,15 +70,25 @@ export function GroupTrackingPage() {
         <CardHeader>
           <CardTitle>Tendencia (últimos {trend.period_days} días)</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+        {/*
+          `comments_count` is omitted by the backend for a viewer without a
+          school-wide role (docs/prompts/19-comentarios-alcance.md §5), so we
+          hide the card entirely instead of rendering a misleading `0`, and drop
+          to a single column when it is absent rather than leaving a gap.
+        */}
+        <CardContent
+          className={`grid gap-4 ${trend.comments_count !== undefined ? "sm:grid-cols-2" : ""}`}
+        >
           <div>
             <p className="text-3xl font-semibold">{trend.assessments_count}</p>
             <p className="text-sm text-muted-foreground">Evaluaciones tomadas</p>
           </div>
-          <div>
-            <p className="text-3xl font-semibold">{trend.comments_count}</p>
-            <p className="text-sm text-muted-foreground">Comentarios cargados</p>
-          </div>
+          {trend.comments_count !== undefined && (
+            <div>
+              <p className="text-3xl font-semibold">{trend.comments_count}</p>
+              <p className="text-sm text-muted-foreground">Comentarios cargados</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

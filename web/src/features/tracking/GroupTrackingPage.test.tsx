@@ -70,4 +70,21 @@ describe("GroupTrackingPage", () => {
     const link = screen.getAllByRole("link", { name: /ver seguimiento/i })[0]
     expect(link).toHaveAttribute("href", "/alumnos/3/seguimiento")
   })
+
+  it("hides the 'Comentarios cargados' card when comments_count is absent", async () => {
+    // The backend omits comments_count for a viewer without a school-wide role
+    // (docs/prompts/19-comentarios-alcance.md §5); the card must not render a
+    // misleading 0.
+    const data = tracking()
+    delete data.trend.comments_count
+    vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(data)
+    vi.spyOn(trackingApi, "fetchGroupComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    expect(await screen.findByText("Seguimiento — 3° A")).toBeInTheDocument()
+    expect(screen.getByText("5")).toBeInTheDocument()
+    expect(screen.getByText("Evaluaciones tomadas")).toBeInTheDocument()
+    expect(screen.queryByText("Comentarios cargados")).not.toBeInTheDocument()
+  })
 })

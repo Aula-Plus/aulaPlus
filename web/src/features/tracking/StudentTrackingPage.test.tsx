@@ -466,6 +466,7 @@ describe("StudentTrackingPage", () => {
         content: "Nueva observación",
         tone: null,
         visible_to: null,
+        author_only: false,
         created_at: "2026-08-20T10:00:00+00:00",
       })
 

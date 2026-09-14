@@ -4,16 +4,59 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
-import { commentToneLabels, roleLabels, type Comment, type CommentTone, type Role } from "@/types"
+import { commentToneLabels, roleLabels, type Comment, type CommentTone } from "@/types"
 import type { CommentInput } from "./trackingApi"
 
 const TONE_OPTIONS: CommentTone[] = ["positive", "neutral", "concerning"]
-const ROLE_OPTIONS: Role[] = ["teacher", "psychopedagogue", "director"]
 
 const toneBadgeClass: Record<CommentTone, string> = {
   positive: "bg-green-100 text-green-800",
   neutral: "bg-muted text-muted-foreground",
   concerning: "bg-red-100 text-red-800",
+}
+
+/**
+ * The four preset scopes the product thinks a comment's visibility in
+ * (docs/prompts/19-comentarios-alcance.md §3). Purely a UI state — never sent
+ * to the backend as-is; {@link buildScopeFields} translates it at submit time.
+ * The backend's fourth scope, `author_only`, is orthogonal to `visible_to` and
+ * mutually exclusive with it, so free role combinations are not offered.
+ */
+type CommentScopeOption = "everyone" | "director" | "psychopedagogue" | "author_only"
+
+const COMMENT_SCOPE_OPTIONS: CommentScopeOption[] = [
+  "everyone",
+  "director",
+  "psychopedagogue",
+  "author_only",
+]
+
+const COMMENT_SCOPE_LABELS: Record<CommentScopeOption, string> = {
+  everyone: "Todos los que ven este registro",
+  director: "Solo dirección",
+  psychopedagogue: "Solo psicopedagogía",
+  author_only: "Solo quien escribe",
+}
+
+/**
+ * Translate the UI-only scope choice into the real payload fields. `everyone`
+ * omits both, keeping the Session 8 rule that "nothing selected" means visible
+ * to everyone (never an empty array); `author_only` sends only `author_only`,
+ * never alongside `visible_to`.
+ */
+function buildScopeFields(
+  option: CommentScopeOption,
+): Pick<CommentInput, "visible_to" | "author_only"> {
+  switch (option) {
+    case "everyone":
+      return {}
+    case "director":
+      return { visible_to: ["director"] }
+    case "psychopedagogue":
+      return { visible_to: ["psychopedagogue"] }
+    case "author_only":
+      return { author_only: true }
+  }
 }
 
 export interface CommentsPanelProps {
@@ -38,13 +81,9 @@ export function CommentsPanel({
 }: CommentsPanelProps) {
   const [content, setContent] = useState("")
   const [tone, setTone] = useState<CommentTone | "">("")
-  const [roles, setRoles] = useState<Role[]>([])
+  const [scope, setScope] = useState<CommentScopeOption>("everyone")
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
-  function toggleRole(role: Role) {
-    setRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
-  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -56,14 +95,14 @@ export function CommentsPanel({
       return
     }
 
-    // visible_to rule (docs/prompts/08 §3): when no role is selected the
-    // comment is visible to everyone who can see the record, so we OMIT the
-    // field entirely. Sending [] would hide it from everybody, the author
-    // included — so we never build an empty array here.
+    // The scope selector maps to the payload here — `visible_to` and
+    // `author_only` are never sent together, and "everyone" omits both
+    // (docs/prompts/19-comentarios-alcance.md §3, keeping the Session 8 rule
+    // that "nothing selected" means visible to everyone, never `[]`).
     const input: CommentInput = {
       content: trimmed,
       tone: tone === "" ? null : tone,
-      ...(roles.length > 0 ? { visible_to: roles } : {}),
+      ...buildScopeFields(scope),
     }
 
     setSubmitting(true)
@@ -71,7 +110,7 @@ export function CommentsPanel({
       await onCreate(input)
       setContent("")
       setTone("")
-      setRoles([])
+      setScope("everyone")
     } catch {
       setError("No pudimos guardar el comentario.")
     } finally {
@@ -111,25 +150,20 @@ export function CommentsPanel({
             </Select>
           </div>
 
-          <fieldset className="grid gap-1.5">
-            <legend className="text-sm font-medium">Visible para</legend>
-            <p className="text-xs text-muted-foreground">
-              Si no seleccionás ningún rol, el comentario es visible para todos los que pueden ver
-              este registro.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {ROLE_OPTIONS.map((role) => (
-                <label key={role} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={roles.includes(role)}
-                    onChange={() => toggleRole(role)}
-                  />
-                  {roleLabels[role]}
-                </label>
+          <div className="grid gap-1.5">
+            <Label htmlFor="comment-scope">Visible para</Label>
+            <Select
+              id="comment-scope"
+              value={scope}
+              onChange={(event) => setScope(event.target.value as CommentScopeOption)}
+            >
+              {COMMENT_SCOPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {COMMENT_SCOPE_LABELS[option]}
+                </option>
               ))}
-            </div>
-          </fieldset>
+            </Select>
+          </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -155,12 +189,22 @@ export function CommentsPanel({
                     {commentToneLabels[comment.tone]}
                   </span>
                 )}
+                {comment.author_only && (
+                  <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    Privado
+                  </span>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {formatShortDate(comment.created_at)}
                 </span>
               </div>
               <p className="mt-1 text-sm whitespace-pre-wrap">{comment.content}</p>
-              {comment.visible_to && comment.visible_to.length > 0 && (
+              {/*
+                `author_only` and `visible_to` are mutually exclusive scopes;
+                showing both lines would be contradictory. The "Privado" badge
+                above already conveys the author-only scope.
+              */}
+              {!comment.author_only && comment.visible_to && comment.visible_to.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Visible para: {comment.visible_to.map((role) => roleLabels[role]).join(", ")}
                 </p>
