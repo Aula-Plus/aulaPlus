@@ -12,6 +12,8 @@ import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
+import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
+import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 
 function App() {
   return (
@@ -78,6 +80,22 @@ function App() {
             element={
               <ProtectedLayout>
                 <AssessmentsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clases/:id/pruebas-de-sondeo"
+            element={
+              <ProtectedLayout>
+                <ScreeningTestApplicationPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/pruebas-de-sondeo/tipos"
+            element={
+              <ProtectedLayout>
+                <ScreeningTestDesignPage />
               </ProtectedLayout>
             }
           />

@@ -556,6 +556,143 @@ export interface ScheduledFollowUp {
   created_at: string | null
 }
 
+// ── Screening tests / pruebas de sondeo (Sesión 17) ─────────────────────────
+// Mirrors the backend Session 13 API (docs/prompts/11-pruebas-de-sondeo.md;
+// frontend docs/prompts/12-frontend-pruebas-de-sondeo.md) under /api/v1. This
+// is a school-wide, psychopedagogy-led module; teachers never see any of it.
+// The design/approval pair follows the same tri-state `approved` pattern as
+// Accommodation; results are anonymised BY CODE and never carry a student name
+// (that mapping lives only in the roster endpoint).
+
+/**
+ * The traffic-light band a screening score falls into (mirror of
+ * `App\Enums\ScreeningColor`). English identifiers in code; the Spanish labels
+ * below are the only user-facing text, per CLAUDE.md. The colour is always the
+ * one the backend confirms on a loaded result — never recomputed on the client.
+ */
+export type ScreeningColor = "red" | "yellow" | "green"
+
+export const screeningColorLabels: Record<ScreeningColor, string> = {
+  red: "Rojo",
+  yellow: "Amarillo",
+  green: "Verde",
+}
+
+/**
+ * One version of a screening test's design (mirror of
+ * `ScreeningTestDesignResource`). "Editing" a design creates a new version left
+ * `approved === null` (pending director approval); `true`/`false` once decided.
+ * The version used to compute new colours is the most recent approved one.
+ */
+export interface ScreeningTestDesign {
+  id: number
+  screening_test_type_id: number
+  cutoff_low: number
+  cutoff_high: number
+  meaning_red: string
+  meaning_yellow: string
+  meaning_green: string
+  /** `null` pending, `true` approved, `false` rejected. */
+  approved: boolean | null
+  approved_by_id: number | null
+  created_by_id: number | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+/**
+ * A kind of screening test offered by the school (mirror of
+ * `ScreeningTestTypeResource`). `current_design` is the in-force APPROVED design
+ * only (the resource resolves `currentApprovedDesign()`); a pending or rejected
+ * design is not carried here — the API exposes no listing of non-approved
+ * designs, so a freshly created pending design is known to the client only as
+ * the POST response that created it.
+ */
+export interface ScreeningTestType {
+  id: number
+  name: string
+  active: boolean
+  created_by_id: number | null
+  current_design: ScreeningTestDesign | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+/**
+ * A screening test applied to a group (mirror of
+ * `ScreeningTestApplicationResource`). `application_date` is an ISO date
+ * (`YYYY-MM-DD`). `results_count` is only present on the listing (`withCount`),
+ * hence optional.
+ */
+export interface ScreeningTestApplication {
+  id: number
+  screening_test_type_id: number
+  group_id: number
+  applied_by_id: number | null
+  application_date: string | null
+  results_count?: number
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+/**
+ * One result of an application, the ANONYMISED by-code view (mirror of
+ * `ScreeningTestResultResource`). It deliberately never carries `student_id` or
+ * a name — the code→student mapping is exposed solely by the roster endpoint.
+ * `score`/`color` are `null` until a score is loaded; `color` is whatever the
+ * backend computed against the in-force design, never derived on the client.
+ */
+export interface ScreeningTestResult {
+  id: number
+  screening_test_application_id: number
+  code: string
+  score: number | null
+  color: ScreeningColor | null
+  loaded_by_id: number | null
+  loaded_at: string | null
+}
+
+/**
+ * One row of the printable roster (`GET .../roster`) — the SINGLE place code
+ * and full name are ever crossed, psychopedagogy only. Note the backend field
+ * is `full_name` (not `student_full_name` as the spec §2 draft suggested); the
+ * real `ScreeningTestApplicationController::roster` shape wins.
+ */
+export interface ScreeningTestRosterEntry {
+  code: string
+  student_id: number
+  full_name: string | null
+}
+
+/** Body for `POST /screening-test-types` (`StoreScreeningTestTypeRequest`). */
+export interface ScreeningTestTypeInput {
+  name: string
+  active?: boolean
+}
+
+/**
+ * Body for `POST /screening-test-types/{type}/designs`
+ * (`StoreScreeningTestDesignRequest`). All five fields are required; the backend
+ * additionally enforces `cutoff_high >= cutoff_low`.
+ */
+export interface ScreeningTestDesignInput {
+  cutoff_low: number
+  cutoff_high: number
+  meaning_red: string
+  meaning_yellow: string
+  meaning_green: string
+}
+
+/**
+ * Body for `POST /groups/{group}/screening-test-applications`
+ * (`StoreScreeningTestApplicationRequest`). `application_date` is nullable; we
+ * omit it when empty rather than send `null`.
+ */
+export interface ScreeningTestApplicationInput {
+  screening_test_type_id: number
+  application_date?: string
+}
+
 /**
  * Wrapper for endpoints paginated with Laravel's default page paginator.
  * Currently only the audit history uses this — every other endpoint uses the

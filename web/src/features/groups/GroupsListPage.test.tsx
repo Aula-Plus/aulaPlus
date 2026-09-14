@@ -4,8 +4,9 @@ import { describe, expect, it, vi } from "vitest"
 import { GroupsListPage } from "./GroupsListPage"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as groupsApi from "./groupsApi"
+import type { Role } from "@/types"
 
-function renderList(role: "director" | "teacher") {
+function renderList(role: Role) {
   const value: AuthContextValue = {
     user: { id: 1, name: "Ana", email: "ana@escuela.test", roles: [role] },
     loading: false,
@@ -119,5 +120,34 @@ describe("GroupsListPage", () => {
 
     expect(await screen.findByText(/todavía no hay clases/i)).toBeInTheDocument()
     expect(screen.queryByRole("link", { name: /nueva clase/i })).not.toBeInTheDocument()
+  })
+
+  it("shows the screening link only to psychopedagogy (not a teacher)", async () => {
+    const groups = [
+      {
+        id: 1,
+        name: "3° A",
+        level: "Primaria",
+        school_year: 2026,
+        group_profile: null,
+        related_documents: null,
+        teachers: [{ id: 5, name: "Ana Ruiz" }],
+        active_tracking_count: 0,
+      },
+    ]
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue(groups)
+
+    const { unmount } = renderList("teacher")
+    expect(await screen.findByText("3° A")).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Sondeo" })).not.toBeInTheDocument()
+    unmount()
+
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue(groups)
+    renderList("psychopedagogue")
+    expect(await screen.findByText("3° A")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Sondeo" })).toHaveAttribute(
+      "href",
+      "/clases/1/pruebas-de-sondeo",
+    )
   })
 })
