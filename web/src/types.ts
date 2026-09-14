@@ -186,7 +186,13 @@ export interface Accommodation {
   id: number
   student_id: number
   type: string
-  category: AccommodationCategory
+  /**
+   * `null` for pre-existing rows created before `category` was required:
+   * `AccommodationResource` serializes `$this->category?->value`, so the field
+   * is nullable on read even though every new write must set it (see
+   * {@see AccommodationInput}).
+   */
+  category: AccommodationCategory | null
   active: boolean
   description: string | null
   focus_area: string | null
