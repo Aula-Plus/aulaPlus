@@ -1,5 +1,5 @@
 import { api } from "@/lib/api"
-import type { StudentPerformanceTimeline } from "@/types"
+import type { GroupPerformanceTimeline, StudentPerformanceTimeline } from "@/types"
 
 /**
  * Data layer for the student performance timeline (backend Sesión 10 —
@@ -29,6 +29,29 @@ export async function fetchStudentPerformanceTimeline(
 
   const { data } = await api.get<StudentPerformanceTimeline>(
     `/api/v1/students/${studentId}/performance-timeline`,
+    Object.keys(params).length > 0 ? { params } : undefined,
+  )
+  return data
+}
+
+/**
+ * Group performance timeline (backend Sesión 11 — docs/prompts/21-perfil-de-
+ * grupo.md; frontend docs/prompts/27-frontend-perfil-de-grupo.md §4). Same
+ * plain `{ results, marks }` body and same authorization as GET
+ * /groups/{group}/tracking — no `{ data }` envelope, `marks` always present.
+ * Every mark is an aggregate count by (type, date); no `student_id` is ever
+ * returned.
+ */
+export async function fetchGroupPerformanceTimeline(
+  groupId: number,
+  range?: { from?: string; to?: string },
+): Promise<GroupPerformanceTimeline> {
+  const params: Record<string, string> = {}
+  if (range?.from) params.from = range.from
+  if (range?.to) params.to = range.to
+
+  const { data } = await api.get<GroupPerformanceTimeline>(
+    `/api/v1/groups/${groupId}/performance-timeline`,
     Object.keys(params).length > 0 ? { params } : undefined,
   )
   return data

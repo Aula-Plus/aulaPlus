@@ -273,8 +273,26 @@ No metas más de una sesión por noche. La Sesión 8 es la más grande de las tr
   **Dependencia:** ramificado de `origin/develop` y mergeado
   `origin/feature/frontend-sesion-13-comentarios-alcance` (sin conflictos) antes de
   implementar, ya que la Sesión 13 aún no estaba en `develop`.
-- [ ] **Sesión 15** — Perfil de grupo en la UI (`27-frontend-perfil-de-grupo.md`)
-  Resumen:
+- [x] **Sesión 15** — Perfil de grupo en la UI (`27-frontend-perfil-de-grupo.md`)
+  Resumen: tres secciones nuevas en `GroupTrackingPage` (no una pantalla nueva),
+  consumiendo los tres agregadores del backend Sesión 11: **"Ajustes activos"**
+  (`GroupAccommodationsSummary`, tabla `type`/`category`/`student_count` **sin gate
+  de rol** — el endpoint es agregado y nunca nombra alumnos); **"Desempeño del grupo"**
+  (`GroupPerformanceChart`, reusa el patrón Recharts de la Sesión 14 y la paleta
+  `performanceMarkColors`, línea de `average_score` y tooltip con `results_count`,
+  ej. "7.4 (22 de 25 alumnos)"); y **"Seguimientos vencidos"** (`GroupOverdueFollowUps`,
+  `?overdue=true`, cada fila linkea a `/alumnos/{student_id}/seguimiento`). Tipos nuevos
+  en `types.ts` (`GroupPerformanceMark` con **cinco** variantes — sin
+  `accommodation_instance_override`, todas conteos agregados por `(tipo, fecha)`, ningún
+  `student_id`) y tres funciones de API (contratos verificados contra los controladores
+  reales: `accommodations-summary` y `performance-timeline` devuelven objeto plano sin
+  `{ data }`; `scheduled-follow-ups` sí va envuelto). Verificación desde `web/` (`npm ci`):
+  `npm run lint` → 0 errores (solo el warning preexistente de `button.tsx`);
+  `npm run typecheck` → OK; `npm run test -- --run` → 170 tests en verde (21 archivos, +11);
+  `npm run build` → OK.
+  **Dependencia:** ramificado de `origin/develop` y mergeado
+  `origin/feature/frontend-sesion-14-perfil-de-alumno` (sin conflictos, trae el setup de
+  Recharts) antes de implementar, ya que la Sesión 14 aún no estaba en `develop`.
 - [ ] **Sesión 16** — Columna agregada en Grupos, UI (`28-frontend-grupos-listado.md`)
   Resumen:
 - [ ] **Sesión 17** — Pruebas de sondeo en la UI (`12-frontend-pruebas-de-sondeo.md`)
