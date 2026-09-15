@@ -49,8 +49,11 @@ class StudentTrackingController extends Controller
         // and the SPA's "Clases" row expects it present.
         $student->load('groups');
 
+        // The cache key carries a schema version: bump it whenever the cached
+        // aggregate shape changes (e.g. adding by_subject/overall_average) so a
+        // stale pre-deploy entry can't be read as the new shape for up to 60s.
         $cached = Cache::remember(
-            "student-tracking.{$student->id}",
+            "student-tracking.v2.{$student->id}",
             60,
             fn () => $this->aggregate($student)
         );
