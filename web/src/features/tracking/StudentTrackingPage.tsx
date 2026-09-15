@@ -408,7 +408,13 @@ export function StudentTrackingPage() {
         )}
       </SectionCard>
 
-      <StudentPerformanceChart studentId={studentId} />
+      <StudentPerformanceChart
+        studentId={studentId}
+        subjects={tracking.by_subject.map((subject) => ({
+          id: subject.subject_id,
+          name: subject.subject_name,
+        }))}
+      />
 
       <ScheduledFollowUpsPanel studentId={studentId} />
 

@@ -18,14 +18,16 @@ import type { GroupPerformanceTimeline, StudentPerformanceTimeline } from "@/typ
  */
 export async function fetchStudentPerformanceTimeline(
   studentId: number,
-  range?: { from?: string; to?: string },
+  range?: { from?: string; to?: string; subjectId?: number },
 ): Promise<StudentPerformanceTimeline> {
   // Only send the params the caller actually set — an empty `from`/`to` is
   // omitted rather than sent as `?from=` (the backend treats absence as "no
-  // bound", spec §1).
+  // bound", spec §1). `subject_id` narrows the line to one subject (backend
+  // Sesión 4); omitted means "all subjects".
   const params: Record<string, string> = {}
   if (range?.from) params.from = range.from
   if (range?.to) params.to = range.to
+  if (range?.subjectId) params.subject_id = String(range.subjectId)
 
   const { data } = await api.get<StudentPerformanceTimeline>(
     `/api/v1/students/${studentId}/performance-timeline`,

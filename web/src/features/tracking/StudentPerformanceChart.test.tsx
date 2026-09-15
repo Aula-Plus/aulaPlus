@@ -120,6 +120,32 @@ describe("StudentPerformanceChart", () => {
     },
   )
 
+  it("refetches with subjectId when a subject is selected", async () => {
+    const fetchSpy = performanceApi.fetchStudentPerformanceTimeline as ReturnType<typeof vi.fn>
+
+    render(
+      <StudentPerformanceChart
+        studentId={3}
+        subjects={[{ id: 1, name: "Matemática" }]}
+      />,
+    )
+
+    // Mount fetch carries no subject filter ("Todas las materias").
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(3, { from: "2026-01-01", to: "2026-12-31" }),
+    )
+
+    fireEvent.click(screen.getByLabelText("Materia"))
+    fireEvent.click(await screen.findByRole("button", { name: "Matemática" }))
+
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        3,
+        expect.objectContaining({ subjectId: 1 }),
+      ),
+    )
+  })
+
   it("shows a message instead of a broken chart when there are no results", async () => {
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue(
       timeline({
@@ -133,7 +159,10 @@ describe("StudentPerformanceChart", () => {
     const { container } = render(<StudentPerformanceChart studentId={3} />)
 
     expect(await screen.findByText("Sin evaluaciones en este rango.")).toBeInTheDocument()
-    expect(container.querySelector("svg")).toBeNull()
+    // No chart is drawn — only the empty message. (The subject selector's own
+    // chevron icon is an svg, so we assert specifically that no recharts chart
+    // rendered, not the mere absence of any svg.)
+    expect(container.querySelector("[class*='recharts']")).toBeNull()
   })
 
   it("renders exactly the marks the response brings, without filtering any by role", async () => {
