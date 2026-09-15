@@ -26,8 +26,11 @@ class AssessmentController extends Controller
     {
         $this->authorize('view', $group);
 
+        // Eager-load `subject` so AssessmentResource can expose `subject_name`
+        // (it is `whenLoaded('subject')`; without this the listing never carries
+        // the name and the SPA can't render it).
         return AssessmentResource::collection(
-            $group->assessments()->latest('administered_at')->get()
+            $group->assessments()->with('subject')->latest('administered_at')->get()
         );
     }
 
@@ -39,7 +42,7 @@ class AssessmentController extends Controller
             'teacher_id' => $request->user()->id,
         ]);
 
-        return (new AssessmentResource($assessment))
+        return (new AssessmentResource($assessment->load('subject')))
             ->response()
             ->setStatusCode(201);
     }
@@ -48,7 +51,7 @@ class AssessmentController extends Controller
     {
         $assessment->update($request->validated());
 
-        return new AssessmentResource($assessment);
+        return new AssessmentResource($assessment->load('subject'));
     }
 
     public function destroy(Assessment $assessment): Response
