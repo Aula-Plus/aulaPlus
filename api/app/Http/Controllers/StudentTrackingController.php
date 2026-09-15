@@ -126,9 +126,12 @@ class StudentTrackingController extends Controller
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->groupBy('subjects.id', 'subjects.name')
             ->orderBy('subjects.name')
+            // COUNT(score), not COUNT(*): a null score does not contribute to
+            // AVG, so it must not be counted either — keep count and average on
+            // the same denominator (the scored results).
             ->selectRaw('subjects.id as subject_id, subjects.name as subject_name, '
                 .'ROUND(AVG(assessment_results.score), 2) as average, '
-                .'COUNT(*) as assessment_count')
+                .'COUNT(assessment_results.score) as assessment_count')
             ->get()
             ->map(fn ($row) => [
                 'subject_id' => (int) $row->subject_id,
