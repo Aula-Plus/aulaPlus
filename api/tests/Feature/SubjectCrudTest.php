@@ -60,3 +60,16 @@ it('rejects a duplicate subject name in the same school', function () {
     postJson('/api/v1/subjects', ['name' => 'Matemática'])
         ->assertStatus(422);
 });
+
+it('allows reusing the name of a soft-deleted subject', function () {
+    $subject = Subject::factory()->for($this->school)->create(['name' => 'Matemática']);
+    $subject->delete();
+
+    actingAs(makeUser($this->school, Role::Director));
+
+    // The partial unique index ignores soft-deleted rows, so recreating a
+    // subject with a deleted subject's name must succeed (not 422 or 500).
+    postJson('/api/v1/subjects', ['name' => 'Matemática'])
+        ->assertCreated()
+        ->assertJsonPath('data.name', 'Matemática');
+});
