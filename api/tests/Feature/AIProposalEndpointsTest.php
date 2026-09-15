@@ -139,6 +139,41 @@ it('requires subject_id (existing in the school) for an annual_plan generation',
     ])->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
 });
 
+it('rejects an AI assessment for a subject the teacher is not assigned in the group', function () {
+    Queue::fake();
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher); // assigns a different subject
+    $unassigned = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Inglés']);
+    Sanctum::actingAs($teacher);
+
+    // The AI path must enforce teachesSubjectInGroup, like the direct endpoint,
+    // so it can't be used to create an Assessment for an unassigned subject (C1).
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'assessment',
+        'parameters' => ['focus' => 'x', 'assessment_type' => 'written', 'subject_id' => $unassigned->id],
+    ])->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+
+    Queue::assertNothingPushed();
+});
+
+it('queues an AI assessment for a subject the teacher is assigned in the group', function () {
+    Queue::fake();
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $subject = leadGroup($group, $teacher);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'assessment',
+        'parameters' => ['focus' => 'x', 'assessment_type' => 'written', 'subject_id' => $subject->id],
+    ])->assertStatus(202);
+
+    Queue::assertPushed(GenerateAIProposalJob::class);
+});
+
 it('lets the requester and a school-wide role poll a proposal, but not an unrelated teacher', function () {
     [$school, $teacher, $group] = teacherWithGroupAndPlan();
     $director = User::factory()->forSchool($school)->director()->create();

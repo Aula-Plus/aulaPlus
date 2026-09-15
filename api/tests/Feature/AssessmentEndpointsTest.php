@@ -140,6 +140,9 @@ it('lists the assessments of a group ordered by administered_at desc', function 
 
     expect($response->json('data'))->toHaveCount(2);
     expect($response->json('data.0.administered_at'))->toBe('2026-05-01');
+    // The listing eager-loads `subject`, so `subject_name` is present (the SPA
+    // shows it next to the type).
+    expect($response->json('data.0.subject_name'))->not->toBeNull();
 });
 
 it('lets the owning teacher update their assessment', function () {
