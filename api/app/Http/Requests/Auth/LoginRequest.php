@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +41,23 @@ class LoginRequest extends FormRequest
      */
     public function authenticate(): void
     {
+        // Give provisioned-but-unusable accounts a precise message before the
+        // generic credential check. See design doc for the enumeration
+        // trade-off (director-provisioned internal tool).
+        $user = User::firstWhere('email', $this->string('email'));
+
+        if ($user?->isDisabled()) {
+            throw ValidationException::withMessages([
+                'email' => 'Esta cuenta está desactivada.',
+            ]);
+        }
+
+        if ($user?->isPending()) {
+            throw ValidationException::withMessages([
+                'email' => 'La cuenta aún no fue activada. Revisá tu correo.',
+            ]);
+        }
+
         $this->ensureIsNotRateLimited();
 
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
