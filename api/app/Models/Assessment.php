@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['group_id', 'teacher_id', 'type', 'purpose', 'duration_minutes', 'content', 'variant_number', 'administered_at'])]
+#[Fillable(['group_id', 'subject_id', 'teacher_id', 'type', 'purpose', 'duration_minutes', 'content', 'variant_number', 'administered_at'])]
 class Assessment extends Model
 {
     /** @use HasFactory<AssessmentFactory> */
@@ -34,6 +34,11 @@ class Assessment extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(Group::class);
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class);
     }
 
     public function teacher(): BelongsTo
