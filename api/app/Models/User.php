@@ -62,8 +62,32 @@ class User extends Authenticatable
     public function groups(): BelongsToMany
     {
         return $this->belongsToMany(Group::class, 'group_teacher', 'teacher_id', 'group_id')
-            ->withPivot('details')
+            ->withPivot(['details', 'subject_id'])
             ->withTimestamps();
+    }
+
+    /**
+     * The distinct set of subjects this user teaches, derived from their
+     * group_teacher assignments (the flat "capability" list). Deliberately
+     * distinct: the same subject taught to several groups is one subject here.
+     */
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'group_teacher', 'teacher_id', 'subject_id')
+            ->distinct();
+    }
+
+    /**
+     * Whether this user is assigned to teach the given subject in the given
+     * group (a group_teacher row for this user + group + subject). Single
+     * source of truth for the assessment-subject validation (Session 3).
+     */
+    public function teachesSubjectInGroup(Group $group, Subject $subject): bool
+    {
+        return $group->teachers()
+            ->wherePivot('teacher_id', $this->id)
+            ->wherePivot('subject_id', $subject->id)
+            ->exists();
     }
 
     public function annualPlans(): HasMany

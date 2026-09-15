@@ -42,7 +42,7 @@ class Group extends Model
     public function teachers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'group_teacher', 'group_id', 'teacher_id')
-            ->withPivot('details')
+            ->withPivot(['details', 'subject_id'])
             ->withTimestamps();
     }
 
