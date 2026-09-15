@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\Group;
+use App\Models\Subject;
+use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -58,9 +61,9 @@ function something()
  * group — authorization, tracking, comments — don't care which subject, so a
  * throwaway subject in the group's school is created when none is given.
  */
-function leadGroup(\App\Models\Group $group, \App\Models\User $teacher, ?\App\Models\Subject $subject = null): \App\Models\Subject
+function leadGroup(Group $group, User $teacher, ?Subject $subject = null): Subject
 {
-    $subject ??= \App\Models\Subject::factory()->create(['school_id' => $group->school_id]);
+    $subject ??= Subject::factory()->create(['school_id' => $group->school_id]);
     $group->teachers()->attach($teacher->getKey(), ['subject_id' => $subject->id]);
 
     return $subject;
