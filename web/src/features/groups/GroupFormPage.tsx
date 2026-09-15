@@ -10,6 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { MultiSelect } from "@/components/ui/multi-select"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
+import { useAuth } from "@/features/auth/AuthContext"
+import { canManageGroups } from "@/lib/permissions"
+import { GroupTeacherAssignments } from "@/features/subjects/GroupTeacherAssignments"
 import * as groupsApi from "./groupsApi"
 import type { Teacher } from "./groupsApi"
 
@@ -30,6 +33,7 @@ export function GroupFormPage() {
   const { id } = useParams()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
+  const { user } = useAuth()
   const outletContext = useOutletContext<GroupFormOutletContext | null>()
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -171,6 +175,14 @@ export function GroupFormPage() {
             )}
           </div>
         </form>
+
+        {/*
+          Teacher-subject assignments only make sense for an existing group
+          (they need a real groupId), so they render only when editing.
+        */}
+        {isEdit && id && (
+          <GroupTeacherAssignments groupId={Number(id)} canManage={canManageGroups(user)} />
+        )}
       </DialogContent>
     </Dialog>
   )

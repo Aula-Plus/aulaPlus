@@ -5,6 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GroupFormPage } from "./GroupFormPage"
 import * as groupsApi from "./groupsApi"
 
+// The form now reads the current user (to gate the assignments panel) and
+// mounts <GroupTeacherAssignments> when editing. Both are out of scope for
+// these form tests, so stub the auth context and the panel here — the panel
+// has its own test in features/subjects.
+vi.mock("@/features/auth/AuthContext", () => ({
+  useAuth: () => ({ user: { id: 1, name: "Dir", email: "d@x.com", roles: ["director"] } }),
+}))
+vi.mock("@/features/subjects/GroupTeacherAssignments", () => ({
+  GroupTeacherAssignments: () => null,
+}))
+
 function renderCreate() {
   return render(
     <MemoryRouter initialEntries={["/clases/nueva"]}>

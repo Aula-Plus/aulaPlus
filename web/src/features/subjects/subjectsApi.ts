@@ -7,6 +7,12 @@ import type { GroupTeacherAssignment, Subject } from "@/types"
  * Resource responses are `{ data: ... }` wrapped, matching groupsApi/assessmentsApi.
  */
 
+// The teacher-options endpoint (`GET /api/teachers`, TeacherOptionsController)
+// already has a data-layer helper in groupsApi. Re-export it so the assignment
+// panel imports its teacher source from one place instead of re-deriving it.
+export { fetchTeachers } from "@/features/groups/groupsApi"
+export type { Teacher } from "@/features/groups/groupsApi"
+
 export interface SubjectInput {
   name: string
   short_code?: string | null
