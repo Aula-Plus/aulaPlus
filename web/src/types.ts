@@ -144,6 +144,7 @@ export const assessmentTypeLabels: Record<AssessmentType, string> = {
 export interface AssessmentSummary {
   id: number
   group_id: number
+  subject_id: number
   type: AssessmentType
   variant_number: number | null
   created_at: string | null
@@ -161,6 +162,8 @@ export interface AssessmentSummary {
 export interface Assessment {
   id: number
   group_id: number
+  subject_id: number
+  subject_name: string | null
   teacher_id: number
   type: AssessmentType
   purpose: string | null

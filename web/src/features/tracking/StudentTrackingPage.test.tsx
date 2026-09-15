@@ -22,7 +22,7 @@ function baseTracking(): StudentTracking {
       groups: [{ id: 1, name: "3° A", school_year: 2026 }],
     },
     recent_assessments: [
-      { id: 10, group_id: 1, type: "written", variant_number: 2, created_at: "2026-08-01T10:00:00+00:00" },
+      { id: 10, group_id: 1, subject_id: 3, type: "written", variant_number: 2, created_at: "2026-08-01T10:00:00+00:00" },
     ],
     accommodations_count: 1,
     barriers_count: 0,

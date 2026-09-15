@@ -1,12 +1,18 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AssessmentsPage } from "./AssessmentsPage"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as trackingApi from "@/features/tracking/trackingApi"
+import * as subjectsApi from "@/features/subjects/subjectsApi"
 import * as assessmentsApi from "./assessmentsApi"
-import type { Assessment, GroupTracking, Role } from "@/types"
+import type { Assessment, GroupTeacherAssignment, GroupTracking, Role } from "@/types"
+
+/** One teacher-subject assignment for the authed teacher (id 1) in the group. */
+function assignments(): GroupTeacherAssignment[] {
+  return [{ teacher_id: 1, teacher_name: "Docente 1", subject_id: 3, subject_name: "Matemática" }]
+}
 
 function groupTracking(teacherIds: number[]): GroupTracking {
   return {
@@ -31,6 +37,8 @@ function assessment(): Assessment {
   return {
     id: 10,
     group_id: 1,
+    subject_id: 3,
+    subject_name: "Matemática",
     teacher_id: 1,
     type: "written",
     purpose: "Unidad 1",
@@ -70,6 +78,7 @@ describe("AssessmentsPage", () => {
   it("submits the correct payload when creating an assessment", async () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([1]))
     vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([])
+    vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
     const createAssessment = vi
       .spyOn(assessmentsApi, "createAssessment")
       .mockResolvedValue(assessment())
@@ -78,22 +87,58 @@ describe("AssessmentsPage", () => {
 
     await userEvent.click(await screen.findByLabelText(/tipo/i))
     await userEvent.click(await screen.findByRole("button", { name: "Oral" }))
+    // The subject picker is required (backend Sesión 3): pick the one subject
+    // this teacher is assigned in the group.
+    await userEvent.click(screen.getByLabelText(/materia/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Matemática" }))
     // Date inputs are set deterministically via fireEvent (RHF listens to change).
     fireEvent.change(screen.getByLabelText(/fecha/i), { target: { value: "2026-09-12" } })
     await userEvent.type(screen.getByLabelText(/propósito/i), "Parcial de lengua")
     await userEvent.click(screen.getByRole("button", { name: /crear evaluación/i }))
 
-    expect(createAssessment).toHaveBeenCalledWith(1, {
-      type: "oral",
-      administered_at: "2026-09-12",
-      purpose: "Parcial de lengua",
-    })
+    await waitFor(() =>
+      expect(createAssessment).toHaveBeenCalledWith(1, {
+        type: "oral",
+        subject_id: 3,
+        administered_at: "2026-09-12",
+        purpose: "Parcial de lengua",
+      }),
+    )
+  })
+
+  it("blocks submitting without a subject and sends subject_id once one is chosen", async () => {
+    vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([1]))
+    vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([])
+    vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
+    const createAssessment = vi
+      .spyOn(assessmentsApi, "createAssessment")
+      .mockResolvedValue(assessment())
+
+    renderPage()
+
+    // Submitting without a subject is blocked client-side.
+    await userEvent.click(await screen.findByRole("button", { name: /crear evaluación/i }))
+    expect(await screen.findByText("Elegí una materia")).toBeInTheDocument()
+    expect(createAssessment).not.toHaveBeenCalled()
+
+    // Choose the subject and the write goes through carrying subject_id.
+    await userEvent.click(screen.getByLabelText(/materia/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Matemática" }))
+    await userEvent.click(screen.getByRole("button", { name: /crear evaluación/i }))
+
+    await waitFor(() =>
+      expect(createAssessment).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ subject_id: 3 }),
+      ),
+    )
   })
 
   it("upserts results with a single POST carrying the whole array", async () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([1]))
     vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([assessment()])
     vi.spyOn(assessmentsApi, "fetchAssessmentResults").mockResolvedValue([])
+    vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
     const saveAssessmentResults = vi
       .spyOn(assessmentsApi, "saveAssessmentResults")
       .mockResolvedValue([])
@@ -116,6 +161,7 @@ describe("AssessmentsPage", () => {
     // The authed teacher (id 1) does NOT lead this group (teacher id 2 does).
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([2]))
     vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([assessment()])
+    vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
     vi.spyOn(assessmentsApi, "fetchAssessmentResults").mockResolvedValue([
       {
         id: 1,
