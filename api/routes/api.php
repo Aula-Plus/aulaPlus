@@ -179,5 +179,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('/users/{user}', [UserController::class, 'update']);
         Route::post('/users/{user}/disable', [UserController::class, 'disable']);
         Route::post('/users/{user}/enable', [UserController::class, 'enable']);
+        Route::post('/users/{user}/resend-invitation', [UserController::class, 'resendInvitation']);
     });
 });

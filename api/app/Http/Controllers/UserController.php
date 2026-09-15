@@ -111,6 +111,22 @@ class UserController extends Controller
         return new ManagedUserResource($user->refresh());
     }
 
+    public function resendInvitation(User $user): ManagedUserResource
+    {
+        $this->authorize('update', $user);
+
+        if (! $user->isPending()) {
+            throw ValidationException::withMessages([
+                'user' => 'Solo se puede reenviar la invitación a un usuario pendiente.',
+            ]);
+        }
+
+        $token = UserInvitation::issueFor($user);
+        $user->notify(new UserInvitationNotification($token));
+
+        return new ManagedUserResource($user);
+    }
+
     /**
      * Whether disabling this user would leave the school with no active
      * director — the lockout guard.
