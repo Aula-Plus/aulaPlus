@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Textarea } from "@/components/ui/textarea"
@@ -67,6 +67,7 @@ export function StudentFormPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
@@ -209,14 +210,24 @@ export function StudentFormPage() {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="group_id">Clase ({currentYear})</Label>
-            <Select id="group_id" {...register("group_id")}>
-              <option value="">Sin clase asignada</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              name="group_id"
+              control={control}
+              render={({ field }) => (
+                <SingleSelect
+                  id="group_id"
+                  options={[
+                    { value: "", label: "Sin clase asignada" },
+                    ...groups.map((group) => ({
+                      value: String(group.id),
+                      label: group.name,
+                    })),
+                  ]}
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                />
+              )}
+            />
           </div>
           <div className="flex items-center gap-2">
             <input

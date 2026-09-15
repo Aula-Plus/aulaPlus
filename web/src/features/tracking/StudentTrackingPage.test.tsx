@@ -259,10 +259,8 @@ describe("StudentTrackingPage", () => {
     expect(fetchLinks).toHaveBeenCalledWith(55)
     await screen.findByText(/todavía no hay adaptaciones vinculadas/i)
 
-    await userEvent.selectOptions(
-      screen.getByLabelText(/vincular adaptación existente/i),
-      "91",
-    )
+    await userEvent.click(screen.getByLabelText(/vincular adaptación existente/i))
+    await userEvent.click(await screen.findByRole("button", { name: /tiempo extra/i }))
     await userEvent.click(screen.getByRole("button", { name: /^vincular$/i }))
     expect(linkApi).toHaveBeenCalledWith(55, 91)
     expect(await screen.findByText(/pendiente de validación/i)).toBeInTheDocument()
@@ -342,7 +340,8 @@ describe("StudentTrackingPage", () => {
     expect(create).not.toHaveBeenCalled()
 
     // Now choose a category and the write goes through with it.
-    await userEvent.selectOptions(screen.getByLabelText(/categoría/i), "content")
+    await userEvent.click(screen.getByLabelText(/categoría/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Contenido" }))
     await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
@@ -411,10 +410,10 @@ describe("StudentTrackingPage", () => {
     await screen.findByText("Seguimiento — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
 
-    const select = screen.getByLabelText(/^evaluación$/i)
-    // The one recent assessment (id 10) is the only real option besides the
-    // placeholder — no assessments endpoint is called (there isn't one).
-    expect(within(select).getByRole("option", { name: /escrita/i })).toHaveValue("10")
+    await userEvent.click(screen.getByLabelText(/^evaluación$/i))
+    // The one recent assessment (Escrita, id 10) is offered — no assessments
+    // endpoint is called (there isn't one).
+    expect(await screen.findByRole("button", { name: /escrita/i })).toBeInTheDocument()
     // Only the initial mount fetch happened.
     expect(fetchTracking).toHaveBeenCalledTimes(1)
   })
@@ -446,7 +445,8 @@ describe("StudentTrackingPage", () => {
 
     await screen.findByText("Seguimiento — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
-    await userEvent.selectOptions(screen.getByLabelText(/^evaluación$/i), "10")
+    await userEvent.click(screen.getByLabelText(/^evaluación$/i))
+    await userEvent.click(await screen.findByRole("button", { name: /escrita/i }))
     await userEvent.type(screen.getByLabelText(/motivo/i), "La evaluación es oral")
     await userEvent.click(screen.getByRole("button", { name: /^desactivar$/i }))
 

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
 import { commentToneLabels, roleLabels, type Comment, type CommentTone } from "@/types"
@@ -139,33 +139,31 @@ export function CommentsPanel({
 
           <div className="grid gap-1.5">
             <Label htmlFor="comment-tone">Tono</Label>
-            <Select
+            <SingleSelect
               id="comment-tone"
               value={tone}
-              onChange={(event) => setTone(event.target.value as CommentTone | "")}
-            >
-              <option value="">Sin especificar</option>
-              {TONE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {commentToneLabels[option]}
-                </option>
-              ))}
-            </Select>
+              onChange={(value) => setTone(value as CommentTone | "")}
+              options={[
+                { value: "", label: "Sin especificar" },
+                ...TONE_OPTIONS.map((option) => ({
+                  value: option,
+                  label: commentToneLabels[option],
+                })),
+              ]}
+            />
           </div>
 
           <div className="grid gap-1.5">
             <Label htmlFor="comment-scope">Visible para</Label>
-            <Select
+            <SingleSelect
               id="comment-scope"
               value={scope}
-              onChange={(event) => setScope(event.target.value as CommentScopeOption)}
-            >
-              {COMMENT_SCOPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {COMMENT_SCOPE_LABELS[option]}
-                </option>
-              ))}
-            </Select>
+              onChange={(value) => setScope(value as CommentScopeOption)}
+              options={COMMENT_SCOPE_OPTIONS.map((option) => ({
+                value: option,
+                label: COMMENT_SCOPE_LABELS[option],
+              }))}
+            />
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

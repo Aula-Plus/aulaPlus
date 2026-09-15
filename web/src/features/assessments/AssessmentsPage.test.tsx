@@ -76,7 +76,8 @@ describe("AssessmentsPage", () => {
 
     renderPage()
 
-    await userEvent.selectOptions(await screen.findByLabelText(/tipo/i), "oral")
+    await userEvent.click(await screen.findByLabelText(/tipo/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Oral" }))
     // Date inputs are set deterministically via fireEvent (RHF listens to change).
     fireEvent.change(screen.getByLabelText(/fecha/i), { target: { value: "2026-09-12" } })
     await userEvent.type(screen.getByLabelText(/propósito/i), "Parcial de lengua")

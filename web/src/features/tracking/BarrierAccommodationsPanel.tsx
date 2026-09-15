@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
   canProposeBarrierAccommodation,
@@ -182,20 +182,19 @@ export function BarrierAccommodationsPanel({
                 Vincular adaptación existente
               </Label>
               <div className="flex flex-wrap items-center gap-2">
-                <Select
+                <SingleSelect
                   id={`link-accommodation-${barrierId}`}
                   value={selectedAccommodationId}
-                  onChange={(event) => setSelectedAccommodationId(event.target.value)}
+                  onChange={(value) => setSelectedAccommodationId(value)}
                   className="min-w-56 flex-1"
-                >
-                  <option value="">Elegí una adaptación…</option>
-                  {linkOptions.map((accommodation) => (
-                    <option key={accommodation.id} value={accommodation.id}>
-                      {accommodation.type}
-                      {accommodation.description ? ` — ${accommodation.description}` : ""}
-                    </option>
-                  ))}
-                </Select>
+                  placeholder="Elegí una adaptación…"
+                  options={linkOptions.map((accommodation) => ({
+                    value: String(accommodation.id),
+                    label: accommodation.description
+                      ? `${accommodation.type} — ${accommodation.description}`
+                      : accommodation.type,
+                  }))}
+                />
                 <Button type="submit" size="sm" disabled={submitting || linkOptions.length === 0}>
                   {submitting ? "Vinculando…" : "Vincular"}
                 </Button>

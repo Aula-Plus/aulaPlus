@@ -1,8 +1,14 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { CommentsPanel } from "./CommentsPanel"
 import type { Comment } from "@/types"
+
+/** Opens a SingleSelect (found by its label) and clicks the option by its text. */
+async function choose(label: RegExp, optionName: string | RegExp) {
+  await userEvent.click(screen.getByLabelText(label))
+  await userEvent.click(await screen.findByRole("button", { name: optionName }))
+}
 
 const sampleComment: Comment = {
   id: 1,
@@ -67,10 +73,8 @@ describe("CommentsPanel", () => {
   it("defaults the scope selector to 'Todos los que ven este registro'", () => {
     render(<CommentsPanel comments={[]} onCreate={vi.fn()} />)
 
-    const select = screen.getByLabelText<HTMLSelectElement>(/visible para/i)
-    expect(select.value).toBe("everyone")
-    const selected = select.options[select.selectedIndex]
-    expect(selected.textContent).toBe("Todos los que ven este registro")
+    const trigger = screen.getByLabelText(/visible para/i)
+    expect(within(trigger).getByText("Todos los que ven este registro")).toBeInTheDocument()
   })
 
   it("scope 'everyone' OMITS both visible_to and author_only", async () => {
@@ -95,8 +99,8 @@ describe("CommentsPanel", () => {
     render(<CommentsPanel comments={[]} onCreate={onCreate} />)
 
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Solo dirección")
-    await userEvent.selectOptions(screen.getByLabelText(/tono/i), "concerning")
-    await userEvent.selectOptions(screen.getByLabelText(/visible para/i), "director")
+    await choose(/tono/i, "Preocupante")
+    await choose(/visible para/i, "Solo dirección")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(onCreate).toHaveBeenCalledWith({
@@ -112,7 +116,7 @@ describe("CommentsPanel", () => {
     render(<CommentsPanel comments={[]} onCreate={onCreate} />)
 
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Solo psico")
-    await userEvent.selectOptions(screen.getByLabelText(/visible para/i), "psychopedagogue")
+    await choose(/visible para/i, "Solo psicopedagogía")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     const payload = onCreate.mock.calls[0][0]
@@ -129,7 +133,7 @@ describe("CommentsPanel", () => {
     render(<CommentsPanel comments={[]} onCreate={onCreate} />)
 
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Nota personal")
-    await userEvent.selectOptions(screen.getByLabelText(/visible para/i), "author_only")
+    await choose(/visible para/i, "Solo quien escribe")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     const payload = onCreate.mock.calls[0][0]
@@ -148,12 +152,16 @@ describe("CommentsPanel", () => {
 
     const textarea = screen.getByLabelText<HTMLTextAreaElement>(/nuevo comentario/i)
     await userEvent.type(textarea, "Algo")
-    await userEvent.selectOptions(screen.getByLabelText(/visible para/i), "author_only")
+    await choose(/visible para/i, "Solo quien escribe")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(textarea.value).toBe("")
     // Scope resets to the default, not the last-used option.
-    expect(screen.getByLabelText<HTMLSelectElement>(/visible para/i).value).toBe("everyone")
+    expect(
+      within(screen.getByLabelText(/visible para/i)).getByText(
+        "Todos los que ven este registro"
+      )
+    ).toBeInTheDocument()
   })
 
   it("hides the form when canComment is false", () => {

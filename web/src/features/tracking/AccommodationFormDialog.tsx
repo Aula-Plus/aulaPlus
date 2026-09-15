@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
@@ -69,6 +69,7 @@ export function AccommodationFormDialog({
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
@@ -151,14 +152,22 @@ export function AccommodationFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="accommodation-category">Categoría</Label>
-            <Select id="accommodation-category" {...register("category")}>
-              <option value="">Elegí una categoría…</option>
-              {CATEGORY_VALUES.map((category) => (
-                <option key={category} value={category}>
-                  {accommodationCategoryLabels[category]}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              name="category"
+              control={control}
+              render={({ field }) => (
+                <SingleSelect
+                  id="accommodation-category"
+                  options={CATEGORY_VALUES.map((category) => ({
+                    value: category,
+                    label: accommodationCategoryLabels[category],
+                  }))}
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  placeholder="Elegí una categoría…"
+                />
+              )}
+            />
             {errors.category && (
               <p className="text-sm text-destructive">{errors.category.message}</p>
             )}

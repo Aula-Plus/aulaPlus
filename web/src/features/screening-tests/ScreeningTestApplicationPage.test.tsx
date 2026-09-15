@@ -79,14 +79,13 @@ describe("ScreeningTestApplicationPage", () => {
 
     renderPage()
 
-    const select = await screen.findByLabelText(/tipo de prueba/i)
-    const options = within(select).getAllByRole("option")
-    // Placeholder + the single applicable type; the design-less type is excluded.
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Elegí un tipo…",
-      "Comprensión lectora",
-    ])
-    expect(screen.queryByRole("option", { name: /sin diseño/i })).not.toBeInTheDocument()
+    const trigger = await screen.findByLabelText(/tipo de prueba/i)
+    // Nothing selected yet: the trigger shows the placeholder.
+    expect(within(trigger).getByText("Elegí un tipo…")).toBeInTheDocument()
+    await userEvent.click(trigger)
+    // Only the applicable type is offered; the design-less type is excluded.
+    expect(await screen.findByRole("button", { name: "Comprensión lectora" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /sin diseño/i })).not.toBeInTheDocument()
   })
 
   it("sends the chosen type and date when creating an application", async () => {
@@ -107,7 +106,8 @@ describe("ScreeningTestApplicationPage", () => {
 
     renderPage()
 
-    await userEvent.selectOptions(await screen.findByLabelText(/tipo de prueba/i), "1")
+    await userEvent.click(await screen.findByLabelText(/tipo de prueba/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Comprensión lectora" }))
     const dateInput = screen.getByLabelText(/fecha/i)
     await userEvent.clear(dateInput)
     await userEvent.type(dateInput, "2026-09-15")

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useParams } from "react-router-dom"
@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { assessmentTypeLabels } from "@/types"
@@ -56,6 +56,7 @@ export function AssessmentsPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
@@ -134,13 +135,21 @@ export function AssessmentsPage() {
             <form onSubmit={handleSubmit(onCreate)} className="grid gap-4 sm:grid-cols-2" noValidate>
               <div className="grid gap-2">
                 <Label htmlFor="type">Tipo</Label>
-                <Select id="type" {...register("type")}>
-                  {ASSESSMENT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {assessmentTypeLabels[type]}
-                    </option>
-                  ))}
-                </Select>
+                <Controller
+                  name="type"
+                  control={control}
+                  render={({ field }) => (
+                    <SingleSelect
+                      id="type"
+                      options={ASSESSMENT_TYPES.map((type) => ({
+                        value: type,
+                        label: assessmentTypeLabels[type],
+                      }))}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="administered_at">Fecha</Label>

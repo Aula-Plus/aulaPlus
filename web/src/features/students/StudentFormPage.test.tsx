@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -111,8 +111,9 @@ describe("StudentFormPage", () => {
 
     renderCreate()
 
-    expect(await screen.findByRole("option", { name: "3° A (actual)" })).toBeInTheDocument()
-    expect(screen.queryByRole("option", { name: "2° A (pasado)" })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByLabelText(/clase/i))
+    expect(await screen.findByRole("button", { name: "3° A (actual)" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "2° A (pasado)" })).not.toBeInTheDocument()
   })
 
   it("shows the clinical profile section for a director", async () => {
@@ -209,8 +210,8 @@ describe("StudentFormPage", () => {
 
       renderEdit("director")
 
-      const select = (await screen.findByLabelText(/clase/i)) as HTMLSelectElement
-      expect(select.value).toBe("1")
+      const select = await screen.findByLabelText(/clase/i)
+      expect(within(select).getByText("3° A")).toBeInTheDocument()
       expect(await screen.findByLabelText(/notas de seguimiento/i)).toHaveValue("Progresa bien.")
       expect(await screen.findByLabelText(/perfil individual/i)).toHaveValue("")
       expect(screen.getByLabelText(/documentos relacionados/i)).toHaveValue("")

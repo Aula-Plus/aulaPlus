@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useParams } from "react-router-dom"
@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PageHeader } from "@/components/ui/page-header"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import type { Group, ScreeningTestApplication, ScreeningTestType } from "@/types"
 import * as groupsApi from "@/features/groups/groupsApi"
 import * as screeningApi from "./screeningTestsApi"
@@ -76,6 +76,7 @@ export function ScreeningTestApplicationPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
@@ -143,14 +144,22 @@ export function ScreeningTestApplicationPage() {
               >
                 <div className="grid gap-2">
                   <Label htmlFor="screening_test_type_id">Tipo de prueba</Label>
-                  <Select id="screening_test_type_id" {...register("screening_test_type_id")}>
-                    <option value="">Elegí un tipo…</option>
-                    {applicableTypes.map((type) => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <Controller
+                    name="screening_test_type_id"
+                    control={control}
+                    render={({ field }) => (
+                      <SingleSelect
+                        id="screening_test_type_id"
+                        options={applicableTypes.map((type) => ({
+                          value: String(type.id),
+                          label: type.name,
+                        }))}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        placeholder="Elegí un tipo…"
+                      />
+                    )}
+                  />
                   {errors.screening_test_type_id && (
                     <p className="text-sm text-destructive">
                       {errors.screening_test_type_id.message}

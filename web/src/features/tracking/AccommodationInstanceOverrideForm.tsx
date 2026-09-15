@@ -2,7 +2,7 @@ import { useState } from "react"
 import { isAxiosError } from "axios"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
+import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { assessmentTypeLabels, type AssessmentSummary } from "@/types"
 import { formatShortDate } from "@/lib/utils"
@@ -115,20 +115,19 @@ export function AccommodationInstanceOverrideForm({
         <Label htmlFor={`override-assessment-${accommodationId}`} className="text-xs">
           Evaluación
         </Label>
-        <Select
+        <SingleSelect
           id={`override-assessment-${accommodationId}`}
           value={assessmentId}
-          onChange={(event) => setAssessmentId(event.target.value)}
-        >
-          <option value="">Elegí una evaluación…</option>
-          {assessments.map((assessment) => (
-            <option key={assessment.id} value={assessment.id}>
-              {assessmentTypeLabels[assessment.type]}
-              {assessment.variant_number ? ` (variante ${assessment.variant_number})` : ""}
-              {` · ${formatShortDate(assessment.created_at)}`}
-            </option>
-          ))}
-        </Select>
+          onChange={(value) => setAssessmentId(value)}
+          placeholder="Elegí una evaluación…"
+          options={assessments.map((assessment) => ({
+            value: String(assessment.id),
+            label:
+              assessmentTypeLabels[assessment.type] +
+              (assessment.variant_number ? ` (variante ${assessment.variant_number})` : "") +
+              ` · ${formatShortDate(assessment.created_at)}`,
+          }))}
+        />
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor={`override-reason-${accommodationId}`} className="text-xs">
