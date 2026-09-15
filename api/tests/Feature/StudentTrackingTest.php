@@ -126,7 +126,7 @@ it('caches the raw student tracking aggregation for 60 seconds', function () {
 
     $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk();
 
-    expect(Cache::has("student-tracking.{$student->id}"))->toBeTrue();
+    expect(Cache::has("student-tracking.v2.{$student->id}"))->toBeTrue();
 
     // A new comment created after the first request should NOT appear until
     // the 60s cache expires — proves the aggregation itself is cached.
