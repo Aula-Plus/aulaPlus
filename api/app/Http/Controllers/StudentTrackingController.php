@@ -6,6 +6,7 @@ use App\Http\Resources\StudentTrackingResource;
 use App\Models\Accommodation;
 use App\Models\Alert;
 use App\Models\Assessment;
+use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
 use App\Models\Student;
@@ -61,14 +62,18 @@ class StudentTrackingController extends Controller
             'barriers' => $this->hydrate(Barrier::class, $cached['barriers']),
             'comments' => $this->hydrate(Comment::class, $cached['comments']),
             'alerts' => $this->hydrate(Alert::class, $cached['alerts']),
+            'by_subject' => $cached['by_subject'],
+            'overall_average' => $cached['overall_average'],
         ]);
     }
 
     /**
-     * Cache-safe snapshot: each key holds a list of raw attribute arrays
-     * (primitive scalars only), never hydrated models — see the class docblock.
+     * Cache-safe snapshot: each model-backed key holds a list of raw attribute
+     * arrays (primitive scalars only), never hydrated models — see the class
+     * docblock. The academic aggregate keys (`by_subject`, `overall_average`)
+     * are likewise plain scalars.
      *
-     * @return array<string, array<int, array<string, mixed>>>
+     * @return array<string, mixed>
      */
     protected function aggregate(Student $student): array
     {
@@ -97,7 +102,53 @@ class StudentTrackingController extends Controller
             'alerts' => $this->rawAttributes(
                 $student->alerts()->where('resolved', false)->get()
             ),
+            // Academic per-subject aggregates and the overall average are plain
+            // scalars — cache-safe and returned to any viewer of the student
+            // (not clinical, so no per-request re-gating in the Resource).
+            'by_subject' => $this->subjectAggregates($student),
+            'overall_average' => $this->overallAverage($student),
         ];
+    }
+
+    /**
+     * Academic per-subject aggregates: for each subject the student has results
+     * in, the mean score and number of scored assessments. Academic data — not
+     * clinical — so it is cached and returned to anyone who can view the student
+     * (no clinical gate). Ordered by subject name for a stable UI.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function subjectAggregates(Student $student): array
+    {
+        return AssessmentResult::query()
+            ->where('assessment_results.student_id', $student->id)
+            ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
+            ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
+            ->groupBy('subjects.id', 'subjects.name')
+            ->orderBy('subjects.name')
+            ->selectRaw('subjects.id as subject_id, subjects.name as subject_name, '
+                .'ROUND(AVG(assessment_results.score), 2) as average, '
+                .'COUNT(*) as assessment_count')
+            ->get()
+            ->map(fn ($row) => [
+                'subject_id' => (int) $row->subject_id,
+                'subject_name' => $row->subject_name,
+                'average' => (float) $row->average,
+                'assessment_count' => (int) $row->assessment_count,
+            ])
+            ->all();
+    }
+
+    /**
+     * Mean of all the student's assessment-result scores, or null if none.
+     */
+    protected function overallAverage(Student $student): ?float
+    {
+        $avg = AssessmentResult::query()
+            ->where('student_id', $student->id)
+            ->avg('score');
+
+        return $avg === null ? null : round((float) $avg, 2);
     }
 
     /**

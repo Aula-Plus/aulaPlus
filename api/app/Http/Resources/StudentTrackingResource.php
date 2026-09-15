@@ -30,6 +30,8 @@ use Illuminate\Support\Facades\Gate;
  *     barriers: iterable,
  *     comments: iterable,
  *     alerts: iterable,
+ *     by_subject: array<int, array<string, mixed>>,
+ *     overall_average: float|null,
  * }
  */
 class StudentTrackingResource extends JsonResource
@@ -72,6 +74,10 @@ class StudentTrackingResource extends JsonResource
                 fn () => AlertResource::collection($alerts)
             ),
             'open_alerts_count' => $alerts->count(),
+            // Academic aggregates — not clinical, so no gating: returned to any
+            // viewer of the student (decision D1/E).
+            'overall_average' => $this->resource['overall_average'],
+            'by_subject' => $this->resource['by_subject'],
         ];
     }
 }
