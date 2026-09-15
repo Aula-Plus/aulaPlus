@@ -55,7 +55,17 @@ class GroupTeacherAssignmentController extends Controller
             'updated_at' => now(),
         ]);
 
-        return response()->json(status: 201);
+        // Return the created (or already-existing) assignment row, in the same
+        // shape as index(), so the caller can render it without a refetch.
+        $assignment = $group->teachers()
+            ->wherePivot('teacher_id', $data['teacher_id'])
+            ->wherePivot('subject_id', $data['subject_id'])
+            ->first();
+        $assignment->subjectName = Subject::whereKey($data['subject_id'])->value('name');
+
+        return (new GroupTeacherAssignmentResource($assignment))
+            ->response()
+            ->setStatusCode(201);
     }
 
     public function destroy(StoreGroupTeacherAssignmentRequest $request, Group $group): Response
