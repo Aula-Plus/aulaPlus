@@ -3,26 +3,29 @@
 use App\Models\Assessment;
 use App\Models\Group;
 use App\Models\School;
+use App\Models\Subject;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 
 /**
- * Helper: a teacher leading a fresh group in the given school.
+ * Helper: a teacher leading a fresh group in the given school, plus the subject
+ * they are assigned in that group (assessments now require a subject the teacher
+ * actually teaches there).
  *
- * @return array{0: User, 1: Group}
+ * @return array{0: User, 1: Group, 2: Subject}
  */
 function teacherLeadingGroup(School $school): array
 {
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    leadGroup($group, $teacher);
+    $subject = leadGroup($group, $teacher);
 
-    return [$teacher, $group];
+    return [$teacher, $group, $subject];
 }
 
 it('lets the teacher who leads a group create an assessment for it', function () {
     $school = School::factory()->create();
-    [$teacher, $group] = teacherLeadingGroup($school);
+    [$teacher, $group, $subject] = teacherLeadingGroup($school);
     Sanctum::actingAs($teacher);
 
     $response = $this->postJson("/api/v1/groups/{$group->id}/assessments", [
@@ -30,18 +33,61 @@ it('lets the teacher who leads a group create an assessment for it', function ()
         'purpose' => 'Diagnóstico inicial',
         'duration_minutes' => 45,
         'administered_at' => '2026-03-10',
+        'subject_id' => $subject->id,
     ])->assertCreated();
 
     $response->assertJsonPath('data.type', 'written')
         ->assertJsonPath('data.administered_at', '2026-03-10')
         ->assertJsonPath('data.teacher_id', $teacher->id)
-        ->assertJsonPath('data.group_id', $group->id);
+        ->assertJsonPath('data.group_id', $group->id)
+        ->assertJsonPath('data.subject_id', $subject->id);
 
     $this->assertDatabaseHas('assessments', [
         'group_id' => $group->id,
         'teacher_id' => $teacher->id,
+        'subject_id' => $subject->id,
     ]);
     expect(Assessment::first()->administered_at->toDateString())->toBe('2026-03-10');
+});
+
+it('rejects an assessment for a subject the teacher is not assigned in the group', function () {
+    $school = School::factory()->create();
+    [$teacher, $group] = teacherLeadingGroup($school);
+    // A different subject in the same school, NOT assigned to this teacher/group.
+    $otherSubject = Subject::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assessments", [
+        'type' => 'written',
+        'administered_at' => '2026-03-10',
+        'subject_id' => $otherSubject->id,
+    ])->assertUnprocessable()->assertJsonValidationErrorFor('subject_id');
+
+    $this->assertDatabaseCount('assessments', 0);
+});
+
+it('requires subject_id when creating an assessment', function () {
+    $school = School::factory()->create();
+    [$teacher, $group] = teacherLeadingGroup($school);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assessments", [
+        'type' => 'written',
+        'administered_at' => '2026-03-10',
+    ])->assertUnprocessable()->assertJsonValidationErrorFor('subject_id');
+});
+
+it('rejects a subject from another school (tenant isolation)', function () {
+    $school = School::factory()->create();
+    [$teacher, $group] = teacherLeadingGroup($school);
+    $foreignSubject = Subject::factory()->create(['school_id' => School::factory()->create()->id]);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assessments", [
+        'type' => 'written',
+        'administered_at' => '2026-03-10',
+        'subject_id' => $foreignSubject->id,
+    ])->assertUnprocessable()->assertJsonValidationErrorFor('subject_id');
 });
 
 it('requires administered_at when creating an assessment', function () {
@@ -112,6 +158,38 @@ it('lets the owning teacher update their assessment', function () {
     ])->assertOk()
         ->assertJsonPath('data.purpose', 'Actualizado')
         ->assertJsonPath('data.administered_at', '2026-04-15');
+});
+
+it('lets the owning teacher change the subject to another they teach in the group', function () {
+    $school = School::factory()->create();
+    [$teacher, $group, $subject] = teacherLeadingGroup($school);
+    $secondSubject = leadGroup($group, $teacher); // assigns a second subject in the group
+    $assessment = Assessment::factory()->create([
+        'group_id' => $group->id,
+        'teacher_id' => $teacher->id,
+        'subject_id' => $subject->id,
+    ]);
+    Sanctum::actingAs($teacher);
+
+    $this->patchJson("/api/v1/assessments/{$assessment->id}", [
+        'subject_id' => $secondSubject->id,
+    ])->assertOk()->assertJsonPath('data.subject_id', $secondSubject->id);
+});
+
+it('rejects updating an assessment to a subject the teacher is not assigned in its group', function () {
+    $school = School::factory()->create();
+    [$teacher, $group, $subject] = teacherLeadingGroup($school);
+    $unassigned = Subject::factory()->create(['school_id' => $school->id]);
+    $assessment = Assessment::factory()->create([
+        'group_id' => $group->id,
+        'teacher_id' => $teacher->id,
+        'subject_id' => $subject->id,
+    ]);
+    Sanctum::actingAs($teacher);
+
+    $this->patchJson("/api/v1/assessments/{$assessment->id}", [
+        'subject_id' => $unassigned->id,
+    ])->assertUnprocessable()->assertJsonValidationErrorFor('subject_id');
 });
 
 it('forbids a non-owner teacher from updating or deleting an assessment', function () {
