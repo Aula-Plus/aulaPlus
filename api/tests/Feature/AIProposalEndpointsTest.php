@@ -28,7 +28,7 @@ function teacherWithGroupAndPlan(): array
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $plan = AnnualPlan::factory()->create([
         'group_id' => $group->id,
         'teacher_id' => $teacher->id,

@@ -14,6 +14,7 @@ use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
+use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
@@ -163,5 +164,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Subjects ("materias") catalog — director-managed, read by all staff.
         Route::apiResource('subjects', SubjectController::class);
+
+        // Director-managed teacher-subject assignments per group.
+        Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);
+        Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store']);
+        Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy']);
     });
 });

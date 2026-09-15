@@ -11,6 +11,7 @@ use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
 use Illuminate\Database\Seeder;
@@ -106,13 +107,20 @@ class PilotSchoolsSeeder extends Seeder
 
             $schoolYear = (int) now()->year;
 
+            // A teacher-in-group assignment carries a subject (Session 2,
+            // Option A), so the pilot teacher is assigned one subject per group.
+            $subject = Subject::factory()->create([
+                'school_id' => $school->id,
+                'name' => 'Matemática',
+            ]);
+
             foreach (range(1, random_int(2, 3)) as $i) {
                 $group = Group::factory()->create([
                     'school_id' => $school->id,
                     'name' => "{$i}° A",
                     'school_year' => $schoolYear,
                 ]);
-                $group->teachers()->attach($teacher);
+                $group->teachers()->attach($teacher, ['subject_id' => $subject->id]);
 
                 Student::factory()
                     ->count(random_int(15, 20))

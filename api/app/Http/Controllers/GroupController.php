@@ -111,11 +111,10 @@ class GroupController extends Controller
 
     public function store(StoreGroupRequest $request): JsonResponse
     {
-        $group = Group::create($request->safe()->except('teacher_ids'));
-
-        if ($request->filled('teacher_ids')) {
-            $group->teachers()->sync($request->input('teacher_ids'));
-        }
+        // Teacher membership is per-subject (Session 2, Option A) and managed
+        // through GroupTeacherAssignmentController — no subjectless bulk assign
+        // on create.
+        $group = Group::create($request->validated());
 
         return (new GroupResource($group->load('teachers')))
             ->response()
@@ -131,11 +130,9 @@ class GroupController extends Controller
 
     public function update(UpdateGroupRequest $request, Group $group): GroupResource
     {
-        $group->update($request->safe()->except('teacher_ids'));
-
-        if ($request->has('teacher_ids')) {
-            $group->teachers()->sync($request->input('teacher_ids', []));
-        }
+        // Teacher membership is per-subject (Session 2, Option A) and managed
+        // through GroupTeacherAssignmentController — not edited here.
+        $group->update($request->validated());
 
         return new GroupResource($group->load('teachers'));
     }

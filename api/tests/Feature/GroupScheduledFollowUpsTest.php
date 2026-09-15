@@ -17,7 +17,7 @@ it('lets a teacher leading the group see follow-ups of all its students', functi
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
 
     $ana = Student::factory()->create(['school_id' => $school->id]);
     $beto = Student::factory()->create(['school_id' => $school->id]);

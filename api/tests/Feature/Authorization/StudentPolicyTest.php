@@ -33,7 +33,7 @@ it('lets a teacher view only students in a group they lead, and never create or 
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $ownGroup = Group::factory()->create(['school_id' => $school->id]);
-    $ownGroup->teachers()->attach($teacher);
+    leadGroup($ownGroup, $teacher);
     $otherGroup = Group::factory()->create(['school_id' => $school->id]);
 
     $own = Student::factory()->create(['school_id' => $school->id]);
@@ -75,7 +75,7 @@ it('lets a teacher who teaches the student view them, but never the clinical pro
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => 2026]);
 

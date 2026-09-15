@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use App\Models\Group;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreGroupRequest extends FormRequest
 {
@@ -24,13 +23,6 @@ class StoreGroupRequest extends FormRequest
             'school_year' => ['required', 'integer'],
             'group_profile' => ['nullable', 'array'],
             'related_documents' => ['nullable', 'array'],
-            'teacher_ids' => ['sometimes', 'array'],
-            'teacher_ids.*' => [
-                'integer',
-                Rule::exists('users', 'id')->where(
-                    fn ($query) => $query->where('school_id', $this->user()->school_id)
-                ),
-            ],
         ];
     }
 }

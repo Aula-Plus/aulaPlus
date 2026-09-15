@@ -19,7 +19,7 @@ it('exposes only counts/booleans per student, never clinical detail, to a teache
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Ana Gómez']);
     $student->groups()->attach($group, ['school_year' => now()->year]);
     Accommodation::factory()->create(['student_id' => $student->id, 'active' => true]);
@@ -110,7 +110,7 @@ it('omits the comments_count key for a teacher leading the group', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     Comment::factory()->forSubject($group)->create();
     Sanctum::actingAs($teacher);
 

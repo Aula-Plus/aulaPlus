@@ -14,7 +14,7 @@ it('serializes a group with its teachers', function () {
         'level' => 'Primaria',
         'school_year' => 2026,
     ]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $group->load('teachers');
 
     // resolve() applies the conditional-field filtering (whenLoaded, when),

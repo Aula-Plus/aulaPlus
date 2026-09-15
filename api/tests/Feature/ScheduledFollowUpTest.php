@@ -16,7 +16,7 @@ use Laravel\Sanctum\Sanctum;
 function teachStudent(User $teacher, Student $student): void
 {
     $group = Group::factory()->create(['school_id' => $student->school_id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student->groups()->attach($group, ['school_year' => now()->year]);
 }
 

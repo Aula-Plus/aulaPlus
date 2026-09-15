@@ -18,7 +18,7 @@ function assessmentWithEnrolledStudent(School $school): array
 {
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $assessment = Assessment::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id]);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);

@@ -24,7 +24,7 @@ it('lets a teacher who teaches the student comment on them', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
     Sanctum::actingAs($teacher);
@@ -54,7 +54,7 @@ it('does not show a comment restricted to psychopedagogue in the listing a teach
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
 
@@ -85,7 +85,7 @@ it('lets a teacher who leads a group comment on it, and a comment restricted to 
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
 
     Sanctum::actingAs($teacher);
     $this->postJson("/api/v1/groups/{$group->id}/comments", ['content' => 'Nota de grupo'])->assertCreated();
@@ -121,8 +121,8 @@ it('shows an author_only comment only to its author, hidden from every other rol
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
 
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacherA);
-    $group->teachers()->attach($teacherB);
+    leadGroup($group, $teacherA);
+    leadGroup($group, $teacherB);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
 
@@ -210,7 +210,7 @@ it('normalizes an empty visible_to array to null so both visibility paths agree'
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
 

@@ -9,7 +9,7 @@ it('lets the teacher who leads the group view, update and delete its class sessi
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $classSession = ClassSession::factory()->create(['group_id' => $group->id]);
 
     expect($teacher->can('view', $classSession))->toBeTrue()
@@ -24,7 +24,7 @@ it('lets director and psychopedagogue view but never write a class session of a 
     $director = User::factory()->forSchool($school)->director()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($owner);
+    leadGroup($group, $owner);
     $classSession = ClassSession::factory()->create(['group_id' => $group->id]);
 
     expect($director->can('view', $classSession))->toBeTrue()
@@ -38,7 +38,7 @@ it('denies a teacher who doesn\'t lead the group', function () {
     $owner = User::factory()->forSchool($school)->teacher()->create();
     $otherTeacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($owner);
+    leadGroup($group, $owner);
     $classSession = ClassSession::factory()->create(['group_id' => $group->id]);
 
     expect($otherTeacher->can('view', $classSession))->toBeFalse()
@@ -52,7 +52,7 @@ it('never authorizes across schools', function () {
     $directorA = User::factory()->forSchool($schoolA)->director()->create();
     $ownerB = User::factory()->forSchool($schoolB)->teacher()->create();
     $groupB = Group::factory()->create(['school_id' => $schoolB->id]);
-    $groupB->teachers()->attach($ownerB);
+    leadGroup($groupB, $ownerB);
     $classSessionB = ClassSession::factory()->create(['group_id' => $groupB->id]);
 
     expect($directorA->can('view', $classSessionB))->toBeFalse();
