@@ -14,6 +14,7 @@ import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage
 import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
+import { SubjectsPage } from "@/features/subjects/SubjectsPage"
 
 function App() {
   return (
@@ -96,6 +97,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <ScreeningTestDesignPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/materias"
+            element={
+              <ProtectedLayout>
+                <SubjectsPage />
               </ProtectedLayout>
             }
           />
