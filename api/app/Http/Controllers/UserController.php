@@ -12,6 +12,7 @@ use App\Notifications\UserInvitationNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -45,17 +46,25 @@ class UserController extends Controller
     {
         // User does not use BelongsToSchool, so school_id is set explicitly
         // from the authenticated director. Password stays null until the
-        // invitee accepts.
-        $user = User::create([
-            'school_id' => $request->user()->school_id,
-            'name' => $request->validated('name'),
-            'email' => $request->validated('email'),
-            'password' => null,
-        ]);
+        // invitee accepts. create + role assignment + invitation issuance
+        // run in a transaction so a mid-sequence failure can't leave a
+        // half-created user; the notification is queued and only fires
+        // after the transaction commits.
+        [$user, $token] = DB::transaction(function () use ($request) {
+            $user = User::create([
+                'school_id' => $request->user()->school_id,
+                'name' => $request->validated('name'),
+                'email' => $request->validated('email'),
+                'password' => null,
+            ]);
 
-        $user->assignRole($request->validated('role'));
+            $user->assignRole($request->validated('role'));
 
-        $token = UserInvitation::issueFor($user);
+            $token = UserInvitation::issueFor($user);
+
+            return [$user, $token];
+        });
+
         $user->notify(new UserInvitationNotification($token));
 
         return (new ManagedUserResource($user))->response()->setStatusCode(201);

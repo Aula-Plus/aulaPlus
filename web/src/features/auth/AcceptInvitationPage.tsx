@@ -71,7 +71,10 @@ export function AcceptInvitationPage() {
     setFormError(null)
     try {
       await usersApi.acceptInvitation(token, values.password)
-      navigate("/login", { replace: true })
+      navigate("/login", {
+        replace: true,
+        state: { message: "Tu cuenta fue activada. Ya podés iniciar sesión." },
+      })
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 410) {
         setInvalid(true)

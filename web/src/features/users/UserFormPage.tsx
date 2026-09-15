@@ -58,9 +58,14 @@ export function UserFormPage() {
   // In edit mode, hydrate from the single-resource endpoint.
   useEffect(() => {
     if (!isEdit) return
-    usersApi.fetchUser(Number(id)).then((user) => {
-      reset({ name: user.name, email: user.email, role: user.roles[0] ?? "teacher" })
-    })
+    usersApi
+      .fetchUser(Number(id))
+      .then((user) => {
+        reset({ name: user.name, email: user.email, role: user.roles[0] ?? "teacher" })
+      })
+      .catch(() => {
+        setFormError("No pudimos cargar el usuario.")
+      })
   }, [id, isEdit, reset])
 
   function close() {

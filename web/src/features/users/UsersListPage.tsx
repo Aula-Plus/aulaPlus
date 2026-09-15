@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, Outlet } from "react-router-dom"
+import { isAxiosError } from "axios"
 import { UserCog } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageUsers } from "@/lib/permissions"
@@ -26,6 +27,22 @@ const statusTone: Record<ManagedUser["status"], BadgeTone> = {
   active: "success",
   pending: "warning",
   disabled: "neutral",
+}
+
+/**
+ * Surfaces a server-provided guardrail message (e.g. "no podés desactivar al
+ * único director activo") for 422s, falling back to a generic message for
+ * anything else — mirrors the pattern in `LoginPage`/`UserFormPage`.
+ */
+function extractErrorMessage(error: unknown, fallback: string): string {
+  if (isAxiosError(error) && error.response?.status === 422) {
+    const data = error.response.data as
+      | { message?: string; errors?: Record<string, string[]> }
+      | undefined
+    const firstFieldError = data?.errors ? Object.values(data.errors)[0]?.[0] : undefined
+    return data?.message ?? firstFieldError ?? fallback
+  }
+  return fallback
 }
 
 /**
@@ -64,8 +81,8 @@ export function UsersListPage() {
         await usersApi.disableUser(target.id)
       }
       await load(search)
-    } catch {
-      setError("No pudimos actualizar el usuario.")
+    } catch (error) {
+      setError(extractErrorMessage(error, "No pudimos actualizar el usuario."))
     } finally {
       setBusyId(null)
     }
@@ -76,8 +93,8 @@ export function UsersListPage() {
     setError(null)
     try {
       await usersApi.resendInvitation(target.id)
-    } catch {
-      setError("No pudimos reenviar la invitación.")
+    } catch (error) {
+      setError(extractErrorMessage(error, "No pudimos reenviar la invitación."))
     } finally {
       setBusyId(null)
     }
@@ -132,41 +149,47 @@ export function UsersListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((staff) => (
-                <TableRow key={staff.id}>
-                  <TableCell className="pl-6 font-medium">{staff.name}</TableCell>
-                  <TableCell>{staff.email}</TableCell>
-                  <TableCell>{staff.roles.map((role) => roleLabels[role]).join(", ")}</TableCell>
-                  <TableCell>
-                    <Badge tone={statusTone[staff.status]}>{userStatusLabels[staff.status]}</Badge>
-                  </TableCell>
-                  <TableCell className="pr-6 text-right">
-                    {canManage && (
-                      <div className="flex items-center justify-end gap-2">
-                        {staff.status === "pending" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={busyId === staff.id}
-                            onClick={() => onResend(staff)}
-                          >
-                            Reenviar invitación
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busyId === staff.id}
-                          onClick={() => onToggleDisabled(staff)}
-                        >
-                          {staff.status === "disabled" ? "Reactivar" : "Desactivar"}
-                        </Button>
-                        <RowLink to={`/usuarios/${staff.id}`}>Editar</RowLink>
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {users.map((staff) => {
+                const isSelf = staff.id === user?.id
+
+                return (
+                  <TableRow key={staff.id}>
+                    <TableCell className="pl-6 font-medium">{staff.name}</TableCell>
+                    <TableCell>{staff.email}</TableCell>
+                    <TableCell>{staff.roles.map((role) => roleLabels[role]).join(", ")}</TableCell>
+                    <TableCell>
+                      <Badge tone={statusTone[staff.status]}>{userStatusLabels[staff.status]}</Badge>
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      {canManage && (
+                        <div className="flex items-center justify-end gap-2">
+                          {staff.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busyId === staff.id}
+                              onClick={() => onResend(staff)}
+                            >
+                              Reenviar invitación
+                            </Button>
+                          )}
+                          {!isSelf && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busyId === staff.id}
+                              onClick={() => onToggleDisabled(staff)}
+                            >
+                              {staff.status === "disabled" ? "Reactivar" : "Desactivar"}
+                            </Button>
+                          )}
+                          <RowLink to={`/usuarios/${staff.id}`}>Editar</RowLink>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </Card>
