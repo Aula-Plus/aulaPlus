@@ -5,7 +5,6 @@ export interface GroupInput {
   name: string
   level?: string
   school_year: number
-  teacher_ids?: number[]
 }
 
 export async function fetchGroups(): Promise<Group[]> {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Controller, useForm } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
@@ -7,20 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { MultiSelect } from "@/components/ui/multi-select"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageGroups } from "@/lib/permissions"
 import { GroupTeacherAssignments } from "@/features/subjects/GroupTeacherAssignments"
 import * as groupsApi from "./groupsApi"
-import type { Teacher } from "./groupsApi"
 
 const groupSchema = z.object({
   name: z.string().min(1, "Ingresá un nombre"),
   level: z.string().optional(),
   school_year: z.string().min(1, "Ingresá el año lectivo"),
-  teacher_ids: z.array(z.number()),
 })
 
 type GroupValues = z.infer<typeof groupSchema>
@@ -37,13 +34,11 @@ export function GroupFormPage() {
   const outletContext = useOutletContext<GroupFormOutletContext | null>()
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [teachers, setTeachers] = useState<Teacher[]>([])
 
   const {
     register,
     handleSubmit,
     reset,
-    control,
     formState: { errors, isSubmitting },
   } = useForm<GroupValues>({
     resolver: zodResolver(groupSchema),
@@ -51,13 +46,8 @@ export function GroupFormPage() {
       name: "",
       level: "",
       school_year: String(getCurrentSchoolYear()),
-      teacher_ids: [],
     },
   })
-
-  useEffect(() => {
-    groupsApi.fetchTeachers().then(setTeachers)
-  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -66,7 +56,6 @@ export function GroupFormPage() {
         name: group.name,
         level: group.level ?? "",
         school_year: String(group.school_year),
-        teacher_ids: group.teachers.map((teacher) => teacher.id),
       })
     })
   }, [id, reset])
@@ -74,11 +63,12 @@ export function GroupFormPage() {
   async function onSubmit(values: GroupValues) {
     setFormError(null)
     try {
+      // Teacher membership is per-subject and managed by the assignment panel
+      // below (backend Sesión 2) — never through this form.
       const input = {
         name: values.name,
         level: values.level,
         school_year: Number(values.school_year),
-        teacher_ids: values.teacher_ids,
       }
       if (isEdit) {
         await groupsApi.updateGroup(Number(id), input)
@@ -110,8 +100,6 @@ export function GroupFormPage() {
     if (!open) navigate("/clases", { replace: true })
   }
 
-  const teacherOptions = teachers.map((teacher) => ({ id: teacher.id, label: teacher.name }))
-
   return (
     <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
@@ -134,21 +122,6 @@ export function GroupFormPage() {
             {errors.school_year && (
               <p className="text-sm text-destructive">{errors.school_year.message}</p>
             )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="teacher_ids">Docentes</Label>
-            <Controller
-              name="teacher_ids"
-              control={control}
-              render={({ field }) => (
-                <MultiSelect
-                  id="teacher_ids"
-                  options={teacherOptions}
-                  selected={field.value}
-                  onChange={field.onChange}
-                />
-              )}
-            />
           </div>
           {formError && (
             <p role="alert" className="text-sm text-destructive">
@@ -177,8 +150,8 @@ export function GroupFormPage() {
         </form>
 
         {/*
-          Teacher-subject assignments only make sense for an existing group
-          (they need a real groupId), so they render only when editing.
+          Teacher-subject membership is managed here, per subject (backend
+          Sesión 2). It needs a real groupId, so it renders only when editing.
         */}
         {isEdit && id && (
           <GroupTeacherAssignments groupId={Number(id)} canManage={canManageGroups(user)} />
