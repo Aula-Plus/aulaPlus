@@ -30,6 +30,7 @@ use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -169,5 +170,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);
         Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store']);
         Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy']);
+
+        // Session: user management (docs/superpowers/specs/2026-09-15-user-
+        // management-design.md). Director-only staff onboarding + lifecycle.
+        Route::get('/users', [UserController::class, 'index']);
     });
 });
