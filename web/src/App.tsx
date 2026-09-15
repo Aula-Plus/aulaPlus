@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { AuthProvider } from "@/features/auth/AuthProvider"
 import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
+import { AcceptInvitationPage } from "@/features/auth/AcceptInvitationPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { GroupsListPage } from "@/features/groups/GroupsListPage"
 import { GroupFormPage } from "@/features/groups/GroupFormPage"
@@ -24,6 +25,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/aceptar-invitacion" element={<AcceptInvitationPage />} />
           <Route
             path="/"
             element={
