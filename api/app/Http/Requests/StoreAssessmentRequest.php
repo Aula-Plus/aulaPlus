@@ -5,7 +5,11 @@ namespace App\Http\Requests;
 use App\Enums\AssessmentType;
 use App\Models\Assessment;
 use App\Models\Group;
+use App\Models\Subject;
+use App\Support\Tenancy;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 
 /**
@@ -35,11 +39,26 @@ class StoreAssessmentRequest extends FormRequest
      */
     public function rules(): array
     {
+        /** @var Group $group */
+        $group = $this->route('group');
+
         return [
             'type' => ['required', new Enum(AssessmentType::class)],
             'purpose' => ['nullable', 'string'],
             'duration_minutes' => ['nullable', 'integer', 'min:1'],
             'administered_at' => ['required', 'date'],
+            'subject_id' => [
+                'required', 'integer',
+                Rule::exists('subjects', 'id')->where('school_id', Tenancy::schoolId()),
+                // The teacher must actually be assigned this subject in this
+                // group (single source of truth: User::teachesSubjectInGroup).
+                function (string $attribute, mixed $value, Closure $fail) use ($group): void {
+                    $subject = Subject::find($value);
+                    if ($subject === null || ! $this->user()->teachesSubjectInGroup($group, $subject)) {
+                        $fail('You are not assigned to teach this subject in this group.');
+                    }
+                },
+            ],
         ];
     }
 }

@@ -6,6 +6,7 @@ use App\Models\AIProposal;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\Student;
+use App\Models\Subject;
 
 /**
  * Assembles the (dynamic) context that gets sent to the model for one
@@ -48,8 +49,9 @@ class BuildProposalContext
      *
      * v1 heuristic (replaceable): take the top-level items of every catalog in
      * every framework linked to the group, plus their direct children, and —
-     * when the request carries a `subject`/`focus` — bubble up any item whose
-     * name or code loosely matches. Deliberately NOT the full catalog (which
+     * when the request carries a `subject_id` (resolved to the subject name) or
+     * a `focus` — bubble up any item whose name or code loosely matches.
+     * Deliberately NOT the full catalog (which
      * would blow up the prompt); refine with real pedagogical relevance later.
      *
      * @param  array<string, mixed>  $parameters
@@ -57,7 +59,12 @@ class BuildProposalContext
      */
     protected function curricularContext(Group $group, array $parameters): array
     {
-        $needle = mb_strtolower(trim((string) ($parameters['subject'] ?? $parameters['focus'] ?? '')));
+        // The subject label is now referenced by id; resolve it to the subject's
+        // name (the only thing sent to the model — a name, never student PII).
+        $subjectName = isset($parameters['subject_id'])
+            ? (Subject::find($parameters['subject_id'])?->name ?? '')
+            : '';
+        $needle = mb_strtolower(trim((string) ($subjectName !== '' ? $subjectName : ($parameters['focus'] ?? ''))));
 
         $frameworks = $group->curricularFrameworks()->with('catalogs.items')->get();
 

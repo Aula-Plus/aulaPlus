@@ -23,6 +23,7 @@ class AssessmentSummaryResource extends JsonResource
         return [
             'id' => $this->id,
             'group_id' => $this->group_id,
+            'subject_id' => $this->subject_id,
             'type' => $this->type->value,
             'variant_number' => $this->variant_number,
             'created_at' => $this->created_at?->toIso8601String(),

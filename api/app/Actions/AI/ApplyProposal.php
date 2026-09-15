@@ -71,7 +71,7 @@ class ApplyProposal
             'curricular_framework_id' => $params['curricular_framework_id'],
             'teacher_id' => $applier->id,
             'student_id' => $params['student_id'] ?? null,
-            'subject' => $params['subject'],
+            'subject_id' => $params['subject_id'],
             'year' => $params['year'],
             // `language` is NOT NULL on annual_plans but optional in the request;
             // default to the product's language when the teacher left it blank.
@@ -146,6 +146,7 @@ class ApplyProposal
 
         $assessment = Assessment::create([
             'group_id' => $proposal->group_id,
+            'subject_id' => $params['subject_id'],
             'teacher_id' => $applier->id,
             'type' => $params['assessment_type'],
             'purpose' => $raw['purpose'] ?? null,

@@ -6,7 +6,9 @@ use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
 use App\Models\AIProposal;
 use App\Models\Group;
+use App\Models\Subject;
 use App\Models\Unit;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
@@ -56,7 +58,10 @@ class GenerateAIProposalRequest extends FormRequest
         return match (AIProposalType::tryFrom((string) $this->input('type'))) {
             AIProposalType::AnnualPlan => [
                 'parameters.curricular_framework_id' => ['required', $this->frameworkBelongsToGroup()],
-                'parameters.subject' => ['required', 'string'],
+                'parameters.subject_id' => [
+                    'required',
+                    Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
+                ],
                 'parameters.year' => ['required', 'integer'],
                 'parameters.student_id' => ['nullable', $this->studentBelongsToGroup()],
                 'parameters.focus' => ['nullable', 'string'],
@@ -81,9 +86,36 @@ class GenerateAIProposalRequest extends FormRequest
             AIProposalType::Assessment => [
                 'parameters.focus' => ['required', 'string'],
                 'parameters.assessment_type' => ['required', new Enum(AssessmentType::class)],
+                // An applied assessment proposal creates a real Assessment, which
+                // now requires a subject in the school's catalog AND that the
+                // teacher is assigned that subject in the group (decision C1) —
+                // the same rule the direct assessment endpoint enforces, so the
+                // AI path can't be used to bypass teachesSubjectInGroup.
+                'parameters.subject_id' => [
+                    'required',
+                    Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
+                    $this->assignedSubjectInGroup(),
+                ],
                 'parameters.duration_minutes' => ['nullable', 'integer'],
             ],
             default => [],
+        };
+    }
+
+    /**
+     * The subject must exist in the school AND the requesting teacher must be
+     * assigned that subject in the route group — mirroring StoreAssessmentRequest
+     * (single source of truth: User::teachesSubjectInGroup). Without this, the AI
+     * assessment path could create an Assessment for a subject the teacher does
+     * not teach, bypassing decision C1.
+     */
+    protected function assignedSubjectInGroup(): callable
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            $subject = Subject::find($value);
+            if ($subject === null || ! $this->user()->teachesSubjectInGroup($this->group(), $subject)) {
+                $fail('You are not assigned to teach this subject in this group.');
+            }
         };
     }
 

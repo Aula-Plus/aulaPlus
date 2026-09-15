@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Enums\AssessmentType;
 use App\Models\Assessment;
 use App\Models\Group;
+use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -17,6 +18,11 @@ class AssessmentFactory extends Factory
     {
         return $this->afterMaking(function (Assessment $assessment): void {
             $assessment->school_id ??= $assessment->group?->school_id;
+            // Every assessment needs a subject in the group's own school. The
+            // Subject factory otherwise mints a new school, so pin it to the
+            // group's school explicitly.
+            $assessment->subject_id ??= Subject::factory()
+                ->create(['school_id' => $assessment->group?->school_id])->id;
         });
     }
 
