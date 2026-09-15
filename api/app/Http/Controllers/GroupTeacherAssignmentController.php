@@ -41,10 +41,18 @@ class GroupTeacherAssignmentController extends Controller
     {
         $data = $request->validated();
 
-        // Idempotent attach: syncWithoutDetaching keyed by the pair avoids a
-        // duplicate-key error on the (group, teacher, subject) unique index.
-        $group->teachers()->syncWithoutDetaching([
-            $data['teacher_id'] => ['subject_id' => $data['subject_id']],
+        // One row per (group, teacher, subject) — Option A (decision B1-sub): a
+        // teacher can teach several subjects in the same group. syncWithoutDetaching
+        // keys pivots by teacher_id only, so it would UPDATE the teacher's existing
+        // row instead of adding a second subject. insertOrIgnore keyed by the full
+        // triple is idempotent (the unique index absorbs a repeat attach) AND
+        // preserves the teacher's other subject rows and their created_at.
+        DB::table('group_teacher')->insertOrIgnore([
+            'group_id' => $group->id,
+            'teacher_id' => $data['teacher_id'],
+            'subject_id' => $data['subject_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         return response()->json(status: 201);
