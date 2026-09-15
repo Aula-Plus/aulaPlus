@@ -19,12 +19,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable([
     'group_id',
+    'subject_id',
     'curricular_framework_id',
     'teacher_id',
     'student_id',
     'description',
     'year',
-    'subject',
     'language',
 ])]
 class AnnualPlan extends Model
@@ -38,6 +38,11 @@ class AnnualPlan extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(Group::class);
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class);
     }
 
     public function curricularFramework(): BelongsTo

@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\AnnualPlan;
 use App\Models\CurricularFramework;
 use App\Models\Group;
+use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -23,6 +24,9 @@ class AnnualPlanFactory extends Factory
     {
         return $this->afterMaking(function (AnnualPlan $annualPlan): void {
             $annualPlan->school_id ??= $annualPlan->group?->school_id;
+            // The subject must live in the same school as the plan's group.
+            $annualPlan->subject_id ??= Subject::factory()
+                ->create(['school_id' => $annualPlan->group?->school_id])->id;
         });
     }
 
@@ -35,7 +39,6 @@ class AnnualPlanFactory extends Factory
             'student_id' => null,
             'description' => fake()->paragraph(),
             'year' => now()->year,
-            'subject' => fake()->randomElement(['Matemática', 'Lengua', 'Ciencias', 'Inglés']),
             'language' => 'Español',
         ];
     }
