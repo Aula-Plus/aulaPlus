@@ -43,12 +43,30 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'disabled_at' => 'datetime',
         ];
     }
 
     public function school(): BelongsTo
     {
         return $this->belongsTo(School::class);
+    }
+
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(UserInvitation::class);
+    }
+
+    /** Invited but has not set a password yet — cannot log in. */
+    public function isPending(): bool
+    {
+        return $this->password === null;
+    }
+
+    /** Deactivated ("dado de baja") — cannot log in, record preserved. */
+    public function isDisabled(): bool
+    {
+        return $this->disabled_at !== null;
     }
 
     public function calendar(): HasOne
