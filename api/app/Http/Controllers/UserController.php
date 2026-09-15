@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreUserRequest;
 use App\Http\Resources\ManagedUserResource;
 use App\Models\User;
+use App\Models\UserInvitation;
+use App\Notifications\UserInvitationNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -32,5 +36,25 @@ class UserController extends Controller
             ->get();
 
         return ManagedUserResource::collection($users);
+    }
+
+    public function store(StoreUserRequest $request): JsonResponse
+    {
+        // User does not use BelongsToSchool, so school_id is set explicitly
+        // from the authenticated director. Password stays null until the
+        // invitee accepts.
+        $user = User::create([
+            'school_id' => $request->user()->school_id,
+            'name' => $request->validated('name'),
+            'email' => $request->validated('email'),
+            'password' => null,
+        ]);
+
+        $user->assignRole($request->validated('role'));
+
+        $token = UserInvitation::issueFor($user);
+        $user->notify(new UserInvitationNotification($token));
+
+        return (new ManagedUserResource($user))->response()->setStatusCode(201);
     }
 }

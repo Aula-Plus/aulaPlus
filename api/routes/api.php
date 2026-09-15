@@ -174,5 +174,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Session: user management (docs/superpowers/specs/2026-09-15-user-
         // management-design.md). Director-only staff onboarding + lifecycle.
         Route::get('/users', [UserController::class, 'index']);
+        Route::post('/users', [UserController::class, 'store']);
     });
 });
