@@ -39,6 +39,24 @@ class UserPolicy
             && $user->hasRole(Role::Director->value);
     }
 
+    /**
+     * Disabling a staff account is director-only, same-school, like update.
+     */
+    public function disable(User $user, User $target): bool
+    {
+        return $this->sharesSchool($user, $target)
+            && $user->hasRole(Role::Director->value);
+    }
+
+    /**
+     * Enabling a staff account is director-only, same-school, like update.
+     */
+    public function enable(User $user, User $target): bool
+    {
+        return $this->sharesSchool($user, $target)
+            && $user->hasRole(Role::Director->value);
+    }
+
     protected function sharesSchool(User $user, User $target): bool
     {
         return $user->school_id === $target->school_id;

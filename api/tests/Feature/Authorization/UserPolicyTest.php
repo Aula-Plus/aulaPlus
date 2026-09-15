@@ -37,3 +37,35 @@ it('never authorizes across schools even for a director', function () {
     expect($directorA->can('view', $userB))->toBeFalse()
         ->and($directorA->can('update', $userB))->toBeFalse();
 });
+
+it('lets a director disable and enable users in their school', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+
+    expect($director->can('disable', $teacher))->toBeTrue()
+        ->and($director->can('enable', $teacher))->toBeTrue();
+});
+
+it('denies a teacher or psychopedagogue from disabling or enabling users', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $other = User::factory()->forSchool($school)->teacher()->create();
+
+    expect($teacher->can('disable', $other))->toBeFalse()
+        ->and($teacher->can('enable', $other))->toBeFalse()
+        ->and($psychopedagogue->can('disable', $other))->toBeFalse()
+        ->and($psychopedagogue->can('enable', $other))->toBeFalse();
+});
+
+it('never authorizes disable or enable across schools even for a director', function () {
+    $schoolA = School::factory()->create();
+    $schoolB = School::factory()->create();
+
+    $directorA = User::factory()->forSchool($schoolA)->director()->create();
+    $userB = User::factory()->forSchool($schoolB)->teacher()->create();
+
+    expect($directorA->can('disable', $userB))->toBeFalse()
+        ->and($directorA->can('enable', $userB))->toBeFalse();
+});
