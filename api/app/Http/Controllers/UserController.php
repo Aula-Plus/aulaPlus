@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\ManagedUserResource;
 use App\Models\User;
 use App\Models\UserInvitation;
@@ -56,5 +57,25 @@ class UserController extends Controller
         $user->notify(new UserInvitationNotification($token));
 
         return (new ManagedUserResource($user))->response()->setStatusCode(201);
+    }
+
+    public function show(User $user): ManagedUserResource
+    {
+        $this->authorize('view', $user);
+
+        return new ManagedUserResource($user);
+    }
+
+    public function update(UpdateUserRequest $request, User $user): ManagedUserResource
+    {
+        if ($request->has('name')) {
+            $user->update(['name' => $request->validated('name')]);
+        }
+
+        if ($request->has('role')) {
+            $user->syncRoles([$request->validated('role')]);
+        }
+
+        return new ManagedUserResource($user->refresh());
     }
 }

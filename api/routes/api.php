@@ -175,5 +175,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // management-design.md). Director-only staff onboarding + lifecycle.
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
+        Route::get('/users/{user}', [UserController::class, 'show']);
+        Route::patch('/users/{user}', [UserController::class, 'update']);
     });
 });
