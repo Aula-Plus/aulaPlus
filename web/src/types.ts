@@ -7,6 +7,24 @@ export const roleLabels: Record<Role, string> = {
   psychopedagogue: "Psicopedagogo",
 }
 
+export type UserStatus = "pending" | "active" | "disabled"
+
+/** User-facing Spanish labels for the staff lifecycle states. */
+export const userStatusLabels: Record<UserStatus, string> = {
+  pending: "Pendiente",
+  active: "Activo",
+  disabled: "Desactivado",
+}
+
+/** A staff member as shown on the director-only "Usuarios" screen. */
+export interface ManagedUser {
+  id: number
+  name: string
+  email: string
+  roles: Role[]
+  status: UserStatus
+}
+
 export interface School {
   id: number
   name: string
