@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
+import { SingleSelect } from "@/components/ui/single-select"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { formatShortDate } from "@/lib/utils"
 import {
@@ -26,6 +27,13 @@ import { fetchStudentPerformanceTimeline } from "./performanceApi"
 
 interface StudentPerformanceChartProps {
   studentId: number
+  /**
+   * Subjects the student has data in, passed down by the parent
+   * (`StudentTrackingPage` already holds `by_subject`) so the selector lists
+   * exactly the relevant subjects without an extra fetch. Absent/empty → the
+   * selector still renders with only the "Todas las materias" default.
+   */
+  subjects?: { id: number; name: string }[]
 }
 
 /** The default date window: the whole current school year. */
@@ -76,8 +84,13 @@ interface ResultDatum {
  * backend's responsibility (CLAUDE.md: authorization lives in server code, the
  * frontend is never the security boundary).
  */
-export function StudentPerformanceChart({ studentId }: StudentPerformanceChartProps) {
+export function StudentPerformanceChart({
+  studentId,
+  subjects = [],
+}: StudentPerformanceChartProps) {
   const [range, setRange] = useState(defaultRange)
+  // "" = every subject (the "Todas las materias" default).
+  const [subjectId, setSubjectId] = useState("")
   const [timeline, setTimeline] = useState<StudentPerformanceTimeline | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -90,7 +103,11 @@ export function StudentPerformanceChart({ studentId }: StudentPerformanceChartPr
     // pattern as AuthProvider).
     let ignore = false
     setError(null)
-    fetchStudentPerformanceTimeline(studentId, { from, to })
+    fetchStudentPerformanceTimeline(studentId, {
+      from,
+      to,
+      subjectId: subjectId ? Number(subjectId) : undefined,
+    })
       .then((data) => {
         if (!ignore) setTimeline(data)
       })
@@ -102,13 +119,29 @@ export function StudentPerformanceChart({ studentId }: StudentPerformanceChartPr
     return () => {
       ignore = true
     }
-  }, [studentId, from, to])
+  }, [studentId, from, to, subjectId])
 
   return (
     <SectionCard
       title="Desempeño"
       action={
         <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="performance-subject">Materia</Label>
+            <SingleSelect
+              id="performance-subject"
+              className="max-w-52"
+              options={[
+                { value: "", label: "Todas las materias" },
+                ...subjects.map((subject) => ({
+                  value: String(subject.id),
+                  label: subject.name,
+                })),
+              ]}
+              value={subjectId}
+              onChange={setSubjectId}
+            />
+          </div>
           <div className="grid gap-1.5">
             <Label htmlFor="performance-from">Desde</Label>
             <Input

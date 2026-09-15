@@ -13,6 +13,8 @@ import type { Assessment, AssessmentResult, AssessmentType } from "@/types"
 /** Payload for creating an assessment (the plain, non-AI form of this session). */
 export interface AssessmentInput {
   type: AssessmentType
+  /** The subject ("materia") the assessment belongs to (backend Sesión 3). */
+  subject_id: number
   /** ISO date (`YYYY-MM-DD`). */
   administered_at: string
   purpose?: string | null
