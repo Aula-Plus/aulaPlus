@@ -55,6 +55,8 @@ Route::post('/login', [AuthenticatedSessionController::class, 'store'])
 // authorization gate; both routes are rate-limited.
 Route::get('/invitations/{token}', [InvitationController::class, 'show'])
     ->middleware('throttle:10,1');
+Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])
+    ->middleware('throttle:10,1');
 
 // Authenticated endpoints. Every route below requires a valid first-party
 // session (or bearer token) resolved by the "sanctum" guard.

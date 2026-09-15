@@ -4,8 +4,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AcceptInvitationRequest;
 use App\Models\UserInvitation;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Hash;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -31,5 +33,23 @@ class InvitationController extends Controller
             'email' => $user->email,
             'school_name' => $user->school?->name,
         ]]);
+    }
+
+    public function accept(AcceptInvitationRequest $request, string $token): JsonResponse
+    {
+        $invitation = UserInvitation::findPending($token);
+
+        if ($invitation === null) {
+            throw new HttpException(410, 'Esta invitación ya no es válida.');
+        }
+
+        $invitation->user->update([
+            'password' => Hash::make($request->validated('password')),
+            'email_verified_at' => now(),
+        ]);
+
+        $invitation->markAccepted();
+
+        return response()->json(['message' => 'Tu cuenta fue activada. Ya podés iniciar sesión.']);
     }
 }
