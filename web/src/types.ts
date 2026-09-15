@@ -448,9 +448,25 @@ export interface Barrier {
  * `accommodations`, `barriers` and `alerts` are only present for a viewer with
  * view-clinical-profile; everyone else gets the `*_count` fields only.
  */
+/**
+ * One subject's aggregated academic stats for a student (backend Sesión 4 —
+ * `StudentTrackingController::subjectAggregates`). `average` is the mean of the
+ * student's scores in that subject; `assessment_count` how many contributed.
+ */
+export interface SubjectStat {
+  subject_id: number
+  subject_name: string
+  average: number
+  assessment_count: number
+}
+
 export interface StudentTracking {
   student: Student
   recent_assessments: AssessmentSummary[]
+  /** Mean of every scored assessment, across subjects; null when there are none. */
+  overall_average: number | null
+  /** Per-subject averages (backend Sesión 4); empty when no scores exist. */
+  by_subject: SubjectStat[]
   accommodations?: Accommodation[]
   accommodations_count: number
   barriers?: Barrier[]

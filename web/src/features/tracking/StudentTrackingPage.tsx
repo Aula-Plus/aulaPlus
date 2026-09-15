@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { Ban, CircleCheck, FileText, HeartHandshake, TriangleAlert } from "lucide-react"
+import { Ban, CircleCheck, FileText, GraduationCap, HeartHandshake, TriangleAlert } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
   canApproveAccommodation,
@@ -11,6 +11,7 @@ import {
 import { formatShortDate } from "@/lib/utils"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
@@ -381,6 +382,32 @@ export function StudentTrackingPage() {
         )}
       </SectionCard>
 
+      <SectionCard
+        title="Desempeño por materia"
+        action={<OverallAverageBadge value={tracking.overall_average} />}
+      >
+        {tracking.by_subject.length === 0 ? (
+          <p className="text-muted-foreground">Sin evaluaciones por materia.</p>
+        ) : (
+          <ul className="grid gap-2">
+            {tracking.by_subject.map((subject) => (
+              <li
+                key={subject.subject_id}
+                className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
+              >
+                <span className="font-medium">{subject.subject_name}</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {subject.average} ·{" "}
+                  {subject.assessment_count === 1
+                    ? "1 evaluación"
+                    : `${subject.assessment_count} evaluaciones`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+
       <StudentPerformanceChart studentId={studentId} />
 
       <ScheduledFollowUpsPanel studentId={studentId} />
@@ -427,6 +454,25 @@ function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodat
     <Badge tone="neutral">Vigente</Badge>
   ) : (
     <Badge tone="neutral">No vigente</Badge>
+  )
+}
+
+/**
+ * The "Promedio general" chip shown alongside the per-subject section. Renders
+ * an em dash when the average is null so "no scores yet" is never confused with
+ * a genuine average of 0.
+ */
+function OverallAverageBadge({ value }: { value: number | null }) {
+  return (
+    <Card className="border-info-background bg-info-background/40">
+      <CardContent className="flex items-center gap-2 px-3 py-1.5">
+        <GraduationCap className="size-4 text-info" aria-hidden="true" />
+        <span className="text-sm text-muted-foreground">Promedio general</span>
+        <span className="text-base font-semibold tabular-nums text-info">
+          {value ?? "—"}
+        </span>
+      </CardContent>
+    </Card>
   )
 }
 

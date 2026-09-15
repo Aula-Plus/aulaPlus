@@ -28,6 +28,10 @@ function baseTracking(): StudentTracking {
     barriers_count: 0,
     recent_comments: [],
     open_alerts_count: 1,
+    overall_average: 8,
+    by_subject: [
+      { subject_id: 1, subject_name: "Matemática", average: 7, assessment_count: 2 },
+    ],
   }
 }
 
@@ -114,6 +118,31 @@ describe("StudentTrackingPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /resolver/i }))
     expect(resolveAlert).toHaveBeenCalledWith(5)
+  })
+
+  it("shows the overall average and per-subject performance", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText(/promedio general/i)).toBeInTheDocument()
+    expect(screen.getByText("Desempeño por materia")).toBeInTheDocument()
+    expect(screen.getByText("Matemática")).toBeInTheDocument()
+  })
+
+  it("shows an empty state for per-subject performance when there are no scores", async () => {
+    const tracking = baseTracking()
+    tracking.overall_average = null
+    tracking.by_subject = []
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText(/sin evaluaciones por materia/i)).toBeInTheDocument()
   })
 
   it("shows an alert count only (no detail, no resolve) when the viewer lacks clinical access", async () => {
