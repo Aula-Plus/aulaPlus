@@ -50,3 +50,18 @@ function something()
 {
     // ..
 }
+
+/**
+ * Attach a teacher to a group so they "lead" it, satisfying the group_teacher
+ * pivot's now-required subject_id (Session 2, Option A: every teacher-in-group
+ * row carries a subject). Setups that only care that the teacher leads the
+ * group — authorization, tracking, comments — don't care which subject, so a
+ * throwaway subject in the group's school is created when none is given.
+ */
+function leadGroup(\App\Models\Group $group, \App\Models\User $teacher, ?\App\Models\Subject $subject = null): \App\Models\Subject
+{
+    $subject ??= \App\Models\Subject::factory()->create(['school_id' => $group->school_id]);
+    $group->teachers()->attach($teacher->getKey(), ['subject_id' => $subject->id]);
+
+    return $subject;
+}

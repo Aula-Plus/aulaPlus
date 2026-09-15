@@ -86,7 +86,7 @@ it('is available to a teacher leading the group with no extra clinical gate', fu
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
     Accommodation::factory()->create(['student_id' => $student->id, 'type' => 'tiempo extra', 'active' => true]);

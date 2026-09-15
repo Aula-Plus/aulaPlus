@@ -86,7 +86,7 @@ it('lists only students in groups a teacher leads, but all students for school-w
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $ownGroup = Group::factory()->create(['school_id' => $school->id]);
-    $ownGroup->teachers()->attach($teacher);
+    leadGroup($ownGroup, $teacher);
     $otherGroup = Group::factory()->create(['school_id' => $school->id]);
 
     $ownStudent = Student::factory()->create(['school_id' => $school->id]);

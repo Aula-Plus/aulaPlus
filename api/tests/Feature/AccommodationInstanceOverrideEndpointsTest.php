@@ -21,7 +21,7 @@ function overrideGraph(School $school): array
 {
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
 
     $student = Student::factory()->create(['school_id' => $school->id]);
     $group->students()->attach($student, ['school_year' => 2026]);

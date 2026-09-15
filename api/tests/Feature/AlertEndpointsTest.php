@@ -26,7 +26,7 @@ it('rejects a teacher (even one who teaches the student) from resolving an alert
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
     $alert = Alert::factory()->create(['student_id' => $student->id, 'resolved' => false]);
@@ -53,7 +53,7 @@ it('forbids a teacher from listing alerts for a student or group', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
     Alert::factory()->create(['student_id' => $student->id, 'resolved' => false]);

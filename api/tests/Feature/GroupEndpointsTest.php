@@ -2,6 +2,7 @@
 
 use App\Models\Group;
 use App\Models\School;
+use App\Models\Subject;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 
@@ -24,26 +25,29 @@ it('lets a director list, create, update and delete groups in their school', fun
     $this->getJson('/api/groups')->assertOk()->assertJsonCount(0, 'data');
 });
 
-it('lets a director assign teachers to a group', function () {
+it('surfaces a group\'s teachers on the resource', function () {
+    // Teacher membership is per-subject now (Session 2, Option A) and assigned
+    // through the dedicated teacher-assignment endpoint rather than a
+    // subjectless teacher_ids field on group create/update. The group resource
+    // still exposes the leading teachers.
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create(['name' => 'Ana Pérez']);
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher, Subject::factory()->create(['school_id' => $school->id]));
+
     Sanctum::actingAs($director);
 
-    $create = $this->postJson('/api/groups', [
-        'name' => '3° A',
-        'school_year' => 2026,
-        'teacher_ids' => [$teacher->id],
-    ]);
-
-    $create->assertCreated()->assertJsonPath('data.teachers.0.id', $teacher->id);
+    $this->getJson("/api/groups/{$group->id}")
+        ->assertOk()
+        ->assertJsonPath('data.teachers.0.id', $teacher->id);
 });
 
 it('rejects a teacher trying to create, update or delete a group', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     Sanctum::actingAs($teacher);
 
     $this->postJson('/api/groups', ['name' => '3° A', 'school_year' => 2026])->assertForbidden();
@@ -57,7 +61,7 @@ it('lists only the groups a teacher leads, but all groups for school-wide roles'
     $director = User::factory()->forSchool($school)->director()->create();
 
     $ownGroup = Group::factory()->create(['school_id' => $school->id]);
-    $ownGroup->teachers()->attach($teacher);
+    leadGroup($ownGroup, $teacher);
     Group::factory()->create(['school_id' => $school->id]);
 
     Sanctum::actingAs($teacher);

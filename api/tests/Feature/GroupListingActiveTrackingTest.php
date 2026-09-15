@@ -63,7 +63,7 @@ it('includes the column for a teacher who leads the group', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    $group->teachers()->attach($teacher);
+    leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     enrolInGroup($student, $group);
     Barrier::factory()->create(['student_id' => $student->id, 'active' => true]);
