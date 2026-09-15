@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\Assessment;
+use App\Models\Group;
 use App\Models\School;
 use App\Models\Subject;
 use App\Models\User;
@@ -8,6 +10,7 @@ use App\Support\Tenancy;
 use Database\Seeders\RoleSeeder;
 
 use function Pest\Laravel\actingAs;
+use function Pest\Laravel\deleteJson;
 use function Pest\Laravel\getJson;
 use function Pest\Laravel\postJson;
 
@@ -72,4 +75,24 @@ it('allows reusing the name of a soft-deleted subject', function () {
     postJson('/api/v1/subjects', ['name' => 'Matemática'])
         ->assertCreated()
         ->assertJsonPath('data.name', 'Matemática');
+});
+
+it('lets a director delete an unused subject', function () {
+    $subject = Subject::factory()->for($this->school)->create(['name' => 'Matemática']);
+    actingAs(makeUser($this->school, Role::Director));
+
+    deleteJson("/api/v1/subjects/{$subject->id}")->assertNoContent();
+});
+
+it('refuses to delete a subject that is in use', function () {
+    $subject = Subject::factory()->for($this->school)->create(['name' => 'Matemática']);
+    $group = Group::factory()->create(['school_id' => $this->school->id]);
+    Assessment::factory()->for($group)->create(['subject_id' => $subject->id]);
+
+    actingAs(makeUser($this->school, Role::Director));
+
+    // A subject referenced by an assessment (or plan/assignment) can't be deleted
+    // — otherwise those rows would point at a soft-deleted subject.
+    deleteJson("/api/v1/subjects/{$subject->id}")->assertStatus(422);
+    expect(Subject::find($subject->id))->not->toBeNull();
 });
