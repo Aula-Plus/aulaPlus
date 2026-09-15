@@ -16,6 +16,7 @@ use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignApprovalController;
@@ -49,6 +50,11 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])
     ->middleware('throttle:6,1')
     ->name('login');
+
+// Public, token-gated invitation acceptance (no session yet). The token is the
+// authorization gate; both routes are rate-limited.
+Route::get('/invitations/{token}', [InvitationController::class, 'show'])
+    ->middleware('throttle:10,1');
 
 // Authenticated endpoints. Every route below requires a valid first-party
 // session (or bearer token) resolved by the "sanctum" guard.
