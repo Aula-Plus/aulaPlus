@@ -26,7 +26,7 @@ use Spatie\Permission\Traits\HasRoles;
  * by the current school would recurse. Cross-school leakage of user rows is
  * instead prevented explicitly in queries/policies.
  */
-#[Fillable(['name', 'email', 'password', 'school_id', 'photo_url'])]
+#[Fillable(['name', 'email', 'password', 'school_id', 'photo_url', 'disabled_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {

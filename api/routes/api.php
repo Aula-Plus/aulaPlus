@@ -177,5 +177,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/{user}', [UserController::class, 'show']);
         Route::patch('/users/{user}', [UserController::class, 'update']);
+        Route::post('/users/{user}/disable', [UserController::class, 'disable']);
+        Route::post('/users/{user}/enable', [UserController::class, 'enable']);
     });
 });

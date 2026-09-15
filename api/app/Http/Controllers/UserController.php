@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\ManagedUserResource;
@@ -11,6 +12,7 @@ use App\Notifications\UserInvitationNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Director-only staff management. User rows are not SchoolScope-bound, so every
@@ -77,5 +79,55 @@ class UserController extends Controller
         }
 
         return new ManagedUserResource($user->refresh());
+    }
+
+    public function disable(Request $request, User $user): ManagedUserResource
+    {
+        $this->authorize('disable', $user);
+
+        if ($user->id === $request->user()->id) {
+            throw ValidationException::withMessages([
+                'user' => 'No podés desactivar tu propia cuenta.',
+            ]);
+        }
+
+        if ($this->isLastActiveDirector($user)) {
+            throw ValidationException::withMessages([
+                'user' => 'No podés desactivar al único director activo de la escuela.',
+            ]);
+        }
+
+        $user->update(['disabled_at' => now()]);
+
+        return new ManagedUserResource($user->refresh());
+    }
+
+    public function enable(User $user): ManagedUserResource
+    {
+        $this->authorize('enable', $user);
+
+        $user->update(['disabled_at' => null]);
+
+        return new ManagedUserResource($user->refresh());
+    }
+
+    /**
+     * Whether disabling this user would leave the school with no active
+     * director — the lockout guard.
+     */
+    protected function isLastActiveDirector(User $user): bool
+    {
+        if (! $user->hasRole(Role::Director->value)) {
+            return false;
+        }
+
+        $otherActiveDirectors = User::query()
+            ->where('school_id', $user->school_id)
+            ->whereKeyNot($user->id)
+            ->whereNull('disabled_at')
+            ->role(Role::Director->value)
+            ->count();
+
+        return $otherActiveDirectors === 0;
     }
 }
