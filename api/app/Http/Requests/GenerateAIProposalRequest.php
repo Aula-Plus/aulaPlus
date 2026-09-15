@@ -56,7 +56,10 @@ class GenerateAIProposalRequest extends FormRequest
         return match (AIProposalType::tryFrom((string) $this->input('type'))) {
             AIProposalType::AnnualPlan => [
                 'parameters.curricular_framework_id' => ['required', $this->frameworkBelongsToGroup()],
-                'parameters.subject' => ['required', 'string'],
+                'parameters.subject_id' => [
+                    'required',
+                    Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
+                ],
                 'parameters.year' => ['required', 'integer'],
                 'parameters.student_id' => ['nullable', $this->studentBelongsToGroup()],
                 'parameters.focus' => ['nullable', 'string'],
@@ -81,6 +84,12 @@ class GenerateAIProposalRequest extends FormRequest
             AIProposalType::Assessment => [
                 'parameters.focus' => ['required', 'string'],
                 'parameters.assessment_type' => ['required', new Enum(AssessmentType::class)],
+                // An applied assessment proposal creates a real Assessment, which
+                // now requires a subject in the school's catalog (decision C1).
+                'parameters.subject_id' => [
+                    'required',
+                    Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
+                ],
                 'parameters.duration_minutes' => ['nullable', 'integer'],
             ],
             default => [],

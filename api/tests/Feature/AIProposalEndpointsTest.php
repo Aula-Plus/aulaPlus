@@ -12,6 +12,7 @@ use App\Models\CurricularFramework;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\School;
+use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -113,6 +114,31 @@ it('validates required per-type parameters', function () {
     ])->assertStatus(422)->assertJsonValidationErrors('parameters.assessment_type');
 });
 
+it('requires subject_id (existing in the school) for an annual_plan generation', function () {
+    Queue::fake();
+    [$school, $teacher, $group] = teacherWithGroupAndPlan();
+    $framework = CurricularFramework::factory()->create();
+    $group->curricularFrameworks()->attach($framework);
+    $foreignSubject = Subject::factory()->create(['school_id' => School::factory()->create()->id]);
+    Sanctum::actingAs($teacher);
+
+    // Missing subject_id → 422.
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'annual_plan',
+        'parameters' => ['curricular_framework_id' => $framework->id, 'year' => 2026],
+    ])->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+
+    // A subject from another school → 422 (tenant isolation).
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'annual_plan',
+        'parameters' => [
+            'curricular_framework_id' => $framework->id,
+            'subject_id' => $foreignSubject->id,
+            'year' => 2026,
+        ],
+    ])->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+});
+
 it('lets the requester and a school-wide role poll a proposal, but not an unrelated teacher', function () {
     [$school, $teacher, $group] = teacherWithGroupAndPlan();
     $director = User::factory()->forSchool($school)->director()->create();
@@ -172,6 +198,7 @@ it('applies a completed annual_plan proposal with the applier as the author', fu
     // Link a framework to the group so the plan's FK validation resolves.
     $frameworkModel = CurricularFramework::factory()->create();
     $group->curricularFrameworks()->attach($frameworkModel);
+    $subject = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Matemática']);
 
     $proposal = AIProposal::factory()->completed(['description' => 'Plan anual generado'])->create([
         'group_id' => $group->id,
@@ -179,7 +206,7 @@ it('applies a completed annual_plan proposal with the applier as the author', fu
         'type' => AIProposalType::AnnualPlan,
         'input_parameters' => [
             'curricular_framework_id' => $frameworkModel->id,
-            'subject' => 'Matemática',
+            'subject_id' => $subject->id,
             'year' => now()->year,
             'language' => 'Español',
         ],
@@ -191,12 +218,13 @@ it('applies a completed annual_plan proposal with the applier as the author', fu
     $plan = AnnualPlan::where('description', 'Plan anual generado')->firstOrFail();
     expect($plan->teacher_id)->toBe($teacher->id)
         ->and($plan->group_id)->toBe($group->id)
-        ->and($plan->subject)->toBe('Matemática');
+        ->and($plan->subject_id)->toBe($subject->id);
 });
 
 it('applies a completed assessment proposal, syncing curricular items', function () {
     [$school, $teacher, $group] = teacherWithGroupAndPlan();
     CurricularItem::factory()->create(['code' => 'LEN-010']);
+    $subject = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Lengua']);
     $proposal = AIProposal::factory()->completed([
         'purpose' => 'Evaluar comprensión lectora',
         'duration_minutes' => 60,
@@ -206,7 +234,7 @@ it('applies a completed assessment proposal, syncing curricular items', function
         'group_id' => $group->id,
         'requested_by_id' => $teacher->id,
         'type' => AIProposalType::Assessment,
-        'input_parameters' => ['focus' => 'lectura', 'assessment_type' => 'written'],
+        'input_parameters' => ['focus' => 'lectura', 'assessment_type' => 'written', 'subject_id' => $subject->id],
     ]);
     Sanctum::actingAs($teacher);
 
@@ -216,6 +244,7 @@ it('applies a completed assessment proposal, syncing curricular items', function
     expect($assessment->teacher_id)->toBe($teacher->id)
         ->and($assessment->type->value)->toBe('written')
         ->and($assessment->purpose)->toBe('Evaluar comprensión lectora')
+        ->and($assessment->subject_id)->toBe($subject->id)
         ->and($assessment->curricularItems)->toHaveCount(1);
 });
 
