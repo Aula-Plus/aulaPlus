@@ -71,3 +71,57 @@ it('removes a single (teacher, subject) assignment', function () {
 
     expect($this->teacher->fresh()->teachesSubjectInGroup($this->group, $this->subject))->toBeFalse();
 });
+
+it('lets a teacher hold two subjects in the same group (Option A: one row each)', function () {
+    $english = Subject::factory()->for($this->group->school)->create(['name' => 'Inglés']);
+    actingAs(director($this->group));
+
+    postJson("/api/v1/groups/{$this->group->id}/teacher-assignments", [
+        'teacher_id' => $this->teacher->id,
+        'subject_id' => $this->subject->id,
+    ])->assertCreated();
+
+    // Assigning a second subject must ADD a row, not overwrite the first.
+    postJson("/api/v1/groups/{$this->group->id}/teacher-assignments", [
+        'teacher_id' => $this->teacher->id,
+        'subject_id' => $english->id,
+    ])->assertCreated();
+
+    $teacher = $this->teacher->fresh();
+    expect($teacher->teachesSubjectInGroup($this->group, $this->subject))->toBeTrue();
+    expect($teacher->teachesSubjectInGroup($this->group, $english))->toBeTrue();
+});
+
+it('is idempotent on a repeated assignment', function () {
+    actingAs(director($this->group));
+
+    foreach (range(1, 2) as $ignored) {
+        postJson("/api/v1/groups/{$this->group->id}/teacher-assignments", [
+            'teacher_id' => $this->teacher->id,
+            'subject_id' => $this->subject->id,
+        ])->assertCreated();
+    }
+
+    $count = \Illuminate\Support\Facades\DB::table('group_teacher')
+        ->where('group_id', $this->group->id)
+        ->where('teacher_id', $this->teacher->id)
+        ->where('subject_id', $this->subject->id)
+        ->count();
+    expect($count)->toBe(1);
+});
+
+it('removes only the named pair, leaving the teacher\'s other subject', function () {
+    $english = Subject::factory()->for($this->group->school)->create(['name' => 'Inglés']);
+    $this->group->teachers()->attach($this->teacher->id, ['subject_id' => $this->subject->id]);
+    $this->group->teachers()->attach($this->teacher->id, ['subject_id' => $english->id]);
+    actingAs(director($this->group));
+
+    deleteJson("/api/v1/groups/{$this->group->id}/teacher-assignments", [
+        'teacher_id' => $this->teacher->id,
+        'subject_id' => $this->subject->id,
+    ])->assertNoContent();
+
+    $teacher = $this->teacher->fresh();
+    expect($teacher->teachesSubjectInGroup($this->group, $this->subject))->toBeFalse();
+    expect($teacher->teachesSubjectInGroup($this->group, $english))->toBeTrue();
+});
