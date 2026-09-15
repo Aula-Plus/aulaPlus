@@ -9,11 +9,10 @@ use App\Models\User;
  * Staff account management. director-only, same two-layer pattern as the
  * other Policies: tenant isolation first, then the role rule.
  *
- * Deactivating a staff account in the permission matrix has no separate
- * model action yet — it's covered by `update` (a director toggling an
- * `active`-like state is still updating the user record). Delete is
- * intentionally not granted to anyone yet: no hard-delete endpoint for
- * staff accounts exists in this session's scope.
+ * Disabling and enabling a staff account are their own abilities (`disable`,
+ * `enable`), not folded into `update` — but they follow the same rule:
+ * director, same school. Delete is intentionally not granted to anyone yet:
+ * no hard-delete endpoint for staff accounts exists in this session's scope.
  */
 class UserPolicy
 {
@@ -34,6 +33,24 @@ class UserPolicy
     }
 
     public function update(User $user, User $target): bool
+    {
+        return $this->sharesSchool($user, $target)
+            && $user->hasRole(Role::Director->value);
+    }
+
+    /**
+     * Disabling a staff account is director-only, same-school, like update.
+     */
+    public function disable(User $user, User $target): bool
+    {
+        return $this->sharesSchool($user, $target)
+            && $user->hasRole(Role::Director->value);
+    }
+
+    /**
+     * Enabling a staff account is director-only, same-school, like update.
+     */
+    public function enable(User $user, User $target): bool
     {
         return $this->sharesSchool($user, $target)
             && $user->hasRole(Role::Director->value);

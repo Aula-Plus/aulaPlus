@@ -8,6 +8,7 @@ import {
   canManageGroups,
   canManageScreeningTests,
   canManageStudents,
+  canManageUsers,
   canProposeBarrierAccommodation,
   canResolveAlert,
   canValidateBarrierAccommodation,
@@ -137,6 +138,13 @@ const cases: {
   {
     name: "canApproveScreeningTestDesign",
     fn: canApproveScreeningTestDesign,
+    director: true,
+    psychopedagogue: false,
+    teacher: false,
+  },
+  {
+    name: "canManageUsers",
+    fn: canManageUsers,
     director: true,
     psychopedagogue: false,
     teacher: false,

@@ -83,6 +83,16 @@ export function canManageSubjects(user: User | null): boolean {
   return isDirector(user)
 }
 
+// ── Users / staff management ────────────────────────────────────────────────
+
+/**
+ * Manage staff (create, edit, disable, resend invitations). Mirror of
+ * `UserPolicy` (role portion): director only. UX-only gate.
+ */
+export function canManageUsers(user: User | null): boolean {
+  return isDirector(user)
+}
+
 // ── Students ────────────────────────────────────────────────────────────────
 
 /** Create/edit a Student. Mirror of `StudentPolicy::create`/`update` (role portion): school-wide staff. */

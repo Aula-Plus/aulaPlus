@@ -16,6 +16,7 @@ use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignApprovalController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -48,6 +50,13 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])
     ->middleware('throttle:6,1')
     ->name('login');
+
+// Public, token-gated invitation acceptance (no session yet). The token is the
+// authorization gate; both routes are rate-limited.
+Route::get('/invitations/{token}', [InvitationController::class, 'show'])
+    ->middleware('throttle:10,1');
+Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])
+    ->middleware('throttle:10,1');
 
 // Authenticated endpoints. Every route below requires a valid first-party
 // session (or bearer token) resolved by the "sanctum" guard.
@@ -169,5 +178,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);
         Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store']);
         Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy']);
+
+        // Session: user management (docs/superpowers/specs/2026-09-15-user-
+        // management-design.md). Director-only staff onboarding + lifecycle.
+        Route::get('/users', [UserController::class, 'index']);
+        Route::post('/users', [UserController::class, 'store']);
+        Route::get('/users/{user}', [UserController::class, 'show']);
+        Route::patch('/users/{user}', [UserController::class, 'update']);
+        Route::post('/users/{user}/disable', [UserController::class, 'disable']);
+        Route::post('/users/{user}/enable', [UserController::class, 'enable']);
+        Route::post('/users/{user}/resend-invitation', [UserController::class, 'resendInvitation']);
     });
 });

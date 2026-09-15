@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { AuthProvider } from "@/features/auth/AuthProvider"
 import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
+import { AcceptInvitationPage } from "@/features/auth/AcceptInvitationPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { GroupsListPage } from "@/features/groups/GroupsListPage"
 import { GroupFormPage } from "@/features/groups/GroupFormPage"
@@ -15,6 +16,8 @@ import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
+import { UsersListPage } from "@/features/users/UsersListPage"
+import { UserFormPage } from "@/features/users/UserFormPage"
 
 function App() {
   return (
@@ -22,6 +25,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/aceptar-invitacion" element={<AcceptInvitationPage />} />
           <Route
             path="/"
             element={
@@ -108,6 +112,17 @@ function App() {
               </ProtectedLayout>
             }
           />
+          <Route
+            path="/usuarios"
+            element={
+              <ProtectedLayout>
+                <UsersListPage />
+              </ProtectedLayout>
+            }
+          >
+            <Route path="nueva" element={<UserFormPage />} />
+            <Route path=":id" element={<UserFormPage />} />
+          </Route>
           <Route
             path="/adopcion"
             element={

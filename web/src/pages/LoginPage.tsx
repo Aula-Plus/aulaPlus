@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { isAxiosError } from "axios"
 import { useAuth } from "@/features/auth/AuthContext"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,8 @@ type LoginValues = z.infer<typeof loginSchema>
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const successMessage = (location.state as { message?: string } | null)?.message
   const [formError, setFormError] = useState<string | null>(null)
 
   const {
@@ -61,6 +63,11 @@ export function LoginPage() {
           <CardDescription>Ingresá con tu cuenta institucional.</CardDescription>
         </CardHeader>
         <CardContent>
+          {successMessage && (
+            <p role="status" className="mb-4 text-sm text-success">
+              {successMessage}
+            </p>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
