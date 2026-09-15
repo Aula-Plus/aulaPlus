@@ -3,7 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Models\Student;
+use App\Support\Tenancy;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Query params for GET /api/v1/students/{student}/performance-timeline
@@ -35,6 +37,10 @@ class StudentPerformanceTimelineRequest extends FormRequest
         return [
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'subject_id' => [
+                'nullable', 'integer',
+                Rule::exists('subjects', 'id')->where('school_id', Tenancy::schoolId()),
+            ],
         ];
     }
 }

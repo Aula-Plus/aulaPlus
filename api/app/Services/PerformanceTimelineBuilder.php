@@ -48,10 +48,10 @@ class PerformanceTimelineBuilder
     /**
      * @return array{results: Collection<int, AssessmentResult>, marks: array<int, array<string, mixed>>}
      */
-    public function build(Student $student, User $user, ?string $from, ?string $to): array
+    public function build(Student $student, User $user, ?string $from, ?string $to, ?int $subjectId = null): array
     {
         return [
-            'results' => $this->results($student, $from, $to),
+            'results' => $this->results($student, $from, $to, $subjectId),
             'marks' => $this->marks($student, $user, $from, $to),
         ];
     }
@@ -59,17 +59,19 @@ class PerformanceTimelineBuilder
     /**
      * The performance line itself: reuses the Session 6 rule
      * (GET /students/{student}/results) — ordered by the parent assessment's
-     * `administered_at`, filtered to the window.
+     * `administered_at`, filtered to the window. An optional `$subjectId`
+     * narrows the line to a single subject (default: all subjects).
      *
      * @return Collection<int, AssessmentResult>
      */
-    protected function results(Student $student, ?string $from, ?string $to): Collection
+    protected function results(Student $student, ?string $from, ?string $to, ?int $subjectId = null): Collection
     {
         return AssessmentResult::query()
             ->where('assessment_results.student_id', $student->id)
             ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
             ->when($from, fn (Builder $q) => $q->whereDate('assessments.administered_at', '>=', $from))
             ->when($to, fn (Builder $q) => $q->whereDate('assessments.administered_at', '<=', $to))
+            ->when($subjectId, fn (Builder $q) => $q->where('assessments.subject_id', $subjectId))
             ->orderBy('assessments.administered_at')
             ->orderBy('assessment_results.id')
             ->select('assessment_results.*')

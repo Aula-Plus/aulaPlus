@@ -32,6 +32,7 @@ class StudentPerformanceTimelineController extends Controller
             $request->user(),
             $request->validated('from'),
             $request->validated('to'),
+            $request->validated('subject_id') !== null ? (int) $request->validated('subject_id') : null,
         );
 
         return response()->json([
