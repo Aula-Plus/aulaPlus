@@ -57,7 +57,7 @@ export function LoginPage() {
     <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Portal Docentes</CardTitle>
+          <CardTitle className="text-2xl">Aula+</CardTitle>
           <CardDescription>Ingresá con tu cuenta institucional.</CardDescription>
         </CardHeader>
         <CardContent>

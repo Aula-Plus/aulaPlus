@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react"
+import { CalendarClock } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SectionCard } from "@/components/ui/section-card"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
 import type { ScheduledFollowUp } from "@/types"
@@ -72,9 +76,9 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
   }
 
   return (
-    <section className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Seguimientos programados</h2>
+    <SectionCard
+      title="Seguimientos programados"
+      action={
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -83,8 +87,9 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
           />
           Mostrar resueltos
         </label>
-      </div>
-
+      }
+    >
+      <div className="grid gap-4">
       <NewFollowUpForm studentId={studentId} onCreated={handleCreated} />
 
       {loadError && <p className="text-sm text-destructive">{loadError}</p>}
@@ -92,11 +97,14 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
       {followUps === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : followUps.length === 0 ? (
-        <p className="text-muted-foreground">
-          {showResolved
-            ? "Todavía no hay seguimientos programados."
-            : "No hay seguimientos pendientes."}
-        </p>
+        <EmptyState
+          icon={CalendarClock}
+          message={
+            showResolved
+              ? "Todavía no hay seguimientos programados."
+              : "No hay seguimientos pendientes."
+          }
+        />
       ) : (
         <ul className="grid gap-3">
           {followUps.map((followUp) => (
@@ -104,7 +112,8 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
           ))}
         </ul>
       )}
-    </section>
+      </div>
+    </SectionCard>
   )
 }
 
@@ -225,11 +234,7 @@ function FollowUpRow({
         </div>
         {/* Painted straight from the server boolean — the component never does
             date arithmetic (spec §4). */}
-        {followUp.is_overdue && (
-          <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-            Vencido
-          </span>
-        )}
+        {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
       </div>
 
       {followUp.resolved ? (

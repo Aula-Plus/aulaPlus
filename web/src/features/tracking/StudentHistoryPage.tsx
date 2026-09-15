@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
+import { FileClock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
+import { PageHeader } from "@/components/ui/page-header"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatShortDate } from "@/lib/utils"
 import {
@@ -70,23 +74,20 @@ export function StudentHistoryPage() {
   }
 
   return (
-    <div className="grid gap-4">
-      <div>
-        <Link
-          className="text-sm text-primary underline-offset-4 hover:underline"
-          to={`/alumnos/${studentId}/seguimiento`}
-        >
-          ← Volver al seguimiento
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Historial de auditoría</h1>
-      </div>
+    <div className="grid gap-6">
+      <PageHeader
+        backTo={`/alumnos/${studentId}/seguimiento`}
+        backLabel="Volver al seguimiento"
+        title="Historial de auditoría"
+      />
 
       {!history ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : history.data.length === 0 ? (
-        <p className="text-muted-foreground">No hay registros en el historial.</p>
+        <EmptyState icon={FileClock} message="No hay registros en el historial." />
       ) : (
         <>
+          <Card className="overflow-hidden py-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -103,6 +104,7 @@ export function StudentHistoryPage() {
               ))}
             </TableBody>
           </Table>
+          </Card>
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>

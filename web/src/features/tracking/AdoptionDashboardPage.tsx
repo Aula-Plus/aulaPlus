@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react"
+import { LogIn, PenLine } from "lucide-react"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canViewAdoptionDashboard } from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { EmptyState } from "@/components/ui/empty-state"
+import { PageHeader } from "@/components/ui/page-header"
+import { SectionCard } from "@/components/ui/section-card"
+import { StatCard } from "@/components/ui/stat-card"
 import type { AdoptionDashboard, WeeklySeriesPoint } from "@/types"
 import { fetchAdoptionDashboard } from "./adoptionApi"
 
@@ -46,59 +58,115 @@ export function AdoptionDashboardPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Tablero de adopción</h1>
-        <p className="text-muted-foreground">
-          Indicadores de uso del piloto (últimos 30 días).
-        </p>
-      </div>
+      <PageHeader
+        title="Tablero de adopción"
+        description="Indicadores de uso del piloto (últimos 30 días)"
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Rate label="Docentes con login" value={dashboard.teacher_login_rate_30d} />
-        <Rate label="Docentes con planificación" value={dashboard.teacher_planning_rate_30d} />
+        <StatCard
+          label="Docentes con login"
+          value={dashboard.teacher_login_rate_30d}
+          suffix="%"
+          icon={LogIn}
+        />
+        <StatCard
+          label="Docentes con planificación"
+          value={dashboard.teacher_planning_rate_30d}
+          suffix="%"
+          icon={PenLine}
+        />
       </div>
 
-      <SeriesTable title="Logins por semana" series={dashboard.weekly_login_series} />
-      <SeriesTable title="Contenido creado por semana" series={dashboard.weekly_content_series} />
+      <WeeklySeries title="Logins por semana" series={dashboard.weekly_login_series} />
+      <WeeklySeries title="Contenido creado por semana" series={dashboard.weekly_content_series} />
     </div>
   )
 }
 
-function Rate({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-3xl font-semibold">{value}%</p>
-        <p className="text-sm text-muted-foreground">{label}</p>
-      </CardContent>
-    </Card>
-  )
+interface WeeklyDatum {
+  label: string
+  count: number
 }
 
-function SeriesTable({ title, series }: { title: string; series: WeeklySeriesPoint[] }) {
+/**
+ * Weekly counts as a single-series bar chart — magnitude over time, so bars,
+ * one brand hue, no legend (the title names the series). A visually-hidden
+ * data table is the accessible/table view of the same numbers (dataviz skill:
+ * a table view always exists), and is what non-visual readers get.
+ */
+function WeeklySeries({ title, series }: { title: string; series: WeeklySeriesPoint[] }) {
+  const data: WeeklyDatum[] = series.map((point) => ({
+    label: formatShortDate(point.week_start),
+    count: point.count,
+  }))
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Semana</TableHead>
-              <TableHead>Eventos</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {series.map((point) => (
-              <TableRow key={point.week_start}>
-                <TableCell>{formatShortDate(point.week_start)}</TableCell>
-                <TableCell>{point.count}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <SectionCard title={title}>
+      {data.length === 0 ? (
+        <EmptyState message="Sin datos en este período." />
+      ) : (
+        <>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                <CartesianGrid vertical={false} stroke="var(--color-border)" />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
+                />
+                <Tooltip
+                  cursor={{ fill: "var(--color-muted)" }}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid var(--color-border)",
+                    background: "var(--color-popover)",
+                    color: "var(--color-popover-foreground)",
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: "var(--color-muted-foreground)" }}
+                />
+                <Bar
+                  dataKey="count"
+                  name="Eventos"
+                  fill="var(--color-primary)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={48}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Accessible/table view of the same series (dataviz skill). Named via
+              aria-label (not a visible caption) so it doesn't duplicate the
+              section title. */}
+          <table className="sr-only" aria-label={title}>
+            <thead>
+              <tr>
+                <th>Semana</th>
+                <th>Eventos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((point) => (
+                <tr key={point.label}>
+                  <td>{point.label}</td>
+                  <td>{point.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </SectionCard>
   )
 }

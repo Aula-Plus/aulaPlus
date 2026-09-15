@@ -1,12 +1,7 @@
 import { useAuth } from "@/features/auth/AuthContext"
 import { roleLabels } from "@/types"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { PageHeader } from "@/components/ui/page-header"
+import { SectionCard } from "@/components/ui/section-card"
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -15,29 +10,21 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Hola, {user.name}</h1>
-        <p className="text-muted-foreground">
-          {user.school?.name ?? "Sin escuela asignada"}
-        </p>
-      </div>
+      <PageHeader
+        title={`Hola, ${user.name}`}
+        description={user.school?.name ?? "Sin escuela asignada"}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tu cuenta</CardTitle>
-          <CardDescription>
-            Datos resueltos por el backend (Sanctum + Spatie roles).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm">
+      <SectionCard title="Tu cuenta">
+        <div className="grid gap-2 text-sm">
           <Row label="Email" value={user.email} />
           <Row label="Escuela" value={user.school?.name ?? "—"} />
           <Row
             label="Roles"
             value={user.roles.map((role) => roleLabels[role]).join(", ") || "—"}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
     </div>
   )
 }

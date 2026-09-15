@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import { Ban, CircleCheck, FileText, HeartHandshake, TriangleAlert } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
   canApproveAccommodation,
@@ -8,8 +9,12 @@ import {
   canViewStudentHistory,
 } from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
+import { Badge, type BadgeTone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
+import { PageHeader } from "@/components/ui/page-header"
+import { SectionCard } from "@/components/ui/section-card"
+import { StatCard } from "@/components/ui/stat-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   accommodationCategoryLabels,
@@ -30,10 +35,10 @@ import { StudentPerformanceChart } from "./StudentPerformanceChart"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput } from "./trackingApi"
 
-const severityBadgeClass: Record<Alert["severity"], string> = {
-  low: "bg-muted text-muted-foreground",
-  medium: "bg-amber-100 text-amber-800",
-  high: "bg-red-100 text-red-800",
+const severityTone: Record<Alert["severity"], BadgeTone> = {
+  low: "neutral",
+  medium: "warning",
+  high: "danger",
 }
 
 export function StudentTrackingPage() {
@@ -140,34 +145,44 @@ export function StudentTrackingPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/alumnos">
-          ← Volver a alumnos
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Seguimiento — {student.full_name}</h1>
+      <PageHeader
+        backTo="/alumnos"
+        backLabel="Volver a alumnos"
+        title={`Seguimiento — ${student.full_name}`}
+      >
         {showHistoryLink && (
-          <p className="mt-1">
-            <Link
-              className="text-sm text-primary underline-offset-4 hover:underline"
-              to={`/alumnos/${studentId}/historial`}
-            >
-              Ver historial de auditoría →
-            </Link>
-          </p>
+          <Link
+            className="text-sm text-primary underline-offset-4 hover:underline"
+            to={`/alumnos/${studentId}/historial`}
+          >
+            Ver historial de auditoría →
+          </Link>
         )}
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Indicator label="Alertas abiertas" value={tracking.open_alerts_count} />
-        <Indicator label="Adaptaciones vigentes" value={tracking.accommodations_count} />
-        <Indicator label="Barreras activas" value={tracking.barriers_count} />
+        <StatCard
+          label="Alertas abiertas"
+          value={tracking.open_alerts_count}
+          icon={TriangleAlert}
+          tone="danger"
+        />
+        <StatCard
+          label="Adaptaciones vigentes"
+          value={tracking.accommodations_count}
+          icon={HeartHandshake}
+          tone="info"
+        />
+        <StatCard
+          label="Barreras activas"
+          value={tracking.barriers_count}
+          icon={Ban}
+          tone="warning"
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos del alumno</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm">
+      <SectionCard title="Datos del alumno">
+        <div className="grid gap-2 text-sm">
           <Row label="Año de ingreso" value={String(student.enrollment_year)} />
           <Row label="Fecha de nacimiento" value={formatShortDate(student.birth_date)} />
           <Row
@@ -178,14 +193,13 @@ export function StudentTrackingPage() {
             label="Clases"
             value={student.groups.map((group) => group.name).join(", ") || "—"}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      <section className="grid gap-3">
-        <h2 className="text-lg font-semibold">Alertas abiertas</h2>
+      <SectionCard title="Alertas abiertas">
         {tracking.alerts ? (
           tracking.alerts.length === 0 ? (
-            <p className="text-muted-foreground">Sin alertas abiertas.</p>
+            <EmptyState icon={CircleCheck} message="Sin alertas abiertas." />
           ) : (
             <ul className="grid gap-3">
               {tracking.alerts.map((alert) => (
@@ -195,11 +209,9 @@ export function StudentTrackingPage() {
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs font-medium ${severityBadgeClass[alert.severity]}`}
-                      >
+                      <Badge tone={severityTone[alert.severity]}>
                         {alertSeverityLabels[alert.severity]}
-                      </span>
+                      </Badge>
                       <span className="text-xs text-muted-foreground">
                         {alertTypeLabels[alert.type]} · {formatShortDate(alert.created_at)}
                       </span>
@@ -220,25 +232,38 @@ export function StudentTrackingPage() {
             </ul>
           )
         ) : (
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {tracking.open_alerts_count} alerta(s) abierta(s). No tenés permiso para ver el detalle
             clínico.
           </p>
         )}
-      </section>
+      </SectionCard>
 
       {tracking.accommodations && (
-        <section className="grid gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Adaptaciones vigentes</h2>
-            {showManageAccommodations && (
+        <SectionCard
+          title="Adaptaciones vigentes"
+          action={
+            // When the list is empty the CTA lives in the empty state instead,
+            // so there is exactly one "Nueva adaptación" affordance per state.
+            showManageAccommodations && tracking.accommodations.length > 0 ? (
               <Button type="button" size="sm" onClick={handleNewAccommodation}>
                 Nueva adaptación
               </Button>
-            )}
-          </div>
+            ) : undefined
+          }
+        >
           {tracking.accommodations.length === 0 ? (
-            <p className="text-muted-foreground">Sin adaptaciones vigentes.</p>
+            <EmptyState
+              icon={HeartHandshake}
+              message="Sin adaptaciones vigentes."
+              action={
+                showManageAccommodations && (
+                  <Button type="button" size="sm" variant="outline" onClick={handleNewAccommodation}>
+                    Nueva adaptación
+                  </Button>
+                )
+              }
+            />
           ) : (
             <ul className="grid gap-2">
               {tracking.accommodations.map((accommodation) => {
@@ -253,9 +278,9 @@ export function StudentTrackingPage() {
                       <div>
                         <span className="font-medium">{accommodation.type}</span>
                         {accommodation.category && (
-                          <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          <Badge tone="neutral" className="ml-2">
                             {accommodationCategoryLabels[accommodation.category]}
-                          </span>
+                          </Badge>
                         )}
                         {accommodation.description && (
                           <p className="text-muted-foreground">{accommodation.description}</p>
@@ -305,14 +330,13 @@ export function StudentTrackingPage() {
               })}
             </ul>
           )}
-        </section>
+        </SectionCard>
       )}
 
       {tracking.barriers && (
-        <section className="grid gap-3">
-          <h2 className="text-lg font-semibold">Barreras activas</h2>
+        <SectionCard title="Barreras activas">
           {tracking.barriers.length === 0 ? (
-            <p className="text-muted-foreground">Sin barreras activas.</p>
+            <EmptyState icon={Ban} message="Sin barreras activas." />
           ) : (
             <ul className="grid gap-2">
               {tracking.barriers.map((barrier) => (
@@ -329,34 +353,33 @@ export function StudentTrackingPage() {
               ))}
             </ul>
           )}
-        </section>
+        </SectionCard>
       )}
 
-      <section className="grid gap-3">
-        <h2 className="text-lg font-semibold">Evaluaciones recientes</h2>
+      <SectionCard title="Evaluaciones recientes" bare={tracking.recent_assessments.length > 0}>
         {tracking.recent_assessments.length === 0 ? (
-          <p className="text-muted-foreground">Sin evaluaciones recientes.</p>
+          <EmptyState icon={FileText} message="Sin evaluaciones recientes." />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Tipo</TableHead>
+                <TableHead className="pl-6">Tipo</TableHead>
                 <TableHead>Variante</TableHead>
-                <TableHead>Fecha</TableHead>
+                <TableHead className="pr-6">Fecha</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tracking.recent_assessments.map((assessment) => (
                 <TableRow key={assessment.id}>
-                  <TableCell>{assessmentTypeLabels[assessment.type]}</TableCell>
+                  <TableCell className="pl-6">{assessmentTypeLabels[assessment.type]}</TableCell>
                   <TableCell>{assessment.variant_number ?? "—"}</TableCell>
-                  <TableCell>{formatShortDate(assessment.created_at)}</TableCell>
+                  <TableCell className="pr-6">{formatShortDate(assessment.created_at)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </section>
+      </SectionCard>
 
       <StudentPerformanceChart studentId={studentId} />
 
@@ -392,45 +415,18 @@ export function StudentTrackingPage() {
 function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
   if (accommodation.requires_external_approval) {
     if (accommodation.approved === true) {
-      return (
-        <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-          Aprobada
-        </span>
-      )
+      return <Badge tone="success">Aprobada</Badge>
     }
     if (accommodation.approved === false) {
-      return (
-        <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-          Rechazada
-        </span>
-      )
+      return <Badge tone="danger">Rechazada</Badge>
     }
-    return (
-      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-        Pendiente de aprobación
-      </span>
-    )
+    return <Badge tone="warning">Pendiente de aprobación</Badge>
   }
 
   return accommodation.is_effective ? (
-    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      Vigente
-    </span>
+    <Badge tone="neutral">Vigente</Badge>
   ) : (
-    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      No vigente
-    </span>
-  )
-}
-
-function Indicator({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-3xl font-semibold">{value}</p>
-        <p className="text-sm text-muted-foreground">{label}</p>
-      </CardContent>
-    </Card>
+    <Badge tone="neutral">No vigente</Badge>
   )
 }
 

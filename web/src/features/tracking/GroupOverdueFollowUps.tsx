@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { CalendarClock } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
+import { RowLink } from "@/components/ui/row-link"
+import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
 import type { ScheduledFollowUp } from "@/types"
 import { fetchGroupScheduledFollowUps } from "./scheduledFollowUpsApi"
@@ -38,14 +41,13 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
   }, [load])
 
   return (
-    <section className="grid gap-3">
-      <h2 className="text-lg font-semibold">Seguimientos vencidos</h2>
+    <SectionCard title="Seguimientos vencidos">
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : followUps === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : followUps.length === 0 ? (
-        <p className="text-muted-foreground">No hay seguimientos vencidos.</p>
+        <EmptyState icon={CalendarClock} message="No hay seguimientos vencidos." />
       ) : (
         <ul className="grid gap-3">
           {followUps.map((followUp) => (
@@ -59,16 +61,13 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
                   Vence: {formatShortDate(followUp.due_date)}
                 </p>
               </div>
-              <Link
-                className="shrink-0 text-primary underline-offset-4 hover:underline"
-                to={`/alumnos/${followUp.student_id}/seguimiento`}
-              >
+              <RowLink to={`/alumnos/${followUp.student_id}/seguimiento`} className="shrink-0">
                 Ver alumno
-              </Link>
+              </RowLink>
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </SectionCard>
   )
 }
