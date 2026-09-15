@@ -11,6 +11,7 @@ import {
 } from "recharts"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SectionCard } from "@/components/ui/section-card"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { formatShortDate } from "@/lib/utils"
 import {
@@ -101,9 +102,9 @@ export function GroupPerformanceChart({ groupId, studentCount }: GroupPerformanc
   }, [load])
 
   return (
-    <section className="grid gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-lg font-semibold">Desempeño del grupo</h2>
+    <SectionCard
+      title="Desempeño del grupo"
+      action={
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid gap-1.5">
             <Label htmlFor="group-performance-from">Desde</Label>
@@ -128,8 +129,8 @@ export function GroupPerformanceChart({ groupId, studentCount }: GroupPerformanc
             />
           </div>
         </div>
-      </div>
-
+      }
+    >
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : timeline === null ? (
@@ -137,7 +138,7 @@ export function GroupPerformanceChart({ groupId, studentCount }: GroupPerformanc
       ) : (
         <GroupPerformanceChartBody timeline={timeline} studentCount={studentCount} />
       )}
-    </section>
+    </SectionCard>
   )
 }
 

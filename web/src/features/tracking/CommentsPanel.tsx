@@ -1,6 +1,10 @@
 import { useState } from "react"
+import { MessageSquare } from "lucide-react"
+import { Badge, type BadgeTone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Label } from "@/components/ui/label"
+import { SectionCard } from "@/components/ui/section-card"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
@@ -9,10 +13,10 @@ import type { CommentInput } from "./trackingApi"
 
 const TONE_OPTIONS: CommentTone[] = ["positive", "neutral", "concerning"]
 
-const toneBadgeClass: Record<CommentTone, string> = {
-  positive: "bg-green-100 text-green-800",
-  neutral: "bg-muted text-muted-foreground",
-  concerning: "bg-red-100 text-red-800",
+const toneBadge: Record<CommentTone, BadgeTone> = {
+  positive: "success",
+  neutral: "neutral",
+  concerning: "danger",
 }
 
 /**
@@ -119,9 +123,8 @@ export function CommentsPanel({
   }
 
   return (
-    <section className="grid gap-4">
-      <h2 className="text-lg font-semibold">{title}</h2>
-
+    <SectionCard title={title}>
+      <div className="grid gap-4">
       {canComment && (
         <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border p-4">
           <div className="grid gap-1.5">
@@ -176,24 +179,16 @@ export function CommentsPanel({
       )}
 
       {comments.length === 0 ? (
-        <p className="text-muted-foreground">Todavía no hay comentarios.</p>
+        <EmptyState icon={MessageSquare} message="Todavía no hay comentarios." />
       ) : (
         <ul className="grid gap-3">
           {comments.map((comment) => (
             <li key={comment.id} className="rounded-md border p-3">
               <div className="flex items-center gap-2">
                 {comment.tone && (
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs font-medium ${toneBadgeClass[comment.tone]}`}
-                  >
-                    {commentToneLabels[comment.tone]}
-                  </span>
+                  <Badge tone={toneBadge[comment.tone]}>{commentToneLabels[comment.tone]}</Badge>
                 )}
-                {comment.author_only && (
-                  <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                    Privado
-                  </span>
-                )}
+                {comment.author_only && <Badge tone="neutral">Privado</Badge>}
                 <span className="text-xs text-muted-foreground">
                   {formatShortDate(comment.created_at)}
                 </span>
@@ -213,6 +208,7 @@ export function CommentsPanel({
           ))}
         </ul>
       )}
-    </section>
+      </div>
+    </SectionCard>
   )
 }

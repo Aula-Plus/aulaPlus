@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
+import { FileText, MessageSquare, Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageScreeningTests } from "@/lib/permissions"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
+import { PageHeader } from "@/components/ui/page-header"
+import { RowLink } from "@/components/ui/row-link"
+import { SectionCard } from "@/components/ui/section-card"
+import { StatCard } from "@/components/ui/stat-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Comment, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
@@ -58,91 +64,65 @@ export function GroupTrackingPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to="/clases">
-          ← Volver a clases
-        </Link>
-        <div className="mt-1 flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-semibold">Seguimiento — {group.name}</h1>
-          <div className="flex items-center gap-4">
-            <Link
-              className="text-sm text-primary underline-offset-4 hover:underline"
-              to={`/clases/${group.id}/evaluaciones`}
-            >
-              Evaluaciones
-            </Link>
-            {canScreen && (
-              <Link
-                className="text-sm text-primary underline-offset-4 hover:underline"
-                to={`/clases/${group.id}/pruebas-de-sondeo`}
-              >
-                Pruebas de sondeo
-              </Link>
-            )}
-          </div>
-        </div>
+      <PageHeader
+        backTo="/clases"
+        backLabel="Volver a clases"
+        title={`Seguimiento — ${group.name}`}
+        description={`Tendencia de los últimos ${trend.period_days} días`}
+      >
+        <RowLink to={`/clases/${group.id}/evaluaciones`}>Evaluaciones</RowLink>
+        {canScreen && (
+          <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Pruebas de sondeo</RowLink>
+        )}
+      </PageHeader>
+
+      {/*
+        `comments_count` is omitted by the backend for a viewer without a
+        school-wide role (docs/prompts/19-comentarios-alcance.md §5), so we
+        hide that card entirely instead of rendering a misleading `0`, and drop
+        to a single column when it is absent rather than leaving a gap.
+      */}
+      <div className={`grid gap-4 ${trend.comments_count !== undefined ? "sm:grid-cols-2" : ""}`}>
+        <StatCard label="Evaluaciones tomadas" value={trend.assessments_count} icon={FileText} />
+        {trend.comments_count !== undefined && (
+          <StatCard label="Comentarios cargados" value={trend.comments_count} icon={MessageSquare} />
+        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tendencia (últimos {trend.period_days} días)</CardTitle>
-        </CardHeader>
-        {/*
-          `comments_count` is omitted by the backend for a viewer without a
-          school-wide role (docs/prompts/19-comentarios-alcance.md §5), so we
-          hide the card entirely instead of rendering a misleading `0`, and drop
-          to a single column when it is absent rather than leaving a gap.
-        */}
-        <CardContent
-          className={`grid gap-4 ${trend.comments_count !== undefined ? "sm:grid-cols-2" : ""}`}
-        >
-          <div>
-            <p className="text-3xl font-semibold">{trend.assessments_count}</p>
-            <p className="text-sm text-muted-foreground">Evaluaciones tomadas</p>
-          </div>
-          {trend.comments_count !== undefined && (
-            <div>
-              <p className="text-3xl font-semibold">{trend.comments_count}</p>
-              <p className="text-sm text-muted-foreground">Comentarios cargados</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <section className="grid gap-3">
-        <h2 className="text-lg font-semibold">Alumnos</h2>
+      <SectionCard title="Alumnos" bare={tracking.students.length > 0}>
         {tracking.students.length === 0 ? (
-          <p className="text-muted-foreground">La clase no tiene alumnos.</p>
+          <EmptyState icon={Users} message="La clase no tiene alumnos." />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nombre</TableHead>
+                <TableHead className="pl-6">Nombre</TableHead>
                 <TableHead>Alertas abiertas</TableHead>
                 <TableHead>Adaptaciones activas</TableHead>
-                <TableHead />
+                <TableHead className="pr-6" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {tracking.students.map((student) => (
                 <TableRow key={student.id}>
-                  <TableCell>{student.full_name}</TableCell>
-                  <TableCell>{student.open_alerts_count}</TableCell>
+                  <TableCell className="pl-6 font-medium">{student.full_name}</TableCell>
+                  <TableCell>
+                    {student.open_alerts_count > 0 ? (
+                      <Badge tone="danger">{student.open_alerts_count}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">0</span>
+                    )}
+                  </TableCell>
                   <TableCell>{student.has_active_accommodations ? "Sí" : "No"}</TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      className="text-primary underline-offset-4 hover:underline"
-                      to={`/alumnos/${student.id}/seguimiento`}
-                    >
-                      Ver seguimiento
-                    </Link>
+                  <TableCell className="pr-6 text-right">
+                    <RowLink to={`/alumnos/${student.id}/seguimiento`}>Ver seguimiento</RowLink>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </section>
+      </SectionCard>
 
       <GroupAccommodationsSummary groupId={group.id} />
 

@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Link, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
+import { ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageAssessments } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
+import { PageHeader } from "@/components/ui/page-header"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -116,15 +119,11 @@ export function AssessmentsPage() {
 
   return (
     <div className="grid gap-6">
-      <div>
-        <Link
-          className="text-sm text-primary underline-offset-4 hover:underline"
-          to={`/clases/${groupId}/seguimiento`}
-        >
-          ← Volver al seguimiento
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Evaluaciones — {group.name}</h1>
-      </div>
+      <PageHeader
+        backTo={`/clases/${groupId}/seguimiento`}
+        backLabel="Volver al seguimiento"
+        title={`Evaluaciones — ${group.name}`}
+      />
 
       {canManage && (
         <Card>
@@ -170,7 +169,7 @@ export function AssessmentsPage() {
       )}
 
       {assessments.length === 0 ? (
-        <p className="text-muted-foreground">Todavía no hay evaluaciones en esta clase.</p>
+        <EmptyState icon={ClipboardList} message="Todavía no hay evaluaciones en esta clase." />
       ) : (
         <section className="grid gap-4">
           <h2 className="text-lg font-semibold">Evaluaciones cargadas</h2>

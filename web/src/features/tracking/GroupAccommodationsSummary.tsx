@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
+import { HeartHandshake } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
+import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { accommodationCategoryLabels, type GroupAccommodationSummaryEntry } from "@/types"
 import { fetchGroupAccommodationsSummary } from "./trackingApi"
@@ -37,14 +40,13 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
   }, [load])
 
   return (
-    <section className="grid gap-3">
-      <h2 className="text-lg font-semibold">Ajustes activos</h2>
+    <SectionCard title="Ajustes activos">
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : entries === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : entries.length === 0 ? (
-        <p className="text-muted-foreground">La clase no tiene ajustes activos.</p>
+        <EmptyState icon={HeartHandshake} message="La clase no tiene ajustes activos." />
       ) : (
         <Table>
           <TableHeader>
@@ -65,6 +67,6 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
           </TableBody>
         </Table>
       )}
-    </section>
+    </SectionCard>
   )
 }

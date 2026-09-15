@@ -7,7 +7,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <Sidebar />
       {/* pt-14 clears the fixed mobile top bar; on desktop the sidebar is in flow. */}
       <main className="flex-1 pt-14 lg:pt-0">
-        <div className="mx-auto max-w-5xl p-6">{children}</div>
+        {/* Left-aligned (no mx-auto) so content anchors to the sidebar instead
+            of floating in the middle of the viewport with a gap on each side. */}
+        <div className="max-w-6xl p-6 lg:p-8">{children}</div>
       </main>
     </div>
   )

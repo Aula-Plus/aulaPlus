@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canApproveScreeningTestDesign, canManageScreeningTests } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PageHeader } from "@/components/ui/page-header"
 import { Textarea } from "@/components/ui/textarea"
 import type { ScreeningTestDesign, ScreeningTestType } from "@/types"
 import * as screeningApi from "./screeningTestsApi"
@@ -132,7 +135,7 @@ export function ScreeningTestDesignPage() {
 
   return (
     <div className="grid gap-6">
-      <h1 className="text-2xl font-semibold">Pruebas de sondeo — Diseño</h1>
+      <PageHeader title="Pruebas de sondeo — Diseño" />
 
       {canManage && (
         <Card>
@@ -164,7 +167,7 @@ export function ScreeningTestDesignPage() {
       )}
 
       {types.length === 0 ? (
-        <p className="text-muted-foreground">Todavía no hay tipos de prueba.</p>
+        <EmptyState icon={ClipboardList} message="Todavía no hay tipos de prueba." />
       ) : (
         <section className="grid gap-4">
           {types.map((type) => {
