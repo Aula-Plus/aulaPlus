@@ -73,6 +73,16 @@ export function canDeleteGroup(user: User | null): boolean {
   return isDirector(user)
 }
 
+// ── Subjects / materias (Sesión 1) ──────────────────────────────────────────
+
+/**
+ * Directors manage the school's subject catalog (mirror of SubjectPolicy).
+ * UX-only gate — the backend enforces the real rule on every request.
+ */
+export function canManageSubjects(user: User | null): boolean {
+  return isDirector(user)
+}
+
 // ── Students ────────────────────────────────────────────────────────────────
 
 /** Create/edit a Student. Mirror of `StudentPolicy::create`/`update` (role portion): school-wide staff. */
