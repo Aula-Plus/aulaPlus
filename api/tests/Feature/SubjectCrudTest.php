@@ -5,13 +5,14 @@ use App\Models\School;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
+use Database\Seeders\RoleSeeder;
 
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\getJson;
 use function Pest\Laravel\postJson;
 
 beforeEach(function () {
-    $this->seed(\Database\Seeders\RoleSeeder::class);
+    $this->seed(RoleSeeder::class);
     $this->school = School::factory()->create();
     Tenancy::useSchool($this->school);
 });
@@ -37,4 +38,25 @@ it('forbids a teacher from creating a subject', function () {
 
     postJson('/api/v1/subjects', ['name' => 'Matemática'])
         ->assertForbidden();
+});
+
+it('lists subjects for the current school only', function () {
+    $otherSchool = School::factory()->create();
+    Subject::factory()->for($otherSchool)->create(['name' => 'Foreign']);
+    Subject::factory()->for($this->school)->create(['name' => 'Matemática']);
+
+    actingAs(makeUser($this->school, Role::Teacher));
+
+    getJson('/api/v1/subjects')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Matemática');
+});
+
+it('rejects a duplicate subject name in the same school', function () {
+    Subject::factory()->for($this->school)->create(['name' => 'Matemática']);
+    actingAs(makeUser($this->school, Role::Director));
+
+    postJson('/api/v1/subjects', ['name' => 'Matemática'])
+        ->assertStatus(422);
 });

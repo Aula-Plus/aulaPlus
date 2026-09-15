@@ -27,6 +27,7 @@ use App\Http\Controllers\StudentHistoryController;
 use App\Http\Controllers\StudentPerformanceTimelineController;
 use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTrackingController;
+use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\TeacherOptionsController;
 use Illuminate\Support\Facades\Route;
 
@@ -159,5 +160,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         Route::post('/accommodations/{accommodation}/instance-overrides', [AccommodationInstanceOverrideController::class, 'store']);
         Route::get('/assessments/{assessment}/instance-overrides', [AccommodationInstanceOverrideController::class, 'index']);
+
+        // Subjects ("materias") catalog — director-managed, read by all staff.
+        Route::apiResource('subjects', SubjectController::class);
     });
 });
