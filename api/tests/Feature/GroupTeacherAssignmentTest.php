@@ -36,7 +36,10 @@ it('lets a director assign a teacher to a subject in a group', function () {
     postJson("/api/v1/groups/{$this->group->id}/teacher-assignments", [
         'teacher_id' => $this->teacher->id,
         'subject_id' => $this->subject->id,
-    ])->assertCreated();
+    ])->assertCreated()
+        ->assertJsonPath('data.teacher_id', $this->teacher->id)
+        ->assertJsonPath('data.subject_id', $this->subject->id)
+        ->assertJsonPath('data.subject_name', 'Matemática');
 
     expect($this->teacher->fresh()->teachesSubjectInGroup($this->group, $this->subject))->toBeTrue();
 });
