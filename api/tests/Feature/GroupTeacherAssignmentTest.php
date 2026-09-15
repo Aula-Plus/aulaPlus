@@ -6,6 +6,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Support\Facades\DB;
 
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\deleteJson;
@@ -102,7 +103,7 @@ it('is idempotent on a repeated assignment', function () {
         ])->assertCreated();
     }
 
-    $count = \Illuminate\Support\Facades\DB::table('group_teacher')
+    $count = DB::table('group_teacher')
         ->where('group_id', $this->group->id)
         ->where('teacher_id', $this->teacher->id)
         ->where('subject_id', $this->subject->id)
