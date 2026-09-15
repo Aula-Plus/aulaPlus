@@ -189,6 +189,28 @@ export interface AssessmentResult {
 }
 
 /**
+ * A school subject ("materia"). Mirror of `SubjectResource` (backend Sesión 1).
+ * School-owned catalog managed by directors.
+ */
+export interface Subject {
+  id: number
+  name: string
+  short_code: string | null
+  color: string | null
+}
+
+/**
+ * One teacher-subject assignment row of a group (backend Sesión 2). Mirror of
+ * `GroupTeacherAssignmentResource`.
+ */
+export interface GroupTeacherAssignment {
+  teacher_id: number
+  teacher_name: string
+  subject_id: number
+  subject_name: string | null
+}
+
+/**
  * Student performance timeline (backend Sesión 10 — docs/prompts/20-linea-
  * tiempo-alumno.md; frontend docs/prompts/26-frontend-perfil-de-alumno.md).
  * Feeds the Perfil de alumno chart: the `results` performance line plus a

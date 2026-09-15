@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react"
-import { ClipboardList, GraduationCap, Home, TrendingUp, Users } from "lucide-react"
+import { BookOpen, ClipboardList, GraduationCap, Home, TrendingUp, Users } from "lucide-react"
 import type { User } from "@/types"
 import {
   canApproveScreeningTestDesign,
   canManageScreeningTests,
+  canManageSubjects,
   canViewAdoptionDashboard,
 } from "@/lib/permissions"
 
@@ -49,6 +50,10 @@ export function buildNavSections(user: User | null): NavSection[] {
     {
       heading: "Administración",
       items: [
+        // The subjects catalog is director-only (mirror of SubjectPolicy).
+        ...(canManageSubjects(user)
+          ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
+          : []),
         // The adoption dashboard is director-only.
         ...(canViewAdoptionDashboard(user)
           ? [{ to: "/adopcion", label: "Adopción", icon: TrendingUp }]

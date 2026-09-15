@@ -5,6 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GroupFormPage } from "./GroupFormPage"
 import * as groupsApi from "./groupsApi"
 
+// The form reads the current user (to gate the assignments panel) and mounts
+// <GroupTeacherAssignments> when editing. Teacher membership is managed there,
+// per subject — the form itself no longer touches teachers. Stub both; the panel
+// has its own test in features/subjects.
+vi.mock("@/features/auth/AuthContext", () => ({
+  useAuth: () => ({ user: { id: 1, name: "Dir", email: "d@x.com", roles: ["director"] } }),
+}))
+vi.mock("@/features/subjects/GroupTeacherAssignments", () => ({
+  GroupTeacherAssignments: () => null,
+}))
+
 function renderCreate() {
   return render(
     <MemoryRouter initialEntries={["/clases/nueva"]}>
@@ -28,10 +39,6 @@ function renderEdit(id = "1") {
 describe("GroupFormPage", () => {
   afterEach(() => {
     vi.restoreAllMocks()
-  })
-
-  beforeEach(() => {
-    vi.spyOn(groupsApi, "fetchTeachers").mockResolvedValue([])
   })
 
   it("shows a validation error and does not submit when name is empty", async () => {
@@ -61,11 +68,12 @@ describe("GroupFormPage", () => {
     await userEvent.type(screen.getByLabelText(/nombre/i), "3° A")
     await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
 
+    // The form no longer sends teacher_ids — teacher membership is per-subject
+    // and handled by the assignment panel (backend Sesión 2).
     expect(createGroup).toHaveBeenCalledWith({
       name: "3° A",
       level: "",
       school_year: expect.any(Number),
-      teacher_ids: [],
     })
   })
 
@@ -75,31 +83,10 @@ describe("GroupFormPage", () => {
     expect(screen.queryByRole("button", { name: /eliminar clase/i })).not.toBeInTheDocument()
   })
 
-  it("selects teachers via the multi-select and submits their ids", async () => {
-    vi.spyOn(groupsApi, "fetchTeachers").mockResolvedValue([
-      { id: 5, name: "Ana Ruiz" },
-      { id: 9, name: "Zoe Diaz" },
-    ])
-    const createGroup = vi.spyOn(groupsApi, "createGroup").mockResolvedValue({
-      id: 1,
-      name: "3° A",
-      level: "",
-      school_year: 2026,
-      group_profile: null,
-      related_documents: null,
-      teachers: [{ id: 5, name: "Ana Ruiz" }],
-    })
-
+  it("does not render a teacher multi-select (membership is managed per subject)", () => {
     renderCreate()
 
-    await userEvent.type(screen.getByLabelText(/nombre/i), "3° A")
-    await userEvent.click(screen.getByLabelText(/docentes/i))
-    await userEvent.click(await screen.findByRole("button", { name: "Ana Ruiz" }))
-    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
-
-    expect(createGroup).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "3° A", teacher_ids: [5] }),
-    )
+    expect(screen.queryByLabelText(/docentes/i)).not.toBeInTheDocument()
   })
 
   describe("editing an existing group", () => {
@@ -113,16 +100,12 @@ describe("GroupFormPage", () => {
         related_documents: null,
         teachers: [{ id: 5, name: "Ana Ruiz" }],
       })
-      vi.spyOn(groupsApi, "fetchTeachers").mockResolvedValue([
-        { id: 5, name: "Ana Ruiz" },
-        { id: 9, name: "Zoe Diaz" },
-      ])
     })
 
-    it("preselects the group's current teachers", async () => {
+    it("preloads the group's fields", async () => {
       renderEdit()
 
-      expect(await screen.findByText("Ana Ruiz")).toBeInTheDocument()
+      expect(await screen.findByDisplayValue("3° A")).toBeInTheDocument()
     })
 
     it("shows a delete button and calls deleteGroup after confirming", async () => {
