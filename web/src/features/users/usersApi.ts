@@ -25,6 +25,11 @@ export async function fetchUsers(search?: string): Promise<ManagedUser[]> {
   return data.data
 }
 
+export async function fetchUser(id: number): Promise<ManagedUser> {
+  const { data } = await api.get<{ data: ManagedUser }>(`/api/v1/users/${id}`)
+  return data.data
+}
+
 export async function createUser(input: CreateUserInput): Promise<ManagedUser> {
   const { data } = await api.post<{ data: ManagedUser }>("/api/v1/users", input)
   return data.data

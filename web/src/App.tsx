@@ -16,6 +16,7 @@ import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTes
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
 import { UsersListPage } from "@/features/users/UsersListPage"
+import { UserFormPage } from "@/features/users/UserFormPage"
 
 function App() {
   return (
@@ -116,7 +117,10 @@ function App() {
                 <UsersListPage />
               </ProtectedLayout>
             }
-          />
+          >
+            <Route path="nueva" element={<UserFormPage />} />
+            <Route path=":id" element={<UserFormPage />} />
+          </Route>
           <Route
             path="/adopcion"
             element={

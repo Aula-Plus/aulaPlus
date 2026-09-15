@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { roleLabels, userStatusLabels, type ManagedUser } from "@/types"
+import type { UserFormOutletContext } from "./UserFormPage"
 import * as usersApi from "./usersApi"
 
 const statusTone: Record<ManagedUser["status"], BadgeTone> = {
@@ -172,7 +173,7 @@ export function UsersListPage() {
       )}
 
       {/* Nested create/edit form route (Task 14) renders here. */}
-      <Outlet context={{ reload: () => load(search) }} />
+      <Outlet context={{ onSaved: () => load(search) } satisfies UserFormOutletContext} />
     </div>
   )
 }
