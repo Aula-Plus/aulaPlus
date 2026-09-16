@@ -211,6 +211,12 @@ describe("permissions", () => {
       expect(canManageAssessments(null, groupLedBy(1))).toBe(false)
       expect(canManageAssessments(teacher, null)).toBe(false)
     })
+
+    it("is false (never throws) when the group has no teachers array", () => {
+      // Some endpoints (e.g. group tracking) may omit `teachers`; a teacher
+      // must degrade to read-only, not white-screen on `undefined.some(...)`.
+      expect(canManageAssessments(teacher, {} as never)).toBe(false)
+    })
   })
 
   describe("canValidateBarrierAccommodation (four-eyes rule)", () => {

@@ -143,3 +143,22 @@ it('still gives psychopedagogue/director the full comments_count, private commen
     $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()
         ->assertJsonPath('data.trend.comments_count', 3);
 });
+
+// The tracking payload must include the group's teachers. The Evaluaciones
+// screen reads `group.teachers` (via canManageAssessments) to decide whether the
+// authed teacher leads the group; when the key is omitted the SPA reads
+// `undefined.some(...)` and white-screens for teachers. So the contract here is:
+// `data.group.teachers` is always present and lists the leading teacher.
+it('includes the group teachers in the tracking payload', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher);
+    Sanctum::actingAs($teacher);
+
+    $response = $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk();
+
+    expect($response->json('data.group.teachers'))->toBeArray();
+    expect(collect($response->json('data.group.teachers'))->pluck('id')->all())
+        ->toContain($teacher->id);
+});

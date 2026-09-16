@@ -28,6 +28,12 @@ class GroupTrackingController extends Controller
     {
         $this->authorize('view', $group);
 
+        // The Evaluaciones screen reads `group.teachers` to decide whether the
+        // authed teacher leads the group (canManageAssessments). GroupResource
+        // only emits `teachers` when the relation is loaded, so load it here —
+        // otherwise the key is omitted and the SPA white-screens for teachers.
+        $group->loadMissing('teachers');
+
         $since = now()->subDays(self::TREND_PERIOD_DAYS);
 
         // Alphabetical by full_name, never by any indicator (open alerts,

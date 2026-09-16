@@ -143,7 +143,10 @@ export function canManageAssessments(
     return false
   }
 
-  return isTeacher(user) && group.teachers.some((teacher) => teacher.id === user.id)
+  // `teachers` is typed as always-present, but some endpoints omit it (e.g. the
+  // group tracking payload). Guard against `undefined.some(...)` so a teacher
+  // degrades to read-only instead of white-screening the page.
+  return isTeacher(user) && (group.teachers ?? []).some((teacher) => teacher.id === user.id)
 }
 
 // ── Forward-looking helpers (Sessions 8 & 9) ────────────────────────────────
