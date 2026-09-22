@@ -48,7 +48,7 @@ use Illuminate\Support\Facades\Route;
 
 // Public authentication endpoints (session is established here for the SPA).
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])
-    ->middleware('throttle:6,1')
+    ->middleware('throttle:login')
     ->name('login');
 
 // Public, token-gated invitation acceptance (no session yet). The token is the

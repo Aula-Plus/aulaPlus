@@ -114,4 +114,18 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Login Throttle
+    |--------------------------------------------------------------------------
+    |
+    | Max attempts per minute allowed on the /login endpoint (per IP), enforced
+    | by the "login" rate limiter (see AppServiceProvider). Keep this strict in
+    | production as a brute-force defence; raise LOGIN_MAX_ATTEMPTS only in local
+    | dev, where repeated logins during testing otherwise trip the limit fast.
+    |
+    */
+
+    'login_max_attempts' => (int) env('LOGIN_MAX_ATTEMPTS', 6),
+
 ];

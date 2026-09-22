@@ -51,10 +51,17 @@ class AppServiceProvider extends ServiceProvider
 
         // Global fallback rate limit for the whole API (wired to the "api"
         // middleware group via ->throttleApi() in bootstrap/app.php). Stricter
-        // endpoint-specific limits (e.g. /login's throttle:6,1) still apply on
+        // endpoint-specific limits (e.g. /login's throttle:login) still apply on
         // top of this, since middleware stacks.
         RateLimiter::for('api', fn ($request) => Limit::perMinute(60)
             ->by($request->user()?->id ?: $request->ip()));
+
+        // Per-IP throttle on the login endpoint (brute-force defence). The max
+        // number of attempts per minute is env-driven so it can stay strict in
+        // production while being relaxed for local dev (LOGIN_MAX_ATTEMPTS in
+        // .env); the strict default applies whenever the env var is unset.
+        RateLimiter::for('login', fn ($request) => Limit::perMinute((int) config('auth.login_max_attempts'))
+            ->by($request->ip()));
 
         // AI-assistant generation limit: per school (cost control). Applied only
         // to the generation route, never to poll/apply/discard.

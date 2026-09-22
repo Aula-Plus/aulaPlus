@@ -72,3 +72,38 @@ it('logs out an authenticated user', function () {
         ->postJson('/api/logout')
         ->assertOk();
 });
+
+it('throttles /login after the configured number of attempts', function () {
+    config()->set('auth.login_max_attempts', 3);
+
+    User::factory()->create([
+        'email' => 'ana@escuela.test',
+        'password' => Hash::make('secret-pass-1'),
+    ]);
+
+    // Valid credentials, so the per-email attempt limiter (LoginRequest) never
+    // fires — this isolates the route-level throttle middleware.
+    $payload = ['email' => 'ana@escuela.test', 'password' => 'secret-pass-1'];
+
+    for ($i = 0; $i < 3; $i++) {
+        login($payload)->assertOk();
+    }
+
+    login($payload)->assertStatus(429);
+});
+
+it('allows more /login attempts when the env limit is raised', function () {
+    // Simulates the relaxed local-dev setting; prod keeps the strict default.
+    config()->set('auth.login_max_attempts', 20);
+
+    User::factory()->create([
+        'email' => 'ana@escuela.test',
+        'password' => Hash::make('secret-pass-1'),
+    ]);
+
+    $payload = ['email' => 'ana@escuela.test', 'password' => 'secret-pass-1'];
+
+    for ($i = 0; $i < 7; $i++) {
+        login($payload)->assertOk();
+    }
+});

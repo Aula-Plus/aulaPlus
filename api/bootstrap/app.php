@@ -26,7 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Global rate limit for every /api/* route (limiter defined in
         // AppServiceProvider). Individual endpoints may still layer a
-        // stricter throttle on top (e.g. /login's throttle:6,1).
+        // stricter throttle on top (e.g. /login's throttle:login).
         $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
