@@ -154,8 +154,9 @@ Marcar acá a medida que cada sesión se completa y mergea. Cada sesión deberí
   ojos), dos FormRequests (`Store`/`Resolve`) y controlador con 3 endpoints v1
   (`POST`/`GET /students/{student}/scheduled-follow-ups`, `POST
   /scheduled-follow-ups/{followUp}/resolve`). `is_overdue` se calcula
-  server-side en el Resource (`!resolved && due_date <= today` en la zona
-  horaria de la app, `config('app.timezone')` = UTC), nunca en el cliente. El
+  server-side en el Resource (`!resolved && due_date < today` en la zona
+  horaria de la app, `config('app.timezone')` = UTC — la fecha límite es el
+  último día válido, así que vence recién el día siguiente), nunca en el cliente. El
   `index` devuelve todos por defecto y sólo filtra si viene `?resolved`
   (decisión del cliente, no del backend). 11 tests nuevos (rol/tenant, los tres
   casos de `is_overdue`, aislamiento cross-school, redacción del audit diff);

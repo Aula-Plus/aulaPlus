@@ -167,7 +167,8 @@ it('computes is_overdue server-side across the due date and resolved states', fu
     $future = ScheduledFollowUp::factory()->for($student)->create([
         'due_date' => now()->addDay()->toDateString(),
     ]);
-    // Due today, unresolved -> overdue (due_date <= today).
+    // Due today, unresolved -> NOT overdue yet; today is still the last valid
+    // day (due_date < today), so it becomes overdue tomorrow.
     $dueToday = ScheduledFollowUp::factory()->for($student)->create([
         'due_date' => now()->toDateString(),
     ]);
@@ -175,7 +176,7 @@ it('computes is_overdue server-side across the due date and resolved states', fu
     expect($overdue->isOverdue())->toBeTrue()
         ->and($resolvedPast->isOverdue())->toBeFalse()
         ->and($future->isOverdue())->toBeFalse()
-        ->and($dueToday->isOverdue())->toBeTrue();
+        ->and($dueToday->isOverdue())->toBeFalse();
 
     Sanctum::actingAs($director);
     $byId = collect(
@@ -185,7 +186,7 @@ it('computes is_overdue server-side across the due date and resolved states', fu
     expect($byId[$overdue->id]['is_overdue'])->toBeTrue()
         ->and($byId[$resolvedPast->id]['is_overdue'])->toBeFalse()
         ->and($byId[$future->id]['is_overdue'])->toBeFalse()
-        ->and($byId[$dueToday->id]['is_overdue'])->toBeTrue();
+        ->and($byId[$dueToday->id]['is_overdue'])->toBeFalse();
 });
 
 // --- tenant isolation --------------------------------------------------------

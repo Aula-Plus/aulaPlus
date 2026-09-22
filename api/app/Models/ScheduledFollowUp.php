@@ -75,13 +75,15 @@ class ScheduledFollowUp extends Model
     }
 
     /**
-     * Whether this follow-up has reached its due date without being resolved.
+     * Whether this follow-up's due date has passed without being resolved.
+     * The due date is the last valid day, so a follow-up becomes overdue the
+     * day *after* it (`due_date < today`), not on the due date itself.
      * Computed server-side in the app timezone (config `app.timezone`) so
      * every consumer gets one consistent answer instead of each client
      * re-implementing the date/timezone arithmetic — see the spec §3.
      */
     public function isOverdue(): bool
     {
-        return ! $this->resolved && $this->due_date->lessThanOrEqualTo(Carbon::today());
+        return ! $this->resolved && $this->due_date->lessThan(Carbon::today());
     }
 }
