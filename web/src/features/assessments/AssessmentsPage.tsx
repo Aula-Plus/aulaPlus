@@ -3,7 +3,7 @@ import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useParams } from "react-router-dom"
-import { ClipboardList } from "lucide-react"
+import { ChevronDown, ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageAssessments } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
@@ -234,52 +234,97 @@ export function AssessmentsPage() {
         <section className="grid gap-4">
           <h2 className="text-lg font-semibold">Evaluaciones cargadas</h2>
           {assessments.map((assessment) => (
-            <Card key={assessment.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <CardTitle>
-                      {assessmentTypeLabels[assessment.type]}
-                      {assessment.subject_name && (
-                        <span className="text-muted-foreground font-normal">
-                          {" · "}
-                          {assessment.subject_name}
-                        </span>
-                      )}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      {assessment.administered_at ?? "Sin fecha"}
-                    </p>
-                    {assessment.purpose && (
-                      <p className="mt-1 text-sm text-muted-foreground">{assessment.purpose}</p>
-                    )}
-                  </div>
-                  {canManage && (
-                    <ConfirmDialog
-                      trigger={
-                        <Button type="button" variant="destructive" size="sm">
-                          Eliminar
-                        </Button>
-                      }
-                      title="Eliminar evaluación"
-                      description="Se eliminarán también las notas cargadas. Esta acción no se puede deshacer."
-                      confirmLabel="Eliminar"
-                      onConfirm={() => onDelete(assessment.id)}
-                    />
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <AssessmentResultsEditor
-                  assessment={assessment}
-                  students={students}
-                  canManage={canManage}
-                />
-              </CardContent>
-            </Card>
+            <AssessmentCard
+              key={assessment.id}
+              assessment={assessment}
+              students={students}
+              canManage={canManage}
+              onDelete={onDelete}
+            />
           ))}
         </section>
       )}
     </div>
+  )
+}
+
+/**
+ * A single assessment in the "Evaluaciones cargadas" list. Collapsible: the
+ * header (type · subject, date, purpose) always shows, and the per-student
+ * results editor expands on demand so a group with many assessments stays
+ * scannable. Starts collapsed.
+ */
+function AssessmentCard({
+  assessment,
+  students,
+  canManage,
+  onDelete,
+}: {
+  assessment: Assessment
+  students: GroupTrackingStudent[]
+  canManage: boolean
+  onDelete: (assessmentId: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const bodyId = `assessment-${assessment.id}-body`
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            className="flex flex-1 items-start gap-2 text-left"
+          >
+            <ChevronDown
+              className={`mt-1 size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+            <div>
+              <CardTitle>
+                {assessmentTypeLabels[assessment.type]}
+                {assessment.subject_name && (
+                  <span className="text-muted-foreground font-normal">
+                    {" · "}
+                    {assessment.subject_name}
+                  </span>
+                )}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {assessment.administered_at ?? "Sin fecha"}
+              </p>
+              {assessment.purpose && (
+                <p className="mt-1 text-sm text-muted-foreground">{assessment.purpose}</p>
+              )}
+            </div>
+          </button>
+          {canManage && (
+            <ConfirmDialog
+              trigger={
+                <Button type="button" variant="destructive" size="sm">
+                  Eliminar
+                </Button>
+              }
+              title="Eliminar evaluación"
+              description="Se eliminarán también las notas cargadas. Esta acción no se puede deshacer."
+              confirmLabel="Eliminar"
+              onConfirm={() => onDelete(assessment.id)}
+            />
+          )}
+        </div>
+      </CardHeader>
+      {open && (
+        <CardContent id={bodyId}>
+          <AssessmentResultsEditor
+            assessment={assessment}
+            students={students}
+            canManage={canManage}
+          />
+        </CardContent>
+      )}
+    </Card>
   )
 }

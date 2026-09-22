@@ -130,7 +130,7 @@ export function StudentPerformanceChart({
             <Label htmlFor="performance-subject">Materia</Label>
             <SingleSelect
               id="performance-subject"
-              className="max-w-52"
+              className="w-52"
               options={[
                 { value: "", label: "Todas las materias" },
                 ...subjects.map((subject) => ({

@@ -77,7 +77,7 @@ export function SingleSelect({
       <Popover.Portal>
         <Popover.Content
           align="start"
-          className="z-50 w-(--radix-popover-trigger-width) rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          className="z-50 min-w-(--radix-popover-trigger-width) max-w-(--radix-popover-content-available-width) rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
         >
           <input
             type="text"
@@ -100,12 +100,12 @@ export function SingleSelect({
                 type="button"
                 aria-pressed={isSelected}
                 onClick={() => select(option.value)}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm whitespace-nowrap hover:bg-accent hover:text-accent-foreground"
               >
                 <span className="flex size-4 shrink-0 items-center justify-center">
                   {isSelected && <Check className="size-3" />}
                 </span>
-                {option.label}
+                <span className="truncate">{option.label}</span>
               </button>
             )
           })}

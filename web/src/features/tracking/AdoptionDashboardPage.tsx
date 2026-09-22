@@ -148,23 +148,28 @@ function WeeklySeries({ title, series }: { title: string; series: WeeklySeriesPo
 
           {/* Accessible/table view of the same series (dataviz skill). Named via
               aria-label (not a visible caption) so it doesn't duplicate the
-              section title. */}
-          <table className="sr-only" aria-label={title}>
-            <thead>
-              <tr>
-                <th>Semana</th>
-                <th>Eventos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((point) => (
-                <tr key={point.label}>
-                  <td>{point.label}</td>
-                  <td>{point.count}</td>
+              section title. Wrapped in a sr-only *div* — `sr-only` on a
+              `display: table` element is ignored (its 1px width/height act only
+              as minimums), leaving a 200px+ off-screen box that adds phantom
+              page scroll; a block wrapper collapses correctly. */}
+          <div className="sr-only">
+            <table aria-label={title}>
+              <thead>
+                <tr>
+                  <th>Semana</th>
+                  <th>Eventos</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.map((point) => (
+                  <tr key={point.label}>
+                    <td>{point.label}</td>
+                    <td>{point.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </SectionCard>

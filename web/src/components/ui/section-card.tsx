@@ -22,7 +22,7 @@ interface SectionCardProps {
 export function SectionCard({ title, action, children, className, bare = false }: SectionCardProps) {
   return (
     <Card className={className}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
         <h2 className="text-base leading-none font-semibold">{title}</h2>
         {action}
       </CardHeader>

@@ -145,6 +145,8 @@ describe("AssessmentsPage", () => {
 
     renderPage()
 
+    // Assessment cards start collapsed; expand it to reach the results editor.
+    await userEvent.click(await screen.findByRole("button", { name: /escrita/i }))
     await userEvent.type(await screen.findByLabelText(/nota de juan pérez/i), "8.5")
     await userEvent.type(screen.getByLabelText(/nota de ana gómez/i), "9")
     await userEvent.click(screen.getByRole("button", { name: /guardar notas/i }))
@@ -178,6 +180,8 @@ describe("AssessmentsPage", () => {
     renderPage()
 
     expect(await screen.findByText("Evaluaciones — 3° A")).toBeInTheDocument()
+    // Assessment cards start collapsed; expand it to reach the results editor.
+    await userEvent.click(await screen.findByRole("button", { name: /escrita/i }))
     // Existing score is shown as read-only text once the editor loads.
     expect(await screen.findByText("7")).toBeInTheDocument()
 
