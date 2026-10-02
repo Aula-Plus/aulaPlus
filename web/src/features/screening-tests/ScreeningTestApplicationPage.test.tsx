@@ -139,7 +139,7 @@ describe("ScreeningTestApplicationPage", () => {
 
     renderPage("director")
 
-    expect(await screen.findByText("Pruebas de sondeo — 3° A")).toBeInTheDocument()
+    expect(await screen.findByText("Screenings — 3° A")).toBeInTheDocument()
     // The application is listed…
     expect(screen.getByText("Comprensión lectora")).toBeInTheDocument()
     // …but no create form, roster sheet, or results loader (psychopedagogy only).

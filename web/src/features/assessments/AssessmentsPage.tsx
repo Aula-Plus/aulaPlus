@@ -151,7 +151,7 @@ export function AssessmentsPage() {
     <div className="grid gap-6">
       <PageHeader
         backTo={`/clases/${groupId}/seguimiento`}
-        backLabel="Volver al seguimiento"
+        backLabel="Volver al perfil del grupo"
         title={`Evaluaciones — ${group.name}`}
       />
 

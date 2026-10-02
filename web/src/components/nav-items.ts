@@ -52,7 +52,7 @@ export function buildNavSections(user: User | null): NavSection[] {
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
-          ? [{ to: "/pruebas-de-sondeo/tipos", label: "Pruebas de sondeo", icon: ClipboardList }]
+          ? [{ to: "/pruebas-de-sondeo/tipos", label: "Screenings", icon: ClipboardList }]
           : []),
       ],
     },

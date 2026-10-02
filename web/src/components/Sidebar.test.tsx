@@ -44,15 +44,15 @@ describe("Sidebar", () => {
 
   it("gates the screening-tests link to psychopedagogy and direction, not teachers", () => {
     renderSidebar("psychopedagogue")
-    expect(screen.getByRole("link", { name: "Pruebas de sondeo" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Screenings" })).toBeInTheDocument()
     cleanup()
 
     renderSidebar("director")
-    expect(screen.getByRole("link", { name: "Pruebas de sondeo" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Screenings" })).toBeInTheDocument()
     cleanup()
 
     renderSidebar("teacher")
-    expect(screen.queryByRole("link", { name: "Pruebas de sondeo" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Screenings" })).not.toBeInTheDocument()
   })
 
   it("shows the adoption link and its section only to a director", () => {

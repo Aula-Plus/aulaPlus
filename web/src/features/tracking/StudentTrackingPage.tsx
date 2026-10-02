@@ -61,7 +61,7 @@ export function StudentTrackingPage() {
     return trackingApi
       .fetchStudentTracking(studentId)
       .then((data) => setTracking(data))
-      .catch(() => setError("No pudimos cargar el seguimiento del alumno."))
+      .catch(() => setError("No pudimos cargar el perfil del alumno."))
   }, [studentId])
 
   const loadComments = useCallback(() => {
@@ -149,7 +149,7 @@ export function StudentTrackingPage() {
       <PageHeader
         backTo="/alumnos"
         backLabel="Volver a alumnos"
-        title={`Seguimiento — ${student.full_name}`}
+        title={`Perfil del alumno — ${student.full_name}`}
       >
         {showHistoryLink && (
           <Link

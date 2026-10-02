@@ -113,7 +113,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("psychopedagogue")
 
-    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText("Acumuló observaciones preocupantes.")).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: /resolver/i }))
@@ -126,7 +126,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("teacher")
 
-    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/promedio general/i)).toBeInTheDocument()
     expect(screen.getByText("Desempeño por materia")).toBeInTheDocument()
     expect(screen.getByText("Matemática")).toBeInTheDocument()
@@ -141,7 +141,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("teacher")
 
-    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/sin evaluaciones por materia/i)).toBeInTheDocument()
   })
 
@@ -152,7 +152,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("teacher")
 
-    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/no tenés permiso para ver el detalle clínico/i)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /resolver/i })).not.toBeInTheDocument()
   })
@@ -170,7 +170,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     // Pending badge visible before, approved badge after — checks the in-place update.
     expect(screen.getByText(/pendiente de aprobación/i)).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: /aprobar/i }))
@@ -198,7 +198,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /rechazar/i }))
     expect(reject).toHaveBeenCalledWith(77)
     expect(await screen.findByText(/rechazada/i)).toBeInTheDocument()
@@ -213,7 +213,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(screen.getByText(/aprobada/i)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument()
@@ -225,7 +225,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("teacher")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(screen.queryByRole("link", { name: /historial de auditoría/i })).not.toBeInTheDocument()
   })
 
@@ -283,7 +283,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
     expect(fetchLinks).toHaveBeenCalledWith(55)
     await screen.findByText(/todavía no hay adaptaciones vinculadas/i)
@@ -325,7 +325,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("psychopedagogue", 7)
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
     const panel = await screen.findByText("Adaptación X")
     // The "Pendiente" badge should be there, but NOT a Validar button.
@@ -354,7 +354,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /nueva adaptación/i }))
 
     // Fill everything except the category, then try to save.
@@ -391,7 +391,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("teacher")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument()
   })
@@ -413,7 +413,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(
       screen.getAllByRole("button", { name: /desactivar para una evaluación/i }),
     ).toHaveLength(1)
@@ -436,7 +436,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
 
     await userEvent.click(screen.getByLabelText(/^evaluación$/i))
@@ -472,7 +472,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
     await userEvent.click(screen.getByLabelText(/^evaluación$/i))
     await userEvent.click(await screen.findByRole("button", { name: /escrita/i }))
@@ -507,7 +507,7 @@ describe("StudentTrackingPage", () => {
 
     renderPage("teacher")
 
-    await screen.findByText("Seguimiento — Juan Pérez")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Nueva observación")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 

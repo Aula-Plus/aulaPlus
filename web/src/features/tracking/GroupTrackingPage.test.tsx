@@ -55,7 +55,7 @@ describe("GroupTrackingPage", () => {
 
     renderPage()
 
-    expect(await screen.findByText("Seguimiento — 3° A")).toBeInTheDocument()
+    expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
     // Trend counts.
     expect(screen.getByText("5")).toBeInTheDocument()
     expect(screen.getByText("8")).toBeInTheDocument()
@@ -67,7 +67,7 @@ describe("GroupTrackingPage", () => {
     const anaRow = screen.getByText("Ana Gómez").closest("tr")
     expect(anaRow!.textContent).toContain("No")
 
-    const link = screen.getAllByRole("link", { name: /ver seguimiento/i })[0]
+    const link = screen.getAllByRole("link", { name: /ver alumno/i })[0]
     expect(link).toHaveAttribute("href", "/alumnos/3/seguimiento")
   })
 
@@ -82,7 +82,7 @@ describe("GroupTrackingPage", () => {
 
     renderPage("teacher")
 
-    expect(await screen.findByText("Seguimiento — 3° A")).toBeInTheDocument()
+    expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
     expect(screen.getByText("5")).toBeInTheDocument()
     expect(screen.getByText("Evaluaciones tomadas")).toBeInTheDocument()
     expect(screen.queryByText("Comentarios cargados")).not.toBeInTheDocument()

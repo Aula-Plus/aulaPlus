@@ -193,11 +193,11 @@ export function GroupsListPage() {
                   <TableCell className="pr-6 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button asChild size="sm" variant="outline">
-                        <Link to={`/clases/${group.id}/seguimiento`}>Seguimiento</Link>
+                        <Link to={`/clases/${group.id}/seguimiento`}>Ver grupo</Link>
                       </Button>
                       <RowLink to={`/clases/${group.id}/evaluaciones`}>Evaluaciones</RowLink>
                       {canScreen && (
-                        <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Sondeo</RowLink>
+                        <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Screenings</RowLink>
                       )}
                       {canManage && <RowLink to={`/clases/${group.id}`}>Editar</RowLink>}
                     </div>

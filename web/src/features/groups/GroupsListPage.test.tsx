@@ -139,13 +139,13 @@ describe("GroupsListPage", () => {
 
     const { unmount } = renderList("teacher")
     expect(await screen.findByText("3° A")).toBeInTheDocument()
-    expect(screen.queryByRole("link", { name: "Sondeo" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Screenings" })).not.toBeInTheDocument()
     unmount()
 
     vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue(groups)
     renderList("psychopedagogue")
     expect(await screen.findByText("3° A")).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Sondeo" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Screenings" })).toHaveAttribute(
       "href",
       "/clases/1/pruebas-de-sondeo",
     )

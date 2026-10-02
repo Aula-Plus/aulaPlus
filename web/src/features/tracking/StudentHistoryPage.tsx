@@ -77,7 +77,7 @@ export function StudentHistoryPage() {
     <div className="grid gap-6">
       <PageHeader
         backTo={`/alumnos/${studentId}/seguimiento`}
-        backLabel="Volver al seguimiento"
+        backLabel="Volver al perfil del alumno"
         title="Historial de auditoría"
       />
 

@@ -135,7 +135,7 @@ export function ScreeningTestDesignPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Pruebas de sondeo — Diseño" />
+      <PageHeader title="Screenings — Diseño" />
 
       {canManage && (
         <Card>

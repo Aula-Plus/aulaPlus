@@ -121,8 +121,8 @@ export function ScreeningTestApplicationPage() {
     <div className="grid gap-6">
       <PageHeader
         backTo={`/clases/${groupId}/seguimiento`}
-        backLabel="Volver al seguimiento"
-        title={`Pruebas de sondeo — ${group.name}`}
+        backLabel="Volver al perfil del grupo"
+        title={`Screenings — ${group.name}`}
       />
 
       {canManage && (

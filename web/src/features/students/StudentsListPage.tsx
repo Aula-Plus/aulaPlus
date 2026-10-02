@@ -159,7 +159,7 @@ export function StudentsListPage() {
                     <TableCell className="pr-6 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button asChild size="sm" variant="outline">
-                          <Link to={`/alumnos/${student.id}/seguimiento`}>Seguimiento</Link>
+                          <Link to={`/alumnos/${student.id}/seguimiento`}>Ver alumno</Link>
                         </Button>
                         {canManage && <RowLink to={`/alumnos/${student.id}`}>Editar</RowLink>}
                       </div>
