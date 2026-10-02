@@ -32,7 +32,7 @@ export function GroupTrackingPage() {
     return trackingApi
       .fetchGroupTracking(groupId)
       .then((data) => setTracking(data))
-      .catch(() => setError("No pudimos cargar el seguimiento de la clase."))
+      .catch(() => setError("No pudimos cargar el perfil del grupo."))
   }, [groupId])
 
   const loadComments = useCallback(() => {
@@ -67,12 +67,12 @@ export function GroupTrackingPage() {
       <PageHeader
         backTo="/clases"
         backLabel="Volver a clases"
-        title={`Seguimiento — ${group.name}`}
+        title={`Perfil del grupo — ${group.name}`}
         description={`Tendencia de los últimos ${trend.period_days} días`}
       >
         <RowLink to={`/clases/${group.id}/evaluaciones`}>Evaluaciones</RowLink>
         {canScreen && (
-          <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Pruebas de sondeo</RowLink>
+          <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Screenings</RowLink>
         )}
       </PageHeader>
 
@@ -115,7 +115,7 @@ export function GroupTrackingPage() {
                   </TableCell>
                   <TableCell>{student.has_active_accommodations ? "Sí" : "No"}</TableCell>
                   <TableCell className="pr-6 text-right">
-                    <RowLink to={`/alumnos/${student.id}/seguimiento`}>Ver seguimiento</RowLink>
+                    <RowLink to={`/alumnos/${student.id}/seguimiento`}>Ver alumno</RowLink>
                   </TableCell>
                 </TableRow>
               ))}
