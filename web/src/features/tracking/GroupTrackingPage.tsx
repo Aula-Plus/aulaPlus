@@ -98,7 +98,7 @@ export function GroupTrackingPage() {
               <TableRow>
                 <TableHead className="pl-6">Nombre</TableHead>
                 <TableHead>Alertas abiertas</TableHead>
-                <TableHead>Adaptaciones activas</TableHead>
+                <TableHead>Ajustes activos</TableHead>
                 <TableHead className="pr-6" />
               </TableRow>
             </TableHeader>
