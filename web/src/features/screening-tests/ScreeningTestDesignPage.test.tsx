@@ -11,6 +11,7 @@ function type(withDesign = false): ScreeningTestType {
   return {
     id: 1,
     name: "Comprensión lectora",
+    area: null,
     active: true,
     created_by_id: 2,
     current_design: withDesign
@@ -77,7 +78,26 @@ describe("ScreeningTestDesignPage", () => {
     await userEvent.type(await screen.findByLabelText(/nombre del tipo/i), "Cálculo mental")
     await userEvent.click(screen.getByRole("button", { name: /crear tipo/i }))
 
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ name: "Cálculo mental" }))
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({ name: "Cálculo mental", area: null }),
+    )
+  })
+
+  it("sends the optional area when creating a type", async () => {
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([])
+    const create = vi
+      .spyOn(screeningApi, "createScreeningTestType")
+      .mockResolvedValue(type())
+
+    renderPage()
+
+    await userEvent.type(await screen.findByLabelText(/nombre del tipo/i), "TECLE")
+    await userEvent.type(screen.getByLabelText(/área/i), "lectoescritura")
+    await userEvent.click(screen.getByRole("button", { name: /crear tipo/i }))
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({ name: "TECLE", area: "lectoescritura" }),
+    )
   })
 
   it("shows a just-created design as pending, without approve buttons for psychopedagogy", async () => {
