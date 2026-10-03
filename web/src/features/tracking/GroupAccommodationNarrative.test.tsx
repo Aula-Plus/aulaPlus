@@ -63,6 +63,19 @@ describe("GroupAccommodationNarrative", () => {
     expect(publish).toHaveBeenCalledWith(7, 9)
   })
 
+  it("explains when an accommodation names a student instead of asking to retry", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
+      view({
+        can_generate: true,
+        draft: { id: 9, status: "error", content: null, error_message: "x", name_in_data: true, outdated: false },
+      }),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+
+    expect(await screen.findByText(/menciona el nombre de un alumno/i)).toBeInTheDocument()
+    expect(screen.queryByText(/probá de nuevo/i)).not.toBeInTheDocument()
+  })
+
   it("disables generation when the group has no accommodations", async () => {
     vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(view({ can_generate: true }))
     render(<GroupAccommodationNarrative groupId={1} canSummarise={false} />)

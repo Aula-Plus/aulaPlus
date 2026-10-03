@@ -60,6 +60,21 @@ it('discards an AI text that names a student', function () {
     expect($draft['status'])->toBe('error')->and($draft['content'])->toBeNull();
 });
 
+it('sends nothing to the AI when an accommodation text names a student', function () {
+    [, $psico, $group, $student] = narrativeSetup();
+    Accommodation::factory()->create(['student_id' => $student->id, 'type' => 'lectura en voz alta para Lucía', 'category' => 'access', 'active' => true]);
+    Http::fake();
+    Sanctum::actingAs($psico);
+
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->assertStatus(202);
+
+    Http::assertNothingSent();
+    $draft = $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")->json('draft');
+    expect($draft['status'])->toBe('error')
+        ->and($draft['name_in_data'])->toBeTrue()
+        ->and($draft['content'])->toBeNull();
+});
+
 it('refuses to generate when the group has no active accommodations', function () {
     [$school, $psico] = narrativeSetup();
     $empty = Group::factory()->create(['school_id' => $school->id]);

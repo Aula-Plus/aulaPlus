@@ -15,6 +15,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Writes the plain-text "Ajustes activos" summary of a group through
@@ -22,8 +23,10 @@ use Illuminate\Support\Facades\Log;
  *
  * The model only receives the aggregated accommodations (type, category,
  * number of students) — never a name or id of a student (CLAUDE.md rule 11).
- * Its answer is checked before being stored: if it names any student of the
- * school it is discarded. Logs carry only the narrative id, never the context
+ * `type` is free text typed by staff, so the outgoing prompt is checked too:
+ * if it contains a student's name nothing is sent. The answer is checked
+ * again before being stored: if it names any student of the school it is
+ * discarded. Logs carry only the narrative id, never the context
  * or the text (rules 2 and 11).
  */
 class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
@@ -42,8 +45,14 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
 
     protected const MAX_TOKENS = 1024;
 
+    /** Stored when the accommodation data itself names a student (nothing is sent). */
+    public const ERROR_NAME_IN_DATA = 'Accommodation data names a student; nothing was sent to the AI.';
+
     /** Name fragments too generic to prove a student is being named. */
     protected const NAME_STOPWORDS = ['del', 'las', 'los', 'van', 'von', 'dos', 'san', 'que'];
+
+    /** Lower-cased name parts of the school's students, loaded once per run. */
+    protected ?array $studentNameParts = null;
 
     public function __construct(public GroupAccommodationNarrative $narrative) {}
 
@@ -51,7 +60,15 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
     {
         Tenancy::forSchool($this->narrative->school_id, function () use ($summarize): void {
             $group = $this->narrative->group;
-            $summary = $summarize($group);
+            $prompt = $this->userPrompt($group->name, $summarize($group));
+
+            // Free-text accommodation types could carry a name: never let it
+            // reach the third-party API (rule 11).
+            if ($this->namesAStudent($prompt)) {
+                $this->markError(self::ERROR_NAME_IN_DATA);
+
+                return;
+            }
 
             try {
                 $response = Http::withHeaders([
@@ -65,7 +82,7 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
                         'model' => config('services.anthropic.model'),
                         'max_tokens' => self::MAX_TOKENS,
                         'system' => $this->systemPrompt(),
-                        'messages' => [['role' => 'user', 'content' => $this->userPrompt($group->name, $summary)]],
+                        'messages' => [['role' => 'user', 'content' => $prompt]],
                     ]);
             } catch (ConnectionException) {
                 $this->markError('Could not reach the AI provider after retries.');
@@ -101,6 +118,15 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
         });
     }
 
+    /**
+     * Uncaught failure (worker crash, DB error…): never leave the narrative
+     * stuck in `pending`, which the UI would poll forever.
+     */
+    public function failed(?Throwable $exception): void
+    {
+        Tenancy::forSchool($this->narrative->school_id, fn () => $this->markError('Generation failed unexpectedly.'));
+    }
+
     protected function markError(string $message): void
     {
         Log::warning('Group accommodation narrative generation failed', [
@@ -120,21 +146,26 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
      */
     protected function namesAStudent(string $text): bool
     {
-        foreach (Student::query()->pluck('full_name') as $fullName) {
-            $parts = preg_split('/\s+/u', mb_strtolower(trim((string) $fullName))) ?: [];
-
-            foreach ($parts as $part) {
-                if (mb_strlen($part) < 3 || in_array($part, self::NAME_STOPWORDS, true)) {
-                    continue;
-                }
-
-                if (preg_match('/(?<!\pL)'.preg_quote($part, '/').'(?!\pL)/iu', $text) === 1) {
-                    return true;
-                }
+        foreach ($this->studentNameParts() as $part) {
+            if (preg_match('/(?<!\pL)'.preg_quote($part, '/').'(?!\pL)/iu', $text) === 1) {
+                return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function studentNameParts(): array
+    {
+        return $this->studentNameParts ??= Student::query()->pluck('full_name')
+            ->flatMap(fn ($fullName) => preg_split('/\s+/u', mb_strtolower(trim((string) $fullName))) ?: [])
+            ->filter(fn (string $part) => mb_strlen($part) >= 3 && ! in_array($part, self::NAME_STOPWORDS, true))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     protected function systemPrompt(): string

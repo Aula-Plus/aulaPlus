@@ -360,6 +360,8 @@ export interface AccommodationNarrativeView {
     status: "pending" | "draft" | "error"
     content: string | null
     error_message: string | null
+    /** The accommodation data itself names a student: nothing was sent to the AI. */
+    name_in_data?: boolean
     outdated: boolean
   } | null
 }

@@ -61,6 +61,8 @@ class GroupAccommodationNarrativeController extends Controller
                 'status' => $latest->status->value,
                 'content' => $latest->content,
                 'error_message' => $latest->error_message,
+                // Retrying won't help: an accommodation's text names a student.
+                'name_in_data' => $latest->error_message === GenerateGroupAccommodationNarrativeJob::ERROR_NAME_IN_DATA,
                 'outdated' => $latest->fingerprint !== $fingerprint,
             ] : null,
         ]);

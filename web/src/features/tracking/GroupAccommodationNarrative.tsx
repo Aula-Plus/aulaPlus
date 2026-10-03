@@ -90,9 +90,15 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
         <div className="rounded-md border border-dashed p-3 text-sm">
           <p className="mb-1 text-xs font-medium text-muted-foreground">Borrador (solo lo ves vos)</p>
           {draft.status === "pending" && <p className="text-muted-foreground">Generando resumen…</p>}
-          {draft.status === "error" && (
-            <p className="text-destructive">No pudimos generar el resumen. Probá de nuevo.</p>
-          )}
+          {draft.status === "error" &&
+            (draft.name_in_data ? (
+              <p className="text-destructive">
+                Algún ajuste del grupo menciona el nombre de un alumno, así que no lo enviamos a la IA.
+                Corregí ese ajuste y volvé a generar el resumen.
+              </p>
+            ) : (
+              <p className="text-destructive">No pudimos generar el resumen. Probá de nuevo.</p>
+            ))}
           {draft.status === "draft" && (
             <>
               <p className="whitespace-pre-wrap">{draft.content}</p>
