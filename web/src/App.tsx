@@ -11,6 +11,7 @@ import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
+import { MyFollowUpsPage } from "@/features/tracking/MyFollowUpsPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
@@ -69,6 +70,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <StudentHistoryPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/mis-seguimientos"
+            element={
+              <ProtectedLayout>
+                <MyFollowUpsPage />
               </ProtectedLayout>
             }
           />
