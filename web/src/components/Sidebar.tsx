@@ -118,6 +118,7 @@ interface SidebarContentProps {
 
 function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: SidebarContentProps) {
   const { user, logout } = useAuth()
+  const location = useLocation()
   const sections = buildNavSections(user)
 
   return (
