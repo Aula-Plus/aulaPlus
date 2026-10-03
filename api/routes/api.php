@@ -17,6 +17,7 @@ use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignApprovalController;
@@ -103,6 +104,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // `is_overdue` is computed server-side by the resource.
         Route::get('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'index']);
         Route::post('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'store']);
+        Route::get('/students/{student}/follow-up-candidates', [ScheduledFollowUpController::class, 'candidates']);
+        Route::get('/scheduled-follow-ups/mine', [ScheduledFollowUpController::class, 'mine']);
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
         // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-
