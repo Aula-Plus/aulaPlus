@@ -42,6 +42,17 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Alumnos" })).toBeInTheDocument()
   })
 
+  it("shows the help and suggestions link to every role", () => {
+    for (const role of ["teacher", "psychopedagogue", "director"] as const) {
+      renderSidebar(role)
+      expect(screen.getByRole("link", { name: "Ayuda y sugerencias" })).toHaveAttribute(
+        "href",
+        "/ayuda",
+      )
+      cleanup()
+    }
+  })
+
   it("gates the screening-tests link to psychopedagogy and direction, not teachers", () => {
     renderSidebar("psychopedagogue")
     expect(screen.getByRole("link", { name: "Pruebas de sondeo" })).toBeInTheDocument()

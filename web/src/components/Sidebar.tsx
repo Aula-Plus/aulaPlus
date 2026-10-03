@@ -166,6 +166,7 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                   key={item.to}
                   to={item.to}
                   end={item.end}
+                  state={item.passFrom ? { from: location.pathname } : undefined}
                   title={collapsed ? item.label : undefined}
                   className={({ isActive }) =>
                     cn(

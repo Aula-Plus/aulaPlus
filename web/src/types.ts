@@ -518,6 +518,16 @@ export interface GroupTracking {
   }
 }
 
+/** "Ayuda y sugerencias": the two paths of the support form. */
+export type SupportMessageKind = "issue" | "improvement"
+
+/** Body for `POST /support-messages`. Role and school are resolved server-side. */
+export interface SupportMessageInput {
+  kind: SupportMessageKind
+  message: string
+  screen?: string | null
+}
+
 /** One weekly bucket of the adoption dashboard time series (Monday-start). */
 export interface WeeklySeriesPoint {
   week_start: string
