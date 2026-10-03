@@ -84,13 +84,24 @@ export interface Student {
 // view-clinical-profile, so their detail arrays are optional here while the
 // counts are always present.
 
-/** Author-set tone of a comment. Mirror of `App\Enums\CommentTone`. */
-export type CommentTone = "positive" | "neutral" | "concerning"
+/** A school-editable comment category (replaces the old comment "tone"). */
+export interface CommentCategory {
+  id: number
+  name: string
+  position: number
+}
 
-export const commentToneLabels: Record<CommentTone, string> = {
-  positive: "Positivo",
-  neutral: "Neutral",
-  concerning: "Preocupante",
+/**
+ * Recurrence mark on a student: several comments of one category in a short
+ * time (thresholds are the school's). Only psychopedagogy/direction receive it.
+ * A mark to look at, not an alert.
+ */
+export interface CommentTrend {
+  category_id: number
+  category_name: string
+  count: number
+  authors: number
+  days: number
 }
 
 export interface Comment {
@@ -100,7 +111,8 @@ export interface Comment {
   commentable_type: string
   commentable_id: number
   content: string
-  tone: CommentTone | null
+  /** Optional, several allowed; empty = "Sin categoría". */
+  categories?: { id: number; name: string }[]
   /**
    * Roles allowed to see the comment, or null when visible to everyone who
    * can see the parent record. Never an empty array from the API.
@@ -118,11 +130,10 @@ export interface Comment {
 }
 
 /** Mirror of `App\Enums\AlertType`. */
-export type AlertType = "performance" | "behavior" | "planning_attendance"
+export type AlertType = "performance" | "planning_attendance"
 
 export const alertTypeLabels: Record<AlertType, string> = {
   performance: "Rendimiento",
-  behavior: "Conducta",
   planning_attendance: "Planificación / asistencia",
 }
 
@@ -253,7 +264,6 @@ export type PerformanceMarkType =
   | "accommodation_deactivated"
   | "accommodation_instance_override"
   | "barrier_registered"
-  | "concerning_comment"
   | "calendar_event"
 
 export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
@@ -261,7 +271,6 @@ export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
   accommodation_deactivated: "Adaptación desactivada",
   accommodation_instance_override: "Adaptación desactivada para esta evaluación",
   barrier_registered: "Barrera registrada",
-  concerning_comment: "Comentario preocupante",
   calendar_event: "Evento de calendario",
 }
 
@@ -276,7 +285,6 @@ export const performanceMarkColors: Record<PerformanceMarkType, string> = {
   accommodation_deactivated: "#dc2626", // red
   accommodation_instance_override: "#d97706", // amber
   barrier_registered: "#7c3aed", // violet
-  concerning_comment: "#db2777", // pink
   calendar_event: "#0891b2", // cyan
 }
 
@@ -300,7 +308,6 @@ export type PerformanceMark =
       reason: string
     })
   | (PerformanceMarkBase & { type: "barrier_registered"; barrier_id: number })
-  | (PerformanceMarkBase & { type: "concerning_comment"; comment_id: number })
   | (PerformanceMarkBase & { type: "calendar_event"; calendar_event_id: number; title: string })
 
 export interface StudentPerformanceTimeline {
@@ -364,14 +371,12 @@ export type GroupPerformanceMarkType =
   | "accommodation_activated"
   | "accommodation_deactivated"
   | "barrier_registered"
-  | "concerning_comment"
   | "calendar_event"
 
 export const groupPerformanceMarkTypeLabels: Record<GroupPerformanceMarkType, string> = {
   accommodation_activated: "Adaptaciones activadas",
   accommodation_deactivated: "Adaptaciones desactivadas",
   barrier_registered: "Barreras registradas",
-  concerning_comment: "Comentarios preocupantes",
   calendar_event: "Evento de calendario",
 }
 
@@ -397,7 +402,6 @@ export type GroupPerformanceMark =
       count: number
     })
   | (GroupPerformanceMarkBase & { type: "barrier_registered"; count: number })
-  | (GroupPerformanceMarkBase & { type: "concerning_comment"; count: number })
   | (GroupPerformanceMarkBase & {
       type: "calendar_event"
       calendar_event_id: number
@@ -490,6 +494,8 @@ export interface StudentTracking {
   barriers?: Barrier[]
   barriers_count: number
   recent_comments: Comment[]
+  /** Absent for a teacher: only psychopedagogy/direction get the recurrence mark. */
+  comment_trends?: CommentTrend[]
   alerts?: Alert[]
   open_alerts_count: number
 }

@@ -25,6 +25,7 @@ import {
   type Accommodation,
   type Alert,
   type Comment,
+  type CommentCategory,
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
@@ -53,6 +54,7 @@ export function StudentTrackingPage() {
 
   const [tracking, setTracking] = useState<StudentTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
+  const [categories, setCategories] = useState<CommentCategory[]>([])
   const [error, setError] = useState<string | null>(null)
   const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
@@ -74,6 +76,10 @@ export function StudentTrackingPage() {
   useEffect(() => {
     loadTracking()
     loadComments()
+    trackingApi
+      .fetchCommentCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]))
   }, [loadTracking, loadComments])
 
   async function handleCreateComment(input: CommentInput) {
@@ -160,6 +166,19 @@ export function StudentTrackingPage() {
           </Link>
         )}
       </PageHeader>
+
+      {/* Recurrence mark (psychopedagogy/direction only — absent for a teacher).
+          A mark to look at, not an alert: no owner, no deadline. */}
+      {(tracking.comment_trends ?? []).map((trend) => (
+        <div
+          key={trend.category_id}
+          role="note"
+          className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          Tendencia: {trend.count} comentarios de «{trend.category_name}» de {trend.authors}{" "}
+          {trend.authors === 1 ? "persona" : "personas"} en {trend.days} días
+        </div>
+      ))}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -422,6 +441,7 @@ export function StudentTrackingPage() {
         comments={comments ?? []}
         onCreate={handleCreateComment}
         title="Comentarios del alumno"
+        categories={categories}
       />
 
       {showManageAccommodations && (

@@ -16,7 +16,7 @@ const sampleComment: Comment = {
   commentable_type: "Student",
   commentable_id: 3,
   content: "Avanzó mucho este mes.",
-  tone: "positive",
+  categories: [{ id: 1, name: "Académico" }],
   visible_to: ["psychopedagogue", "director"],
   author_only: false,
   created_at: "2026-08-01T10:00:00+00:00",
@@ -27,13 +27,13 @@ describe("CommentsPanel", () => {
     vi.restoreAllMocks()
   })
 
-  it("renders existing comments with tone and visibility", () => {
-    // canComment={false} so the tone <option>s in the form don't collide with
-    // the badge text we assert on here — this test is about the list.
+  it("renders existing comments with categories and visibility", () => {
+    // canComment={false} so the form's controls don't collide with the badge
+    // text we assert on here — this test is about the list.
     render(<CommentsPanel comments={[sampleComment]} onCreate={vi.fn()} canComment={false} />)
 
     expect(screen.getByText("Avanzó mucho este mes.")).toBeInTheDocument()
-    expect(screen.getByText("Positivo")).toBeInTheDocument()
+    expect(screen.getByText("Académico")).toBeInTheDocument()
     expect(screen.getByText(/visible para: psicopedagogo, director/i)).toBeInTheDocument()
     // A non-private comment shows no "Privado" badge.
     expect(screen.queryByText("Privado")).not.toBeInTheDocument()
@@ -91,21 +91,33 @@ describe("CommentsPanel", () => {
     // field is simply absent — and so is author_only.
     expect(payload).not.toHaveProperty("visible_to")
     expect(payload).not.toHaveProperty("author_only")
-    expect(payload).toEqual({ content: "Observación general", tone: null })
+    expect(payload).toEqual({ content: "Observación general" })
   })
 
-  it("scope 'director' sends visible_to: ['director'] and the chosen tone", async () => {
+  it("scope 'director' sends visible_to: ['director'] and the chosen categories", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
-    render(<CommentsPanel comments={[]} onCreate={onCreate} />)
+    render(
+      <CommentsPanel
+        comments={[]}
+        onCreate={onCreate}
+        categories={[
+          { id: 1, name: "Emocional", position: 0 },
+          { id: 2, name: "Académico", position: 1 },
+        ]}
+      />,
+    )
 
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Solo dirección")
-    await choose(/tono/i, "Preocupante")
+    await userEvent.click(screen.getByLabelText(/de qué trata/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Emocional" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Académico" }))
+    await userEvent.keyboard("{Escape}")
     await choose(/visible para/i, "Solo dirección")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(onCreate).toHaveBeenCalledWith({
       content: "Solo dirección",
-      tone: "concerning",
+      category_ids: [1, 2],
       visible_to: ["director"],
     })
     expect(onCreate.mock.calls[0][0]).not.toHaveProperty("author_only")
@@ -122,7 +134,6 @@ describe("CommentsPanel", () => {
     const payload = onCreate.mock.calls[0][0]
     expect(payload).toEqual({
       content: "Solo psico",
-      tone: null,
       visible_to: ["psychopedagogue"],
     })
     expect(payload).not.toHaveProperty("author_only")
@@ -139,7 +150,6 @@ describe("CommentsPanel", () => {
     const payload = onCreate.mock.calls[0][0]
     expect(payload).toEqual({
       content: "Nota personal",
-      tone: null,
       author_only: true,
     })
     // Mutually exclusive: visible_to is never sent alongside author_only.

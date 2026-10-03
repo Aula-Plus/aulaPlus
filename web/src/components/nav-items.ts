@@ -3,6 +3,7 @@ import {
   BookOpen,
   ClipboardList,
   GraduationCap,
+  MessageSquare,
   Home,
   TrendingUp,
   UserCog,
@@ -11,6 +12,7 @@ import {
 import type { User } from "@/types"
 import {
   canApproveScreeningTestDesign,
+  canManageCommentSettings,
   canManageScreeningTests,
   canManageSubjects,
   canManageUsers,
@@ -66,6 +68,10 @@ export function buildNavSections(user: User | null): NavSection[] {
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
           ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
+          : []),
+        // Comment categories + trend threshold: director-only.
+        ...(canManageCommentSettings(user)
+          ? [{ to: "/ajustes/comentarios", label: "Comentarios", icon: MessageSquare }]
           : []),
         // The adoption dashboard is director-only.
         ...(canViewAdoptionDashboard(user)
