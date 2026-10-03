@@ -676,6 +676,7 @@ export interface ScreeningTestDesign {
 export interface ScreeningTestType {
   id: number
   name: string
+  area: string | null
   active: boolean
   created_by_id: number | null
   current_design: ScreeningTestDesign | null
@@ -732,6 +733,7 @@ export interface ScreeningTestRosterEntry {
 /** Body for `POST /screening-test-types` (`StoreScreeningTestTypeRequest`). */
 export interface ScreeningTestTypeInput {
   name: string
+  area?: string | null
   active?: boolean
 }
 
