@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Groups\BuildGroupAccommodationSummary;
 use App\Enums\AuditAction;
 use App\Enums\CommentTone;
 use App\Http\Requests\GroupPerformanceTimelineRequest;
@@ -36,30 +37,11 @@ class GroupProfileController extends Controller
      * yet be different concrete adjustments); `student_count` counts DISTINCT
      * students, not rows, and only effective accommodations are counted.
      */
-    public function accommodationsSummary(Group $group): JsonResponse
+    public function accommodationsSummary(Group $group, BuildGroupAccommodationSummary $summarize): JsonResponse
     {
         $this->authorize('view', $group);
 
-        $studentIds = $group->students()->pluck('students.id');
-
-        $summary = Accommodation::query()
-            ->whereIn('student_id', $studentIds)
-            ->get()
-            ->filter->isEffective()
-            ->groupBy('type')
-            ->map(fn (Collection $group, string $type): array => [
-                'type' => $type,
-                // A given `type` is expected to carry one category; if the data
-                // ever disagrees we take the first deterministically rather than
-                // silently dropping the row.
-                'category' => $group->first()->category?->value,
-                'student_count' => $group->pluck('student_id')->unique()->count(),
-            ])
-            // Deterministic order (the domain doc gives none): alphabetical by
-            // type, so the payload is stable across requests.
-            ->sortBy('type')
-            ->values()
-            ->all();
+        $summary = $summarize($group);
 
         return response()->json($summary);
     }
