@@ -14,7 +14,9 @@ class CommentCategoryPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        // Explicit staff check rather than `true` (CLAUDE.md security rule 4);
+        // the list itself is tenant-scoped by SchoolScope.
+        return $user->hasAnyRole(Role::values());
     }
 
     public function create(User $user): bool

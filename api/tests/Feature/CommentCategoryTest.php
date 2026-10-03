@@ -34,6 +34,12 @@ it('gives every new school the default categories', function () {
     expect($names)->toBe(['Académico', 'Conductual', 'Social', 'Emocional', 'Familiar', 'Otro']);
 });
 
+it('does not list the categories to a user without a staff role', function () {
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->create());
+
+    $this->getJson('/api/v1/comment-categories')->assertForbidden();
+});
+
 it('lets only a director edit the categories, and only their own school\'s', function () {
     $school = School::factory()->create();
     $other = School::factory()->create();
