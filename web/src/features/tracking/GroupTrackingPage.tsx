@@ -10,7 +10,7 @@ import { RowLink } from "@/components/ui/row-link"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { Comment, GroupTracking } from "@/types"
+import type { Comment, CommentCategory, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
 import { GroupAccommodationsSummary } from "./GroupAccommodationsSummary"
 import { GroupOverdueFollowUps } from "./GroupOverdueFollowUps"
@@ -26,6 +26,7 @@ export function GroupTrackingPage() {
 
   const [tracking, setTracking] = useState<GroupTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
+  const [categories, setCategories] = useState<CommentCategory[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const loadTracking = useCallback(() => {
@@ -45,6 +46,10 @@ export function GroupTrackingPage() {
   useEffect(() => {
     loadTracking()
     loadComments()
+    trackingApi
+      .fetchCommentCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]))
   }, [loadTracking, loadComments])
 
   async function handleCreateComment(input: CommentInput) {
@@ -134,6 +139,7 @@ export function GroupTrackingPage() {
         comments={comments ?? []}
         onCreate={handleCreateComment}
         title="Comentarios de la clase"
+        categories={categories}
       />
     </div>
   )

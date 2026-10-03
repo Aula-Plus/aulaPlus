@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\Role;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -30,6 +31,7 @@ use Illuminate\Support\Facades\Gate;
  *     barriers: iterable,
  *     comments: iterable,
  *     alerts: iterable,
+ *     comment_trends: array<int, array<string, mixed>>,
  *     by_subject: array<int, array<string, mixed>>,
  *     overall_average: float|null,
  * }
@@ -69,6 +71,12 @@ class StudentTrackingResource extends JsonResource
             ),
             'barriers_count' => $barriers->count(),
             'recent_comments' => CommentResource::collection($visibleComments),
+            // Recurrence mark: psychopedagogy/direction only (absent for a
+            // teacher, since the number anchors). A mark, not an alert.
+            'comment_trends' => $this->when(
+                $user->hasAnyRole(Role::schoolWideValues()),
+                fn () => $this->resource['comment_trends'] ?? []
+            ),
             'alerts' => $this->when(
                 $canViewClinicalProfile,
                 fn () => AlertResource::collection($alerts)

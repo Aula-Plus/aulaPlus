@@ -14,8 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * An early-warning alert for a student (docs/prompts/04-seguimiento-
- * institucional.md §4). Generated automatically by `alerts:generate` today;
- * `description` holds a short, non-PII summary and is excluded from the
+ * institucional.md §4). `description` holds a short, non-PII summary and is excluded from the
  * audit diff (CLAUDE.md security rule 11), same pattern as Accommodation/
  * Barrier.
  */
