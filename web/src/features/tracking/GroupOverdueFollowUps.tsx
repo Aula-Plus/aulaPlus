@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useState } from "react"
-import { CalendarClock } from "lucide-react"
-import { EmptyState } from "@/components/ui/empty-state"
-import { RowLink } from "@/components/ui/row-link"
-import { SectionCard } from "@/components/ui/section-card"
-import { formatShortDate } from "@/lib/utils"
-import type { ScheduledFollowUp } from "@/types"
-import { fetchGroupScheduledFollowUps } from "./scheduledFollowUpsApi"
+import { useCallback, useEffect, useState } from "react";
+import { CalendarClock } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { RowLink } from "@/components/ui/row-link";
+import { SectionCard } from "@/components/ui/section-card";
+import { formatShortDate } from "@/lib/utils";
+import type { ScheduledFollowUp } from "@/types";
+import { fetchGroupScheduledFollowUps } from "./scheduledFollowUpsApi";
 
 interface GroupOverdueFollowUpsProps {
-  groupId: number
+  groupId: number;
 }
 
 /**
@@ -23,22 +23,22 @@ interface GroupOverdueFollowUpsProps {
  * `?overdue=true`; the `is_overdue` flag is decided server-side.
  */
 export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
-  const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setError(null)
+    setError(null);
     try {
-      setFollowUps(await fetchGroupScheduledFollowUps(groupId, true))
+      setFollowUps(await fetchGroupScheduledFollowUps(groupId, true));
     } catch {
-      setError("No pudimos cargar los seguimientos vencidos.")
-      setFollowUps([])
+      setError("No pudimos cargar los seguimientos vencidos.");
+      setFollowUps([]);
     }
-  }, [groupId])
+  }, [groupId]);
 
   useEffect(() => {
-    load()
-  }, [load])
+    load();
+  }, [load]);
 
   return (
     <SectionCard title="Seguimientos vencidos">
@@ -47,7 +47,10 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
       ) : followUps === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : followUps.length === 0 ? (
-        <EmptyState icon={CalendarClock} message="No hay seguimientos vencidos." />
+        <EmptyState
+          icon={CalendarClock}
+          message="No hay seguimientos vencidos."
+        />
       ) : (
         <ul className="grid gap-3">
           {followUps.map((followUp) => (
@@ -61,7 +64,10 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
                   Vence: {formatShortDate(followUp.due_date)}
                 </p>
               </div>
-              <RowLink to={`/alumnos/${followUp.student_id}/seguimiento`} className="shrink-0">
+              <RowLink
+                to={`/alumnos/${followUp.student_id}/seguimiento`}
+                className="shrink-0"
+              >
                 Ver alumno
               </RowLink>
             </li>
@@ -69,5 +75,5 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
         </ul>
       )}
     </SectionCard>
-  )
+  );
 }

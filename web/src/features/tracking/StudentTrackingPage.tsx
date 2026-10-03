@@ -1,22 +1,36 @@
-import { useCallback, useEffect, useState } from "react"
-import { Link, useParams } from "react-router-dom"
-import { Ban, CircleCheck, FileText, GraduationCap, HeartHandshake, TriangleAlert } from "lucide-react"
-import { useAuth } from "@/features/auth/AuthContext"
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  Ban,
+  CircleCheck,
+  FileText,
+  GraduationCap,
+  HeartHandshake,
+  TriangleAlert,
+} from "lucide-react";
+import { useAuth } from "@/features/auth/AuthContext";
 import {
   canApproveAccommodation,
   canManageAccommodations,
   canResolveAlert,
   canViewStudentHistory,
-} from "@/lib/permissions"
-import { formatShortDate } from "@/lib/utils"
-import { Badge, type BadgeTone } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { EmptyState } from "@/components/ui/empty-state"
-import { PageHeader } from "@/components/ui/page-header"
-import { SectionCard } from "@/components/ui/section-card"
-import { StatCard } from "@/components/ui/stat-card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+} from "@/lib/permissions";
+import { formatShortDate } from "@/lib/utils";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatCard } from "@/components/ui/stat-card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   accommodationCategoryLabels,
   alertSeverityLabels,
@@ -26,64 +40,65 @@ import {
   type Alert,
   type Comment,
   type StudentTracking,
-} from "@/types"
-import { AccommodationFormDialog } from "./AccommodationFormDialog"
-import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
-import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
-import { CommentsPanel } from "./CommentsPanel"
-import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
-import { StudentPerformanceChart } from "./StudentPerformanceChart"
-import * as trackingApi from "./trackingApi"
-import type { CommentInput } from "./trackingApi"
+} from "@/types";
+import { AccommodationFormDialog } from "./AccommodationFormDialog";
+import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm";
+import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel";
+import { CommentsPanel } from "./CommentsPanel";
+import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel";
+import { StudentPerformanceChart } from "./StudentPerformanceChart";
+import * as trackingApi from "./trackingApi";
+import type { CommentInput } from "./trackingApi";
 
 const severityTone: Record<Alert["severity"], BadgeTone> = {
   low: "neutral",
   medium: "warning",
   high: "danger",
-}
+};
 
 export function StudentTrackingPage() {
-  const { id } = useParams<{ id: string }>()
-  const studentId = Number(id)
-  const { user } = useAuth()
-  const showResolve = canResolveAlert(user)
-  const showApprove = canApproveAccommodation(user)
-  const showManageAccommodations = canManageAccommodations(user)
-  const showHistoryLink = canViewStudentHistory(user)
+  const { id } = useParams<{ id: string }>();
+  const studentId = Number(id);
+  const { user } = useAuth();
+  const showResolve = canResolveAlert(user);
+  const showApprove = canApproveAccommodation(user);
+  const showManageAccommodations = canManageAccommodations(user);
+  const showHistoryLink = canViewStudentHistory(user);
 
-  const [tracking, setTracking] = useState<StudentTracking | null>(null)
-  const [comments, setComments] = useState<Comment[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
-  const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
+  const [tracking, setTracking] = useState<StudentTracking | null>(null);
+  const [comments, setComments] = useState<Comment[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false);
+  const [editingAccommodation, setEditingAccommodation] =
+    useState<Accommodation | null>(null);
 
   const loadTracking = useCallback(() => {
     return trackingApi
       .fetchStudentTracking(studentId)
       .then((data) => setTracking(data))
-      .catch(() => setError("No pudimos cargar el seguimiento del alumno."))
-  }, [studentId])
+      .catch(() => setError("No pudimos cargar el seguimiento del alumno."));
+  }, [studentId]);
 
   const loadComments = useCallback(() => {
     return trackingApi
       .fetchStudentComments(studentId)
       .then((data) => setComments(data))
-      .catch(() => setComments([]))
-  }, [studentId])
+      .catch(() => setComments([]));
+  }, [studentId]);
 
   useEffect(() => {
-    loadTracking()
-    loadComments()
-  }, [loadTracking, loadComments])
+    loadTracking();
+    loadComments();
+  }, [loadTracking, loadComments]);
 
   async function handleCreateComment(input: CommentInput) {
-    await trackingApi.createStudentComment(studentId, input)
-    await loadComments()
+    await trackingApi.createStudentComment(studentId, input);
+    await loadComments();
   }
 
   async function handleResolveAlert(alertId: number) {
-    await trackingApi.resolveAlert(alertId)
-    await loadTracking()
+    await trackingApi.resolveAlert(alertId);
+    await loadTracking();
   }
 
   /**
@@ -95,34 +110,34 @@ export function StudentTrackingPage() {
    */
   function replaceAccommodation(next: Accommodation) {
     setTracking((current) => {
-      if (!current || !current.accommodations) return current
+      if (!current || !current.accommodations) return current;
       return {
         ...current,
         accommodations: current.accommodations.map((accommodation) =>
           accommodation.id === next.id ? next : accommodation,
         ),
-      }
-    })
+      };
+    });
   }
 
   async function handleApprove(accommodationId: number) {
-    const updated = await trackingApi.approveAccommodation(accommodationId)
-    replaceAccommodation(updated)
+    const updated = await trackingApi.approveAccommodation(accommodationId);
+    replaceAccommodation(updated);
   }
 
   async function handleReject(accommodationId: number) {
-    const updated = await trackingApi.rejectAccommodation(accommodationId)
-    replaceAccommodation(updated)
+    const updated = await trackingApi.rejectAccommodation(accommodationId);
+    replaceAccommodation(updated);
   }
 
   function handleNewAccommodation() {
-    setEditingAccommodation(null)
-    setAccommodationDialogOpen(true)
+    setEditingAccommodation(null);
+    setAccommodationDialogOpen(true);
   }
 
   function handleEditAccommodation(accommodation: Accommodation) {
-    setEditingAccommodation(accommodation)
-    setAccommodationDialogOpen(true)
+    setEditingAccommodation(accommodation);
+    setAccommodationDialogOpen(true);
   }
 
   /**
@@ -131,18 +146,18 @@ export function StudentTrackingPage() {
    * not race the ~60s server cache the way the in-place splice avoids.
    */
   function handleAccommodationSaved() {
-    loadTracking()
+    loadTracking();
   }
 
   if (error) {
-    return <p className="text-sm text-destructive">{error}</p>
+    return <p className="text-sm text-destructive">{error}</p>;
   }
 
   if (!tracking) {
-    return <p className="text-muted-foreground">Cargando…</p>
+    return <p className="text-muted-foreground">Cargando…</p>;
   }
 
-  const { student } = tracking
+  const { student } = tracking;
 
   return (
     <div className="grid gap-6">
@@ -185,7 +200,10 @@ export function StudentTrackingPage() {
       <SectionCard title="Datos del alumno">
         <div className="grid gap-2 text-sm">
           <Row label="Año de ingreso" value={String(student.enrollment_year)} />
-          <Row label="Fecha de nacimiento" value={formatShortDate(student.birth_date)} />
+          <Row
+            label="Fecha de nacimiento"
+            value={formatShortDate(student.birth_date)}
+          />
           <Row
             label="Acompañante terapéutico"
             value={student.has_therapeutic_companion ? "Sí" : "No"}
@@ -214,7 +232,8 @@ export function StudentTrackingPage() {
                         {alertSeverityLabels[alert.severity]}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {alertTypeLabels[alert.type]} · {formatShortDate(alert.created_at)}
+                        {alertTypeLabels[alert.type]} ·{" "}
+                        {formatShortDate(alert.created_at)}
                       </span>
                     </div>
                     <p className="mt-1 text-sm">{alert.description}</p>
@@ -234,8 +253,8 @@ export function StudentTrackingPage() {
           )
         ) : (
           <p className="text-sm text-muted-foreground">
-            {tracking.open_alerts_count} alerta(s) abierta(s). No tenés permiso para ver el detalle
-            clínico.
+            {tracking.open_alerts_count} alerta(s) abierta(s). No tenés permiso
+            para ver el detalle clínico.
           </p>
         )}
       </SectionCard>
@@ -259,7 +278,12 @@ export function StudentTrackingPage() {
               message="Sin adaptaciones vigentes."
               action={
                 showManageAccommodations && (
-                  <Button type="button" size="sm" variant="outline" onClick={handleNewAccommodation}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleNewAccommodation}
+                  >
                     Nueva adaptación
                   </Button>
                 )
@@ -269,7 +293,8 @@ export function StudentTrackingPage() {
             <ul className="grid gap-2">
               {tracking.accommodations.map((accommodation) => {
                 const pendingApproval =
-                  accommodation.requires_external_approval && accommodation.approved === null
+                  accommodation.requires_external_approval &&
+                  accommodation.approved === null;
                 return (
                   <li
                     key={accommodation.id}
@@ -277,24 +302,36 @@ export function StudentTrackingPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <span className="font-medium">{accommodation.type}</span>
+                        <span className="font-medium">
+                          {accommodation.type}
+                        </span>
                         {accommodation.category && (
                           <Badge tone="neutral" className="ml-2">
-                            {accommodationCategoryLabels[accommodation.category]}
+                            {
+                              accommodationCategoryLabels[
+                                accommodation.category
+                              ]
+                            }
                           </Badge>
                         )}
                         {accommodation.description && (
-                          <p className="text-muted-foreground">{accommodation.description}</p>
+                          <p className="text-muted-foreground">
+                            {accommodation.description}
+                          </p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <AccommodationStatusBadge accommodation={accommodation} />
+                        <AccommodationStatusBadge
+                          accommodation={accommodation}
+                        />
                         {showManageAccommodations && (
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() => handleEditAccommodation(accommodation)}
+                            onClick={() =>
+                              handleEditAccommodation(accommodation)
+                            }
                           >
                             Editar
                           </Button>
@@ -327,7 +364,7 @@ export function StudentTrackingPage() {
                       />
                     )}
                   </li>
-                )
+                );
               })}
             </ul>
           )}
@@ -344,7 +381,9 @@ export function StudentTrackingPage() {
                 <li key={barrier.id} className="rounded-md border p-3 text-sm">
                   <p>{barrier.description}</p>
                   {barrier.coping_strategy && (
-                    <p className="text-muted-foreground">Estrategia: {barrier.coping_strategy}</p>
+                    <p className="text-muted-foreground">
+                      Estrategia: {barrier.coping_strategy}
+                    </p>
                   )}
                   <BarrierAccommodationsPanel
                     barrierId={barrier.id}
@@ -357,7 +396,10 @@ export function StudentTrackingPage() {
         </SectionCard>
       )}
 
-      <SectionCard title="Evaluaciones recientes" bare={tracking.recent_assessments.length > 0}>
+      <SectionCard
+        title="Evaluaciones recientes"
+        bare={tracking.recent_assessments.length > 0}
+      >
         {tracking.recent_assessments.length === 0 ? (
           <EmptyState icon={FileText} message="Sin evaluaciones recientes." />
         ) : (
@@ -372,9 +414,13 @@ export function StudentTrackingPage() {
             <TableBody>
               {tracking.recent_assessments.map((assessment) => (
                 <TableRow key={assessment.id}>
-                  <TableCell className="pl-6">{assessmentTypeLabels[assessment.type]}</TableCell>
+                  <TableCell className="pl-6">
+                    {assessmentTypeLabels[assessment.type]}
+                  </TableCell>
                   <TableCell>{assessment.variant_number ?? "—"}</TableCell>
-                  <TableCell className="pr-6">{formatShortDate(assessment.created_at)}</TableCell>
+                  <TableCell className="pr-6">
+                    {formatShortDate(assessment.created_at)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -434,7 +480,7 @@ export function StudentTrackingPage() {
         />
       )}
     </div>
-  )
+  );
 }
 
 /**
@@ -445,22 +491,26 @@ export function StudentTrackingPage() {
  *   - Otherwise: fall back to the vigency flag `is_effective` — no approval
  *     badge is added when approval does not apply (docs/prompts/09 §3).
  */
-function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
+function AccommodationStatusBadge({
+  accommodation,
+}: {
+  accommodation: Accommodation;
+}) {
   if (accommodation.requires_external_approval) {
     if (accommodation.approved === true) {
-      return <Badge tone="success">Aprobada</Badge>
+      return <Badge tone="success">Aprobada</Badge>;
     }
     if (accommodation.approved === false) {
-      return <Badge tone="danger">Rechazada</Badge>
+      return <Badge tone="danger">Rechazada</Badge>;
     }
-    return <Badge tone="warning">Pendiente de aprobación</Badge>
+    return <Badge tone="warning">Pendiente de aprobación</Badge>;
   }
 
   return accommodation.is_effective ? (
     <Badge tone="neutral">Vigente</Badge>
   ) : (
     <Badge tone="neutral">No vigente</Badge>
-  )
+  );
 }
 
 /**
@@ -479,7 +529,7 @@ function OverallAverageBadge({ value }: { value: number | null }) {
         </span>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -488,5 +538,5 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value}</span>
     </div>
-  )
+  );
 }

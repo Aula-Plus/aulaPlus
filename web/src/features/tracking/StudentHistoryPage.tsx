@@ -1,19 +1,26 @@
-import { useCallback, useEffect, useState } from "react"
-import { useParams } from "react-router-dom"
-import { FileClock } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { EmptyState } from "@/components/ui/empty-state"
-import { PageHeader } from "@/components/ui/page-header"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { formatShortDate } from "@/lib/utils"
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { FileClock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatShortDate } from "@/lib/utils";
 import {
   auditActionLabels,
   auditOriginLabels,
   type AuditLogEntry,
   type Paginated,
-} from "@/types"
-import * as trackingApi from "./trackingApi"
+} from "@/types";
+import * as trackingApi from "./trackingApi";
 
 /**
  * Read-only audit timeline for a student. Uses server-side page pagination
@@ -27,50 +34,50 @@ import * as trackingApi from "./trackingApi"
  * UI is out of scope for this session.
  */
 export function StudentHistoryPage() {
-  const { id } = useParams<{ id: string }>()
-  const studentId = Number(id)
+  const { id } = useParams<{ id: string }>();
+  const studentId = Number(id);
 
-  const [page, setPage] = useState(1)
-  const [history, setHistory] = useState<Paginated<AuditLogEntry> | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1);
+  const [history, setHistory] = useState<Paginated<AuditLogEntry> | null>(null);
+  const [error, setError] = useState<string | null>(null);
   /**
    * `pendingPage` tracks a click on prev/next that is still in flight. It only
    * flips inside event handlers or promise callbacks — never synchronously
    * from inside the effect (which is flagged by
    * react/set-state-in-effect) — so cascading renders are avoided.
    */
-  const [pendingPage, setPendingPage] = useState<number | null>(null)
+  const [pendingPage, setPendingPage] = useState<number | null>(null);
 
   const load = useCallback(
     (nextPage: number) => {
       return trackingApi
         .fetchStudentHistory(studentId, nextPage)
         .then((data) => {
-          setHistory(data)
-          setError(null)
+          setHistory(data);
+          setError(null);
         })
         .catch(() => setError("No pudimos cargar el historial."))
-        .finally(() => setPendingPage(null))
+        .finally(() => setPendingPage(null));
     },
     [studentId],
-  )
+  );
 
   useEffect(() => {
     // Effect stays minimal — no synchronous setState before the fetch
     // resolves, per the react/set-state-in-effect rule.
-    load(page)
-  }, [load, page])
+    load(page);
+  }, [load, page]);
 
   function goToPage(next: number) {
-    if (next === page) return
-    setPendingPage(next)
-    setPage(next)
+    if (next === page) return;
+    setPendingPage(next);
+    setPage(next);
   }
 
-  const loading = pendingPage !== null
+  const loading = pendingPage !== null;
 
   if (error) {
-    return <p className="text-sm text-destructive">{error}</p>
+    return <p className="text-sm text-destructive">{error}</p>;
   }
 
   return (
@@ -84,26 +91,29 @@ export function StudentHistoryPage() {
       {!history ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : history.data.length === 0 ? (
-        <EmptyState icon={FileClock} message="No hay registros en el historial." />
+        <EmptyState
+          icon={FileClock}
+          message="No hay registros en el historial."
+        />
       ) : (
         <>
           <Card className="overflow-hidden py-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Entidad</TableHead>
-                <TableHead>Acción</TableHead>
-                <TableHead>Origen</TableHead>
-                <TableHead>Detalle</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {history.data.map((entry) => (
-                <HistoryRow key={entry.id} entry={entry} />
-              ))}
-            </TableBody>
-          </Table>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Entidad</TableHead>
+                  <TableHead>Acción</TableHead>
+                  <TableHead>Origen</TableHead>
+                  <TableHead>Detalle</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.data.map((entry) => (
+                  <HistoryRow key={entry.id} entry={entry} />
+                ))}
+              </TableBody>
+            </Table>
           </Card>
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -116,7 +126,9 @@ export function StudentHistoryPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => goToPage(Math.max(1, history.meta.current_page - 1))}
+                onClick={() =>
+                  goToPage(Math.max(1, history.meta.current_page - 1))
+                }
                 disabled={loading || history.meta.current_page <= 1}
               >
                 Anterior
@@ -126,9 +138,16 @@ export function StudentHistoryPage() {
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  goToPage(Math.min(history.meta.last_page, history.meta.current_page + 1))
+                  goToPage(
+                    Math.min(
+                      history.meta.last_page,
+                      history.meta.current_page + 1,
+                    ),
+                  )
                 }
-                disabled={loading || history.meta.current_page >= history.meta.last_page}
+                disabled={
+                  loading || history.meta.current_page >= history.meta.last_page
+                }
               >
                 Siguiente
               </Button>
@@ -137,7 +156,7 @@ export function StudentHistoryPage() {
         </>
       )}
     </div>
-  )
+  );
 }
 
 /**
@@ -145,13 +164,13 @@ export function StudentHistoryPage() {
  * "Usuario #null") when `origin === "system"`, per docs/prompts/09 §5.
  */
 function HistoryRow({ entry }: { entry: AuditLogEntry }) {
-  const [showDetail, setShowDetail] = useState(false)
+  const [showDetail, setShowDetail] = useState(false);
   const originLabel =
     entry.origin === "system"
       ? auditOriginLabels.system
       : entry.user_id !== null
         ? `Usuario #${entry.user_id}`
-        : auditOriginLabels.user
+        : auditOriginLabels.user;
 
   return (
     <>
@@ -159,7 +178,10 @@ function HistoryRow({ entry }: { entry: AuditLogEntry }) {
         <TableCell>{formatShortDate(entry.created_at)}</TableCell>
         <TableCell>
           {entry.auditable_type}
-          <span className="text-xs text-muted-foreground"> #{entry.auditable_id}</span>
+          <span className="text-xs text-muted-foreground">
+            {" "}
+            #{entry.auditable_id}
+          </span>
         </TableCell>
         <TableCell>{auditActionLabels[entry.action]}</TableCell>
         <TableCell>{originLabel}</TableCell>
@@ -185,5 +207,5 @@ function HistoryRow({ entry }: { entry: AuditLogEntry }) {
         </TableRow>
       )}
     </>
-  )
+  );
 }

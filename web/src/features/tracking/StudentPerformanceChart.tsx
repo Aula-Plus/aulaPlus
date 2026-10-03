@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -8,13 +8,13 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from "recharts"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { SectionCard } from "@/components/ui/section-card"
-import { SingleSelect } from "@/components/ui/single-select"
-import { getCurrentSchoolYear } from "@/lib/schoolYear"
-import { formatShortDate } from "@/lib/utils"
+} from "recharts";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { SectionCard } from "@/components/ui/section-card";
+import { SingleSelect } from "@/components/ui/single-select";
+import { getCurrentSchoolYear } from "@/lib/schoolYear";
+import { formatShortDate } from "@/lib/utils";
 import {
   assessmentTypeLabels,
   performanceMarkColors,
@@ -22,24 +22,24 @@ import {
   type PerformanceMark,
   type PerformanceResultPoint,
   type StudentPerformanceTimeline,
-} from "@/types"
-import { fetchStudentPerformanceTimeline } from "./performanceApi"
+} from "@/types";
+import { fetchStudentPerformanceTimeline } from "./performanceApi";
 
 interface StudentPerformanceChartProps {
-  studentId: number
+  studentId: number;
   /**
    * Subjects the student has data in, passed down by the parent
    * (`StudentTrackingPage` already holds `by_subject`) so the selector lists
    * exactly the relevant subjects without an extra fetch. Absent/empty → the
    * selector still renders with only the "Todas las materias" default.
    */
-  subjects?: { id: number; name: string }[]
+  subjects?: { id: number; name: string }[];
 }
 
 /** The default date window: the whole current school year. */
 function defaultRange(): { from: string; to: string } {
-  const year = getCurrentSchoolYear()
-  return { from: `${year}-01-01`, to: `${year}-12-31` }
+  const year = getCurrentSchoolYear();
+  return { from: `${year}-01-01`, to: `${year}-12-31` };
 }
 
 /**
@@ -51,26 +51,26 @@ function defaultRange(): { from: string; to: string } {
 function markDetail(mark: PerformanceMark): string | null {
   switch (mark.type) {
     case "accommodation_instance_override":
-      return mark.reason
+      return mark.reason;
     case "calendar_event":
-      return mark.title
+      return mark.title;
     default:
-      return null
+      return null;
   }
 }
 
 /** The full tooltip text for a mark: label · date · detail. */
 function markTooltip(mark: PerformanceMark): string {
-  const detail = markDetail(mark)
-  const base = `${performanceMarkTypeLabels[mark.type]} · ${formatShortDate(mark.date)}`
-  return detail ? `${base} · ${detail}` : base
+  const detail = markDetail(mark);
+  const base = `${performanceMarkTypeLabels[mark.type]} · ${formatShortDate(mark.date)}`;
+  return detail ? `${base} · ${detail}` : base;
 }
 
 interface ResultDatum {
-  x: number
-  score: number
-  administered_at: string
-  assessment_type: PerformanceResultPoint["assessment_type"]
+  x: number;
+  score: number;
+  administered_at: string;
+  assessment_type: PerformanceResultPoint["assessment_type"];
 }
 
 /**
@@ -88,38 +88,40 @@ export function StudentPerformanceChart({
   studentId,
   subjects = [],
 }: StudentPerformanceChartProps) {
-  const [range, setRange] = useState(defaultRange)
+  const [range, setRange] = useState(defaultRange);
   // "" = every subject (the "Todas las materias" default).
-  const [subjectId, setSubjectId] = useState("")
-  const [timeline, setTimeline] = useState<StudentPerformanceTimeline | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [subjectId, setSubjectId] = useState("");
+  const [timeline, setTimeline] = useState<StudentPerformanceTimeline | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
 
-  const { from, to } = range
+  const { from, to } = range;
 
   useEffect(() => {
     // Guard against an out-of-order response: changing `from` then `to` fires
     // two fetches, and the slower one must not clobber the newer selection.
     // The cleanup flips `ignore` so a stale in-flight request is dropped (same
     // pattern as AuthProvider).
-    let ignore = false
-    setError(null)
+    let ignore = false;
+    setError(null);
     fetchStudentPerformanceTimeline(studentId, {
       from,
       to,
       subjectId: subjectId ? Number(subjectId) : undefined,
     })
       .then((data) => {
-        if (!ignore) setTimeline(data)
+        if (!ignore) setTimeline(data);
       })
       .catch(() => {
-        if (ignore) return
-        setError("No pudimos cargar el desempeño del alumno.")
-        setTimeline(null)
-      })
+        if (ignore) return;
+        setError("No pudimos cargar el desempeño del alumno.");
+        setTimeline(null);
+      });
     return () => {
-      ignore = true
-    }
-  }, [studentId, from, to, subjectId])
+      ignore = true;
+    };
+  }, [studentId, from, to, subjectId]);
 
   return (
     <SectionCard
@@ -149,7 +151,9 @@ export function StudentPerformanceChart({
               type="date"
               value={from}
               max={to || undefined}
-              onChange={(event) => setRange((prev) => ({ ...prev, from: event.target.value }))}
+              onChange={(event) =>
+                setRange((prev) => ({ ...prev, from: event.target.value }))
+              }
               className="max-w-44"
             />
           </div>
@@ -160,7 +164,9 @@ export function StudentPerformanceChart({
               type="date"
               value={to}
               min={from || undefined}
-              onChange={(event) => setRange((prev) => ({ ...prev, to: event.target.value }))}
+              onChange={(event) =>
+                setRange((prev) => ({ ...prev, to: event.target.value }))
+              }
               className="max-w-44"
             />
           </div>
@@ -175,17 +181,23 @@ export function StudentPerformanceChart({
         <PerformanceChartBody timeline={timeline} />
       )}
     </SectionCard>
-  )
+  );
 }
 
-function PerformanceChartBody({ timeline }: { timeline: StudentPerformanceTimeline }) {
-  const { results, marks } = timeline
+function PerformanceChartBody({
+  timeline,
+}: {
+  timeline: StudentPerformanceTimeline;
+}) {
+  const { results, marks } = timeline;
 
   // Empty results → an explicit message, never an empty/broken chart (spec §5).
   // Marks are intentionally NOT enough to draw the chart on their own: without a
   // score line there is no Y dimension to place them against.
   if (results.length === 0) {
-    return <p className="text-muted-foreground">Sin evaluaciones en este rango.</p>
+    return (
+      <p className="text-muted-foreground">Sin evaluaciones en este rango.</p>
+    );
   }
 
   const resultData: ResultDatum[] = results.map((result) => ({
@@ -193,40 +205,58 @@ function PerformanceChartBody({ timeline }: { timeline: StudentPerformanceTimeli
     score: result.score,
     administered_at: result.administered_at,
     assessment_type: result.assessment_type,
-  }))
+  }));
 
-  const markPoints = marks.map((mark) => ({ ts: new Date(mark.date).getTime(), mark }))
+  const markPoints = marks.map((mark) => ({
+    ts: new Date(mark.date).getTime(),
+    mark,
+  }));
 
   // X domain covers both the score line and every mark, so a mark that falls
   // before the first assessment or after the last still lands on the axis
   // instead of being clipped. A single-point line gets a ±1 day pad so it is
   // not a degenerate zero-width domain.
-  const timestamps = [...resultData.map((d) => d.x), ...markPoints.map((m) => m.ts)]
-  let min = Math.min(...timestamps)
-  let max = Math.max(...timestamps)
+  const timestamps = [
+    ...resultData.map((d) => d.x),
+    ...markPoints.map((m) => m.ts),
+  ];
+  let min = Math.min(...timestamps);
+  let max = Math.max(...timestamps);
   if (min === max) {
-    const DAY = 86_400_000
-    min -= DAY
-    max += DAY
+    const DAY = 86_400_000;
+    min -= DAY;
+    max += DAY;
   }
 
-  const presentMarkTypes = [...new Set(marks.map((mark) => mark.type))]
+  const presentMarkTypes = [...new Set(marks.map((mark) => mark.type))];
 
   return (
     <div className="grid gap-3">
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={resultData} margin={{ top: 16, right: 16, bottom: 8, left: 0 }}>
+        <ComposedChart
+          data={resultData}
+          margin={{ top: 16, right: 16, bottom: 8, left: 0 }}
+        >
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
             dataKey="x"
             type="number"
             scale="time"
             domain={[min, max]}
-            tickFormatter={(value: number) => formatShortDate(new Date(value).toISOString())}
+            tickFormatter={(value: number) =>
+              formatShortDate(new Date(value).toISOString())
+            }
             tick={{ fontSize: 12 }}
           />
-          <YAxis domain={[0, "auto"]} tick={{ fontSize: 12 }} allowDecimals={false} />
-          <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<ResultTooltip />} />
+          <YAxis
+            domain={[0, "auto"]}
+            tick={{ fontSize: 12 }}
+            allowDecimals={false}
+          />
+          <Tooltip
+            cursor={{ strokeDasharray: "3 3" }}
+            content={<ResultTooltip />}
+          />
           <Line
             type="monotone"
             dataKey="score"
@@ -244,7 +274,9 @@ function PerformanceChartBody({ timeline }: { timeline: StudentPerformanceTimeli
               x={ts}
               y={0}
               ifOverflow="extendDomain"
-              shape={(props) => <MarkDot cx={props.cx} cy={props.cy} mark={mark} />}
+              shape={(props) => (
+                <MarkDot cx={props.cx} cy={props.cy} mark={mark} />
+              )}
             />
           ))}
         </ComposedChart>
@@ -265,7 +297,7 @@ function PerformanceChartBody({ timeline }: { timeline: StudentPerformanceTimeli
         </ul>
       )}
     </div>
-  )
+  );
 }
 
 /**
@@ -279,11 +311,11 @@ function MarkDot({
   cy,
   mark,
 }: {
-  cx?: number
-  cy?: number
-  mark: PerformanceMark
+  cx?: number;
+  cy?: number;
+  mark: PerformanceMark;
 }) {
-  if (cx === undefined || cy === undefined) return null
+  if (cx === undefined || cy === undefined) return null;
   return (
     <g>
       <circle
@@ -296,7 +328,7 @@ function MarkDot({
       />
       <title>{markTooltip(mark)}</title>
     </g>
-  )
+  );
 }
 
 /** Tooltip content for a hovered point on the score line. */
@@ -304,16 +336,20 @@ function ResultTooltip({
   active,
   payload,
 }: {
-  active?: boolean
-  payload?: { payload: ResultDatum }[]
+  active?: boolean;
+  payload?: { payload: ResultDatum }[];
 }) {
-  if (!active || !payload || payload.length === 0) return null
-  const datum = payload[0].payload
+  if (!active || !payload || payload.length === 0) return null;
+  const datum = payload[0].payload;
   return (
     <div className="rounded-md border bg-background p-2 text-xs shadow-sm">
-      <p className="font-medium">{assessmentTypeLabels[datum.assessment_type]}</p>
-      <p className="text-muted-foreground">{formatShortDate(datum.administered_at)}</p>
+      <p className="font-medium">
+        {assessmentTypeLabels[datum.assessment_type]}
+      </p>
+      <p className="text-muted-foreground">
+        {formatShortDate(datum.administered_at)}
+      </p>
       <p>Puntaje: {datum.score}</p>
     </div>
-  )
+  );
 }
