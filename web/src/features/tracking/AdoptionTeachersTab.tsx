@@ -21,8 +21,11 @@ function summarize(counts: AdoptionTeacherRow["month_counts"]) {
     counts.class_sessions > 0 && plural(counts.class_sessions, "clase", "clases"),
     counts.assessments > 0 && plural(counts.assessments, "evaluación", "evaluaciones"),
     counts.annual_plans > 0 && plural(counts.annual_plans, "programa", "programas"),
-  ].filter(Boolean)
-  return parts.length > 0 ? `${parts.join(" y ")} este mes` : "Sin contenido creado este mes"
+  ].filter((part): part is string => Boolean(part))
+  if (parts.length === 0) return "Sin contenido creado este mes"
+  // "4 clases, 1 evaluación y 2 programas" — commas, "y" only before the last.
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}`
+  return `${list} este mes`
 }
 
 /**

@@ -82,7 +82,7 @@ describe("AdoptionDashboardPage", () => {
         id: 7,
         name: "Ana Fernández",
         subjects: ["Ciencias"],
-        month_counts: { annual_plans: 0, class_sessions: 4, assessments: 1 },
+        month_counts: { annual_plans: 2, class_sessions: 4, assessments: 1 },
       },
     ])
     const lastLogin = vi
@@ -93,7 +93,7 @@ describe("AdoptionDashboardPage", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "Por docente" }))
 
     expect(await screen.findByText(/Ana Fernández/)).toBeInTheDocument()
-    expect(screen.getByText("4 clases y 1 evaluación este mes")).toBeInTheDocument()
+    expect(screen.getByText("4 clases, 1 evaluación y 2 programas este mes")).toBeInTheDocument()
     expect(screen.queryByText(/último ingreso/i)).not.toBeInTheDocument()
     expect(lastLogin).not.toHaveBeenCalled()
 
