@@ -124,7 +124,7 @@ class ScheduledFollowUpController extends Controller
     public function store(StoreScheduledFollowUpRequest $request, Student $student): JsonResponse
     {
         $creator = $request->user();
-        $assignedToId = $request->validated('assigned_to_id') ?? $creator->id;
+        $assignedToId = (int) ($request->validated('assigned_to_id') ?? $creator->id);
 
         $followUp = ScheduledFollowUp::create([
             'student_id' => $student->id,
@@ -137,7 +137,7 @@ class ScheduledFollowUpController extends Controller
         // The responsible person is not also "shared with".
         $shared = collect($request->validated('shared_with_ids') ?? [])
             ->map(fn ($id) => (int) $id)
-            ->reject(fn (int $id) => $id === (int) $assignedToId)
+            ->reject(fn (int $id) => $id === $assignedToId)
             ->values();
         $followUp->sharedWith()->sync($shared->all());
 

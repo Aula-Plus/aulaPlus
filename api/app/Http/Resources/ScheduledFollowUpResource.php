@@ -19,6 +19,12 @@ class ScheduledFollowUpResource extends JsonResource
         return [
             'id' => $this->id,
             'student_id' => $this->student_id,
+            // Only loaded by the caller's own pending list (`mine`), whose rows
+            // are already filtered to students the caller may see.
+            'student' => $this->whenLoaded('student', fn () => [
+                'id' => $this->student->id,
+                'full_name' => $this->student->full_name,
+            ]),
             'description' => $this->description,
             'due_date' => $this->due_date?->toDateString(),
             // Computed server-side (app timezone) so no client re-derives the

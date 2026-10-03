@@ -48,6 +48,11 @@ export function MyFollowUpsPage() {
     }
   }
 
+  // Notices carry ids only; the student's name comes from the pending list.
+  const studentNameByFollowUp = new Map(
+    (followUps ?? []).map((followUp) => [followUp.id, followUp.student?.full_name]),
+  )
+
   return (
     <div className="grid gap-6">
       <PageHeader title="Mis seguimientos" description="Los seguimientos que tenés a cargo o que te compartieron." />
@@ -60,7 +65,11 @@ export function MyFollowUpsPage() {
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
                 <span>
-                  Te asignaron un seguimiento con fecha {formatShortDate(notice.data.due_date)}.{" "}
+                  Te asignaron un seguimiento
+                  {studentNameByFollowUp.get(notice.data.follow_up_id)
+                    ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
+                    : ""}{" "}
+                  con fecha {formatShortDate(notice.data.due_date)}.{" "}
                   <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
                     Ver ficha del alumno
                   </Link>
@@ -84,6 +93,7 @@ export function MyFollowUpsPage() {
             {followUps.map((followUp) => (
               <li key={followUp.id} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
                 <div>
+                  {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
                   <p className="whitespace-pre-wrap">{followUp.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Vence: {formatShortDate(followUp.due_date)}

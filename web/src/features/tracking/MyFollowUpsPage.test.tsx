@@ -13,6 +13,7 @@ describe("MyFollowUpsPage", () => {
       {
         id: 1,
         student_id: 3,
+        student: { id: 3, full_name: "Juan Pérez" },
         description: "Revisar tiempo extendido",
         due_date: "2026-10-30",
         created_by_id: 5,
@@ -43,7 +44,8 @@ describe("MyFollowUpsPage", () => {
     )
 
     expect(await screen.findByText("Revisar tiempo extendido")).toBeInTheDocument()
-    expect(screen.getByText(/te asignaron un seguimiento/i)).toBeInTheDocument()
+    expect(screen.getByText("Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText(/te asignaron un seguimiento de Juan Pérez/i)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: /entendido/i }))
 

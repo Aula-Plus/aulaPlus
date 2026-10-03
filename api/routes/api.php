@@ -107,7 +107,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/follow-up-candidates', [ScheduledFollowUpController::class, 'candidates']);
         Route::get('/scheduled-follow-ups/mine', [ScheduledFollowUpController::class, 'mine']);
         Route::get('/notifications', [NotificationController::class, 'index']);
-        Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+        Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
         // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-

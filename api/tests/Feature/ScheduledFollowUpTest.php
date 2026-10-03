@@ -302,7 +302,9 @@ it('lets a teacher assign a follow-up to a psychopedagogue and share it, notifyi
 
     // Pending list: responsible and sharer see it, direction does not.
     Sanctum::actingAs($psico);
-    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->assertJsonPath('data.0.id', $followUpId);
+    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()
+        ->assertJsonPath('data.0.id', $followUpId)
+        ->assertJsonPath('data.0.student.full_name', $student->full_name);
     Sanctum::actingAs($otherTeacher);
     $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->assertJsonCount(1, 'data');
     Sanctum::actingAs($director);
@@ -369,6 +371,7 @@ it('serves and marks read only the caller\'s own notifications', function () {
 
     $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(0, 'data');
     $this->postJson("/api/v1/notifications/{$notificationId}/read")->assertNotFound();
+    $this->postJson('/api/v1/notifications/not-a-uuid/read')->assertNotFound();
 
     Sanctum::actingAs($psico);
     $this->getJson('/api/v1/notifications')->assertOk()

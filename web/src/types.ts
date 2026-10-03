@@ -625,6 +625,8 @@ export interface AppNotification {
 export interface ScheduledFollowUp {
   id: number
   student_id: number
+  /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
+  student?: { id: number; full_name: string }
   description: string
   due_date: string
   created_by_id: number
