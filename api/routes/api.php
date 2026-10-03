@@ -96,6 +96,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
 
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
+        Route::get('/schools/{school}/adoption-dashboard/teachers', [AdoptionDashboardController::class, 'teachers']);
+        Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/usage', [AdoptionDashboardController::class, 'teacherUsage']);
 
         // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
         // programado.md). A person schedules a follow-up on a student for a

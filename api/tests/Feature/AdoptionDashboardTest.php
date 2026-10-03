@@ -102,3 +102,97 @@ it('returns 0% when the school has no teachers', function () {
     expect($response->json('data.teacher_login_rate_30d'))->toEqual(0.0)
         ->and($response->json('data.teacher_planning_rate_30d'))->toEqual(0.0);
 });
+
+it('splits the weekly content series by type', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+
+    foreach (['annual_plan.created', 'class_session.created', 'class_session.created', 'assessment.created'] as $type) {
+        UsageEvent::factory()->create([
+            'school_id' => $school->id,
+            'user_id' => $teacher->id,
+            'event_type' => $type,
+            'created_at' => now(),
+        ]);
+    }
+
+    Sanctum::actingAs($director);
+    $response = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard")->assertOk();
+
+    $series = $response->json('data.weekly_content_by_type');
+    expect($series)->toHaveCount(8);
+    expect(last($series))->toMatchArray(['annual_plans' => 1, 'class_sessions' => 2, 'assessments' => 1]);
+    expect($series[0])->toMatchArray(['annual_plans' => 0, 'class_sessions' => 0, 'assessments' => 0]);
+});
+
+it('lists teachers alphabetically with this month counts only, for the director', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $zoe = User::factory()->forSchool($school)->teacher()->create(['name' => 'Zoe Pérez']);
+    $ana = User::factory()->forSchool($school)->teacher()->create(['name' => 'ana Fernández']);
+
+    UsageEvent::factory()->create([
+        'school_id' => $school->id, 'user_id' => $ana->id,
+        'event_type' => 'class_session.created', 'created_at' => now()->startOfMonth()->addMinute(),
+    ]);
+    UsageEvent::factory()->create([
+        'school_id' => $school->id, 'user_id' => $ana->id,
+        'event_type' => 'class_session.created', 'created_at' => now()->startOfMonth()->subDay(),
+    ]);
+
+    // A teacher from another school must never appear.
+    User::factory()->forSchool(School::factory()->create())->teacher()->create();
+
+    Sanctum::actingAs($director);
+    $response = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers")->assertOk();
+
+    expect(collect($response->json('data'))->pluck('name')->all())->toBe(['ana Fernández', 'Zoe Pérez']);
+    expect($response->json('data.0.month_counts'))->toBe(['annual_plans' => 0, 'class_sessions' => 1, 'assessments' => 0]);
+    expect($response->json('data.0'))->not->toHaveKeys(['last_login', 'last_login_at', 'total']);
+});
+
+it('forbids the per-teacher views for non-directors and other schools', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $otherDirector = User::factory()->forSchool(School::factory()->create())->director()->create();
+
+    foreach ([$teacher, $otherDirector] as $actor) {
+        Sanctum::actingAs($actor);
+        $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers")->assertForbidden();
+        $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$teacher->id}/usage")->assertForbidden();
+    }
+});
+
+it('returns the last login only as a coarse range', function (?int $daysAgo, string $expected) {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+
+    if ($daysAgo !== null) {
+        UsageEvent::factory()->create([
+            'school_id' => $school->id, 'user_id' => $teacher->id,
+            'event_type' => 'login', 'created_at' => now()->subDays($daysAgo),
+        ]);
+    }
+
+    Sanctum::actingAs($director);
+    $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$teacher->id}/usage")
+        ->assertOk()
+        ->assertExactJson(['data' => ['last_login_range' => $expected]]);
+})->with([
+    'never' => [null, 'never'],
+    'recent' => [0, 'this_week'],
+    'a week and a bit' => [8, 'within_10_days'],
+    'long ago' => [30, 'over_10_days'],
+]);
+
+it('returns 404 for a non-teacher or another school user on the usage detail', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $foreignTeacher = User::factory()->forSchool(School::factory()->create())->teacher()->create();
+
+    Sanctum::actingAs($director);
+    $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$foreignTeacher->id}/usage")->assertNotFound();
+    $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$director->id}/usage")->assertNotFound();
+});
