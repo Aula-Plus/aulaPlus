@@ -1,23 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { HeartHandshake } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
-import { SectionCard } from "@/components/ui/section-card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  accommodationCategoryLabels,
-  type GroupAccommodationSummaryEntry,
-} from "@/types";
-import { fetchGroupAccommodationsSummary } from "./trackingApi";
+import { useCallback, useEffect, useState } from "react"
+import { HeartHandshake } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
+import { SectionCard } from "@/components/ui/section-card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { accommodationCategoryLabels, type GroupAccommodationSummaryEntry } from "@/types"
+import { fetchGroupAccommodationsSummary } from "./trackingApi"
 
 interface GroupAccommodationsSummaryProps {
-  groupId: number;
+  groupId: number
 }
 
 /**
@@ -31,27 +21,23 @@ interface GroupAccommodationsSummaryProps {
  * `canAccessClinicalProfile` gate here would be more restrictive than necessary
  * (spec §6). Authorization stays the backend's job anyway (CLAUDE.md).
  */
-export function GroupAccommodationsSummary({
-  groupId,
-}: GroupAccommodationsSummaryProps) {
-  const [entries, setEntries] = useState<
-    GroupAccommodationSummaryEntry[] | null
-  >(null);
-  const [error, setError] = useState<string | null>(null);
+export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSummaryProps) {
+  const [entries, setEntries] = useState<GroupAccommodationSummaryEntry[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    setError(null);
+    setError(null)
     try {
-      setEntries(await fetchGroupAccommodationsSummary(groupId));
+      setEntries(await fetchGroupAccommodationsSummary(groupId))
     } catch {
-      setError("No pudimos cargar los ajustes activos.");
-      setEntries([]);
+      setError("No pudimos cargar los ajustes activos.")
+      setEntries([])
     }
-  }, [groupId]);
+  }, [groupId])
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load()
+  }, [load])
 
   return (
     <SectionCard title="Ajustes activos">
@@ -60,10 +46,7 @@ export function GroupAccommodationsSummary({
       ) : entries === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : entries.length === 0 ? (
-        <EmptyState
-          icon={HeartHandshake}
-          message="La clase no tiene ajustes activos."
-        />
+        <EmptyState icon={HeartHandshake} message="La clase no tiene ajustes activos." />
       ) : (
         <Table>
           <TableHeader>
@@ -77,9 +60,7 @@ export function GroupAccommodationsSummary({
             {entries.map((entry) => (
               <TableRow key={entry.type}>
                 <TableCell>{entry.type}</TableCell>
-                <TableCell>
-                  {accommodationCategoryLabels[entry.category]}
-                </TableCell>
+                <TableCell>{accommodationCategoryLabels[entry.category]}</TableCell>
                 <TableCell>{entry.student_count}</TableCell>
               </TableRow>
             ))}
@@ -87,5 +68,5 @@ export function GroupAccommodationsSummary({
         </Table>
       )}
     </SectionCard>
-  );
+  )
 }

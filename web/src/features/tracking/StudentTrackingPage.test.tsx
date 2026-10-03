@@ -1,17 +1,14 @@
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { AxiosError } from "axios";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StudentTrackingPage } from "./StudentTrackingPage";
-import {
-  AuthContext,
-  type AuthContextValue,
-} from "@/features/auth/AuthContext";
-import * as trackingApi from "./trackingApi";
-import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi";
-import * as performanceApi from "./performanceApi";
-import type { Accommodation, Role, StudentTracking } from "@/types";
+import { render, screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { AxiosError } from "axios"
+import { MemoryRouter, Route, Routes } from "react-router-dom"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { StudentTrackingPage } from "./StudentTrackingPage"
+import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
+import * as trackingApi from "./trackingApi"
+import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import * as performanceApi from "./performanceApi"
+import type { Accommodation, Role, StudentTracking } from "@/types"
 
 function baseTracking(): StudentTracking {
   return {
@@ -25,14 +22,7 @@ function baseTracking(): StudentTracking {
       groups: [{ id: 1, name: "3° A", school_year: 2026 }],
     },
     recent_assessments: [
-      {
-        id: 10,
-        group_id: 1,
-        subject_id: 3,
-        type: "written",
-        variant_number: 2,
-        created_at: "2026-08-01T10:00:00+00:00",
-      },
+      { id: 10, group_id: 1, subject_id: 3, type: "written", variant_number: 2, created_at: "2026-08-01T10:00:00+00:00" },
     ],
     accommodations_count: 1,
     barriers_count: 0,
@@ -40,19 +30,12 @@ function baseTracking(): StudentTracking {
     open_alerts_count: 1,
     overall_average: 8,
     by_subject: [
-      {
-        subject_id: 1,
-        subject_name: "Matemática",
-        average: 7,
-        assessment_count: 2,
-      },
+      { subject_id: 1, subject_name: "Matemática", average: 7, assessment_count: 2 },
     ],
-  };
+  }
 }
 
-function pendingAccommodation(
-  overrides: Partial<Accommodation> = {},
-): Accommodation {
+function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommodation {
   return {
     id: 77,
     student_id: 3,
@@ -68,7 +51,7 @@ function pendingAccommodation(
     created_at: "2026-08-05T10:00:00+00:00",
     updated_at: "2026-08-05T10:00:00+00:00",
     ...overrides,
-  };
+  }
 }
 
 function renderPage(role: Role, userId = 1) {
@@ -77,20 +60,17 @@ function renderPage(role: Role, userId = 1) {
     loading: false,
     login: vi.fn(),
     logout: vi.fn(),
-  };
+  }
 
   return render(
     <AuthContext value={value}>
       <MemoryRouter initialEntries={["/alumnos/3/seguimiento"]}>
         <Routes>
-          <Route
-            path="/alumnos/:id/seguimiento"
-            element={<StudentTrackingPage />}
-          />
+          <Route path="/alumnos/:id/seguimiento" element={<StudentTrackingPage />} />
         </Routes>
       </MemoryRouter>
     </AuthContext>,
-  );
+  )
 }
 
 describe("StudentTrackingPage", () => {
@@ -98,25 +78,19 @@ describe("StudentTrackingPage", () => {
     // The embedded ScheduledFollowUpsPanel and StudentPerformanceChart both
     // self-fetch on mount; stub them so these tests (about alerts/
     // accommodations/comments) don't hit the network.
-    vi.spyOn(
-      scheduledFollowUpsApi,
-      "fetchScheduledFollowUps",
-    ).mockResolvedValue([]);
-    vi.spyOn(
-      performanceApi,
-      "fetchStudentPerformanceTimeline",
-    ).mockResolvedValue({
+    vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
+    vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
-    });
-  });
+    })
+  })
 
   afterEach(() => {
-    vi.restoreAllMocks();
-  });
+    vi.restoreAllMocks()
+  })
 
   it("renders the student header, indicators and a clinical alert with a resolve button for a school-wide role", async () => {
-    const tracking = baseTracking();
+    const tracking = baseTracking()
     tracking.alerts = [
       {
         id: 5,
@@ -129,227 +103,172 @@ describe("StudentTrackingPage", () => {
         resolved_at: null,
         created_at: "2026-08-10T10:00:00+00:00",
       },
-    ];
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
-    const resolveAlert = vi
-      .spyOn(trackingApi, "resolveAlert")
-      .mockResolvedValue({
-        ...tracking.alerts[0],
-        resolved: true,
-      });
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const resolveAlert = vi.spyOn(trackingApi, "resolveAlert").mockResolvedValue({
+      ...tracking.alerts[0],
+      resolved: true,
+    })
 
-    renderPage("psychopedagogue");
+    renderPage("psychopedagogue")
 
-    expect(
-      await screen.findByText("Seguimiento — Juan Pérez"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Acumuló observaciones preocupantes."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText("Acumuló observaciones preocupantes.")).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: /resolver/i }));
-    expect(resolveAlert).toHaveBeenCalledWith(5);
-  });
+    await userEvent.click(screen.getByRole("button", { name: /resolver/i }))
+    expect(resolveAlert).toHaveBeenCalledWith(5)
+  })
 
   it("shows the overall average and per-subject performance", async () => {
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(
-      baseTracking(),
-    );
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("teacher");
+    renderPage("teacher")
 
-    expect(
-      await screen.findByText("Seguimiento — Juan Pérez"),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/promedio general/i)).toBeInTheDocument();
-    expect(screen.getByText("Desempeño por materia")).toBeInTheDocument();
-    expect(screen.getByText("Matemática")).toBeInTheDocument();
-  });
+    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText(/promedio general/i)).toBeInTheDocument()
+    expect(screen.getByText("Desempeño por materia")).toBeInTheDocument()
+    expect(screen.getByText("Matemática")).toBeInTheDocument()
+  })
 
   it("shows an empty state for per-subject performance when there are no scores", async () => {
-    const tracking = baseTracking();
-    tracking.overall_average = null;
-    tracking.by_subject = [];
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    const tracking = baseTracking()
+    tracking.overall_average = null
+    tracking.by_subject = []
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("teacher");
+    renderPage("teacher")
 
-    expect(
-      await screen.findByText("Seguimiento — Juan Pérez"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/sin evaluaciones por materia/i),
-    ).toBeInTheDocument();
-  });
+    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText(/sin evaluaciones por materia/i)).toBeInTheDocument()
+  })
 
   it("shows an alert count only (no detail, no resolve) when the viewer lacks clinical access", async () => {
     // A teacher's payload omits the clinical arrays entirely (server-side gate).
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(
-      baseTracking(),
-    );
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("teacher");
+    renderPage("teacher")
 
-    expect(
-      await screen.findByText("Seguimiento — Juan Pérez"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/no tenés permiso para ver el detalle clínico/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /resolver/i }),
-    ).not.toBeInTheDocument();
-  });
+    expect(await screen.findByText("Seguimiento — Juan Pérez")).toBeInTheDocument()
+    expect(screen.getByText(/no tenés permiso para ver el detalle clínico/i)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /resolver/i })).not.toBeInTheDocument()
+  })
 
   it("approves a pending accommodation in place using the response, without a full refetch", async () => {
-    const tracking = baseTracking();
-    tracking.accommodations = [pendingAccommodation()];
+    const tracking = baseTracking()
+    tracking.accommodations = [pendingAccommodation()]
     const fetchTracking = vi
       .spyOn(trackingApi, "fetchStudentTracking")
-      .mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
-    const approve = vi
-      .spyOn(trackingApi, "approveAccommodation")
-      .mockResolvedValue(
-        pendingAccommodation({ approved: true, is_effective: true }),
-      );
+      .mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const approve = vi.spyOn(trackingApi, "approveAccommodation").mockResolvedValue(
+      pendingAccommodation({ approved: true, is_effective: true }),
+    )
 
-    renderPage("psychopedagogue");
+    renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
+    await screen.findByText("Seguimiento — Juan Pérez")
     // Pending badge visible before, approved badge after — checks the in-place update.
-    expect(screen.getByText(/pendiente de aprobación/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /aprobar/i }));
-    expect(approve).toHaveBeenCalledWith(77);
-    expect(await screen.findByText(/aprobada/i)).toBeInTheDocument();
+    expect(screen.getByText(/pendiente de aprobación/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: /aprobar/i }))
+    expect(approve).toHaveBeenCalledWith(77)
+    expect(await screen.findByText(/aprobada/i)).toBeInTheDocument()
     // No approve/reject buttons remain once the decision is in.
-    expect(
-      screen.queryByRole("button", { name: /aprobar/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /rechazar/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument()
     // The tracking aggregate is server-cached (~60s); a refetch could return
     // the stale value. §3 of the spec forbids a refetch, so we assert the
     // initial mount call is the only one.
-    expect(fetchTracking).toHaveBeenCalledTimes(1);
-  });
+    expect(fetchTracking).toHaveBeenCalledTimes(1)
+  })
 
   it("rejects a pending accommodation in place using the response, without a full refetch", async () => {
-    const tracking = baseTracking();
-    tracking.accommodations = [pendingAccommodation()];
+    const tracking = baseTracking()
+    tracking.accommodations = [pendingAccommodation()]
     const fetchTracking = vi
       .spyOn(trackingApi, "fetchStudentTracking")
-      .mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
-    const reject = vi
-      .spyOn(trackingApi, "rejectAccommodation")
-      .mockResolvedValue(pendingAccommodation({ approved: false }));
+      .mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const reject = vi.spyOn(trackingApi, "rejectAccommodation").mockResolvedValue(
+      pendingAccommodation({ approved: false }),
+    )
 
-    renderPage("director");
+    renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.click(screen.getByRole("button", { name: /rechazar/i }));
-    expect(reject).toHaveBeenCalledWith(77);
-    expect(await screen.findByText(/rechazada/i)).toBeInTheDocument();
-    expect(fetchTracking).toHaveBeenCalledTimes(1);
-  });
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /rechazar/i }))
+    expect(reject).toHaveBeenCalledWith(77)
+    expect(await screen.findByText(/rechazada/i)).toBeInTheDocument()
+    expect(fetchTracking).toHaveBeenCalledTimes(1)
+  })
 
   it("does not render approve/reject buttons for an accommodation with a decision already recorded", async () => {
-    const tracking = baseTracking();
-    tracking.accommodations = [
-      pendingAccommodation({ approved: true, is_effective: true }),
-    ];
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    const tracking = baseTracking()
+    tracking.accommodations = [pendingAccommodation({ approved: true, is_effective: true })]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("psychopedagogue");
+    renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    expect(screen.getByText(/aprobada/i)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /aprobar/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /rechazar/i }),
-    ).not.toBeInTheDocument();
-  });
+    await screen.findByText("Seguimiento — Juan Pérez")
+    expect(screen.getByText(/aprobada/i)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument()
+  })
 
   it("does not show the audit-history link to a teacher (no clinical access)", async () => {
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(
-      baseTracking(),
-    );
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("teacher");
+    renderPage("teacher")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    expect(
-      screen.queryByRole("link", { name: /historial de auditoría/i }),
-    ).not.toBeInTheDocument();
-  });
+    await screen.findByText("Seguimiento — Juan Pérez")
+    expect(screen.queryByRole("link", { name: /historial de auditoría/i })).not.toBeInTheDocument()
+  })
 
   it("shows the audit-history link to a school-wide viewer", async () => {
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(
-      baseTracking(),
-    );
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("director");
+    renderPage("director")
 
-    const link = await screen.findByRole("link", {
-      name: /historial de auditoría/i,
-    });
-    expect(link).toHaveAttribute("href", "/alumnos/3/historial");
-  });
+    const link = await screen.findByRole("link", { name: /historial de auditoría/i })
+    expect(link).toHaveAttribute("href", "/alumnos/3/historial")
+  })
 
   it("links and validates a barrier↔accommodation, updating the panel in place", async () => {
-    const tracking = baseTracking();
+    const tracking = baseTracking()
     // A director user (id 1) can view the panel; but per BarrierPolicy::update
     // only teacher/psychopedagogue can propose, so we use psychopedagogue here
     // to exercise both the link form and the validate action against a link
     // that a DIFFERENT user proposed.
     tracking.accommodations = [
-      {
-        ...pendingAccommodation(),
-        id: 91,
-        requires_external_approval: false,
-        approved: null,
-        active: true,
-      },
-    ];
+      { ...pendingAccommodation(), id: 91, requires_external_approval: false, approved: null, active: true },
+    ]
     tracking.barriers = [
-      {
-        id: 55,
-        description: "Dificultad de atención sostenida",
-        coping_strategy: null,
-        active: true,
-      },
-    ];
-    tracking.barriers_count = 1;
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+      { id: 55, description: "Dificultad de atención sostenida", coping_strategy: null, active: true },
+    ]
+    tracking.barriers_count = 1
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
     // Panel opens empty…
     const fetchLinks = vi
       .spyOn(trackingApi, "fetchBarrierAccommodations")
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
     // …then a link is created against a DIFFERENT proposer so the current
     // psychopedagogue (id 1) may validate it (four-eyes rule).
-    const linkApi = vi
-      .spyOn(trackingApi, "linkAccommodationToBarrier")
-      .mockResolvedValue({
-        id: 91,
-        type: "Tiempo extra en evaluaciones",
-        description: "Doble tiempo en pruebas escritas.",
-        focus_area: null,
-        proposed_by_id: 999,
-        validated: false,
-        validated_by_id: null,
-      });
+    const linkApi = vi.spyOn(trackingApi, "linkAccommodationToBarrier").mockResolvedValue({
+      id: 91,
+      type: "Tiempo extra en evaluaciones",
+      description: "Doble tiempo en pruebas escritas.",
+      focus_area: null,
+      proposed_by_id: 999,
+      validated: false,
+      validated_by_id: null,
+    })
     const validateApi = vi
       .spyOn(trackingApi, "validateBarrierAccommodation")
       .mockResolvedValue({
@@ -360,45 +279,37 @@ describe("StudentTrackingPage", () => {
         proposed_by_id: 999,
         validated: true,
         validated_by_id: 1,
-      });
+      })
 
-    renderPage("psychopedagogue");
+    renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.click(
-      screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }),
-    );
-    expect(fetchLinks).toHaveBeenCalledWith(55);
-    await screen.findByText(/todavía no hay adaptaciones vinculadas/i);
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
+    expect(fetchLinks).toHaveBeenCalledWith(55)
+    await screen.findByText(/todavía no hay adaptaciones vinculadas/i)
 
-    await userEvent.click(
-      screen.getByLabelText(/vincular adaptación existente/i),
-    );
-    await userEvent.click(
-      await screen.findByRole("button", { name: /tiempo extra/i }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: /^vincular$/i }));
-    expect(linkApi).toHaveBeenCalledWith(55, 91);
-    expect(
-      await screen.findByText(/pendiente de validación/i),
-    ).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText(/vincular adaptación existente/i))
+    await userEvent.click(await screen.findByRole("button", { name: /tiempo extra/i }))
+    await userEvent.click(screen.getByRole("button", { name: /^vincular$/i }))
+    expect(linkApi).toHaveBeenCalledWith(55, 91)
+    expect(await screen.findByText(/pendiente de validación/i)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: /validar/i }));
-    expect(validateApi).toHaveBeenCalledWith(55, 91);
-    expect(await screen.findByText(/^validada$/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /validar/i }))
+    expect(validateApi).toHaveBeenCalledWith(55, 91)
+    expect(await screen.findByText(/^validada$/i)).toBeInTheDocument()
     // Validate action must NOT re-fetch the whole barrier list.
-    expect(fetchLinks).toHaveBeenCalledTimes(1);
-  });
+    expect(fetchLinks).toHaveBeenCalledTimes(1)
+  })
 
   it("hides the 'Validar' button entirely when the current user is the proposer (four-eyes rule)", async () => {
-    const tracking = baseTracking();
-    tracking.accommodations = [];
+    const tracking = baseTracking()
+    tracking.accommodations = []
     tracking.barriers = [
       { id: 55, description: "Barrera X", coping_strategy: null, active: true },
-    ];
-    tracking.barriers_count = 1;
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    ]
+    tracking.barriers_count = 1
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
     // Same id as the auth user (userId = 7 below).
     vi.spyOn(trackingApi, "fetchBarrierAccommodations").mockResolvedValue([
       {
@@ -410,78 +321,57 @@ describe("StudentTrackingPage", () => {
         validated: false,
         validated_by_id: null,
       },
-    ]);
+    ])
 
-    renderPage("psychopedagogue", 7);
+    renderPage("psychopedagogue", 7)
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.click(
-      screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }),
-    );
-    const panel = await screen.findByText("Adaptación X");
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
+    const panel = await screen.findByText("Adaptación X")
     // The "Pendiente" badge should be there, but NOT a Validar button.
+    expect(within(panel.closest("li") as HTMLElement).getByText(/pendiente/i)).toBeInTheDocument()
     expect(
-      within(panel.closest("li") as HTMLElement).getByText(/pendiente/i),
-    ).toBeInTheDocument();
-    expect(
-      within(panel.closest("li") as HTMLElement).queryByRole("button", {
-        name: /validar/i,
-      }),
-    ).not.toBeInTheDocument();
-  });
+      within(panel.closest("li") as HTMLElement).queryByRole("button", { name: /validar/i }),
+    ).not.toBeInTheDocument()
+  })
 
   // ── Sesión 12: accommodation create/edit + per-instance deactivation ──────
 
   it("does not allow submitting a new accommodation without a category", async () => {
-    const tracking = baseTracking();
-    tracking.accommodations = [];
-    tracking.accommodations_count = 0;
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
-    const create = vi
-      .spyOn(trackingApi, "createAccommodation")
-      .mockResolvedValue({
-        ...pendingAccommodation(),
-        id: 200,
-        category: "content",
-        requires_external_approval: false,
-        approved: null,
-        is_effective: true,
-      });
+    const tracking = baseTracking()
+    tracking.accommodations = []
+    tracking.accommodations_count = 0
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const create = vi.spyOn(trackingApi, "createAccommodation").mockResolvedValue({
+      ...pendingAccommodation(),
+      id: 200,
+      category: "content",
+      requires_external_approval: false,
+      approved: null,
+      is_effective: true,
+    })
 
-    renderPage("director");
+    renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.click(
-      screen.getByRole("button", { name: /nueva adaptación/i }),
-    );
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /nueva adaptación/i }))
 
     // Fill everything except the category, then try to save.
-    await userEvent.type(
-      screen.getByLabelText(/^tipo$/i),
-      "Lectura en voz alta",
-    );
-    await userEvent.type(
-      screen.getByLabelText(/descripción/i),
-      "El docente lee la consigna",
-    );
-    await userEvent.type(
-      screen.getByLabelText(/área de enfoque/i),
-      "Comprensión",
-    );
-    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await userEvent.type(screen.getByLabelText(/^tipo$/i), "Lectura en voz alta")
+    await userEvent.type(screen.getByLabelText(/descripción/i), "El docente lee la consigna")
+    await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Comprensión")
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
 
     // Exact match (not a substring regex) so it hits the error message, not the
     // "Elegí una categoría…" placeholder option.
-    expect(await screen.findByText("Elegí una categoría")).toBeInTheDocument();
-    expect(create).not.toHaveBeenCalled();
+    expect(await screen.findByText("Elegí una categoría")).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
 
     // Now choose a category and the write goes through with it.
-    await userEvent.click(screen.getByLabelText(/categoría/i));
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Contenido" }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await userEvent.click(screen.getByLabelText(/categoría/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Contenido" }))
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
       type: "Lectura en voz alta",
@@ -490,30 +380,24 @@ describe("StudentTrackingPage", () => {
       category: "content",
       requires_external_approval: false,
       active: true,
-    });
-  });
+    })
+  })
 
   it("hides 'Nueva adaptación' and 'Editar' from a viewer without clinical access", async () => {
     // A teacher's payload omits the accommodations array entirely — the whole
     // section (and its manage buttons) never renders.
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(
-      baseTracking(),
-    );
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("teacher");
+    renderPage("teacher")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    expect(
-      screen.queryByRole("button", { name: /nueva adaptación/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^editar$/i }),
-    ).not.toBeInTheDocument();
-  });
+    await screen.findByText("Seguimiento — Juan Pérez")
+    expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument()
+  })
 
   it("shows 'Desactivar para una evaluación' only on effective accommodations", async () => {
-    const tracking = baseTracking();
+    const tracking = baseTracking()
     tracking.accommodations = [
       pendingAccommodation({
         id: 1,
@@ -523,22 +407,20 @@ describe("StudentTrackingPage", () => {
       }),
       // Pending approval → not effective → no deactivation action.
       pendingAccommodation({ id: 2, is_effective: false }),
-    ];
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("director");
+    renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
+    await screen.findByText("Seguimiento — Juan Pérez")
     expect(
-      screen.getAllByRole("button", {
-        name: /desactivar para una evaluación/i,
-      }),
-    ).toHaveLength(1);
-  });
+      screen.getAllByRole("button", { name: /desactivar para una evaluación/i }),
+    ).toHaveLength(1)
+  })
 
   it("populates the deactivation select from recent_assessments without an extra fetch", async () => {
-    const tracking = baseTracking();
+    const tracking = baseTracking()
     tracking.accommodations = [
       pendingAccommodation({
         id: 1,
@@ -546,31 +428,27 @@ describe("StudentTrackingPage", () => {
         approved: null,
         is_effective: true,
       }),
-    ];
+    ]
     const fetchTracking = vi
       .spyOn(trackingApi, "fetchStudentTracking")
-      .mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+      .mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("director");
+    renderPage("director")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.click(
-      screen.getByRole("button", { name: /desactivar para una evaluación/i }),
-    );
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
 
-    await userEvent.click(screen.getByLabelText(/^evaluación$/i));
+    await userEvent.click(screen.getByLabelText(/^evaluación$/i))
     // The one recent assessment (Escrita, id 10) is offered — no assessments
     // endpoint is called (there isn't one).
-    expect(
-      await screen.findByRole("button", { name: /escrita/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /escrita/i })).toBeInTheDocument()
     // Only the initial mount fetch happened.
-    expect(fetchTracking).toHaveBeenCalledTimes(1);
-  });
+    expect(fetchTracking).toHaveBeenCalledTimes(1)
+  })
 
   it("shows a readable message when deactivation is forbidden (not the assessment owner)", async () => {
-    const tracking = baseTracking();
+    const tracking = baseTracking()
     tracking.accommodations = [
       pendingAccommodation({
         id: 1,
@@ -578,54 +456,41 @@ describe("StudentTrackingPage", () => {
         approved: null,
         is_effective: true,
       }),
-    ];
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking);
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([]);
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
     const forbidden = new AxiosError("Forbidden", "403", undefined, undefined, {
       status: 403,
       statusText: "Forbidden",
       data: {},
       headers: {},
       config: { headers: undefined as never },
-    });
+    })
     const deactivate = vi
       .spyOn(trackingApi, "deactivateAccommodationForAssessment")
-      .mockRejectedValue(forbidden);
+      .mockRejectedValue(forbidden)
 
-    renderPage("psychopedagogue");
+    renderPage("psychopedagogue")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.click(
-      screen.getByRole("button", { name: /desactivar para una evaluación/i }),
-    );
-    await userEvent.click(screen.getByLabelText(/^evaluación$/i));
-    await userEvent.click(
-      await screen.findByRole("button", { name: /escrita/i }),
-    );
-    await userEvent.type(
-      screen.getByLabelText(/motivo/i),
-      "La evaluación es oral",
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /^desactivar$/i }),
-    );
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
+    await userEvent.click(screen.getByLabelText(/^evaluación$/i))
+    await userEvent.click(await screen.findByRole("button", { name: /escrita/i }))
+    await userEvent.type(screen.getByLabelText(/motivo/i), "La evaluación es oral")
+    await userEvent.click(screen.getByRole("button", { name: /^desactivar$/i }))
 
     expect(deactivate).toHaveBeenCalledWith(1, {
       assessment_id: 10,
       reason: "La evaluación es oral",
-    });
+    })
     expect(
       await screen.findByText(/solo el docente responsable de esa evaluación/i),
-    ).toBeInTheDocument();
-  });
+    ).toBeInTheDocument()
+  })
 
   it("creates a comment and reloads the comment list", async () => {
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(
-      baseTracking(),
-    );
-    const fetchComments = vi
-      .spyOn(trackingApi, "fetchStudentComments")
-      .mockResolvedValue([]);
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    const fetchComments = vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
     const createComment = vi
       .spyOn(trackingApi, "createStudentComment")
       .mockResolvedValue({
@@ -638,22 +503,16 @@ describe("StudentTrackingPage", () => {
         visible_to: null,
         author_only: false,
         created_at: "2026-08-20T10:00:00+00:00",
-      });
+      })
 
-    renderPage("teacher");
+    renderPage("teacher")
 
-    await screen.findByText("Seguimiento — Juan Pérez");
-    await userEvent.type(
-      screen.getByLabelText(/nuevo comentario/i),
-      "Nueva observación",
-    );
-    await userEvent.click(screen.getByRole("button", { name: /comentar/i }));
+    await screen.findByText("Seguimiento — Juan Pérez")
+    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Nueva observación")
+    await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
-    expect(createComment).toHaveBeenCalledWith(3, {
-      content: "Nueva observación",
-      tone: null,
-    });
+    expect(createComment).toHaveBeenCalledWith(3, { content: "Nueva observación", tone: null })
     // loadComments runs once on mount and again after creating.
-    expect(fetchComments).toHaveBeenCalledTimes(2);
-  });
-});
+    expect(fetchComments).toHaveBeenCalledTimes(2)
+  })
+})

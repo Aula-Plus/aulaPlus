@@ -1,23 +1,23 @@
-import { useCallback, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { SingleSelect } from "@/components/ui/single-select";
-import { useAuth } from "@/features/auth/AuthContext";
+import { useCallback, useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { SingleSelect } from "@/components/ui/single-select"
+import { useAuth } from "@/features/auth/AuthContext"
 import {
   canProposeBarrierAccommodation,
   canValidateBarrierAccommodation,
-} from "@/lib/permissions";
-import type { Accommodation, BarrierAccommodationLink } from "@/types";
-import * as trackingApi from "./trackingApi";
+} from "@/lib/permissions"
+import type { Accommodation, BarrierAccommodationLink } from "@/types"
+import * as trackingApi from "./trackingApi"
 
 interface BarrierAccommodationsPanelProps {
-  barrierId: number;
+  barrierId: number
   /**
    * Accommodations of the SAME student — the only ones known to the SPA (there
    * is no general-purpose "list accommodations" endpoint). Reused as the
    * options of the "vincular adaptación existente" `<select>`.
    */
-  studentAccommodations: Accommodation[];
+  studentAccommodations: Accommodation[]
 }
 
 /**
@@ -33,82 +33,71 @@ export function BarrierAccommodationsPanel({
   barrierId,
   studentAccommodations,
 }: BarrierAccommodationsPanelProps) {
-  const { user } = useAuth();
-  const canPropose = canProposeBarrierAccommodation(user);
+  const { user } = useAuth()
+  const canPropose = canProposeBarrierAccommodation(user)
 
-  const [expanded, setExpanded] = useState(false);
-  const [links, setLinks] = useState<BarrierAccommodationLink[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedAccommodationId, setSelectedAccommodationId] =
-    useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false)
+  const [links, setLinks] = useState<BarrierAccommodationLink[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedAccommodationId, setSelectedAccommodationId] = useState<string>("")
+  const [submitting, setSubmitting] = useState(false)
 
   const loadLinks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     try {
-      const data = await trackingApi.fetchBarrierAccommodations(barrierId);
-      setLinks(data);
+      const data = await trackingApi.fetchBarrierAccommodations(barrierId)
+      setLinks(data)
     } catch {
-      setError("No pudimos cargar las adaptaciones vinculadas.");
+      setError("No pudimos cargar las adaptaciones vinculadas.")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [barrierId]);
+  }, [barrierId])
 
   async function handleToggle() {
-    const nextExpanded = !expanded;
-    setExpanded(nextExpanded);
+    const nextExpanded = !expanded
+    setExpanded(nextExpanded)
     if (nextExpanded && links === null) {
-      await loadLinks();
+      await loadLinks()
     }
   }
 
   async function handleLink(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-    const id = Number(selectedAccommodationId);
+    event.preventDefault()
+    setError(null)
+    const id = Number(selectedAccommodationId)
     if (!id) {
-      setError("Elegí una adaptación.");
-      return;
+      setError("Elegí una adaptación.")
+      return
     }
-    setSubmitting(true);
+    setSubmitting(true)
     try {
-      const created = await trackingApi.linkAccommodationToBarrier(
-        barrierId,
-        id,
-      );
+      const created = await trackingApi.linkAccommodationToBarrier(barrierId, id)
       // Update in place, don't refetch — see file-level comment.
       setLinks((prev) => {
-        const base = prev ?? [];
+        const base = prev ?? []
         // The server upserts (syncWithoutDetaching), so if the accommodation
         // was already linked, replace the row rather than duplicate it.
-        const withoutDupe = base.filter((link) => link.id !== created.id);
-        return [...withoutDupe, created];
-      });
-      setSelectedAccommodationId("");
+        const withoutDupe = base.filter((link) => link.id !== created.id)
+        return [...withoutDupe, created]
+      })
+      setSelectedAccommodationId("")
     } catch {
-      setError("No pudimos vincular la adaptación.");
+      setError("No pudimos vincular la adaptación.")
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
   async function handleValidate(accommodationId: number) {
-    setError(null);
+    setError(null)
     try {
-      const updated = await trackingApi.validateBarrierAccommodation(
-        barrierId,
-        accommodationId,
-      );
-      setLinks(
-        (prev) =>
-          prev?.map((link) => (link.id === updated.id ? updated : link)) ??
-          null,
-      );
+      const updated = await trackingApi.validateBarrierAccommodation(barrierId, accommodationId)
+      setLinks((prev) => prev?.map((link) => (link.id === updated.id ? updated : link)) ?? null)
     } catch {
-      setError("No pudimos validar el vínculo.");
+      setError("No pudimos validar el vínculo.")
     }
   }
 
@@ -116,10 +105,10 @@ export function BarrierAccommodationsPanel({
   // barrier — those are the meaningful choices for the "vincular" select. The
   // server would upsert either way, but hiding already-linked options avoids
   // no-op clicks.
-  const linkedIds = new Set((links ?? []).map((link) => link.id));
+  const linkedIds = new Set((links ?? []).map((link) => link.id))
   const linkOptions = studentAccommodations.filter(
     (accommodation) => !linkedIds.has(accommodation.id),
-  );
+  )
 
   return (
     <div className="mt-2 border-t pt-2">
@@ -135,14 +124,11 @@ export function BarrierAccommodationsPanel({
 
       {expanded && (
         <div className="mt-3 grid gap-3">
-          {loading && (
-            <p className="text-xs text-muted-foreground">Cargando…</p>
-          )}
+          {loading && <p className="text-xs text-muted-foreground">Cargando…</p>}
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          {!loading &&
-            links !== null &&
-            (links.length === 0 ? (
+          {!loading && links !== null && (
+            links.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 Todavía no hay adaptaciones vinculadas a esta barrera.
               </p>
@@ -150,8 +136,7 @@ export function BarrierAccommodationsPanel({
               <ul className="grid gap-2">
                 {links.map((link) => {
                   const showValidate =
-                    !link.validated &&
-                    canValidateBarrierAccommodation(user, link.proposed_by_id);
+                    !link.validated && canValidateBarrierAccommodation(user, link.proposed_by_id)
                   return (
                     <li
                       key={link.id}
@@ -160,9 +145,7 @@ export function BarrierAccommodationsPanel({
                       <div>
                         <p className="font-medium">{link.type}</p>
                         {link.description && (
-                          <p className="text-xs text-muted-foreground">
-                            {link.description}
-                          </p>
+                          <p className="text-xs text-muted-foreground">{link.description}</p>
                         )}
                         <p className="mt-1 text-xs">
                           {link.validated ? (
@@ -187,17 +170,15 @@ export function BarrierAccommodationsPanel({
                         </Button>
                       )}
                     </li>
-                  );
+                  )
                 })}
               </ul>
-            ))}
+            )
+          )}
 
           {canPropose && (
             <form onSubmit={handleLink} className="grid gap-2 border-t pt-3">
-              <Label
-                htmlFor={`link-accommodation-${barrierId}`}
-                className="text-xs"
-              >
+              <Label htmlFor={`link-accommodation-${barrierId}`} className="text-xs">
                 Vincular adaptación existente
               </Label>
               <div className="flex flex-wrap items-center gap-2">
@@ -214,18 +195,13 @@ export function BarrierAccommodationsPanel({
                       : accommodation.type,
                   }))}
                 />
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={submitting || linkOptions.length === 0}
-                >
+                <Button type="submit" size="sm" disabled={submitting || linkOptions.length === 0}>
                   {submitting ? "Vinculando…" : "Vincular"}
                 </Button>
               </div>
               {linkOptions.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Todas las adaptaciones conocidas del alumno ya están
-                  vinculadas.
+                  Todas las adaptaciones conocidas del alumno ya están vinculadas.
                 </p>
               )}
             </form>
@@ -233,5 +209,5 @@ export function BarrierAccommodationsPanel({
         </div>
       )}
     </div>
-  );
+  )
 }

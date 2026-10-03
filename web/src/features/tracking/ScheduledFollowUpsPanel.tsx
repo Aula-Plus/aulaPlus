@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import { CalendarClock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { SectionCard } from "@/components/ui/section-card";
-import { Textarea } from "@/components/ui/textarea";
-import { formatShortDate } from "@/lib/utils";
-import type { ScheduledFollowUp } from "@/types";
-import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi";
+import { useCallback, useEffect, useState } from "react"
+import { CalendarClock } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { SectionCard } from "@/components/ui/section-card"
+import { Textarea } from "@/components/ui/textarea"
+import { formatShortDate } from "@/lib/utils"
+import type { ScheduledFollowUp } from "@/types"
+import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 
 interface ScheduledFollowUpsPanelProps {
-  studentId: number;
+  studentId: number
 }
 
 /**
@@ -29,54 +29,50 @@ interface ScheduledFollowUpsPanelProps {
  * a teacher who does not teach the student is rejected with 403 by the
  * Controller.
  */
-export function ScheduledFollowUpsPanel({
-  studentId,
-}: ScheduledFollowUpsPanelProps) {
-  const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null);
-  const [showResolved, setShowResolved] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelProps) {
+  const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
+  const [showResolved, setShowResolved] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Default: only pending (?resolved=false). When "Mostrar resueltos" is on we
   // drop the query param entirely so the backend returns every follow-up
   // (spec §4) — the toggle literally swaps `resolved=false` for no param.
   const loadFollowUps = useCallback(async () => {
-    setLoadError(null);
+    setLoadError(null)
     try {
       const data = await scheduledFollowUpsApi.fetchScheduledFollowUps(
         studentId,
         showResolved ? undefined : false,
-      );
-      setFollowUps(data);
+      )
+      setFollowUps(data)
     } catch {
-      setLoadError("No pudimos cargar los seguimientos programados.");
-      setFollowUps([]);
+      setLoadError("No pudimos cargar los seguimientos programados.")
+      setFollowUps([])
     }
-  }, [studentId, showResolved]);
+  }, [studentId, showResolved])
 
   useEffect(() => {
-    loadFollowUps();
-  }, [loadFollowUps]);
+    loadFollowUps()
+  }, [loadFollowUps])
 
   function handleCreated(created: ScheduledFollowUp) {
     // Use the returned row, no full refetch (same convention as the rest of
     // StudentTrackingPage). Skip it when it wouldn't be visible under the
     // current filter — a freshly created follow-up is never resolved, so it
     // only belongs in the list while pending ones are shown.
-    setFollowUps((prev) => [created, ...(prev ?? [])]);
+    setFollowUps((prev) => [created, ...(prev ?? [])])
   }
 
   function handleResolved(updated: ScheduledFollowUp) {
     setFollowUps((prev) => {
-      if (!prev) return prev;
+      if (!prev) return prev
       // When only pending are shown, drop the now-resolved row; otherwise
       // update it in place with the server's response.
       if (!showResolved) {
-        return prev.filter((followUp) => followUp.id !== updated.id);
+        return prev.filter((followUp) => followUp.id !== updated.id)
       }
-      return prev.map((followUp) =>
-        followUp.id === updated.id ? updated : followUp,
-      );
-    });
+      return prev.map((followUp) => (followUp.id === updated.id ? updated : followUp))
+    })
   }
 
   return (
@@ -94,79 +90,72 @@ export function ScheduledFollowUpsPanel({
       }
     >
       <div className="grid gap-4">
-        <NewFollowUpForm studentId={studentId} onCreated={handleCreated} />
+      <NewFollowUpForm studentId={studentId} onCreated={handleCreated} />
 
-        {loadError && <p className="text-sm text-destructive">{loadError}</p>}
+      {loadError && <p className="text-sm text-destructive">{loadError}</p>}
 
-        {followUps === null ? (
-          <p className="text-muted-foreground">Cargando…</p>
-        ) : followUps.length === 0 ? (
-          <EmptyState
-            icon={CalendarClock}
-            message={
-              showResolved
-                ? "Todavía no hay seguimientos programados."
-                : "No hay seguimientos pendientes."
-            }
-          />
-        ) : (
-          <ul className="grid gap-3">
-            {followUps.map((followUp) => (
-              <FollowUpRow
-                key={followUp.id}
-                followUp={followUp}
-                onResolved={handleResolved}
-              />
-            ))}
-          </ul>
-        )}
+      {followUps === null ? (
+        <p className="text-muted-foreground">Cargando…</p>
+      ) : followUps.length === 0 ? (
+        <EmptyState
+          icon={CalendarClock}
+          message={
+            showResolved
+              ? "Todavía no hay seguimientos programados."
+              : "No hay seguimientos pendientes."
+          }
+        />
+      ) : (
+        <ul className="grid gap-3">
+          {followUps.map((followUp) => (
+            <FollowUpRow key={followUp.id} followUp={followUp} onResolved={handleResolved} />
+          ))}
+        </ul>
+      )}
       </div>
     </SectionCard>
-  );
+  )
 }
 
 function NewFollowUpForm({
   studentId,
   onCreated,
 }: {
-  studentId: number;
-  onCreated: (created: ScheduledFollowUp) => void;
+  studentId: number
+  onCreated: (created: ScheduledFollowUp) => void
 }) {
-  const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [description, setDescription] = useState("")
+  const [dueDate, setDueDate] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
+    event.preventDefault()
+    setError(null)
 
-    const trimmed = description.trim();
+    const trimmed = description.trim()
     if (!trimmed) {
-      setError("Escribí una descripción.");
-      return;
+      setError("Escribí una descripción.")
+      return
     }
     if (!dueDate) {
-      setError("Elegí una fecha límite.");
-      return;
+      setError("Elegí una fecha límite.")
+      return
     }
 
-    setSubmitting(true);
+    setSubmitting(true)
     try {
-      const created = await scheduledFollowUpsApi.createScheduledFollowUp(
-        studentId,
-        {
-          description: trimmed,
-          due_date: dueDate,
-        },
-      );
-      onCreated(created);
-      setDescription("");
-      setDueDate("");
+      const created = await scheduledFollowUpsApi.createScheduledFollowUp(studentId, {
+        description: trimmed,
+        due_date: dueDate,
+      })
+      onCreated(created)
+      setDescription("")
+      setDueDate("")
     } catch {
-      setError("No pudimos guardar el seguimiento.");
+      setError("No pudimos guardar el seguimiento.")
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
@@ -201,36 +190,36 @@ function NewFollowUpForm({
         </Button>
       </div>
     </form>
-  );
+  )
 }
 
 function FollowUpRow({
   followUp,
   onResolved,
 }: {
-  followUp: ScheduledFollowUp;
-  onResolved: (updated: ScheduledFollowUp) => void;
+  followUp: ScheduledFollowUp
+  onResolved: (updated: ScheduledFollowUp) => void
 }) {
-  const [resolving, setResolving] = useState(false);
-  const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [resolving, setResolving] = useState(false)
+  const [note, setNote] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   async function handleConfirm() {
-    setError(null);
-    setSubmitting(true);
+    setError(null)
+    setSubmitting(true)
     try {
-      const trimmed = note.trim();
+      const trimmed = note.trim()
       // Never send resolution_note: "" — pass undefined so the field is omitted
       // when the user leaves it empty (spec §6).
       const updated = await scheduledFollowUpsApi.resolveScheduledFollowUp(
         followUp.id,
         trimmed ? trimmed : undefined,
-      );
-      onResolved(updated);
+      )
+      onResolved(updated)
     } catch {
-      setError("No pudimos resolver el seguimiento.");
-      setSubmitting(false);
+      setError("No pudimos resolver el seguimiento.")
+      setSubmitting(false)
     }
   }
 
@@ -252,13 +241,10 @@ function FollowUpRow({
         <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
           <p>
             Resuelto el {formatShortDate(followUp.resolved_at)}
-            {followUp.resolved_by_id !== null &&
-              ` por Usuario #${followUp.resolved_by_id}`}
+            {followUp.resolved_by_id !== null && ` por Usuario #${followUp.resolved_by_id}`}
           </p>
           {followUp.resolution_note && (
-            <p className="mt-1 whitespace-pre-wrap">
-              Nota: {followUp.resolution_note}
-            </p>
+            <p className="mt-1 whitespace-pre-wrap">Nota: {followUp.resolution_note}</p>
           )}
         </div>
       ) : resolving ? (
@@ -274,12 +260,7 @@ function FollowUpRow({
           />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={submitting}
-              onClick={handleConfirm}
-            >
+            <Button type="button" size="sm" disabled={submitting} onClick={handleConfirm}>
               {submitting ? "Resolviendo…" : "Confirmar"}
             </Button>
             <Button
@@ -288,9 +269,9 @@ function FollowUpRow({
               variant="outline"
               disabled={submitting}
               onClick={() => {
-                setResolving(false);
-                setNote("");
-                setError(null);
+                setResolving(false)
+                setNote("")
+                setError(null)
               }}
             >
               Cancelar
@@ -299,16 +280,11 @@ function FollowUpRow({
         </div>
       ) : (
         <div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setResolving(true)}
-          >
+          <Button type="button" size="sm" variant="outline" onClick={() => setResolving(true)}>
             Resolver
           </Button>
         </div>
       )}
     </li>
-  );
+  )
 }

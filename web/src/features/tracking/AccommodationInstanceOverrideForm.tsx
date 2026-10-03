@@ -1,20 +1,20 @@
-import { useState } from "react";
-import { isAxiosError } from "axios";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { SingleSelect } from "@/components/ui/single-select";
-import { Textarea } from "@/components/ui/textarea";
-import { assessmentTypeLabels, type AssessmentSummary } from "@/types";
-import { formatShortDate } from "@/lib/utils";
-import * as trackingApi from "./trackingApi";
+import { useState } from "react"
+import { isAxiosError } from "axios"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { SingleSelect } from "@/components/ui/single-select"
+import { Textarea } from "@/components/ui/textarea"
+import { assessmentTypeLabels, type AssessmentSummary } from "@/types"
+import { formatShortDate } from "@/lib/utils"
+import * as trackingApi from "./trackingApi"
 
 interface AccommodationInstanceOverrideFormProps {
-  accommodationId: number;
+  accommodationId: number
   /**
    * Assessment options, taken straight from `tracking.recent_assessments`
    * already loaded by StudentTrackingPage — no extra fetch (docs/prompts/24 §5).
    */
-  assessments: AssessmentSummary[];
+  assessments: AssessmentSummary[]
 }
 
 /**
@@ -34,55 +34,55 @@ export function AccommodationInstanceOverrideForm({
   accommodationId,
   assessments,
 }: AccommodationInstanceOverrideFormProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [assessmentId, setAssessmentId] = useState("");
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
+  const [expanded, setExpanded] = useState(false)
+  const [assessmentId, setAssessmentId] = useState("")
+  const [reason, setReason] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [done, setDone] = useState(false)
 
   function reset() {
-    setAssessmentId("");
-    setReason("");
-    setError(null);
+    setAssessmentId("")
+    setReason("")
+    setError(null)
   }
 
   async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
+    event.preventDefault()
+    setError(null)
 
-    const id = Number(assessmentId);
+    const id = Number(assessmentId)
     if (!id) {
-      setError("Elegí una evaluación.");
-      return;
+      setError("Elegí una evaluación.")
+      return
     }
-    const trimmed = reason.trim();
+    const trimmed = reason.trim()
     if (!trimmed) {
-      setError("Escribí un motivo.");
-      return;
+      setError("Escribí un motivo.")
+      return
     }
 
-    setSubmitting(true);
+    setSubmitting(true)
     try {
       await trackingApi.deactivateAccommodationForAssessment(accommodationId, {
         assessment_id: id,
         reason: trimmed,
-      });
-      setDone(true);
-      setExpanded(false);
-      reset();
+      })
+      setDone(true)
+      setExpanded(false)
+      reset()
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 403) {
         setError(
           "Solo el docente responsable de esa evaluación puede desactivar la adaptación para ella.",
-        );
+        )
       } else if (isAxiosError(err) && err.response?.status === 422) {
-        setError("Esa evaluación no es válida para esta adaptación.");
+        setError("Esa evaluación no es válida para esta adaptación.")
       } else {
-        setError("No pudimos desactivar la adaptación para esa evaluación.");
+        setError("No pudimos desactivar la adaptación para esa evaluación.")
       }
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
@@ -99,23 +99,20 @@ export function AccommodationInstanceOverrideForm({
           variant="outline"
           size="sm"
           onClick={() => {
-            setDone(false);
-            setExpanded(true);
+            setDone(false)
+            setExpanded(true)
           }}
         >
           Desactivar para una evaluación
         </Button>
       </div>
-    );
+    )
   }
 
   return (
     <form onSubmit={handleSubmit} className="mt-2 grid gap-2 border-t pt-2">
       <div className="grid gap-1.5">
-        <Label
-          htmlFor={`override-assessment-${accommodationId}`}
-          className="text-xs"
-        >
+        <Label htmlFor={`override-assessment-${accommodationId}`} className="text-xs">
           Evaluación
         </Label>
         <SingleSelect
@@ -127,18 +124,13 @@ export function AccommodationInstanceOverrideForm({
             value: String(assessment.id),
             label:
               assessmentTypeLabels[assessment.type] +
-              (assessment.variant_number
-                ? ` (variante ${assessment.variant_number})`
-                : "") +
+              (assessment.variant_number ? ` (variante ${assessment.variant_number})` : "") +
               ` · ${formatShortDate(assessment.created_at)}`,
           }))}
         />
       </div>
       <div className="grid gap-1.5">
-        <Label
-          htmlFor={`override-reason-${accommodationId}`}
-          className="text-xs"
-        >
+        <Label htmlFor={`override-reason-${accommodationId}`} className="text-xs">
           Motivo
         </Label>
         <Textarea
@@ -150,11 +142,7 @@ export function AccommodationInstanceOverrideForm({
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
-        <Button
-          type="submit"
-          size="sm"
-          disabled={submitting || assessments.length === 0}
-        >
+        <Button type="submit" size="sm" disabled={submitting || assessments.length === 0}>
           {submitting ? "Desactivando…" : "Desactivar"}
         </Button>
         <Button
@@ -163,8 +151,8 @@ export function AccommodationInstanceOverrideForm({
           variant="outline"
           disabled={submitting}
           onClick={() => {
-            setExpanded(false);
-            reset();
+            setExpanded(false)
+            reset()
           }}
         >
           Cancelar
@@ -176,5 +164,5 @@ export function AccommodationInstanceOverrideForm({
         </p>
       )}
     </form>
-  );
+  )
 }
