@@ -40,6 +40,29 @@ class SubjectPolicy
             && $user->hasRole(Role::Director->value);
     }
 
+    /**
+     * Upload, replace or remove the subject's curricular program PDF (ClickUp
+     * 86e3dt6ag): direction only, same as editing the subject.
+     */
+    public function manageSyllabus(User $user, Subject $subject): bool
+    {
+        return $this->update($user, $subject);
+    }
+
+    /**
+     * Open the program PDF: direction and psychopedagogy, and the teachers
+     * who teach this subject in some group (group_teacher.subject_id).
+     */
+    public function viewSyllabus(User $user, Subject $subject): bool
+    {
+        if (! $this->sharesSchool($user, $subject)) {
+            return false;
+        }
+
+        return $user->hasAnyRole(Role::schoolWideValues())
+            || $subject->teachers()->whereKey($user->id)->exists();
+    }
+
     protected function sharesSchool(User $user, Subject $subject): bool
     {
         return $user->school_id === $subject->school_id;

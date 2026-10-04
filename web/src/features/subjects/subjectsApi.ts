@@ -38,6 +38,25 @@ export async function deleteSubject(id: number): Promise<void> {
   await api.delete(`/api/v1/subjects/${id}`)
 }
 
+/** Upload or replace the subject's curricular program PDF (ClickUp 86e3dt6ag). */
+export async function uploadSyllabus(id: number, file: File): Promise<Subject> {
+  const form = new FormData()
+  form.append("file", file)
+  const { data } = await api.post<{ data: Subject }>(`/api/v1/subjects/${id}/syllabus`, form)
+  return data.data
+}
+
+export async function deleteSyllabus(id: number): Promise<Subject> {
+  const { data } = await api.delete<{ data: Subject }>(`/api/v1/subjects/${id}/syllabus`)
+  return data.data
+}
+
+/** A short-lived URL to open the program PDF (never stored). */
+export async function fetchSyllabusUrl(id: number): Promise<string> {
+  const { data } = await api.get<{ data: { url: string } }>(`/api/v1/subjects/${id}/syllabus`)
+  return data.data.url
+}
+
 export async function fetchGroupAssignments(groupId: number): Promise<GroupTeacherAssignment[]> {
   const { data } = await api.get<{ data: GroupTeacherAssignment[] }>(
     `/api/v1/groups/${groupId}/teacher-assignments`,
