@@ -6,6 +6,7 @@ use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
+use App\Http\Controllers\AlertSettingsController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
@@ -94,6 +95,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+
+        // Sustained-low-performance alerts (ClickUp 86e3jpzcv): the open alerts
+        // that reach the current user, and the school's alert settings
+        // (conditions + who each type reaches first) for direction and
+        // psychopedagogy.
+        Route::get('/alerts', [AlertController::class, 'index']);
+        Route::get('/alert-settings', [AlertSettingsController::class, 'show']);
+        Route::post('/alert-rules', [AlertSettingsController::class, 'storeRule']);
+        Route::patch('/alert-rules/{alertRule}', [AlertSettingsController::class, 'updateRule']);
+        Route::delete('/alert-rules/{alertRule}', [AlertSettingsController::class, 'destroyRule']);
+        Route::put('/alert-routing/{type}', [AlertSettingsController::class, 'updateRouting']);
 
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
 

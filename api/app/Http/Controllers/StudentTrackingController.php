@@ -53,7 +53,7 @@ class StudentTrackingController extends Controller
         // aggregate shape changes (e.g. adding by_subject/overall_average) so a
         // stale pre-deploy entry can't be read as the new shape for up to 60s.
         $cached = Cache::remember(
-            "student-tracking.v2.{$student->id}",
+            "student-tracking.v3.{$student->id}",
             60,
             fn () => $this->aggregate($student)
         );

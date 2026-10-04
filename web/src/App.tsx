@@ -18,6 +18,7 @@ import { ScreeningTestApplicationPage } from "@/features/screening-tests/Screeni
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
+import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 
 function App() {
   return (
@@ -123,6 +124,14 @@ function App() {
             <Route path="nueva" element={<UserFormPage />} />
             <Route path=":id" element={<UserFormPage />} />
           </Route>
+          <Route
+            path="/configuracion/alertas"
+            element={
+              <ProtectedLayout>
+                <AlertSettingsPage />
+              </ProtectedLayout>
+            }
+          />
           <Route
             path="/adopcion"
             element={

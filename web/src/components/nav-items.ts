@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  BellRing,
   BookOpen,
   ClipboardList,
   GraduationCap,
@@ -11,6 +12,7 @@ import {
 import type { User } from "@/types"
 import {
   canApproveScreeningTestDesign,
+  canManageAlertSettings,
   canManageScreeningTests,
   canManageSubjects,
   canManageUsers,
@@ -66,6 +68,11 @@ export function buildNavSections(user: User | null): NavSection[] {
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
           ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
+          : []),
+        // Alert conditions and routing: direction and psychopedagogy
+        // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.
+        ...(canManageAlertSettings(user)
+          ? [{ to: "/configuracion/alertas", label: "Alertas", icon: BellRing }]
           : []),
         // The adoption dashboard is director-only.
         ...(canViewAdoptionDashboard(user)
