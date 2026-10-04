@@ -28,6 +28,7 @@ use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
 use App\Http\Controllers\StudentPerformanceTimelineController;
 use App\Http\Controllers\StudentResultController;
+use App\Http\Controllers\StudentTeamSummaryController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\TeacherOptionsController;
@@ -89,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
 
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
+        Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);

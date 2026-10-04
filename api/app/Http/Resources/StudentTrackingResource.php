@@ -68,6 +68,18 @@ class StudentTrackingResource extends JsonResource
                 fn () => BarrierResource::collection($barriers)
             ),
             'barriers_count' => $barriers->count(),
+            // Team-facing summary (no diagnosis) — readable by anyone who can view
+            // the student; null until psychopedagogy confirms it.
+            'team_summary' => $student->teamSummary(),
+            // Names only (no report, validator or clinical detail) so a teacher
+            // sees WHICH supports apply, never the clinical record behind them
+            // (the full `accommodations`/`barriers` above stay gated).
+            'support_chips' => [
+                'accommodations' => $accommodations
+                    ->map(fn ($a) => ['id' => $a->id, 'label' => $a->type])->values(),
+                'barriers' => $barriers
+                    ->map(fn ($b) => ['id' => $b->id, 'label' => $b->description])->values(),
+            ],
             'recent_comments' => CommentResource::collection($visibleComments),
             'alerts' => $this->when(
                 $canViewClinicalProfile,
