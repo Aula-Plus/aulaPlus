@@ -34,6 +34,12 @@ const routingTypeLabels: Partial<Record<AlertType, string>> = {
   performance: "Desempeño bajo sostenido",
 }
 
+/** Extra context per type on the routing card. */
+const routingTypeHints: Partial<Record<AlertType, string>> = {
+  escalated_overdue:
+    "Siempre le llega a quien pasó la alerta y a quien la tenía que resolver. Acá podés sumar roles.",
+}
+
 const ruleSchema = z
   .object({
     condition: z.enum(["consecutive_below", "average_below"]),
@@ -207,6 +213,8 @@ function RoutingRow({
   }
 
   const label = routingTypeLabels[entry.type] ?? alertTypeLabels[entry.type]
+  // The escalated alert always reaches the two people involved (ClickUp 86e3jpzdp).
+  const allowsEmpty = entry.type === "escalated_overdue"
 
   return (
     <fieldset className="grid gap-3 rounded-md border p-4">
@@ -230,7 +238,10 @@ function RoutingRow({
           )
         })}
       </div>
-      {selected.length === 0 && (
+      {routingTypeHints[entry.type] && (
+        <p className="text-sm text-muted-foreground">{routingTypeHints[entry.type]}</p>
+      )}
+      {selected.length === 0 && !allowsEmpty && (
         <p className="text-sm text-destructive">Elegí al menos a quién le llega.</p>
       )}
       {error && (
@@ -240,7 +251,12 @@ function RoutingRow({
       )}
       {changed && (
         <div>
-          <Button type="button" size="sm" disabled={saving || selected.length === 0} onClick={save}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving || (selected.length === 0 && !allowsEmpty)}
+            onClick={save}
+          >
             {saving ? "Guardando…" : "Guardar"}
           </Button>
         </div>

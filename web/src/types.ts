@@ -118,12 +118,46 @@ export interface Comment {
 }
 
 /** Mirror of `App\Enums\AlertType`. */
-export type AlertType = "performance" | "behavior" | "planning_attendance"
+export type AlertType = "performance" | "behavior" | "planning_attendance" | "escalated_overdue"
 
 export const alertTypeLabels: Record<AlertType, string> = {
   performance: "Rendimiento",
   behavior: "Conducta",
   planning_attendance: "Planificación / asistencia",
+  escalated_overdue: "Alerta escalada con plazo vencido",
+}
+
+/** Mirror of `App\Enums\AlertOutcome` — the three ways out of an alert (ClickUp 86e3jpzdp). */
+export type AlertOutcome = "owned" | "handed_off" | "observing"
+
+/** Button labels, phrased in first person as on screen 11 of the living document. */
+export const alertOutcomeActionLabels: Record<AlertOutcome, string> = {
+  owned: "Me ocupo yo",
+  handed_off: "Se la paso a otro rol",
+  observing: "La dejo en observación",
+}
+
+/** State labels once a way out was chosen. */
+export const alertOutcomeLabels: Record<AlertOutcome, string> = {
+  owned: "En curso",
+  handed_off: "Pasada a otro rol",
+  observing: "En observación",
+}
+
+export interface AlertPerson {
+  id: number
+  name: string | null
+}
+
+/** One step of an alert's thread. */
+export interface AlertActionEntry {
+  id: number
+  outcome: AlertOutcome
+  actor: AlertPerson
+  assignee: AlertPerson
+  due_on: string | null
+  note: string | null
+  created_at: string | null
 }
 
 /** Mirror of `App\Enums\AlertSeverity`. */
@@ -150,6 +184,19 @@ export interface Alert {
   condition_met_on?: string | null
   /** Who the alert reached first; `null` on alerts created before 86e3jpzcv. */
   recipients?: AlertRecipient[] | null
+  /** Escalated alerts: the alert whose deadline passed. */
+  source_alert_id?: number | null
+  /** The way out chosen (ClickUp 86e3jpzdp), `null` while none was. */
+  outcome?: AlertOutcome | null
+  /** The person responsible — «la tiene X desde el dd/mm». */
+  assignee?: AlertPerson | null
+  outcome_by?: AlertPerson | null
+  outcome_at?: string | null
+  due_on?: string | null
+  is_overdue?: boolean
+  actions?: AlertActionEntry[]
+  /** What the current user may do, decided by `AlertPolicy`. */
+  can?: { act: boolean; resolve: boolean }
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null

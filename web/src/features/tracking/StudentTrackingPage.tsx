@@ -219,14 +219,21 @@ export function StudentTrackingPage() {
                     </div>
                     <p className="mt-1 text-sm">{alert.description}</p>
                   </div>
-                  {showResolve && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleResolveAlert(alert.id)}
-                    >
-                      Resolver
+                  {alert.can?.act ? (
+                    // The three ways out live on the Alertas screen (ClickUp 86e3jpzdp).
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/alertas">Elegir una salida</Link>
                     </Button>
+                  ) : (
+                    (alert.can ? alert.can.resolve : showResolve) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleResolveAlert(alert.id)}
+                      >
+                        Resolver
+                      </Button>
+                    )
                   )}
                 </li>
               ))}

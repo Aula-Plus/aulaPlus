@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AlertOutcome;
 use App\Enums\AlertRecipient;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertType;
@@ -14,6 +15,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
@@ -32,11 +35,18 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
     'student_id',
     'subject_id',
     'alert_rule_id',
+    'source_alert_id',
     'type',
     'severity',
     'description',
     'condition_met_on',
     'recipients',
+    'outcome',
+    'assignee_id',
+    'due_on',
+    'outcome_by_id',
+    'outcome_at',
+    'escalated_at',
     'resolved',
     'resolved_by_id',
     'resolved_at',
@@ -55,6 +65,10 @@ class Alert extends Model
             'severity' => AlertSeverity::class,
             'condition_met_on' => 'date',
             'recipients' => 'array',
+            'outcome' => AlertOutcome::class,
+            'due_on' => 'date',
+            'outcome_at' => 'datetime',
+            'escalated_at' => 'datetime',
             'resolved' => 'boolean',
             'resolved_at' => 'datetime',
         ];
@@ -80,6 +94,78 @@ class Alert extends Model
         return $this->belongsTo(User::class, 'resolved_by_id');
     }
 
+    /** The person currently responsible (ClickUp 86e3jpzdp). */
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    public function outcomeBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'outcome_by_id');
+    }
+
+    /** For an "escalated, deadline passed" alert: the alert it escalates. */
+    public function source(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_alert_id');
+    }
+
+    public function escalations(): HasMany
+    {
+        return $this->hasMany(self::class, 'source_alert_id');
+    }
+
+    /** The thread: every way out chosen, oldest first. */
+    public function actions(): HasMany
+    {
+        return $this->hasMany(AlertAction::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /**
+     * People the alert reaches individually, on top of the role-based
+     * `recipients` snapshot: whoever it was handed to and whoever handed it.
+     */
+    public function people(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'alert_user')->withTimestamps();
+    }
+
+    /**
+     * Whether the user may choose one of the three ways out now: someone it
+     * reaches while nobody has chosen yet, and afterwards only the person
+     * currently responsible. An escalated alert takes no way out of its own —
+     * it closes when the escalated alert moves.
+     */
+    public function canBeActedOnBy(User $user): bool
+    {
+        return ! $this->resolved
+            && $this->type !== AlertType::EscalatedOverdue
+            && ($this->outcome === null || $this->assignee_id === $user->id)
+            && $this->isVisibleTo($user);
+    }
+
+    /**
+     * Whether the user may mark the alert resolved. Legacy alerts (no
+     * recipients snapshot) keep the original rule — any school-wide role that
+     * sees them. Any other alert closes only after a way out was chosen, and
+     * only by the person responsible: never with a bare "ya me encargué".
+     */
+    public function canBeResolvedBy(User $user): bool
+    {
+        if ($this->resolved || $this->type === AlertType::EscalatedOverdue) {
+            return false;
+        }
+
+        if ($this->recipients === null) {
+            return $this->isVisibleTo($user);
+        }
+
+        return $this->outcome !== null
+            && $this->assignee_id === $user->id
+            && $this->isVisibleTo($user);
+    }
+
     /**
      * Scope to the alerts a user may see. The single source of truth for alert
      * visibility: AlertPolicy::view delegates here, and list endpoints call it
@@ -91,6 +177,9 @@ class Alert extends Model
      *   the snapshot ("dirección no la ve al principio"), and a teacher only
      *   when `teacher` is in the snapshot AND they teach the alert's subject in
      *   one of the student's groups (any subject, for an alert with none).
+     * - Anyone listed in `alert_user` sees it too: the person it was handed
+     *   to "la ve desde ese momento" (ClickUp 86e3jpzdp), and whoever handed
+     *   it keeps seeing it.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -106,6 +195,14 @@ class Alert extends Model
             if ($user->hasRole(Role::Director->value)) {
                 $query->orWhereJsonContains('alerts.recipients', AlertRecipient::Director->value);
             }
+
+            // Reached individually (handed to them, handed by them, or an
+            // escalated alert addressed to them) — ClickUp 86e3jpzdp.
+            $query->orWhereExists(fn (QueryBuilder $exists) => $exists
+                ->selectRaw('1')
+                ->from('alert_user')
+                ->whereColumn('alert_user.alert_id', 'alerts.id')
+                ->where('alert_user.user_id', $user->id));
 
             $query->orWhere(fn (Builder $query) => $query
                 ->whereJsonContains('alerts.recipients', AlertRecipient::Teacher->value)

@@ -5,6 +5,7 @@ import {
   ClipboardList,
   GraduationCap,
   Home,
+  TriangleAlert,
   TrendingUp,
   UserCog,
   Users,
@@ -51,6 +52,8 @@ export function buildNavSections(user: User | null): NavSection[] {
       items: [
         { to: "/clases", label: "Clases", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
+        // The open alerts that reach the user, for every role (ClickUp 86e3jpzdp).
+        { to: "/alertas", label: "Alertas", icon: TriangleAlert },
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
@@ -72,7 +75,7 @@ export function buildNavSections(user: User | null): NavSection[] {
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.
         ...(canManageAlertSettings(user)
-          ? [{ to: "/configuracion/alertas", label: "Alertas", icon: BellRing }]
+          ? [{ to: "/configuracion/alertas", label: "Configurar alertas", icon: BellRing }]
           : []),
         // The adoption dashboard is director-only.
         ...(canViewAdoptionDashboard(user)

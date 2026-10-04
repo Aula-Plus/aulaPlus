@@ -29,7 +29,7 @@ class AlertController extends Controller
         $alerts = Alert::query()
             ->visibleTo($request->user())
             ->where('resolved', false)
-            ->with(['student:id,full_name', 'subject:id,name'])
+            ->with(['student:id,full_name', ...AlertResource::RELATIONS])
             ->orderBy('created_at')
             ->get();
 
@@ -41,7 +41,7 @@ class AlertController extends Controller
         $this->authorize('view', $student);
 
         return AlertResource::collection(
-            $student->alerts()->visibleTo($request->user())->with('subject:id,name')->latest()->get()
+            $student->alerts()->visibleTo($request->user())->with(AlertResource::RELATIONS)->latest()->get()
         );
     }
 
@@ -54,7 +54,7 @@ class AlertController extends Controller
         $alerts = Alert::query()
             ->whereIn('student_id', $studentIds)
             ->visibleTo($request->user())
-            ->with('subject:id,name')
+            ->with(AlertResource::RELATIONS)
             ->latest()
             ->get();
 
@@ -71,6 +71,6 @@ class AlertController extends Controller
             'resolved_at' => now(),
         ]);
 
-        return new AlertResource($alert);
+        return new AlertResource($alert->load(AlertResource::RELATIONS));
     }
 }

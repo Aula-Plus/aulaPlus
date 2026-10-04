@@ -30,9 +30,22 @@ class AlertPolicy
         return $alert->isVisibleTo($user);
     }
 
+    /**
+     * Choose one of the three ways out (ClickUp 86e3jpzdp) — see
+     * {@see Alert::canBeActedOnBy()}.
+     */
+    public function act(User $user, Alert $alert): bool
+    {
+        return $alert->canBeActedOnBy($user);
+    }
+
+    /**
+     * See {@see Alert::canBeResolvedBy()}: a new alert closes only after a way
+     * out was chosen, and only by the person responsible.
+     */
     public function resolve(User $user, Alert $alert): bool
     {
-        return $this->view($user, $alert);
+        return $alert->canBeResolvedBy($user);
     }
 
     /**
