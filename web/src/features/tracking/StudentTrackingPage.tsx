@@ -450,6 +450,43 @@ export function StudentTrackingPage() {
             )}
           </SectionCard>
 
+          {tracking.grades_view.restricted && (
+            <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {tracking.grades_view.mode === "all_periodic" && tracking.grades_view.cutoff_at
+                ? `Notas de otras materias al ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
+                : tracking.grades_view.mode === "all_periodic"
+                  ? "Todavía no hay un corte: por ahora ves solo las notas de tu materia."
+                  : "Ves solo las notas de las materias que dictás."}
+            </p>
+          )}
+
+          <SectionCard title="Notas" bare={tracking.grades.length > 0}>
+            {tracking.grades.length === 0 ? (
+              <EmptyState icon={FileText} message="Sin notas para mostrar." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Materia</TableHead>
+                    <TableHead>Instancia</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="pr-6">Nota</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tracking.grades.map((grade) => (
+                    <TableRow key={grade.id}>
+                      <TableCell className="pl-6">{grade.subject_name}</TableCell>
+                      <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
+                      <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
+                      <TableCell className="pr-6 tabular-nums">{grade.score ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </SectionCard>
+
           <SectionCard
             title="Desempeño por materia"
             action={<OverallAverageBadge value={tracking.overall_average} />}

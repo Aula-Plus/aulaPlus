@@ -502,6 +502,9 @@ export interface StudentTracking {
   overall_average: number | null
   /** Per-subject averages (backend Sesión 4); empty when no scores exist. */
   by_subject: SubjectStat[]
+  /** Scored instances the viewer may see (already filtered by the server), newest first. */
+  grades: StudentGrade[]
+  grades_view: GradesView
   accommodations?: Accommodation[]
   accommodations_count: number
   barriers?: Barrier[]
@@ -788,4 +791,32 @@ export interface Paginated<T> {
     last_page: number
     total: number
   }
+}
+
+export interface StudentGrade {
+  id: number
+  assessment_id: number
+  subject_id: number
+  subject_name: string
+  type: AssessmentType
+  administered_at: string | null
+  score: number | null
+}
+
+export type GradesVisibilityMode = "own_subject" | "all_live" | "all_periodic"
+
+/** Why a teacher sees fewer grades than exist (never any grade data). */
+export interface GradesView {
+  mode: GradesVisibilityMode
+  restricted: boolean
+  own_subject_ids: number[]
+  /** Periodic mode: date of the last cutoff shown for other subjects. */
+  cutoff_at: string | null
+}
+
+export interface GradesVisibilitySettings {
+  mode: GradesVisibilityMode
+  cutoff_months: number | null
+  cutoff_anchor: string | null
+  last_cutoff_at: string | null
 }

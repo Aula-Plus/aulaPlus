@@ -45,13 +45,15 @@ use Illuminate\Support\Facades\Gate;
  */
 class PerformanceTimelineBuilder
 {
+    public function __construct(protected StudentGradeAccess $gradeAccess) {}
+
     /**
      * @return array{results: Collection<int, AssessmentResult>, marks: array<int, array<string, mixed>>}
      */
     public function build(Student $student, User $user, ?string $from, ?string $to, ?int $subjectId = null): array
     {
         return [
-            'results' => $this->results($student, $from, $to, $subjectId),
+            'results' => $this->results($student, $user, $from, $to, $subjectId),
             'marks' => $this->marks($student, $user, $from, $to),
         ];
     }
@@ -64,11 +66,15 @@ class PerformanceTimelineBuilder
      *
      * @return Collection<int, AssessmentResult>
      */
-    protected function results(Student $student, ?string $from, ?string $to, ?int $subjectId = null): Collection
+    protected function results(Student $student, User $user, ?string $from, ?string $to, ?int $subjectId = null): Collection
     {
-        return AssessmentResult::query()
-            ->where('assessment_results.student_id', $student->id)
-            ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
+        return $this->gradeAccess->restrict(
+            AssessmentResult::query()
+                ->where('assessment_results.student_id', $student->id)
+                ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
+            $user,
+            $student,
+        )
             ->when($from, fn (Builder $q) => $q->whereDate('assessments.administered_at', '>=', $from))
             ->when($to, fn (Builder $q) => $q->whereDate('assessments.administered_at', '<=', $to))
             ->when($subjectId, fn (Builder $q) => $q->where('assessments.subject_id', $subjectId))

@@ -86,10 +86,12 @@ class StudentTrackingResource extends JsonResource
                 fn () => AlertResource::collection($alerts)
             ),
             'open_alerts_count' => $alerts->count(),
-            // Academic aggregates — not clinical, so no gating: returned to any
-            // viewer of the student (decision D1/E).
+            // Role-filtered upstream (StudentGradeAccess): a teacher only gets the
+            // subjects they teach unless direction opened more.
             'overall_average' => $this->resource['overall_average'],
             'by_subject' => $this->resource['by_subject'],
+            'grades' => $this->resource['grades'],
+            'grades_view' => $this->resource['grades_view'],
         ];
     }
 }

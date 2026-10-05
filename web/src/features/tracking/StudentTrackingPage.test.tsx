@@ -34,6 +34,10 @@ function baseTracking(): StudentTracking {
     by_subject: [
       { subject_id: 1, subject_name: "Matemática", average: 7, assessment_count: 2 },
     ],
+    grades: [
+      { id: 1, assessment_id: 10, subject_id: 1, subject_name: "Matemática", type: "written", administered_at: "2026-08-01", score: 7 },
+    ],
+    grades_view: { mode: "own_subject", restricted: false, own_subject_ids: [], cutoff_at: null },
   }
 }
 
@@ -137,7 +141,19 @@ describe("StudentTrackingPage", () => {
     expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/promedio general/i)).toBeInTheDocument()
     expect(screen.getByText("Desempeño por materia")).toBeInTheDocument()
-    expect(screen.getByText("Matemática")).toBeInTheDocument()
+    expect(screen.getAllByText("Matemática").length).toBeGreaterThan(0)
+  })
+
+  it("tells a restricted teacher which cutoff the other subjects' grades are from", async () => {
+    const tracking = baseTracking()
+    tracking.grades_view = { mode: "all_periodic", restricted: true, own_subject_ids: [1], cutoff_at: "2026-07-01" }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Evaluaciones")
+
+    expect(await screen.findByRole("note")).toHaveTextContent(/notas de otras materias al/i)
   })
 
   it("shows an empty state for per-subject performance when there are no scores", async () => {

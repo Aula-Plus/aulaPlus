@@ -48,7 +48,7 @@ it('gives a teacher without clinical access the results, calendar events and vis
     ['school' => $school, 'teacher' => $teacher, 'group' => $group, 'student' => $student] = timelineScenario();
 
     // A result on the performance line.
-    $assessment = Assessment::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id, 'administered_at' => '2026-03-10']);
+    $assessment = Assessment::factory()->create(['group_id' => $group->id, 'subject_id' => $teacher->subjects()->first()->id, 'teacher_id' => $teacher->id, 'administered_at' => '2026-03-10']);
     AssessmentResult::factory()->create(['assessment_id' => $assessment->id, 'student_id' => $student->id, 'created_by_id' => $teacher->id, 'score' => 80]);
 
     // Clinical sources — must be hidden from a plain teacher.

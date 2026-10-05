@@ -3,6 +3,7 @@ import {
   BookOpen,
   ClipboardList,
   GraduationCap,
+  Eye,
   Home,
   TrendingUp,
   UserCog,
@@ -11,6 +12,7 @@ import {
 import type { User } from "@/types"
 import {
   canApproveScreeningTestDesign,
+  canManageGradesVisibility,
   canManageScreeningTests,
   canManageSubjects,
   canManageUsers,
@@ -66,6 +68,10 @@ export function buildNavSections(user: User | null): NavSection[] {
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
           ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
+          : []),
+        // Grade visibility for teachers is director-only.
+        ...(canManageGradesVisibility(user)
+          ? [{ to: "/ajustes/notas", label: "Visibilidad de notas", icon: Eye }]
           : []),
         // The adoption dashboard is director-only.
         ...(canViewAdoptionDashboard(user)

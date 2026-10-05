@@ -211,6 +211,14 @@ export function canViewAdoptionDashboard(user: User | null): boolean {
 }
 
 /**
+ * Configure how much of other subjects' grades teachers see. Director only.
+ * Mirror of `UpdateGradesVisibilityRequest::authorize`.
+ */
+export function canManageGradesVisibility(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
  * Show the create/edit-accommodation UI (docs/prompts/24 §3). Deliberately
  * gated on the SAME roles that may already SEE accommodations
  * (`canViewClinicalProfileUX` → school-wide staff), not on the looser backend

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\StudentAssessmentResultResource;
 use App\Models\AssessmentResult;
 use App\Models\Student;
+use App\Services\StudentGradeAccess;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
@@ -17,15 +18,21 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 class StudentResultController extends Controller
 {
+    public function __construct(protected StudentGradeAccess $gradeAccess) {}
+
     public function index(Student $student): AnonymousResourceCollection
     {
         $this->authorize('view', $student);
 
         // Order by the parent assessment's administered_at via a join, then
         // re-select the result columns so the models hydrate cleanly.
-        $results = AssessmentResult::query()
-            ->where('assessment_results.student_id', $student->id)
-            ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
+        $results = $this->gradeAccess->restrict(
+            AssessmentResult::query()
+                ->where('assessment_results.student_id', $student->id)
+                ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
+            request()->user(),
+            $student,
+        )
             ->orderBy('assessments.administered_at')
             ->orderBy('assessment_results.id')
             ->select('assessment_results.*')
