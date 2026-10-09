@@ -8,6 +8,7 @@ use App\Jobs\GenerateGroupAccommodationNarrativeJob;
 use App\Models\Group;
 use App\Models\GroupAccommodationNarrative;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -18,6 +19,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class GroupAccommodationNarrativeController extends Controller
 {
+    /** How long a `pending` generation is considered still running. */
+    protected const PENDING_WINDOW_MINUTES = 10;
+
     /**
      * GET /groups/{group}/accommodation-narrative
      */
@@ -79,6 +83,20 @@ class GroupAccommodationNarrativeController extends Controller
 
         abort_if($summary === [], Response::HTTP_UNPROCESSABLE_ENTITY, 'The group has no active accommodations.');
 
+        // A generation already running for this group (double click, two
+        // tabs): hand that one back instead of paying for a second AI call. A
+        // pending row older than the window is treated as lost and ignored.
+        $running = GroupAccommodationNarrative::query()
+            ->where('group_id', $group->id)
+            ->where('status', AccommodationNarrativeStatus::Pending)
+            ->where('created_at', '>=', now()->subMinutes(self::PENDING_WINDOW_MINUTES))
+            ->latest('id')
+            ->first();
+
+        if ($running !== null) {
+            return response()->json(['id' => $running->id, 'status' => $running->status->value], Response::HTTP_ACCEPTED);
+        }
+
         $narrative = GroupAccommodationNarrative::create([
             'group_id' => $group->id,
             'status' => AccommodationNarrativeStatus::Pending,
@@ -99,22 +117,32 @@ class GroupAccommodationNarrativeController extends Controller
         $this->authorize('generateAccommodationNarrative', $group);
 
         abort_unless($narrative->group_id === $group->id, Response::HTTP_NOT_FOUND);
-        abort_unless(
-            $narrative->status === AccommodationNarrativeStatus::Draft,
-            Response::HTTP_UNPROCESSABLE_ENTITY,
-            'Only a draft can be published.',
-        );
 
-        GroupAccommodationNarrative::query()
-            ->where('group_id', $group->id)
-            ->where('status', AccommodationNarrativeStatus::Published)
-            ->update(['status' => AccommodationNarrativeStatus::Archived]);
+        // Archive + publish as one unit, re-reading the row under a lock so two
+        // concurrent publishes can't both pass the "is a draft" check or leave
+        // the group with the old text archived and no new one published.
+        $narrative = DB::transaction(function () use ($group, $narrative): GroupAccommodationNarrative {
+            $narrative = GroupAccommodationNarrative::query()->lockForUpdate()->findOrFail($narrative->id);
 
-        $narrative->update([
-            'status' => AccommodationNarrativeStatus::Published,
-            'published_by_id' => request()->user()->id,
-            'published_at' => now(),
-        ]);
+            abort_unless(
+                $narrative->status === AccommodationNarrativeStatus::Draft,
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+                'Only a draft can be published.',
+            );
+
+            GroupAccommodationNarrative::query()
+                ->where('group_id', $group->id)
+                ->where('status', AccommodationNarrativeStatus::Published)
+                ->update(['status' => AccommodationNarrativeStatus::Archived]);
+
+            $narrative->update([
+                'status' => AccommodationNarrativeStatus::Published,
+                'published_by_id' => request()->user()->id,
+                'published_at' => now(),
+            ]);
+
+            return $narrative;
+        });
 
         return response()->json(['id' => $narrative->id, 'status' => $narrative->status->value]);
     }

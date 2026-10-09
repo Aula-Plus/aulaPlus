@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AccommodationNarrativeStatus;
+use App\Jobs\GenerateGroupAccommodationNarrativeJob;
 use App\Models\Accommodation;
 use App\Models\Group;
 use App\Models\GroupAccommodationNarrative;
@@ -58,6 +59,103 @@ it('discards an AI text that names a student', function () {
 
     $draft = $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")->json('draft');
     expect($draft['status'])->toBe('error')->and($draft['content'])->toBeNull();
+});
+
+it('discards an AI text that names a student without the accent', function () {
+    [, $psico, $group] = narrativeSetup();
+    fakeNarrative('Lucia necesita tiempo extendido.');
+    Sanctum::actingAs($psico);
+
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->assertStatus(202);
+
+    $draft = $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")->json('draft');
+    expect($draft['status'])->toBe('error')->and($draft['content'])->toBeNull();
+});
+
+it('does not start a second generation while one is running, but ignores a stale one', function () {
+    [, $psico, $group] = narrativeSetup();
+    fakeNarrative('Resumen.');
+    Sanctum::actingAs($psico);
+
+    $running = GroupAccommodationNarrative::create([
+        'group_id' => $group->id,
+        'status' => AccommodationNarrativeStatus::Pending,
+        'fingerprint' => str_repeat('0', 64),
+        'generated_by_id' => $psico->id,
+    ]);
+
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")
+        ->assertStatus(202)
+        ->assertJsonPath('id', $running->id);
+    Http::assertNothingSent();
+    expect(GroupAccommodationNarrative::where('group_id', $group->id)->count())->toBe(1);
+
+    $running->forceFill(['created_at' => now()->subHour()])->save();
+
+    $id = $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->assertStatus(202)->json('id');
+    expect($id)->not->toBe($running->id)
+        ->and(GroupAccommodationNarrative::find($id)->status)->toBe(AccommodationNarrativeStatus::Draft);
+});
+
+it('stores the fingerprint of the data actually summarised and refuses an emptied group at run time', function () {
+    [$school, $psico, $group, $student] = narrativeSetup();
+    fakeNarrative('Resumen.');
+    Sanctum::actingAs($psico);
+
+    $narrative = GroupAccommodationNarrative::create([
+        'group_id' => $group->id,
+        'status' => AccommodationNarrativeStatus::Pending,
+        'fingerprint' => str_repeat('0', 64),
+        'generated_by_id' => $psico->id,
+    ]);
+    GenerateGroupAccommodationNarrativeJob::dispatchSync($narrative);
+
+    $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")
+        ->assertJsonPath('draft.status', 'draft')
+        ->assertJsonPath('draft.outdated', false);
+
+    // Accommodations ended between the request and the job: nothing is sent.
+    Accommodation::query()->where('student_id', $student->id)->update(['active' => false]);
+    $emptied = GroupAccommodationNarrative::create([
+        'group_id' => $group->id,
+        'status' => AccommodationNarrativeStatus::Pending,
+        'fingerprint' => str_repeat('0', 64),
+        'generated_by_id' => $psico->id,
+    ]);
+    GenerateGroupAccommodationNarrativeJob::dispatchSync($emptied);
+
+    Http::assertSentCount(1); // only the first job reached the AI
+    expect($emptied->refresh()->status)->toBe(AccommodationNarrativeStatus::Error);
+});
+
+it('does not publish a narrative of another group or another school', function () {
+    [$school, $psico, $group] = narrativeSetup();
+    $otherGroup = Group::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs($psico);
+    $sameSchool = GroupAccommodationNarrative::create([
+        'group_id' => $otherGroup->id,
+        'status' => AccommodationNarrativeStatus::Draft,
+        'content' => 'Otro grupo.',
+        'fingerprint' => str_repeat('0', 64),
+        'generated_by_id' => $psico->id,
+    ]);
+
+    [, $foreignPsico, $foreignGroup] = narrativeSetup();
+    Sanctum::actingAs($foreignPsico);
+    $foreign = GroupAccommodationNarrative::create([
+        'group_id' => $foreignGroup->id,
+        'status' => AccommodationNarrativeStatus::Draft,
+        'content' => 'Otra escuela.',
+        'fingerprint' => str_repeat('0', 64),
+        'generated_by_id' => $foreignPsico->id,
+    ]);
+
+    Sanctum::actingAs($psico);
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/{$sameSchool->id}/publish")->assertNotFound();
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/{$foreign->id}/publish")->assertNotFound();
+
+    expect(GroupAccommodationNarrative::withoutGlobalScopes()->whereIn('id', [$sameSchool->id, $foreign->id])->pluck('status')->all())
+        ->each->toBe(AccommodationNarrativeStatus::Draft);
 });
 
 it('sends nothing to the AI when an accommodation text names a student', function () {
