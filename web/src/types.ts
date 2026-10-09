@@ -533,7 +533,30 @@ export interface AdoptionDashboard {
   teacher_planning_rate_30d: number
   weekly_login_series: WeeklySeriesPoint[]
   weekly_content_series: WeeklySeriesPoint[]
+  weekly_content_by_type: WeeklyContentByTypePoint[]
 }
+
+/** One weekly bucket of content created, split by type (stacked chart). */
+export interface WeeklyContentByTypePoint {
+  week_start: string
+  annual_plans: number
+  class_sessions: number
+  assessments: number
+}
+
+/**
+ * One row of the director-only "Por docente" tab. Plain counts for the
+ * current month — deliberately no totals, scores or login timestamps.
+ */
+export interface AdoptionTeacherRow {
+  id: number
+  name: string
+  subjects: string[]
+  month_counts: { annual_plans: number; class_sessions: number; assessments: number }
+}
+
+/** Coarse last-login range shown by "Ver detalles de uso" (never day/time). */
+export type LastLoginRange = "this_week" | "within_10_days" | "over_10_days" | "never"
 
 // ── Approval flows & traceability (Sesión 9) ────────────────────────────────
 // Mirrors the backend Session 3 API (docs/prompts/03-flujos-aprobacion-
