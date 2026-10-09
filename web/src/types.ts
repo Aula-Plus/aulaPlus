@@ -482,8 +482,25 @@ export interface SubjectStat {
   assessment_count: number
 }
 
+/** Team-facing summary of the technical report (no diagnosis); confirmed by psychopedagogy. */
+export interface TeamSummary {
+  strengths: string
+  difficulties: string
+  adjustments: string
+  confirmed_at: string
+}
+
+/** A short label for a current accommodation/barrier — all a teacher gets (no clinical detail). */
+export interface SupportChip {
+  id: number
+  label: string
+}
+
 export interface StudentTracking {
   student: Student
+  /** `null` until psychopedagogy writes and confirms it. */
+  team_summary: TeamSummary | null
+  support_chips: { accommodations: SupportChip[]; barriers: SupportChip[] }
   recent_assessments: AssessmentSummary[]
   /** Mean of every scored assessment, across subjects; null when there are none. */
   overall_average: number | null
@@ -524,6 +541,16 @@ export interface GroupTracking {
   }
 }
 
+/** "Ayuda y sugerencias": the two paths of the support form. */
+export type SupportMessageKind = "issue" | "improvement"
+
+/** Body for `POST /support-messages`. Role and school are resolved server-side. */
+export interface SupportMessageInput {
+  kind: SupportMessageKind
+  message: string
+  screen?: string | null
+}
+
 /** One weekly bucket of the adoption dashboard time series (Monday-start). */
 export interface WeeklySeriesPoint {
   week_start: string
@@ -539,7 +566,30 @@ export interface AdoptionDashboard {
   teacher_planning_rate_30d: number
   weekly_login_series: WeeklySeriesPoint[]
   weekly_content_series: WeeklySeriesPoint[]
+  weekly_content_by_type: WeeklyContentByTypePoint[]
 }
+
+/** One weekly bucket of content created, split by type (stacked chart). */
+export interface WeeklyContentByTypePoint {
+  week_start: string
+  annual_plans: number
+  class_sessions: number
+  assessments: number
+}
+
+/**
+ * One row of the director-only "Por docente" tab. Plain counts for the
+ * current month — deliberately no totals, scores or login timestamps.
+ */
+export interface AdoptionTeacherRow {
+  id: number
+  name: string
+  subjects: string[]
+  month_counts: { annual_plans: number; class_sessions: number; assessments: number }
+}
+
+/** Coarse last-login range shown by "Ver detalles de uso" (never day/time). */
+export type LastLoginRange = "this_week" | "within_10_days" | "over_10_days" | "never"
 
 // ── Approval flows & traceability (Sesión 9) ────────────────────────────────
 // Mirrors the backend Session 3 API (docs/prompts/03-flujos-aprobacion-
@@ -604,6 +654,25 @@ export interface AuditLogEntry {
   created_at: string | null
 }
 
+/** A colleague as exposed by `StaffMemberResource`: id, name and role only. */
+export interface StaffMember {
+  id: number
+  name: string
+  role: Role | null
+}
+
+/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+export interface AppNotification {
+  id: string
+  data: {
+    type: string
+    follow_up_id: number
+    student_id: number
+    due_date: string
+  }
+  created_at: string | null
+}
+
 /**
  * A scheduled follow-up on a student (`ScheduledFollowUpResource`, backend
  * Sesión 7 — docs/prompts/17-seguimiento-programado.md). The concrete face of
@@ -612,9 +681,16 @@ export interface AuditLogEntry {
 export interface ScheduledFollowUp {
   id: number
   student_id: number
+  /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
+  student?: { id: number; full_name: string }
   description: string
   due_date: string
   created_by_id: number
+  /** Responsible person — the creator unless they picked someone else. */
+  assigned_to_id?: number | null
+  assigned_to?: StaffMember | null
+  /** People, besides the responsible one, who also follow it. */
+  shared_with?: StaffMember[]
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null
@@ -682,6 +758,7 @@ export interface ScreeningTestDesign {
 export interface ScreeningTestType {
   id: number
   name: string
+  area: string | null
   active: boolean
   created_by_id: number | null
   current_design: ScreeningTestDesign | null
@@ -738,6 +815,7 @@ export interface ScreeningTestRosterEntry {
 /** Body for `POST /screening-test-types` (`StoreScreeningTestTypeRequest`). */
 export interface ScreeningTestTypeInput {
   name: string
+  area?: string | null
   active?: boolean
 }
 

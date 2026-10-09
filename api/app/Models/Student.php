@@ -46,6 +46,9 @@ class Student extends Model
         'individual_profile',
         'tracking_notes',
         'related_documents',
+        'team_summary_strengths',
+        'team_summary_difficulties',
+        'team_summary_adjustments',
     ];
 
     protected $table = 'students';
@@ -58,6 +61,27 @@ class Student extends Model
             'learning_profile' => 'array',
             'individual_profile' => 'array',
             'related_documents' => 'array',
+            'team_summary_confirmed_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * The confirmed team-facing summary of the technical report, or null while
+     * psychopedagogy has not written/confirmed one. Never contains a diagnosis.
+     *
+     * @return array{strengths: string, difficulties: string, adjustments: string, confirmed_at: string}|null
+     */
+    public function teamSummary(): ?array
+    {
+        if ($this->team_summary_confirmed_at === null) {
+            return null;
+        }
+
+        return [
+            'strengths' => (string) $this->team_summary_strengths,
+            'difficulties' => (string) $this->team_summary_difficulties,
+            'adjustments' => (string) $this->team_summary_adjustments,
+            'confirmed_at' => $this->team_summary_confirmed_at->toIso8601String(),
         ];
     }
 

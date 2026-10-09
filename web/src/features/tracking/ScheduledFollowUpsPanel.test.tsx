@@ -148,4 +148,46 @@ describe("ScheduledFollowUpsPanel", () => {
     expect(within(row).getByText(/usuario #12/i)).toBeInTheDocument()
     expect(within(row).getByText(/nota: cerrado/i)).toBeInTheDocument()
   })
+
+  it("assigns to another person picked by role and shares with others", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([
+      { id: 7, name: "Paula Psico", role: "psychopedagogue" },
+      { id: 8, name: "Carlos Ciencias", role: "teacher" },
+    ])
+    const create = vi
+      .spyOn(scheduledFollowUpsApi, "createScheduledFollowUp")
+      .mockResolvedValue(
+        followUp({
+          id: 50,
+          description: "Revisar ajuste",
+          assigned_to: { id: 7, name: "Paula Psico", role: "psychopedagogue" },
+          shared_with: [{ id: 8, name: "Carlos Ciencias", role: "teacher" }],
+        }),
+      )
+
+    render(<ScheduledFollowUpsPanel studentId={3} />)
+    await screen.findByText(/no hay seguimientos pendientes/i)
+
+    await userEvent.type(screen.getByLabelText(/nuevo seguimiento/i), "Revisar ajuste")
+    await userEvent.type(screen.getByLabelText(/fecha límite/i), "2026-10-30")
+    await userEvent.click(screen.getByRole("button", { name: /asignar a otra persona/i }))
+
+    await userEvent.click(await screen.findByLabelText(/rol/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Psicopedagogo" }))
+    await userEvent.click(screen.getByLabelText(/responsable/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Paula Psico" }))
+    await userEvent.click(screen.getByLabelText(/compartir con/i))
+    await userEvent.click(await screen.findByText(/Carlos Ciencias/))
+    await userEvent.keyboard("{Escape}")
+    await userEvent.click(screen.getByRole("button", { name: /programar seguimiento/i }))
+
+    expect(create).toHaveBeenCalledWith(3, {
+      description: "Revisar ajuste",
+      due_date: "2026-10-30",
+      assigned_to_id: 7,
+      shared_with_ids: [8],
+    })
+    expect(await screen.findByText(/Responsable: Paula Psico/)).toBeInTheDocument()
+    expect(screen.getByText(/Compartido con: Carlos Ciencias/)).toBeInTheDocument()
+  })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
-import { FileText, MessageSquare, Users } from "lucide-react"
+import { FileText, Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageScreeningTests } from "@/lib/permissions"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { Comment, CommentCategory, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
 import { GroupAccommodationsSummary } from "./GroupAccommodationsSummary"
+import { GroupOpenAlerts } from "./GroupOpenAlerts"
 import { GroupOverdueFollowUps } from "./GroupOverdueFollowUps"
 import { GroupPerformanceChart } from "./GroupPerformanceChart"
 import * as trackingApi from "./trackingApi"
@@ -81,18 +82,14 @@ export function GroupTrackingPage() {
         )}
       </PageHeader>
 
-      {/*
-        `comments_count` is omitted by the backend for a viewer without a
-        school-wide role (docs/prompts/19-comentarios-alcance.md §5), so we
-        hide that card entirely instead of rendering a misleading `0`, and drop
-        to a single column when it is absent rather than leaving a gap.
-      */}
-      <div className={`grid gap-4 ${trend.comments_count !== undefined ? "sm:grid-cols-2" : ""}`}>
+      <div className="grid gap-4">
         <StatCard label="Evaluaciones tomadas" value={trend.assessments_count} icon={FileText} />
-        {trend.comments_count !== undefined && (
-          <StatCard label="Comentarios cargados" value={trend.comments_count} icon={MessageSquare} />
-        )}
       </div>
+
+      <GroupOpenAlerts
+        groupId={group.id}
+        studentNames={Object.fromEntries(tracking.students.map((s) => [s.id, s.full_name]))}
+      />
 
       <SectionCard title="Alumnos" bare={tracking.students.length > 0}>
         {tracking.students.length === 0 ? (

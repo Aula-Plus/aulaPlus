@@ -59,6 +59,17 @@ class StudentPolicy
             && $user->hasAnyRole(Role::schoolWideValues());
     }
 
+    /**
+     * Write/confirm the team-facing summary of the technical report. Only
+     * psychopedagogy edits it; director and teachers read it (it carries no
+     * diagnosis, so reading follows plain `view`).
+     */
+    public function editTeamSummary(User $user, Student $student): bool
+    {
+        return $this->sharesSchool($user, $student)
+            && $user->hasRole(Role::Psychopedagogue->value);
+    }
+
     public function create(User $user): bool
     {
         return $user->hasAnyRole(Role::schoolWideValues());
