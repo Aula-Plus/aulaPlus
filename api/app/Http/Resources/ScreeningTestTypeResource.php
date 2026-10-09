@@ -21,6 +21,7 @@ class ScreeningTestTypeResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'area' => $this->area,
             'active' => $this->active,
             'created_by_id' => $this->created_by_id,
             'current_design' => $currentDesign

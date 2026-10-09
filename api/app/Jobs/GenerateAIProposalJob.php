@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  * Tenancy: a queued job has no authenticated user, so BelongsToSchool/
  * SchoolScope can't infer the tenant. The whole body is wrapped in
  * Tenancy::forSchool() using the proposal's own school — same pattern as
- * App\Console\Commands\GenerateAlerts. (AppServiceProvider::boot also resets
+ * any other console/queue context. (AppServiceProvider::boot also resets
  * tenancy around every job as a safety net.)
  *
  * Errors never crash the job into an uncontrolled state: a network/timeout

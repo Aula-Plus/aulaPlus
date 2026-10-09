@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\CommentTone;
 use App\Enums\Role;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
@@ -12,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
@@ -35,7 +35,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * cannot be expressed through `visible_to` — that is why it lives in its own
  * column and is handled explicitly by both visibility methods below.
  */
-#[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'tone', 'visible_to', 'author_only'])]
+#[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'visible_to', 'author_only'])]
 class Comment extends Model
 {
     /** @use HasFactory<CommentFactory> */
@@ -46,7 +46,6 @@ class Comment extends Model
     protected function casts(): array
     {
         return [
-            'tone' => CommentTone::class,
             'visible_to' => 'array',
             'author_only' => 'boolean',
         ];
@@ -55,6 +54,17 @@ class Comment extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_id');
+    }
+
+    /**
+     * Optional, several per comment; none = "Sin categoría" (also every
+     * comment written before categories existed).
+     *
+     * @return BelongsToMany<CommentCategory, $this>
+     */
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(CommentCategory::class, 'comment_comment_category');
     }
 
     public function commentable(): MorphTo

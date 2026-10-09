@@ -10,6 +10,7 @@ use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
 use App\Models\Student;
+use App\Services\CommentTrendDetector;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
@@ -53,7 +54,7 @@ class StudentTrackingController extends Controller
         // aggregate shape changes (e.g. adding by_subject/overall_average) so a
         // stale pre-deploy entry can't be read as the new shape for up to 60s.
         $cached = Cache::remember(
-            "student-tracking.v2.{$student->id}",
+            "student-tracking.v3.{$student->id}",
             60,
             fn () => $this->aggregate($student)
         );
@@ -63,7 +64,9 @@ class StudentTrackingController extends Controller
             'assessments' => $this->hydrate(Assessment::class, $cached['assessments']),
             'accommodations' => $this->hydrate(Accommodation::class, $cached['accommodations']),
             'barriers' => $this->hydrate(Barrier::class, $cached['barriers']),
-            'comments' => $this->hydrate(Comment::class, $cached['comments']),
+            'comments' => $this->hydrate(Comment::class, $cached['comments'])->load('categories'),
+            // Never cached: depends on the asking user (visibility + role).
+            'comment_trends' => app(CommentTrendDetector::class)->forStudent($student, request()->user()),
             'alerts' => $this->hydrate(Alert::class, $cached['alerts']),
             'by_subject' => $cached['by_subject'],
             'overall_average' => $cached['overall_average'],

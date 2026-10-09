@@ -6,17 +6,22 @@ use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
+use App\Http\Controllers\AlertOutcomeController;
+use App\Http\Controllers\AlertSettingsController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
+use App\Http\Controllers\CommentCategoryController;
+use App\Http\Controllers\CommentTrendSettingsController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignApprovalController;
@@ -28,9 +33,11 @@ use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
 use App\Http\Controllers\StudentPerformanceTimelineController;
 use App\Http\Controllers\StudentResultController;
+use App\Http\Controllers\StudentTeamSummaryController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\SubjectSyllabusController;
+use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -90,13 +97,46 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
 
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
+        Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
 
+        // Sustained-low-performance alerts (ClickUp 86e3jpzcv): the open alerts
+        // that reach the current user, and the school's alert settings
+        // (conditions + who each type reaches first) for direction and
+        // psychopedagogy.
+        Route::get('/alerts', [AlertController::class, 'index']);
+        Route::get('/alert-settings', [AlertSettingsController::class, 'show']);
+        Route::post('/alert-rules', [AlertSettingsController::class, 'storeRule']);
+        Route::patch('/alert-rules/{alertRule}', [AlertSettingsController::class, 'updateRule']);
+        Route::delete('/alert-rules/{alertRule}', [AlertSettingsController::class, 'destroyRule']);
+        Route::put('/alert-routing/{type}', [AlertSettingsController::class, 'updateRouting']);
+
+        // The three ways out of an alert (ClickUp 86e3jpzdp): me ocupo yo / se
+        // la paso a otro rol / la dejo en observación, each with responsible
+        // and deadline; plus who it can be handed to.
+        Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
+        Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
+
+        // Comment categories (replace the old comment "tone"): a school-
+        // editable catalog (director writes) plus the school's recurrence
+        // threshold for the trend mark (psychopedagogy/direction read,
+        // director writes).
+        Route::get('/comment-categories', [CommentCategoryController::class, 'index']);
+        Route::post('/comment-categories', [CommentCategoryController::class, 'store']);
+        Route::put('/comment-categories/{category}', [CommentCategoryController::class, 'update']);
+        Route::delete('/comment-categories/{category}', [CommentCategoryController::class, 'destroy']);
+        Route::get('/comment-trend-settings', [CommentTrendSettingsController::class, 'show']);
+        Route::put('/comment-trend-settings', [CommentTrendSettingsController::class, 'update']);
+
+        Route::post('/support-messages', [SupportMessageController::class, 'store'])->middleware('throttle:10,1');
+
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
+        Route::get('/schools/{school}/adoption-dashboard/teachers', [AdoptionDashboardController::class, 'teachers']);
+        Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/usage', [AdoptionDashboardController::class, 'teacherUsage']);
 
         // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
         // programado.md). A person schedules a follow-up on a student for a
@@ -104,6 +144,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // `is_overdue` is computed server-side by the resource.
         Route::get('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'index']);
         Route::post('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'store']);
+        Route::get('/students/{student}/follow-up-candidates', [ScheduledFollowUpController::class, 'candidates']);
+        Route::get('/scheduled-follow-ups/mine', [ScheduledFollowUpController::class, 'mine']);
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
         // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-
