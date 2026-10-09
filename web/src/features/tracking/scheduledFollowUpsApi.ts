@@ -1,5 +1,5 @@
 import { api } from "@/lib/api"
-import type { ScheduledFollowUp } from "@/types"
+import type { AppNotification, Role, ScheduledFollowUp, StaffMember } from "@/types"
 
 /**
  * Data layer for scheduled follow-ups (backend Sesión 7 — docs/prompts/17-
@@ -51,7 +51,13 @@ export async function fetchGroupScheduledFollowUps(
 
 export async function createScheduledFollowUp(
   studentId: number,
-  input: { description: string; due_date: string },
+  input: {
+    description: string
+    due_date: string
+    /** Omitted when the creator keeps it (the default). */
+    assigned_to_id?: number
+    shared_with_ids?: number[]
+  },
 ): Promise<ScheduledFollowUp> {
   const { data } = await api.post<{ data: ScheduledFollowUp }>(
     `/api/v1/students/${studentId}/scheduled-follow-ups`,
@@ -75,4 +81,35 @@ export async function resolveScheduledFollowUp(
     resolutionNote ? { resolution_note: resolutionNote } : {},
   )
   return data.data
+}
+
+/**
+ * People a follow-up on this student can be assigned to or shared with —
+ * only those who already see the student (backend-enforced). Optionally
+ * narrowed by role first, then a person is picked.
+ */
+export async function fetchFollowUpCandidates(
+  studentId: number,
+  role?: Role,
+): Promise<StaffMember[]> {
+  const { data } = await api.get<{ data: StaffMember[] }>(
+    `/api/v1/students/${studentId}/follow-up-candidates`,
+    role ? { params: { role } } : undefined,
+  )
+  return data.data
+}
+
+/** The caller's pending follow-ups: responsible for, or shared with them. */
+export async function fetchMyFollowUps(): Promise<ScheduledFollowUp[]> {
+  const { data } = await api.get<{ data: ScheduledFollowUp[] }>("/api/v1/scheduled-follow-ups/mine")
+  return data.data
+}
+
+export async function fetchNotifications(): Promise<AppNotification[]> {
+  const { data } = await api.get<{ data: AppNotification[] }>("/api/v1/notifications")
+  return data.data
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await api.post(`/api/v1/notifications/${id}/read`)
 }

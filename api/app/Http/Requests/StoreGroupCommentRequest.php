@@ -2,12 +2,11 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\CommentTone;
 use App\Enums\Role;
 use App\Models\Group;
+use App\Support\Tenancy;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Enum;
 
 /**
  * Authorization for commenting on a Group reuses GroupPolicy::view — same
@@ -56,7 +55,12 @@ class StoreGroupCommentRequest extends FormRequest
     {
         return [
             'content' => ['required', 'string'],
-            'tone' => ['nullable', new Enum(CommentTone::class)],
+            // Optional, several allowed, only this school's categories.
+            'category_ids' => ['sometimes', 'array', 'max:10'],
+            'category_ids.*' => [
+                'integer', 'distinct',
+                Rule::exists('comment_categories', 'id')->where('school_id', Tenancy::schoolId()),
+            ],
             'author_only' => ['sometimes', 'boolean'],
             'visible_to' => ['nullable', 'array'],
             'visible_to.*' => [Rule::in(Role::values())],

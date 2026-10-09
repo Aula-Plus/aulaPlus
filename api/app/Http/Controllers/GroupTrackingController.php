@@ -7,6 +7,7 @@ use App\Models\Alert;
 use App\Models\Assessment;
 use App\Models\Comment;
 use App\Models\Group;
+use Illuminate\Http\Request;
 
 /**
  * GET /api/v1/groups/{group}/tracking — read-only aggregator view
@@ -24,7 +25,7 @@ class GroupTrackingController extends Controller
      */
     protected const TREND_PERIOD_DAYS = 30;
 
-    public function show(Group $group): GroupTrackingResource
+    public function show(Request $request, Group $group): GroupTrackingResource
     {
         $this->authorize('view', $group);
 
@@ -43,7 +44,13 @@ class GroupTrackingController extends Controller
         $students = $group->students()->orderBy('students.full_name')->get()->map(fn ($student) => [
             'id' => $student->id,
             'full_name' => $student->full_name,
-            'open_alerts_count' => Alert::query()->where('student_id', $student->id)->where('resolved', false)->count(),
+            // Alert::scopeCountableFor: a role that isn't a recipient of a new
+            // alert yet must not learn it exists.
+            'open_alerts_count' => Alert::query()
+                ->where('student_id', $student->id)
+                ->where('resolved', false)
+                ->countableFor($request->user())
+                ->count(),
             'has_active_accommodations' => $student->accommodations()->get()->contains->isEffective(),
         ]);
 

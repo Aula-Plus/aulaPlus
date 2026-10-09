@@ -1,23 +1,16 @@
 import { useState } from "react"
 import { MessageSquare } from "lucide-react"
-import { Badge, type BadgeTone } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
+import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
-import { commentToneLabels, roleLabels, type Comment, type CommentTone } from "@/types"
+import { roleLabels, type Comment, type CommentCategory } from "@/types"
 import type { CommentInput } from "./trackingApi"
-
-const TONE_OPTIONS: CommentTone[] = ["positive", "neutral", "concerning"]
-
-const toneBadge: Record<CommentTone, BadgeTone> = {
-  positive: "success",
-  neutral: "neutral",
-  concerning: "danger",
-}
 
 /**
  * The four preset scopes the product thinks a comment's visibility in
@@ -75,6 +68,8 @@ export interface CommentsPanelProps {
   canComment?: boolean
   /** Heading for the panel, e.g. "Comentarios del alumno". */
   title?: string
+  /** The school's categories for the optional "De qué trata" picker. */
+  categories?: CommentCategory[]
 }
 
 export function CommentsPanel({
@@ -82,9 +77,10 @@ export function CommentsPanel({
   onCreate,
   canComment = true,
   title = "Comentarios",
+  categories = [],
 }: CommentsPanelProps) {
   const [content, setContent] = useState("")
-  const [tone, setTone] = useState<CommentTone | "">("")
+  const [categoryIds, setCategoryIds] = useState<number[]>([])
   const [scope, setScope] = useState<CommentScopeOption>("everyone")
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -105,7 +101,7 @@ export function CommentsPanel({
     // that "nothing selected" means visible to everyone, never `[]`).
     const input: CommentInput = {
       content: trimmed,
-      tone: tone === "" ? null : tone,
+      ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
       ...buildScopeFields(scope),
     }
 
@@ -113,7 +109,7 @@ export function CommentsPanel({
     try {
       await onCreate(input)
       setContent("")
-      setTone("")
+      setCategoryIds([])
       setScope("everyone")
     } catch {
       setError("No pudimos guardar el comentario.")
@@ -137,21 +133,18 @@ export function CommentsPanel({
             />
           </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="comment-tone">Tono</Label>
-            <SingleSelect
-              id="comment-tone"
-              value={tone}
-              onChange={(value) => setTone(value as CommentTone | "")}
-              options={[
-                { value: "", label: "Sin especificar" },
-                ...TONE_OPTIONS.map((option) => ({
-                  value: option,
-                  label: commentToneLabels[option],
-                })),
-              ]}
-            />
-          </div>
+          {categories.length > 0 && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="comment-categories">De qué trata (opcional)</Label>
+              <MultiSelect
+                id="comment-categories"
+                options={categories.map((category) => ({ id: category.id, label: category.name }))}
+                selected={categoryIds}
+                onChange={setCategoryIds}
+                placeholder="Sin categoría"
+              />
+            </div>
+          )}
 
           <div className="grid gap-1.5">
             <Label htmlFor="comment-scope">Visible para</Label>
@@ -183,9 +176,11 @@ export function CommentsPanel({
           {comments.map((comment) => (
             <li key={comment.id} className="rounded-md border p-3">
               <div className="flex items-center gap-2">
-                {comment.tone && (
-                  <Badge tone={toneBadge[comment.tone]}>{commentToneLabels[comment.tone]}</Badge>
-                )}
+                {(comment.categories ?? []).map((category) => (
+                  <Badge key={category.id} tone="neutral">
+                    {category.name}
+                  </Badge>
+                ))}
                 {comment.author_only && <Badge tone="neutral">Privado</Badge>}
                 <span className="text-xs text-muted-foreground">
                   {formatShortDate(comment.created_at)}

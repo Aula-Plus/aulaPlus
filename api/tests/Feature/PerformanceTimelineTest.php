@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\CommentTone;
 use App\Models\Accommodation;
 use App\Models\AccommodationInstanceOverride;
 use App\Models\Assessment;
@@ -44,7 +43,7 @@ function markTypes(array $marks): array
     return array_map(fn (array $mark) => $mark['type'], $marks);
 }
 
-it('gives a teacher without clinical access the results, calendar events and visible concerning comments, but no clinical marks', function () {
+it('gives a teacher without clinical access the results, calendar events and no comment marks and no clinical marks', function () {
     ['school' => $school, 'teacher' => $teacher, 'group' => $group, 'student' => $student] = timelineScenario();
 
     // A result on the performance line.
@@ -58,9 +57,9 @@ it('gives a teacher without clinical access the results, calendar events and vis
     // A school-wide calendar event (never gated).
     CalendarEvent::factory()->create(['school_id' => $school->id, 'title' => 'Período de exámenes', 'start_at' => '2026-03-05 08:00:00']);
 
-    // A concerning comment visible to everyone (visible_to null): the teacher
-    // sees it even without the clinical gate.
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->create(['author_id' => $teacher->id]);
+    // Comments are not a performance mark any more (only what can explain a
+    // break in the grade line goes on it).
+    Comment::factory()->forSubject($student)->create(['author_id' => $teacher->id]);
 
     Sanctum::actingAs($teacher);
 
@@ -70,7 +69,7 @@ it('gives a teacher without clinical access the results, calendar events and vis
 
     $types = markTypes($response->json('marks'));
     expect($types)->toContain('calendar_event')
-        ->toContain('concerning_comment')
+        ->not->toContain('concerning_comment')
         ->not->toContain('accommodation_activated')
         ->not->toContain('accommodation_deactivated')
         ->not->toContain('accommodation_instance_override')
@@ -156,43 +155,7 @@ it('does not emit accommodation_deactivated when the accommodation was never dea
     expect(markTypes($marks))->not->toContain('accommodation_deactivated');
 });
 
-it('hides an author_only concerning comment from another user even when concerning', function () {
-    $school = School::factory()->create();
-    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
-    $student = Student::factory()->create(['school_id' => $school->id]);
-
-    // Private to its author (the psychopedagogue).
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->authorOnly()
-        ->create(['author_id' => $psychopedagogue->id]);
-
-    // The director requests the timeline: must not see the author-only comment.
-    Sanctum::actingAs($director);
-    $marks = $this->getJson("/api/v1/students/{$student->id}/performance-timeline")->assertOk()->json('marks');
-    expect(markTypes($marks))->not->toContain('concerning_comment');
-
-    // The author does see it.
-    Sanctum::actingAs($psychopedagogue);
-    $marks = $this->getJson("/api/v1/students/{$student->id}/performance-timeline")->assertOk()->json('marks');
-    expect(markTypes($marks))->toContain('concerning_comment');
-});
-
-it('only counts concerning-toned comments, not positive or neutral ones', function () {
-    $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
-    $student = Student::factory()->create(['school_id' => $school->id]);
-
-    Comment::factory()->forSubject($student)->tone(CommentTone::Positive)->create(['author_id' => $director->id]);
-    Comment::factory()->forSubject($student)->tone(CommentTone::Neutral)->create(['author_id' => $director->id]);
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->create(['author_id' => $director->id]);
-
-    Sanctum::actingAs($director);
-    $marks = $this->getJson("/api/v1/students/{$student->id}/performance-timeline")->assertOk()->json('marks');
-
-    expect(collect(markTypes($marks))->filter(fn ($t) => $t === 'concerning_comment'))->toHaveCount(1);
-});
-
-it('filters all six sources by from and to', function () {
+it('filters all five sources by from and to', function () {
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
@@ -229,11 +192,7 @@ it('filters all six sources by from and to', function () {
     Barrier::factory()->create(['student_id' => $student->id, 'created_by_id' => $director->id, 'created_at' => $in]);
     Barrier::factory()->create(['student_id' => $student->id, 'created_by_id' => $director->id, 'created_at' => $out]);
 
-    // 6. concerning_comment — by created_at.
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->create(['author_id' => $director->id, 'created_at' => $in]);
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->create(['author_id' => $director->id, 'created_at' => $out]);
-
-    // 7. calendar_event — by start_at.
+    // 6. calendar_event — by start_at.
     CalendarEvent::factory()->create(['school_id' => $school->id, 'start_at' => $in]);
     CalendarEvent::factory()->create(['school_id' => $school->id, 'start_at' => $out]);
 
@@ -241,7 +200,7 @@ it('filters all six sources by from and to', function () {
 
     $response = $this->getJson("/api/v1/students/{$student->id}/performance-timeline?from=2026-03-01&to=2026-03-31")->assertOk();
 
-    // Exactly one result, and exactly one mark of each of the six mark types.
+    // Exactly one result, and exactly one mark of each of the five mark types.
     expect($response->json('results'))->toHaveCount(1);
 
     $counts = collect(markTypes($response->json('marks')))->countBy();
@@ -249,7 +208,6 @@ it('filters all six sources by from and to', function () {
         ->and($counts['accommodation_deactivated'] ?? 0)->toBe(1)
         ->and($counts['accommodation_instance_override'] ?? 0)->toBe(1)
         ->and($counts['barrier_registered'] ?? 0)->toBe(1)
-        ->and($counts['concerning_comment'] ?? 0)->toBe(1)
         ->and($counts['calendar_event'] ?? 0)->toBe(1);
 });
 

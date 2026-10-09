@@ -24,7 +24,7 @@ class AlertFactory extends Factory
     {
         return [
             'student_id' => Student::factory(),
-            'type' => AlertType::Behavior,
+            'type' => AlertType::Performance,
             'severity' => AlertSeverity::Medium,
             'description' => fake()->sentence(),
             'resolved' => false,

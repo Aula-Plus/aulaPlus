@@ -29,11 +29,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'grades_visibility',
     'grades_cutoff_months',
     'grades_cutoff_anchor',
+    'comment_trend_min_count',
+    'comment_trend_days',
 ])]
 class School extends Model
 {
     /** @use HasFactory<SchoolFactory> */
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::created(fn (School $school) => CommentCategory::seedDefaults($school->id));
+    }
 
     protected function casts(): array
     {

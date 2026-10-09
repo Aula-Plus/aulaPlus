@@ -11,6 +11,7 @@ use App\Models\Barrier;
 use App\Models\Comment;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\CommentTrendDetector;
 use App\Services\StudentGradeAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -69,7 +70,9 @@ class StudentTrackingController extends Controller
             'assessments' => $this->hydrate(Assessment::class, $cached['assessments']),
             'accommodations' => $this->hydrate(Accommodation::class, $cached['accommodations']),
             'barriers' => $this->hydrate(Barrier::class, $cached['barriers']),
-            'comments' => $this->hydrate(Comment::class, $cached['comments']),
+            'comments' => $this->hydrate(Comment::class, $cached['comments'])->load('categories'),
+            // Never cached: depends on the asking user (visibility + role).
+            'comment_trends' => app(CommentTrendDetector::class)->forStudent($student, request()->user()),
             'alerts' => $this->hydrate(Alert::class, $cached['alerts']),
             // Grades are role-dependent (a teacher only sees their own subjects
             // unless direction opened more), so they are computed per request,

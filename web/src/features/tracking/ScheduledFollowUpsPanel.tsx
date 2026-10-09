@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
-import type { ScheduledFollowUp } from "@/types"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { SingleSelect } from "@/components/ui/single-select"
+import { roleLabels } from "@/types"
+import type { Role, ScheduledFollowUp, StaffMember } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 
 interface ScheduledFollowUpsPanelProps {
@@ -128,6 +131,44 @@ function NewFollowUpForm({
   const [dueDate, setDueDate] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Responsible person: by default the creator, nothing is sent. "Asignar a
+  // otra persona" loads the candidates (people who already see the student),
+  // filters them by role and then picks one; "Compartir con" picks more.
+  const [assigning, setAssigning] = useState(false)
+  const [candidates, setCandidates] = useState<StaffMember[]>([])
+  const [roleFilter, setRoleFilter] = useState<string>("")
+  const [assigneeId, setAssigneeId] = useState<string>("")
+  const [sharedIds, setSharedIds] = useState<number[]>([])
+
+  async function startAssigning() {
+    setAssigning(true)
+    try {
+      setCandidates(await scheduledFollowUpsApi.fetchFollowUpCandidates(studentId))
+    } catch {
+      setError("No pudimos cargar a las personas disponibles.")
+    }
+  }
+
+  function stopAssigning() {
+    setAssigning(false)
+    setRoleFilter("")
+    setAssigneeId("")
+    setSharedIds([])
+  }
+
+  const roleOptions = (Object.keys(roleLabels) as Role[]).map((role) => ({
+    value: role,
+    label: roleLabels[role],
+  }))
+  const personOptions = candidates
+    .filter((person) => !roleFilter || person.role === roleFilter)
+    .map((person) => ({ value: String(person.id), label: person.name }))
+  const sharedOptions = candidates
+    .filter((person) => String(person.id) !== assigneeId)
+    .map((person) => ({
+      id: person.id,
+      label: `${person.name}${person.role ? ` (${roleLabels[person.role]})` : ""}`,
+    }))
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -145,13 +186,17 @@ function NewFollowUpForm({
 
     setSubmitting(true)
     try {
+      const shared = sharedIds.filter((id) => String(id) !== assigneeId)
       const created = await scheduledFollowUpsApi.createScheduledFollowUp(studentId, {
         description: trimmed,
         due_date: dueDate,
+        ...(assigneeId ? { assigned_to_id: Number(assigneeId) } : {}),
+        ...(shared.length > 0 ? { shared_with_ids: shared } : {}),
       })
       onCreated(created)
       setDescription("")
       setDueDate("")
+      stopAssigning()
     } catch {
       setError("No pudimos guardar el seguimiento.")
     } finally {
@@ -181,6 +226,59 @@ function NewFollowUpForm({
           className="max-w-48"
         />
       </div>
+
+      {assigning ? (
+        <div className="grid gap-3 rounded-md border p-3">
+          <div className="flex flex-wrap gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="follow-up-role">Rol</Label>
+              <SingleSelect
+                id="follow-up-role"
+                options={roleOptions}
+                value={roleFilter}
+                onChange={(value) => {
+                  setRoleFilter(value)
+                  setAssigneeId("")
+                }}
+                placeholder="Todos los roles"
+                className="w-48"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="follow-up-assignee">Responsable</Label>
+              <SingleSelect
+                id="follow-up-assignee"
+                options={personOptions}
+                value={assigneeId}
+                onChange={setAssigneeId}
+                placeholder="Elegí una persona"
+                className="w-56"
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="follow-up-shared">Compartir con</Label>
+            <MultiSelect
+              id="follow-up-shared"
+              options={sharedOptions}
+              selected={sharedIds}
+              onChange={setSharedIds}
+              placeholder="Nadie más"
+            />
+          </div>
+          <div>
+            <Button type="button" size="sm" variant="outline" onClick={stopAssigning}>
+              Quedarme como responsable
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <Button type="button" size="sm" variant="outline" onClick={startAssigning}>
+            Asignar a otra persona o compartir
+          </Button>
+        </div>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -231,6 +329,17 @@ function FollowUpRow({
           <p className="mt-1 text-xs text-muted-foreground">
             Vence: {formatShortDate(followUp.due_date)}
           </p>
+          {followUp.assigned_to && (
+            <p className="text-xs text-muted-foreground">
+              Responsable: {followUp.assigned_to.name}
+              {followUp.assigned_to.role && ` (${roleLabels[followUp.assigned_to.role]})`}
+            </p>
+          )}
+          {followUp.shared_with && followUp.shared_with.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Compartido con: {followUp.shared_with.map((person) => person.name).join(", ")}
+            </p>
+          )}
         </div>
         {/* Painted straight from the server boolean — the component never does
             date arithmetic (spec §4). */}

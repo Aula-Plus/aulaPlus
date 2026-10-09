@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\CommentTone;
 use App\Models\Accommodation;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
@@ -62,7 +61,6 @@ it('never includes a student_id in any mark', function () {
 
     Accommodation::factory()->create(['student_id' => $student->id, 'type' => 'tiempo extra', 'active' => true]);
     Barrier::factory()->create(['student_id' => $student->id, 'active' => true]);
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->create();
     CalendarEvent::factory()->create(['school_id' => $school->id, 'title' => 'Semana de exámenes']);
 
     Sanctum::actingAs($director);
@@ -144,7 +142,7 @@ it('hides clinical marks from a teacher without view-clinical-profile but keeps 
     // Non-clinical sources — must be present.
     $assessment = Assessment::factory()->create(['group_id' => $group->id, 'administered_at' => '2026-03-01']);
     AssessmentResult::factory()->create(['assessment_id' => $assessment->id, 'student_id' => $student->id, 'score' => 9]);
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->create(); // visible_to null → visible to all roles
+    Comment::factory()->forSubject($student)->create(); // comments are not a mark
     CalendarEvent::factory()->create(['school_id' => $school->id, 'title' => 'Feriado']);
 
     Sanctum::actingAs($teacher);
@@ -155,31 +153,9 @@ it('hides clinical marks from a teacher without view-clinical-profile but keeps 
         ->not->toContain('accommodation_activated')
         ->not->toContain('accommodation_deactivated')
         ->not->toContain('barrier_registered')
-        ->toContain('concerning_comment')
+        ->not->toContain('concerning_comment')
         ->toContain('calendar_event');
     expect($response->json('results'))->toHaveCount(1);
-});
-
-it('omits a concerning_comment that is author_only for anyone but its author', function () {
-    $school = School::factory()->create();
-    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
-    $group = Group::factory()->create(['school_id' => $school->id]);
-    $student = Student::factory()->create(['school_id' => $school->id]);
-    $student->groups()->attach($group, ['school_year' => now()->year]);
-
-    Comment::factory()->forSubject($student)->tone(CommentTone::Concerning)->authorOnly()
-        ->create(['author_id' => $psychopedagogue->id]);
-
-    // The director is not the author → no concerning_comment mark.
-    Sanctum::actingAs($director);
-    $directorMarks = collect($this->getJson("/api/v1/groups/{$group->id}/performance-timeline")->assertOk()->json('marks'));
-    expect($directorMarks->pluck('type'))->not->toContain('concerning_comment');
-
-    // The author sees their own author_only comment.
-    Sanctum::actingAs($psychopedagogue);
-    $authorMarks = collect($this->getJson("/api/v1/groups/{$group->id}/performance-timeline")->assertOk()->json('marks'));
-    expect($authorMarks->pluck('type'))->toContain('concerning_comment');
 });
 
 it('filters results and marks by the from/to window', function () {

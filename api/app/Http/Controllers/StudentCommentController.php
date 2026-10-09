@@ -22,6 +22,7 @@ class StudentCommentController extends Controller
         $this->authorize('view', $student);
 
         $comments = $student->comments()
+            ->with('categories')
             ->visibleToRole(request()->user())
             ->latest()
             ->get();
@@ -36,10 +37,12 @@ class StudentCommentController extends Controller
             'commentable_type' => Student::class,
             'commentable_id' => $student->id,
             'content' => $request->validated('content'),
-            'tone' => $request->validated('tone'),
             'visible_to' => $request->validated('visible_to'),
             'author_only' => $request->boolean('author_only'),
         ]);
+
+        $comment->categories()->sync($request->validated('category_ids') ?? []);
+        $comment->load('categories');
 
         return (new CommentResource($comment))->response()->setStatusCode(201);
     }

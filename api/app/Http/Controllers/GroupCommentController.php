@@ -21,6 +21,7 @@ class GroupCommentController extends Controller
         $this->authorize('view', $group);
 
         $comments = $group->comments()
+            ->with('categories')
             ->visibleToRole(request()->user())
             ->latest()
             ->get();
@@ -35,10 +36,12 @@ class GroupCommentController extends Controller
             'commentable_type' => Group::class,
             'commentable_id' => $group->id,
             'content' => $request->validated('content'),
-            'tone' => $request->validated('tone'),
             'visible_to' => $request->validated('visible_to'),
             'author_only' => $request->boolean('author_only'),
         ]);
+
+        $comment->categories()->sync($request->validated('category_ids') ?? []);
+        $comment->load('categories');
 
         return (new CommentResource($comment))->response()->setStatusCode(201);
     }
