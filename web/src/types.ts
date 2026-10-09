@@ -478,8 +478,25 @@ export interface SubjectStat {
   assessment_count: number
 }
 
+/** Team-facing summary of the technical report (no diagnosis); confirmed by psychopedagogy. */
+export interface TeamSummary {
+  strengths: string
+  difficulties: string
+  adjustments: string
+  confirmed_at: string
+}
+
+/** A short label for a current accommodation/barrier — all a teacher gets (no clinical detail). */
+export interface SupportChip {
+  id: number
+  label: string
+}
+
 export interface StudentTracking {
   student: Student
+  /** `null` until psychopedagogy writes and confirms it. */
+  team_summary: TeamSummary | null
+  support_chips: { accommodations: SupportChip[]; barriers: SupportChip[] }
   recent_assessments: AssessmentSummary[]
   /** Mean of every scored assessment, across subjects; null when there are none. */
   overall_average: number | null
