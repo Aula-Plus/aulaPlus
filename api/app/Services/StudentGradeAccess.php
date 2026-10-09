@@ -88,12 +88,16 @@ class StudentGradeAccess
             return null;
         }
 
-        $cutoff = $anchor->copy()->startOfDay();
-        while ($cutoff->copy()->addMonthsNoOverflow($months)->lte($today)) {
-            $cutoff = $cutoff->addMonthsNoOverflow($months);
+        // Each cutoff is computed from the anchor (anchor + k × months), never
+        // by stepping from the previous cutoff: stepping would drift once a
+        // month clamps (Jan 31 → Feb 28 → Mar 28 instead of Mar 31).
+        $anchor = $anchor->copy()->startOfDay();
+        $k = 0;
+        while ($anchor->copy()->addMonthsNoOverflow(($k + 1) * $months)->lte($today)) {
+            $k++;
         }
 
-        return $cutoff;
+        return $anchor->copy()->addMonthsNoOverflow($k * $months);
     }
 
     protected function seesEverything(User $user): bool
