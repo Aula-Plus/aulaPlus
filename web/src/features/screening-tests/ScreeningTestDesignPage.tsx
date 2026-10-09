@@ -18,6 +18,7 @@ import { ScreeningTestDesignCard } from "./ScreeningTestDesignCard"
 
 const typeSchema = z.object({
   name: z.string().min(1, "Ingresá un nombre"),
+  area: z.string().max(100, "Máximo 100 caracteres"),
 })
 
 type TypeValues = z.infer<typeof typeSchema>
@@ -89,13 +90,16 @@ export function ScreeningTestDesignPage() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<TypeValues>({ resolver: zodResolver(typeSchema), defaultValues: { name: "" } })
+  } = useForm<TypeValues>({ resolver: zodResolver(typeSchema), defaultValues: { name: "", area: "" } })
 
   async function onCreateType(values: TypeValues) {
     setTypeFormError(null)
     try {
-      await screeningApi.createScreeningTestType({ name: values.name.trim() })
-      reset({ name: "" })
+      await screeningApi.createScreeningTestType({
+        name: values.name.trim(),
+        area: values.area.trim() || null,
+      })
+      reset({ name: "", area: "" })
       await loadTypes()
     } catch {
       setTypeFormError("No pudimos crear el tipo de prueba.")
@@ -153,6 +157,11 @@ export function ScreeningTestDesignPage() {
                 <Input id="name" {...register("name")} />
                 {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
               </div>
+              <div className="grid flex-1 gap-2">
+                <Label htmlFor="area">Área (opcional)</Label>
+                <Input id="area" placeholder="Ej: lectoescritura" {...register("area")} />
+                {errors.area && <p className="text-sm text-destructive">{errors.area.message}</p>}
+              </div>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Creando…" : "Crear tipo"}
               </Button>
@@ -176,6 +185,9 @@ export function ScreeningTestDesignPage() {
               <Card key={type.id}>
                 <CardHeader>
                   <CardTitle>{type.name}</CardTitle>
+                  {type.area && (
+                    <p className="text-sm text-muted-foreground">Área: {type.area}</p>
+                  )}
                 </CardHeader>
                 <CardContent className="grid gap-4">
                   <div>

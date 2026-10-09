@@ -12,6 +12,7 @@ import type {
   Paginated,
   Role,
   StudentTracking,
+  TeamSummary,
 } from "@/types"
 
 /**
@@ -50,6 +51,19 @@ export interface CommentInput {
 export async function fetchStudentTracking(studentId: number): Promise<StudentTracking> {
   const { data } = await api.get<{ data: StudentTracking }>(
     `/api/v1/students/${studentId}/tracking`,
+  )
+  return data.data
+}
+
+export type TeamSummaryInput = Pick<TeamSummary, "strengths" | "difficulties" | "adjustments">
+
+export async function updateTeamSummary(
+  studentId: number,
+  input: TeamSummaryInput,
+): Promise<TeamSummary> {
+  const { data } = await api.put<{ data: TeamSummary }>(
+    `/api/v1/students/${studentId}/team-summary`,
+    input,
   )
   return data.data
 }

@@ -5,6 +5,7 @@ import {
   ClipboardList,
   GraduationCap,
   Home,
+  LifeBuoy,
   TrendingUp,
   UserCog,
   Users,
@@ -24,6 +25,8 @@ export interface NavItem {
   icon: LucideIcon
   /** Passed to `NavLink` so "/" only matches the index route exactly. */
   end?: boolean
+  /** Passes the originating screen to the target (e.g. the support form). */
+  passFrom?: boolean
 }
 
 export interface NavSection {
@@ -74,6 +77,10 @@ export function buildNavSections(user: User | null): NavSection[] {
           ? [{ to: "/adopcion", label: "Adopción", icon: TrendingUp }]
           : []),
       ],
+    },
+    // Fixed item for every role: support / improvement form.
+    {
+      items: [{ to: "/ayuda", label: "Ayuda y sugerencias", icon: LifeBuoy, passFrom: true }],
     },
   ]
 

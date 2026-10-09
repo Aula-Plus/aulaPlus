@@ -29,8 +29,10 @@ use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
 use App\Http\Controllers\StudentPerformanceTimelineController;
 use App\Http\Controllers\StudentResultController;
+use App\Http\Controllers\StudentTeamSummaryController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
+use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -90,13 +92,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
 
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
+        Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
 
+        Route::post('/support-messages', [SupportMessageController::class, 'store'])->middleware('throttle:10,1');
+
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
+        Route::get('/schools/{school}/adoption-dashboard/teachers', [AdoptionDashboardController::class, 'teachers']);
+        Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/usage', [AdoptionDashboardController::class, 'teacherUsage']);
 
         // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
         // programado.md). A person schedules a follow-up on a student for a
