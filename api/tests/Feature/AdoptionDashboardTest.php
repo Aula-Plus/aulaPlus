@@ -155,9 +155,10 @@ it('lists teachers alphabetically with this month counts only, for the director'
 it('forbids the per-teacher views for non-directors and other schools', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $otherDirector = User::factory()->forSchool(School::factory()->create())->director()->create();
 
-    foreach ([$teacher, $otherDirector] as $actor) {
+    foreach ([$teacher, $psychopedagogue, $otherDirector] as $actor) {
         Sanctum::actingAs($actor);
         $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers")->assertForbidden();
         $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$teacher->id}/usage")->assertForbidden();
@@ -195,4 +196,33 @@ it('returns 404 for a non-teacher or another school user on the usage detail', f
     Sanctum::actingAs($director);
     $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$foreignTeacher->id}/usage")->assertNotFound();
     $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers/{$director->id}/usage")->assertNotFound();
+});
+
+it('never counts another school\'s events in the by-type series or the per-teacher counts', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+
+    $otherSchool = School::factory()->create();
+    $foreignTeacher = User::factory()->forSchool($otherSchool)->teacher()->create();
+
+    foreach (['annual_plan.created', 'class_session.created', 'assessment.created'] as $type) {
+        UsageEvent::factory()->create([
+            'school_id' => $otherSchool->id, 'user_id' => $foreignTeacher->id,
+            'event_type' => $type, 'created_at' => now(),
+        ]);
+    }
+
+    Sanctum::actingAs($director);
+
+    $series = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard")
+        ->assertOk()
+        ->json('data.weekly_content_by_type');
+    expect(last($series))->toMatchArray(['annual_plans' => 0, 'class_sessions' => 0, 'assessments' => 0]);
+
+    $rows = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard/teachers")
+        ->assertOk()
+        ->json('data');
+    expect(collect($rows)->pluck('id')->all())->toBe([$teacher->id]);
+    expect($rows[0]['month_counts'])->toBe(['annual_plans' => 0, 'class_sessions' => 0, 'assessments' => 0]);
 });
