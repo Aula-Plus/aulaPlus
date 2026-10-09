@@ -88,7 +88,6 @@ describe("StudentPerformanceChart", () => {
       detail: "Evaluación diagnóstica sin adaptación",
     },
     { mark: { type: "barrier_registered", date: "2026-03-04T10:00:00+00:00", barrier_id: 5 } },
-    { mark: { type: "concerning_comment", date: "2026-03-05T10:00:00+00:00", comment_id: 8 } },
     {
       mark: {
         type: "calendar_event",

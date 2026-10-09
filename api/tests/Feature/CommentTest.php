@@ -31,11 +31,10 @@ it('lets a teacher who teaches the student comment on them', function () {
 
     $this->postJson("/api/v1/students/{$student->id}/comments", [
         'content' => 'Buen progreso en lectura.',
-        'tone' => 'positive',
     ])
         ->assertCreated()
         ->assertJsonPath('data.author_id', $teacher->id)
-        ->assertJsonPath('data.tone', 'positive');
+        ->assertJsonPath('data.categories', []);
 });
 
 it('lets a psychopedagogue comment on any student in their school', function () {

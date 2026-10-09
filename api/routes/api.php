@@ -11,6 +11,8 @@ use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
+use App\Http\Controllers\CommentCategoryController;
+use App\Http\Controllers\CommentTrendSettingsController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
@@ -98,6 +100,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+
+        // Comment categories (replace the old comment "tone"): a school-
+        // editable catalog (director writes) plus the school's recurrence
+        // threshold for the trend mark (psychopedagogy/direction read,
+        // director writes).
+        Route::get('/comment-categories', [CommentCategoryController::class, 'index']);
+        Route::post('/comment-categories', [CommentCategoryController::class, 'store']);
+        Route::put('/comment-categories/{category}', [CommentCategoryController::class, 'update']);
+        Route::delete('/comment-categories/{category}', [CommentCategoryController::class, 'destroy']);
+        Route::get('/comment-trend-settings', [CommentTrendSettingsController::class, 'show']);
+        Route::put('/comment-trend-settings', [CommentTrendSettingsController::class, 'update']);
 
         Route::post('/support-messages', [SupportMessageController::class, 'store'])->middleware('throttle:10,1');
 

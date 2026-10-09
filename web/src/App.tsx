@@ -11,6 +11,7 @@ import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
+import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { MyFollowUpsPage } from "@/features/tracking/MyFollowUpsPage"
 import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
@@ -71,6 +72,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <StudentHistoryPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/ajustes/comentarios"
+            element={
+              <ProtectedLayout>
+                <CommentSettingsPage />
               </ProtectedLayout>
             }
           />

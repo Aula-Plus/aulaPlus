@@ -25,11 +25,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'anep_secondary_body',
     'levels_offered',
     'instruction_languages',
+    'comment_trend_min_count',
+    'comment_trend_days',
 ])]
 class School extends Model
 {
     /** @use HasFactory<SchoolFactory> */
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::created(fn (School $school) => CommentCategory::seedDefaults($school->id));
+    }
 
     protected function casts(): array
     {
