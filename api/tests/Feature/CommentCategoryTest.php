@@ -176,3 +176,41 @@ it('lets psychopedagogy read and only direction change the trend threshold', fun
     $this->putJson('/api/v1/comment-trend-settings', ['min_count' => 5, 'days' => 30])->assertOk()->assertJsonPath('data', ['min_count' => 5, 'days' => 30]);
     expect($school->refresh()->comment_trend_min_count)->toBe(5);
 });
+
+it('does not let a teacher create, rename or delete categories', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $social = categoryId($school, 'Social');
+    Sanctum::actingAs($teacher);
+
+    $this->postJson('/api/v1/comment-categories', ['name' => 'Salud'])->assertForbidden();
+    $this->putJson("/api/v1/comment-categories/{$social}", ['name' => 'x'])->assertForbidden();
+    $this->deleteJson("/api/v1/comment-categories/{$social}")->assertForbidden();
+
+    expect(CommentCategory::withoutGlobalScopes()->find($social)->name)->toBe('Social');
+});
+
+it('tags a group comment only with its own school\'s categories', function () {
+    $school = School::factory()->create();
+    $other = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher);
+    Sanctum::actingAs($teacher);
+    $url = "/api/v1/groups/{$group->id}/comments";
+
+    $this->postJson($url, ['content' => 'x', 'category_ids' => [categoryId($other, 'Social')]])
+        ->assertJsonValidationErrors('category_ids.0');
+
+    $this->postJson($url, ['content' => 'x', 'category_ids' => [categoryId($school, 'Social')]])
+        ->assertCreated()
+        ->assertJsonPath('data.categories.0.name', 'Social');
+});
+
+it('does not let a teacher change the trend threshold', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+
+    $this->putJson('/api/v1/comment-trend-settings', ['min_count' => 5, 'days' => 30])->assertForbidden();
+    expect($school->refresh()->comment_trend_min_count)->toBe(4);
+});
