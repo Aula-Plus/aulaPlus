@@ -9,8 +9,10 @@ use App\Models\School;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
+use App\Services\StudentGradeAccess;
 use App\Support\Tenancy;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Support\Carbon;
 
 use function Pest\Laravel\actingAs;
 use function Pest\Laravel\getJson;
@@ -132,4 +134,75 @@ it('does not touch another school when direction saves', function () {
     putJson('/api/v1/grades-visibility', ['mode' => 'all_live'])->assertOk();
 
     expect($other->refresh()->grades_visibility)->toBe(GradesVisibility::OwnSubject);
+});
+
+it('shows no grades on any endpoint to a teacher of the student whose subject has none', function () {
+    $art = Subject::factory()->for($this->school)->create(['name' => 'Arte']);
+    $teacher = User::factory()->create(['school_id' => $this->school->id]);
+    $teacher->assignRole(Role::Teacher->value);
+    $this->group->teachers()->attach($teacher->id, ['subject_id' => $art->id]);
+    actingAs($teacher);
+
+    $response = getJson($this->url)->assertOk();
+
+    expect($response->json('data.by_subject'))->toBe([]);
+    expect($response->json('data.grades'))->toBe([]);
+    $response->assertJsonPath('data.overall_average', null);
+    expect(getJson("/api/v1/students/{$this->student->id}/results")->assertOk()->json('data'))->toBe([]);
+    expect(getJson("/api/v1/students/{$this->student->id}/performance-timeline")->assertOk()->json('results'))
+        ->toBe([]);
+});
+
+it('does not open a subject the teacher only teaches in another group', function () {
+    $otherGroup = Group::factory()->create(['school_id' => $this->school->id]);
+    $otherGroup->teachers()->attach($this->teacher->id, ['subject_id' => $this->history->id]);
+    actingAs($this->teacher);
+
+    expect(subjectNames(getJson($this->url)->assertOk()))->toBe(['Matemática']);
+    expect(getJson("/api/v1/students/{$this->student->id}/results")->assertOk()->json('data'))->toHaveCount(1);
+});
+
+it('applies the periodic cutoff on the results and timeline endpoints too', function () {
+    $this->school->update([
+        'grades_visibility' => GradesVisibility::AllPeriodic,
+        'grades_cutoff_months' => 3,
+        'grades_cutoff_anchor' => now()->subMonths(4)->toDateString(),
+    ]);
+    // The History result was recorded after the last cutoff → hidden for now.
+    actingAs($this->teacher);
+
+    expect(getJson("/api/v1/students/{$this->student->id}/results")->assertOk()->json('data'))->toHaveCount(1);
+    expect(getJson("/api/v1/students/{$this->student->id}/performance-timeline")->assertOk()->json('results'))
+        ->toHaveCount(1);
+});
+
+it('forbids psychopedagogy from changing the setting and validates the mode', function () {
+    $psychopedagogue = User::factory()->create(['school_id' => $this->school->id]);
+    $psychopedagogue->assignRole(Role::Psychopedagogue->value);
+    actingAs($psychopedagogue);
+    putJson('/api/v1/grades-visibility', ['mode' => 'all_live'])->assertForbidden();
+    expect($this->school->refresh()->grades_visibility)->toBe(GradesVisibility::OwnSubject);
+
+    $director = User::factory()->create(['school_id' => $this->school->id]);
+    $director->assignRole(Role::Director->value);
+    actingAs($director);
+    putJson('/api/v1/grades-visibility', ['mode' => 'everything'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['mode']);
+    putJson('/api/v1/grades-visibility', ['mode' => 'all_periodic', 'cutoff_months' => 0])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['cutoff_months']);
+});
+
+it('computes every cutoff from the anchor without month-end drift', function () {
+    $school = School::factory()->create([
+        'grades_visibility' => GradesVisibility::AllPeriodic,
+        'grades_cutoff_months' => 1,
+        'grades_cutoff_anchor' => '2026-01-31',
+    ]);
+    $access = app(StudentGradeAccess::class);
+
+    expect($access->lastCutoff($school, Carbon::parse('2026-01-30')))->toBeNull();
+    expect($access->lastCutoff($school, Carbon::parse('2026-03-01'))->toDateString())->toBe('2026-02-28');
+    expect($access->lastCutoff($school, Carbon::parse('2026-04-15'))->toDateString())->toBe('2026-03-31');
 });
