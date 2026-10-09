@@ -24,7 +24,11 @@ use Illuminate\Support\Facades\DB;
  * Evaluated per (student, subject) over the student's assessment results in
  * chronological order (assessment `administered_at`, falling back to its
  * creation date). One open alert per student and subject at most: while one
- * is unresolved, a second rule met in the same subject adds nothing.
+ * is unresolved, a second rule met in the same subject adds nothing. Once it
+ * is resolved, a new alert is only generated on new evidence — a condition
+ * met on a later date than the last alert for that student and subject — so
+ * re-running the command never re-raises an alert someone already closed.
+ * Soft-deleted students are skipped.
  *
  * The caller must have set the tenant (Tenancy::forSchool) — this runs from a
  * console command with no authenticated user.
@@ -55,6 +59,21 @@ class PerformanceAlertGenerator
             ->mapWithKeys(fn (Alert $alert) => ["{$alert->student_id}:{$alert->subject_id}" => true])
             ->all();
 
+        // Latest date a condition was already reported per (student, subject),
+        // resolved or not: the same scores must not raise a second alert.
+        $lastMetOn = Alert::query()
+            ->where('type', AlertType::Performance->value)
+            ->whereNotNull('subject_id')
+            ->whereNotNull('condition_met_on')
+            ->groupBy('student_id', 'subject_id')
+            ->select(['student_id', 'subject_id', DB::raw('MAX(condition_met_on) as last_met_on')])
+            ->toBase()
+            ->get()
+            ->mapWithKeys(fn (object $row) => [
+                "{$row->student_id}:{$row->subject_id}" => substr((string) $row->last_met_on, 0, 10),
+            ])
+            ->all();
+
         $generated = 0;
 
         foreach ($rules as $rule) {
@@ -72,7 +91,7 @@ class PerformanceAlertGenerator
 
                     $met = $this->evaluate($rule, $scores, $today);
 
-                    if ($met === null) {
+                    if ($met === null || (isset($lastMetOn[$key]) && $met['on'] <= $lastMetOn[$key])) {
                         continue;
                     }
 
@@ -182,6 +201,8 @@ class PerformanceAlertGenerator
 
         AssessmentResult::query()
             ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
+            ->join('students', 'students.id', '=', 'assessment_results.student_id')
+            ->whereNull('students.deleted_at')
             ->whereNotNull('assessments.subject_id')
             ->whereNotNull('assessment_results.score')
             ->orderByRaw($takenOn)

@@ -109,6 +109,78 @@ it('keeps a single open alert per student and subject across runs', function () 
     expect(Alert::query()->withoutGlobalScopes()->count())->toBe(1);
 });
 
+it('does not re-raise a resolved alert on the same scores, only on new evidence', function () {
+    ($this->rule)();
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4]);
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+    Alert::query()->withoutGlobalScopes()->update(['resolved' => true, 'resolved_at' => now()]);
+
+    // Re-running with the same scores must not bring the closed alert back.
+    $this->artisan('alerts:performance')->assertSuccessful();
+    expect(Alert::query()->withoutGlobalScopes()->count())->toBe(1);
+
+    // A new low score is new evidence: a new alert is generated.
+    ($this->scores)($this->math, [2 => 2]);
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    $alerts = Alert::query()->withoutGlobalScopes()->orderBy('id')->get();
+    expect($alerts)->toHaveCount(2)
+        ->and($alerts->last()->resolved)->toBeFalse()
+        ->and($alerts->last()->condition_met_on->toDateString())->toBe(now()->subDays(2)->toDateString());
+});
+
+it('skips soft-deleted students', function () {
+    ($this->rule)();
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4]);
+    $this->student->delete();
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    expect(Alert::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('evaluates each school only against its own conditions', function () {
+    // School A (beforeEach) has low scores but no rule; school B has a rule
+    // but its student is doing fine. Nothing must cross between them.
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4]);
+
+    $otherSchool = School::factory()->create();
+    $otherGroup = Group::factory()->create(['school_id' => $otherSchool->id]);
+    $otherSubject = Subject::factory()->create(['school_id' => $otherSchool->id]);
+    $otherTeacher = User::factory()->forSchool($otherSchool)->teacher()->create();
+    $otherStudent = Student::factory()->create(['school_id' => $otherSchool->id]);
+    $otherStudent->groups()->attach($otherGroup, ['school_year' => now()->year]);
+    Tenancy::forSchool($otherSchool, function () use ($otherSchool, $otherGroup, $otherSubject, $otherTeacher, $otherStudent): void {
+        AlertRule::factory()->create(['school_id' => $otherSchool->id]);
+        foreach ([30 => 8, 20 => 9, 10 => 7] as $daysAgo => $score) {
+            $assessment = Assessment::factory()->create([
+                'group_id' => $otherGroup->id,
+                'subject_id' => $otherSubject->id,
+                'teacher_id' => $otherTeacher->id,
+                'administered_at' => now()->subDays($daysAgo)->toDateString(),
+            ]);
+            AssessmentResult::factory()->create([
+                'assessment_id' => $assessment->id,
+                'student_id' => $otherStudent->id,
+                'score' => $score,
+                'created_by_id' => $otherTeacher->id,
+            ]);
+        }
+    });
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+    expect(Alert::query()->withoutGlobalScopes()->count())->toBe(0);
+
+    // Once school A configures its own rule, its alert is created in school A.
+    ($this->rule)();
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    $alert = Alert::query()->withoutGlobalScopes()->sole();
+    expect($alert->school_id)->toBe($this->school->id)
+        ->and($alert->student_id)->toBe($this->student->id);
+});
+
 it('supports the period-average condition', function () {
     ($this->rule)(['condition' => 'average_below', 'threshold' => 6, 'consecutive_count' => null, 'period_days' => 60]);
     // The old 9 falls outside the 60-day window, so the average is 5.
