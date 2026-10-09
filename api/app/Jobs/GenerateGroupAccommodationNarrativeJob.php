@@ -15,6 +15,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -48,6 +49,8 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
     /** Stored when the accommodation data itself names a student (nothing is sent). */
     public const ERROR_NAME_IN_DATA = 'Accommodation data names a student; nothing was sent to the AI.';
 
+    public const ERROR_NO_ACCOMMODATIONS = 'The group has no active accommodations.';
+
     /** Name fragments too generic to prove a student is being named. */
     protected const NAME_STOPWORDS = ['del', 'las', 'los', 'van', 'von', 'dos', 'san', 'que'];
 
@@ -60,7 +63,17 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
     {
         Tenancy::forSchool($this->narrative->school_id, function () use ($summarize): void {
             $group = $this->narrative->group;
-            $prompt = $this->userPrompt($group->name, $summarize($group));
+            $summary = $summarize($group);
+
+            // Accommodations may have ended since the request was accepted: an
+            // empty list would only invite the model to invent content.
+            if ($summary === []) {
+                $this->markError(self::ERROR_NO_ACCOMMODATIONS);
+
+                return;
+            }
+
+            $prompt = $this->userPrompt($group->name, $summary);
 
             // Free-text accommodation types could carry a name: never let it
             // reach the third-party API (rule 11).
@@ -114,6 +127,9 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
                 'content' => $text,
                 'status' => AccommodationNarrativeStatus::Draft,
                 'error_message' => null,
+                // The data actually summarised (it may differ from what the
+                // request saw), so `outdated` compares against the right thing.
+                'fingerprint' => $summarize->fingerprint($summary),
             ]);
         });
     }
@@ -142,10 +158,13 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
 
     /**
      * True when the text contains the full name or any name part (3+ letters)
-     * of a student of the school, as a whole word, ignoring case.
+     * of a student of the school, as a whole word, ignoring case and accents
+     * ("Lucia" must still match "Lucía").
      */
     protected function namesAStudent(string $text): bool
     {
+        $text = $this->normalize($text);
+
         foreach ($this->studentNameParts() as $part) {
             if (preg_match('/(?<!\pL)'.preg_quote($part, '/').'(?!\pL)/iu', $text) === 1) {
                 return true;
@@ -161,11 +180,17 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
     protected function studentNameParts(): array
     {
         return $this->studentNameParts ??= Student::query()->pluck('full_name')
-            ->flatMap(fn ($fullName) => preg_split('/\s+/u', mb_strtolower(trim((string) $fullName))) ?: [])
+            ->flatMap(fn ($fullName) => preg_split('/\s+/u', $this->normalize(trim((string) $fullName))) ?: [])
             ->filter(fn (string $part) => mb_strlen($part) >= 3 && ! in_array($part, self::NAME_STOPWORDS, true))
             ->unique()
             ->values()
             ->all();
+    }
+
+    /** Lower-case and strip diacritics, so accent differences don't hide a name. */
+    protected function normalize(string $text): string
+    {
+        return mb_strtolower(Str::ascii($text));
     }
 
     protected function systemPrompt(): string
