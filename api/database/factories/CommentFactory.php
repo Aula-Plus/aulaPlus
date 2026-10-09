@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Enums\CommentTone;
 use App\Models\Comment;
 use App\Models\Student;
 use App\Models\User;
@@ -28,7 +27,6 @@ class CommentFactory extends Factory
             'commentable_type' => Student::class,
             'commentable_id' => Student::factory(),
             'content' => fake()->paragraph(),
-            'tone' => fake()->randomElement(CommentTone::cases()),
             'visible_to' => null,
             'author_only' => false,
         ];
@@ -41,11 +39,6 @@ class CommentFactory extends Factory
             'commentable_id' => $subject->getKey(),
             'school_id' => $subject->getAttribute('school_id'),
         ]);
-    }
-
-    public function tone(CommentTone $tone): static
-    {
-        return $this->state(['tone' => $tone]);
     }
 
     public function visibleTo(array $roles): static

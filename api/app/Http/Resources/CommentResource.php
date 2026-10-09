@@ -22,7 +22,10 @@ class CommentResource extends JsonResource
             'commentable_type' => class_basename($this->commentable_type),
             'commentable_id' => $this->commentable_id,
             'content' => $this->content,
-            'tone' => $this->tone?->value,
+            'categories' => $this->whenLoaded('categories', fn () => $this->categories->map(fn ($category) => [
+                'id' => $category->id,
+                'name' => $category->name,
+            ])->values()->all()),
             'visible_to' => $this->visible_to,
             'author_only' => $this->author_only,
             'created_at' => $this->created_at?->toIso8601String(),

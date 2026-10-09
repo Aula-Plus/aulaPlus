@@ -83,6 +83,14 @@ export function canManageSubjects(user: User | null): boolean {
   return isDirector(user)
 }
 
+/**
+ * Directors edit the comment categories and the trend threshold (mirror of
+ * CommentCategoryPolicy / CommentTrendSettingsController). UX-only gate.
+ */
+export function canManageCommentSettings(user: User | null): boolean {
+  return isDirector(user)
+}
+
 // ── Users / staff management ────────────────────────────────────────────────
 
 /**

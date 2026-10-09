@@ -11,6 +11,9 @@ import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
+import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
+import { MyFollowUpsPage } from "@/features/tracking/MyFollowUpsPage"
+import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
@@ -70,6 +73,22 @@ function App() {
             element={
               <ProtectedLayout>
                 <StudentHistoryPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/ajustes/comentarios"
+            element={
+              <ProtectedLayout>
+                <CommentSettingsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/mis-seguimientos"
+            element={
+              <ProtectedLayout>
+                <MyFollowUpsPage />
               </ProtectedLayout>
             }
           />
@@ -137,6 +156,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <AdoptionDashboardPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/ayuda"
+            element={
+              <ProtectedLayout>
+                <SupportPage />
               </ProtectedLayout>
             }
           />

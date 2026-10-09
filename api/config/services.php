@@ -28,6 +28,11 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Recipients (comma-separated) of "Ayuda y sugerencias" emails. Per-env.
+    'support' => [
+        'notify_to' => array_filter(array_map('trim', explode(',', (string) env('SUPPORT_NOTIFY_EMAILS', '')))),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

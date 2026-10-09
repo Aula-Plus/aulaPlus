@@ -49,6 +49,17 @@ class ScheduledFollowUpPolicy
     }
 
     /**
+     * Whether `$user` is someone who may see `$student`'s follow-ups, i.e.
+     * a valid responsible/co-follower for one. Used to validate the assignee
+     * lists and to drop follow-ups from a pending list once the person no
+     * longer has access to the student.
+     */
+    public function canFollow(User $user, Student $student): bool
+    {
+        return $this->canAccessStudent($user, $student);
+    }
+
+    /**
      * Same school AND (teaches the student OR a school-wide role). A teacher
      * only ever reaches their own students; a director/psychopedagogue reaches
      * any student in their own school.
