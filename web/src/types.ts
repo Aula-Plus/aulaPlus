@@ -149,9 +149,18 @@ export const alertSeverityLabels: Record<AlertSeverity, string> = {
 export interface Alert {
   id: number
   student_id: number
+  /** Present on the "my alerts" list (`GET /api/v1/alerts`). */
+  student_name?: string | null
+  /** The subject a sustained-low-performance alert was met in (ClickUp 86e3jpzcv). */
+  subject_id?: number | null
+  subject_name?: string | null
   type: AlertType
   severity: AlertSeverity
   description: string
+  /** `YYYY-MM-DD` the configured condition was met on, when known. */
+  condition_met_on?: string | null
+  /** Who the alert reached first; `null` on alerts created before 86e3jpzcv. */
+  recipients?: AlertRecipient[] | null
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null
@@ -855,4 +864,43 @@ export interface Paginated<T> {
     last_page: number
     total: number
   }
+}
+
+// ── Alert settings (ClickUp 86e3jpzcv) ──────────────────────────────────────
+
+/** Mirror of `App\Enums\AlertCondition`. */
+export type AlertCondition = "consecutive_below" | "average_below"
+
+/** Mirror of `App\Enums\AlertRecipient` — who an alert type reaches first. */
+export type AlertRecipient = "teacher" | "psychopedagogue" | "director"
+
+export const alertRecipientLabels: Record<AlertRecipient, string> = {
+  teacher: "Docente de la materia",
+  psychopedagogue: "Psicopedagogía",
+  director: "Dirección",
+}
+
+/** A school-configured sustained-low-performance condition (`AlertRuleResource`). */
+export interface AlertRule {
+  id: number
+  condition: AlertCondition
+  threshold: number
+  consecutive_count: number | null
+  period_days: number | null
+  /** `null` = applies to every subject. */
+  subject_id: number | null
+  active: boolean
+  created_at: string | null
+}
+
+export interface AlertRoutingEntry {
+  type: AlertType
+  recipients: AlertRecipient[]
+  /** `true` while the school hasn't changed the product default. */
+  is_default: boolean
+}
+
+export interface AlertSettings {
+  rules: AlertRule[]
+  routing: AlertRoutingEntry[]
 }

@@ -6,26 +6,46 @@ use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\Group;
 use App\Models\Student;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
  * Read/resolve endpoints for Alerts (docs/prompts/04-seguimiento-
  * institucional.md §4). Alerts hold behavior/performance concerns about a
- * minor, so every action here is gated the same way as the student's full
- * clinical profile — see AlertPolicy.
+ * minor: every list is filtered through Alert::scopeVisibleTo() and every
+ * single-alert action goes through AlertPolicy.
  */
 class AlertController extends Controller
 {
-    public function forStudent(Student $student): AnonymousResourceCollection
+    /**
+     * GET /api/v1/alerts — the open alerts that reach the current user
+     * (ClickUp 86e3jpzcv: "le llega a Mariana, que da Matemática en su
+     * grupo"). Oldest condition first, so nothing waits behind newer ones.
+     */
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize('view-clinical-profile', $student);
+        $this->authorize('viewAny', Alert::class);
+
+        $alerts = Alert::query()
+            ->visibleTo($request->user())
+            ->where('resolved', false)
+            ->with(['student:id,full_name', 'subject:id,name'])
+            ->orderBy('created_at')
+            ->get();
+
+        return AlertResource::collection($alerts);
+    }
+
+    public function forStudent(Request $request, Student $student): AnonymousResourceCollection
+    {
+        $this->authorize('view', $student);
 
         return AlertResource::collection(
-            $student->alerts()->latest()->get()
+            $student->alerts()->visibleTo($request->user())->with('subject:id,name')->latest()->get()
         );
     }
 
-    public function forGroup(Group $group): AnonymousResourceCollection
+    public function forGroup(Request $request, Group $group): AnonymousResourceCollection
     {
         $this->authorize('viewForGroup', [Alert::class, $group]);
 
@@ -33,6 +53,8 @@ class AlertController extends Controller
 
         $alerts = Alert::query()
             ->whereIn('student_id', $studentIds)
+            ->visibleTo($request->user())
+            ->with('subject:id,name')
             ->latest()
             ->get();
 

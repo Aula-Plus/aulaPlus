@@ -171,6 +171,14 @@ export function canResolveAlert(user: User | null): boolean {
 }
 
 /**
+ * Configure the school's alert conditions and who each alert type reaches
+ * first. Director or psychopedagogue. Mirror of `AlertRulePolicy`.
+ */
+export function canManageAlertSettings(user: User | null): boolean {
+  return isSchoolWideStaff(user)
+}
+
+/**
  * Approve/reject an accommodation. Director or psychopedagogue.
  * Mirror of `AccommodationPolicy::approve`.
  */
