@@ -58,6 +58,14 @@ class Alert extends Model
 
     public static array $auditableExcludeFromDiff = ['description'];
 
+    /**
+     * Users this instance is already known to be visible to — see
+     * {@see self::markVisibleTo()}. Per instance, never persisted.
+     *
+     * @var array<int, true>
+     */
+    protected array $knownVisibleTo = [];
+
     protected function casts(): array
     {
         return [
@@ -233,7 +241,24 @@ class Alert extends Model
 
     public function isVisibleTo(User $user): bool
     {
-        return $user->school_id === $this->school_id
-            && static::query()->whereKey($this->getKey())->visibleTo($user)->exists();
+        if ($user->school_id !== $this->school_id) {
+            return false;
+        }
+
+        return isset($this->knownVisibleTo[$user->id])
+            || static::query()->whereKey($this->getKey())->visibleTo($user)->exists();
+    }
+
+    /**
+     * Record that this instance was loaded through {@see self::scopeVisibleTo()}
+     * for the user, so the per-alert `can` checks in AlertResource don't
+     * re-run the visibility query once per alert (N+1) on list endpoints.
+     * Only list endpoints that filtered with visibleTo($user) may call it.
+     */
+    public function markVisibleTo(User $user): static
+    {
+        $this->knownVisibleTo[$user->id] = true;
+
+        return $this;
     }
 }

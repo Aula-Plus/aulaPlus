@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\Sanctum;
 
@@ -221,4 +222,89 @@ it('lets the school add direction to the escalated alert', function () {
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.type', 'escalated_overdue')
         ->assertJsonPath('data.0.can.act', false);
+});
+
+it('closes the escalated alert when the responsible person resolves the alert it escalates', function () {
+    Sanctum::actingAs($this->teacher);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/outcome", [
+        'outcome' => 'handed_off',
+        'assignee_id' => $this->psychopedagogue->id,
+        'due_on' => now()->addDay()->toDateString(),
+    ])->assertOk();
+
+    $this->travel(3)->days();
+    $this->artisan('alerts:escalate')->assertSuccessful();
+    $escalation = Alert::query()->withoutGlobalScopes()->where('type', AlertType::EscalatedOverdue->value)->sole();
+
+    // The escalated alert itself takes no way out and can't be resolved…
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->postJson("/api/v1/alerts/{$escalation->id}/resolve")->assertForbidden();
+
+    // …so resolving the alert it escalates must close it, or it stays open forever.
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/resolve")->assertOk();
+
+    expect($escalation->fresh()->resolved)->toBeTrue();
+    foreach ([$this->teacher, $this->psychopedagogue] as $person) {
+        Sanctum::actingAs($person);
+        $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+    }
+});
+
+it('escalates each school\'s overdue alerts inside that school only', function () {
+    $otherSchool = School::factory()->create();
+    $otherGroup = Group::factory()->create(['school_id' => $otherSchool->id]);
+    $otherTeacher = User::factory()->forSchool($otherSchool)->teacher()->create();
+    $otherPsychopedagogue = User::factory()->forSchool($otherSchool)->psychopedagogue()->create();
+    $otherStudent = Student::factory()->create(['school_id' => $otherSchool->id]);
+    $otherStudent->groups()->attach($otherGroup, ['school_year' => now()->year]);
+
+    $overdue = fn (School $school, Student $student, User $from, User $to) => Tenancy::forSchool($school, fn () => Alert::factory()->create([
+        'student_id' => $student->id,
+        'type' => AlertType::Performance,
+        'recipients' => ['teacher'],
+        'outcome' => 'handed_off',
+        'outcome_by_id' => $from->id,
+        'outcome_at' => now()->subDays(10),
+        'assignee_id' => $to->id,
+        'due_on' => now()->subDays(2)->toDateString(),
+    ]));
+    $mine = $overdue($this->school, $this->student, $this->teacher, $this->psychopedagogue);
+    $theirs = $overdue($otherSchool, $otherStudent, $otherTeacher, $otherPsychopedagogue);
+
+    $this->artisan('alerts:escalate')->assertSuccessful();
+
+    foreach ([[$mine, $this->school], [$theirs, $otherSchool]] as [$source, $school]) {
+        $escalation = Alert::query()->withoutGlobalScopes()->where('source_alert_id', $source->id)->sole();
+        expect($escalation->school_id)->toBe($school->id)
+            ->and($escalation->people()->pluck('users.school_id')->unique()->all())->toBe([$school->id]);
+    }
+
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->getJson('/api/v1/alerts')
+        ->assertOk()
+        ->assertJsonMissing(['source_alert_id' => $theirs->id]);
+});
+
+it('lists alerts without one visibility query per alert', function () {
+    $queriesFor = function (int $count): int {
+        Alert::query()->withoutGlobalScopes()->delete();
+        Tenancy::forSchool($this->school, fn () => Alert::factory()->count($count)->create([
+            'student_id' => $this->student->id,
+            'subject_id' => $this->math->id,
+            'type' => AlertType::Performance,
+            'recipients' => ['teacher'],
+        ]));
+
+        Sanctum::actingAs($this->teacher);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount($count, 'data');
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    $queriesFor(1); // warm up the per-user role cache
+    expect($queriesFor(5))->toBe($queriesFor(1));
 });
