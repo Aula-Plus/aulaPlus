@@ -36,6 +36,7 @@ use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTeamSummaryController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
+use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\UserController;
@@ -217,6 +218,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Subjects ("materias") catalog — director-managed, read by all staff.
         Route::apiResource('subjects', SubjectController::class);
+
+        // A subject's curricular program PDF (ClickUp 86e3dt6ag): private
+        // file, temporary URL only. Direction manages it; direction,
+        // psychopedagogy and the subject's teachers can open it.
+        Route::post('/subjects/{subject}/syllabus', [SubjectSyllabusController::class, 'store']);
+        Route::get('/subjects/{subject}/syllabus', [SubjectSyllabusController::class, 'show']);
+        Route::delete('/subjects/{subject}/syllabus', [SubjectSyllabusController::class, 'destroy']);
 
         // Director-managed teacher-subject assignments per group.
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);

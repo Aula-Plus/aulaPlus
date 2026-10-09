@@ -38,6 +38,7 @@ class BuildProposalContext
                 'profile' => $group->group_profile,
             ],
             'curricular_framework' => $this->curricularContext($group, $parameters),
+            'subject_program' => $this->subjectProgram($parameters),
             'student_cohort_summary' => $this->cohortSummary($group),
             'target_student' => $this->targetStudent($parameters),
             'reference_example' => $this->referenceExample($proposal),
@@ -99,6 +100,56 @@ class BuildProposalContext
         return [
             'frameworks' => $frameworks->pluck('name')->all(),
             'relevant_items' => $items,
+        ];
+    }
+
+    /**
+     * The program of the requested subject (ClickUp 86e3dt6ag). Once the
+     * subject is linked to the curricular catalog, the catalog is the source
+     * (its units/objectives subtree) and the school's PDF is no longer used;
+     * until then, the text extracted from the program PDF the school uploaded
+     * is sent as provisional context, so a teacher never plans without a
+     * program. A curriculum document — no student data.
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return array<string, mixed>|null
+     */
+    protected function subjectProgram(array $parameters): ?array
+    {
+        $subject = isset($parameters['subject_id']) ? Subject::find($parameters['subject_id']) : null;
+
+        if ($subject === null) {
+            return null;
+        }
+
+        if ($subject->curricularItem !== null) {
+            $item = $subject->curricularItem;
+
+            return [
+                'source' => 'curricular_catalog',
+                'subject' => $subject->name,
+                'items' => collect([$item])
+                    ->concat($item->descendants())
+                    ->take(self::MAX_CURRICULAR_ITEMS)
+                    ->map(fn (CurricularItem $node): array => [
+                        'code' => $node->code,
+                        'name' => $node->name,
+                        'type' => $node->type->value,
+                        'description' => $node->description,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        if ($subject->syllabus_text === null) {
+            return null;
+        }
+
+        return [
+            'source' => 'school_program_pdf',
+            'subject' => $subject->name,
+            'text' => mb_substr($subject->syllabus_text, 0, self::MAX_PROGRAM_TEXT_LENGTH),
         ];
     }
 
@@ -199,4 +250,7 @@ class BuildProposalContext
 
     /** v1 cap so a large catalog can't blow up the prompt. Tune with real data. */
     protected const MAX_CURRICULAR_ITEMS = 50;
+
+    /** Cap on the program PDF text sent to the model (≈ 3–4k tokens). */
+    protected const MAX_PROGRAM_TEXT_LENGTH = 15_000;
 }

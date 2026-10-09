@@ -285,6 +285,20 @@ export interface Subject {
   name: string
   short_code: string | null
   color: string | null
+  /** Whether the Aula+ team already loaded it into the curricular catalog (ClickUp 86e3dt6ag). */
+  in_catalog?: boolean
+  /** Curricular program PDF metadata; the file itself is reached via a temporary URL. */
+  syllabus?: SubjectSyllabus | null
+}
+
+export interface SubjectSyllabus {
+  name: string
+  size: number | null
+  uploaded_at: string | null
+  /** Whether its text could be extracted for the AI assistant. */
+  text_extracted: boolean
+  /** Decided by `SubjectPolicy::viewSyllabus` for the current user. */
+  can_view: boolean
 }
 
 /**
