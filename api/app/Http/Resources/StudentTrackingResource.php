@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\Role;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ use Illuminate\Support\Facades\Gate;
  *     barriers: iterable,
  *     comments: iterable,
  *     alerts: iterable,
+ *     comment_trends: array<int, array<string, mixed>>,
  *     by_subject: array<int, array<string, mixed>>,
  *     overall_average: float|null,
  * }
@@ -84,7 +86,25 @@ class StudentTrackingResource extends JsonResource
                 fn () => BarrierResource::collection($barriers)
             ),
             'barriers_count' => $barriers->count(),
+            // Team-facing summary (no diagnosis) — readable by anyone who can view
+            // the student; null until psychopedagogy confirms it.
+            'team_summary' => $student->teamSummary(),
+            // Names only (no report, validator or clinical detail) so a teacher
+            // sees WHICH supports apply, never the clinical record behind them
+            // (the full `accommodations`/`barriers` above stay gated).
+            'support_chips' => [
+                'accommodations' => $accommodations
+                    ->map(fn ($a) => ['id' => $a->id, 'label' => $a->type])->values(),
+                'barriers' => $barriers
+                    ->map(fn ($b) => ['id' => $b->id, 'label' => $b->description])->values(),
+            ],
             'recent_comments' => CommentResource::collection($visibleComments),
+            // Recurrence mark: psychopedagogy/direction only (absent for a
+            // teacher, since the number anchors). A mark, not an alert.
+            'comment_trends' => $this->when(
+                $user->hasAnyRole(Role::schoolWideValues()),
+                fn () => $this->resource['comment_trends'] ?? []
+            ),
             'alerts' => $this->when(
                 $canViewClinicalProfile || $alerts->isNotEmpty(),
                 fn () => AlertResource::collection($alerts)

@@ -84,13 +84,24 @@ export interface Student {
 // view-clinical-profile, so their detail arrays are optional here while the
 // counts are always present.
 
-/** Author-set tone of a comment. Mirror of `App\Enums\CommentTone`. */
-export type CommentTone = "positive" | "neutral" | "concerning"
+/** A school-editable comment category (replaces the old comment "tone"). */
+export interface CommentCategory {
+  id: number
+  name: string
+  position: number
+}
 
-export const commentToneLabels: Record<CommentTone, string> = {
-  positive: "Positivo",
-  neutral: "Neutral",
-  concerning: "Preocupante",
+/**
+ * Recurrence mark on a student: several comments of one category in a short
+ * time (thresholds are the school's). Only psychopedagogy/direction receive it.
+ * A mark to look at, not an alert.
+ */
+export interface CommentTrend {
+  category_id: number
+  category_name: string
+  count: number
+  authors: number
+  days: number
 }
 
 export interface Comment {
@@ -100,7 +111,8 @@ export interface Comment {
   commentable_type: string
   commentable_id: number
   content: string
-  tone: CommentTone | null
+  /** Optional, several allowed; empty = "Sin categoría". */
+  categories?: { id: number; name: string }[]
   /**
    * Roles allowed to see the comment, or null when visible to everyone who
    * can see the parent record. Never an empty array from the API.
@@ -118,11 +130,10 @@ export interface Comment {
 }
 
 /** Mirror of `App\Enums\AlertType`. */
-export type AlertType = "performance" | "behavior" | "planning_attendance" | "escalated_overdue"
+export type AlertType = "performance" | "planning_attendance" | "escalated_overdue"
 
 export const alertTypeLabels: Record<AlertType, string> = {
   performance: "Rendimiento",
-  behavior: "Conducta",
   planning_attendance: "Planificación / asistencia",
   escalated_overdue: "Alerta escalada con plazo vencido",
 }
@@ -309,7 +320,6 @@ export type PerformanceMarkType =
   | "accommodation_deactivated"
   | "accommodation_instance_override"
   | "barrier_registered"
-  | "concerning_comment"
   | "calendar_event"
 
 export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
@@ -317,7 +327,6 @@ export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
   accommodation_deactivated: "Adaptación desactivada",
   accommodation_instance_override: "Adaptación desactivada para esta evaluación",
   barrier_registered: "Barrera registrada",
-  concerning_comment: "Comentario preocupante",
   calendar_event: "Evento de calendario",
 }
 
@@ -332,7 +341,6 @@ export const performanceMarkColors: Record<PerformanceMarkType, string> = {
   accommodation_deactivated: "#dc2626", // red
   accommodation_instance_override: "#d97706", // amber
   barrier_registered: "#7c3aed", // violet
-  concerning_comment: "#db2777", // pink
   calendar_event: "#0891b2", // cyan
 }
 
@@ -356,7 +364,6 @@ export type PerformanceMark =
       reason: string
     })
   | (PerformanceMarkBase & { type: "barrier_registered"; barrier_id: number })
-  | (PerformanceMarkBase & { type: "concerning_comment"; comment_id: number })
   | (PerformanceMarkBase & { type: "calendar_event"; calendar_event_id: number; title: string })
 
 export interface StudentPerformanceTimeline {
@@ -420,14 +427,12 @@ export type GroupPerformanceMarkType =
   | "accommodation_activated"
   | "accommodation_deactivated"
   | "barrier_registered"
-  | "concerning_comment"
   | "calendar_event"
 
 export const groupPerformanceMarkTypeLabels: Record<GroupPerformanceMarkType, string> = {
   accommodation_activated: "Adaptaciones activadas",
   accommodation_deactivated: "Adaptaciones desactivadas",
   barrier_registered: "Barreras registradas",
-  concerning_comment: "Comentarios preocupantes",
   calendar_event: "Evento de calendario",
 }
 
@@ -453,7 +458,6 @@ export type GroupPerformanceMark =
       count: number
     })
   | (GroupPerformanceMarkBase & { type: "barrier_registered"; count: number })
-  | (GroupPerformanceMarkBase & { type: "concerning_comment"; count: number })
   | (GroupPerformanceMarkBase & {
       type: "calendar_event"
       calendar_event_id: number
@@ -534,8 +538,25 @@ export interface SubjectStat {
   assessment_count: number
 }
 
+/** Team-facing summary of the technical report (no diagnosis); confirmed by psychopedagogy. */
+export interface TeamSummary {
+  strengths: string
+  difficulties: string
+  adjustments: string
+  confirmed_at: string
+}
+
+/** A short label for a current accommodation/barrier — all a teacher gets (no clinical detail). */
+export interface SupportChip {
+  id: number
+  label: string
+}
+
 export interface StudentTracking {
   student: Student
+  /** `null` until psychopedagogy writes and confirms it. */
+  team_summary: TeamSummary | null
+  support_chips: { accommodations: SupportChip[]; barriers: SupportChip[] }
   recent_assessments: AssessmentSummary[]
   /** Mean of every scored assessment, across subjects; null when there are none. */
   overall_average: number | null
@@ -546,6 +567,8 @@ export interface StudentTracking {
   barriers?: Barrier[]
   barriers_count: number
   recent_comments: Comment[]
+  /** Absent for a teacher: only psychopedagogy/direction get the recurrence mark. */
+  comment_trends?: CommentTrend[]
   alerts?: Alert[]
   open_alerts_count: number
 }
@@ -574,6 +597,16 @@ export interface GroupTracking {
   }
 }
 
+/** "Ayuda y sugerencias": the two paths of the support form. */
+export type SupportMessageKind = "issue" | "improvement"
+
+/** Body for `POST /support-messages`. Role and school are resolved server-side. */
+export interface SupportMessageInput {
+  kind: SupportMessageKind
+  message: string
+  screen?: string | null
+}
+
 /** One weekly bucket of the adoption dashboard time series (Monday-start). */
 export interface WeeklySeriesPoint {
   week_start: string
@@ -589,7 +622,30 @@ export interface AdoptionDashboard {
   teacher_planning_rate_30d: number
   weekly_login_series: WeeklySeriesPoint[]
   weekly_content_series: WeeklySeriesPoint[]
+  weekly_content_by_type: WeeklyContentByTypePoint[]
 }
+
+/** One weekly bucket of content created, split by type (stacked chart). */
+export interface WeeklyContentByTypePoint {
+  week_start: string
+  annual_plans: number
+  class_sessions: number
+  assessments: number
+}
+
+/**
+ * One row of the director-only "Por docente" tab. Plain counts for the
+ * current month — deliberately no totals, scores or login timestamps.
+ */
+export interface AdoptionTeacherRow {
+  id: number
+  name: string
+  subjects: string[]
+  month_counts: { annual_plans: number; class_sessions: number; assessments: number }
+}
+
+/** Coarse last-login range shown by "Ver detalles de uso" (never day/time). */
+export type LastLoginRange = "this_week" | "within_10_days" | "over_10_days" | "never"
 
 // ── Approval flows & traceability (Sesión 9) ────────────────────────────────
 // Mirrors the backend Session 3 API (docs/prompts/03-flujos-aprobacion-
@@ -654,6 +710,25 @@ export interface AuditLogEntry {
   created_at: string | null
 }
 
+/** A colleague as exposed by `StaffMemberResource`: id, name and role only. */
+export interface StaffMember {
+  id: number
+  name: string
+  role: Role | null
+}
+
+/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+export interface AppNotification {
+  id: string
+  data: {
+    type: string
+    follow_up_id: number
+    student_id: number
+    due_date: string
+  }
+  created_at: string | null
+}
+
 /**
  * A scheduled follow-up on a student (`ScheduledFollowUpResource`, backend
  * Sesión 7 — docs/prompts/17-seguimiento-programado.md). The concrete face of
@@ -662,9 +737,16 @@ export interface AuditLogEntry {
 export interface ScheduledFollowUp {
   id: number
   student_id: number
+  /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
+  student?: { id: number; full_name: string }
   description: string
   due_date: string
   created_by_id: number
+  /** Responsible person — the creator unless they picked someone else. */
+  assigned_to_id?: number | null
+  assigned_to?: StaffMember | null
+  /** People, besides the responsible one, who also follow it. */
+  shared_with?: StaffMember[]
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null
@@ -732,6 +814,7 @@ export interface ScreeningTestDesign {
 export interface ScreeningTestType {
   id: number
   name: string
+  area: string | null
   active: boolean
   created_by_id: number | null
   current_design: ScreeningTestDesign | null
@@ -788,6 +871,7 @@ export interface ScreeningTestRosterEntry {
 /** Body for `POST /screening-test-types` (`StoreScreeningTestTypeRequest`). */
 export interface ScreeningTestTypeInput {
   name: string
+  area?: string | null
   active?: boolean
 }
 

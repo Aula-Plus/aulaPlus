@@ -39,6 +39,7 @@ function type(id: number, name: string, withDesign: boolean): ScreeningTestType 
   return {
     id,
     name,
+    area: null,
     active: true,
     created_by_id: 2,
     current_design: withDesign ? design(id) : null,

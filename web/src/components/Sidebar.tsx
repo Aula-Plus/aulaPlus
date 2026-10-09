@@ -118,6 +118,7 @@ interface SidebarContentProps {
 
 function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: SidebarContentProps) {
   const { user, logout } = useAuth()
+  const location = useLocation()
   const sections = buildNavSections(user)
 
   return (
@@ -166,6 +167,7 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                   key={item.to}
                   to={item.to}
                   end={item.end}
+                  state={item.passFrom ? { from: location.pathname } : undefined}
                   title={collapsed ? item.label : undefined}
                   className={({ isActive }) =>
                     cn(

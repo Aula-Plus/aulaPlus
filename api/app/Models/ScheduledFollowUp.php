@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -27,6 +28,7 @@ use Illuminate\Support\Carbon;
     'description',
     'due_date',
     'created_by_id',
+    'assigned_to_id',
     'resolved',
     'resolved_by_id',
     'resolved_at',
@@ -67,6 +69,25 @@ class ScheduledFollowUp extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    /**
+     * The person responsible for it (the creator unless they picked someone
+     * else). Decides whose pending list it appears in, not who can see it.
+     */
+    public function assignedTo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to_id');
+    }
+
+    /**
+     * People, besides the responsible one, who also follow it.
+     *
+     * @return BelongsToMany<User, $this>
+     */
+    public function sharedWith(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'scheduled_follow_up_user')->withTimestamps();
     }
 
     public function resolvedBy(): BelongsTo

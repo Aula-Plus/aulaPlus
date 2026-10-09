@@ -6,12 +6,13 @@ import type {
   AuditLogEntry,
   BarrierAccommodationLink,
   Comment,
-  CommentTone,
+  CommentCategory,
   GroupAccommodationSummaryEntry,
   GroupTracking,
   Paginated,
   Role,
   StudentTracking,
+  TeamSummary,
 } from "@/types"
 
 /**
@@ -25,7 +26,8 @@ import type {
 
 export interface CommentInput {
   content: string
-  tone?: CommentTone | null
+  /** Optional; several allowed; only this school's categories. */
+  category_ids?: number[]
   /**
    * Roles allowed to see the comment.
    *
@@ -50,6 +52,19 @@ export interface CommentInput {
 export async function fetchStudentTracking(studentId: number): Promise<StudentTracking> {
   const { data } = await api.get<{ data: StudentTracking }>(
     `/api/v1/students/${studentId}/tracking`,
+  )
+  return data.data
+}
+
+export type TeamSummaryInput = Pick<TeamSummary, "strengths" | "difficulties" | "adjustments">
+
+export async function updateTeamSummary(
+  studentId: number,
+  input: TeamSummaryInput,
+): Promise<TeamSummary> {
+  const { data } = await api.put<{ data: TeamSummary }>(
+    `/api/v1/students/${studentId}/team-summary`,
+    input,
   )
   return data.data
 }
@@ -224,4 +239,49 @@ export async function fetchStudentHistory(
     { params: { page } },
   )
   return data
+}
+
+// ── Comment categories (replace the old comment "tone") ──────────────────────
+// Readable by any staff member (the comment form needs them); only a director
+// writes. Trend thresholds: psychopedagogy/direction read, director writes.
+
+export async function fetchCommentCategories(): Promise<CommentCategory[]> {
+  const { data } = await api.get<{ data: CommentCategory[] }>("/api/v1/comment-categories")
+  return data.data
+}
+
+export async function createCommentCategory(name: string): Promise<CommentCategory> {
+  const { data } = await api.post<{ data: CommentCategory }>("/api/v1/comment-categories", { name })
+  return data.data
+}
+
+export async function renameCommentCategory(id: number, name: string): Promise<CommentCategory> {
+  const { data } = await api.put<{ data: CommentCategory }>(`/api/v1/comment-categories/${id}`, {
+    name,
+  })
+  return data.data
+}
+
+export async function deleteCommentCategory(id: number): Promise<void> {
+  await api.delete(`/api/v1/comment-categories/${id}`)
+}
+
+export interface CommentTrendSettings {
+  min_count: number
+  days: number
+}
+
+export async function fetchCommentTrendSettings(): Promise<CommentTrendSettings> {
+  const { data } = await api.get<{ data: CommentTrendSettings }>("/api/v1/comment-trend-settings")
+  return data.data
+}
+
+export async function updateCommentTrendSettings(
+  settings: CommentTrendSettings,
+): Promise<CommentTrendSettings> {
+  const { data } = await api.put<{ data: CommentTrendSettings }>(
+    "/api/v1/comment-trend-settings",
+    settings,
+  )
+  return data.data
 }

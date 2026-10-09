@@ -3,14 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditAction;
-use App\Enums\CommentTone;
 use App\Http\Requests\GroupPerformanceTimelineRequest;
 use App\Models\Accommodation;
 use App\Models\Assessment;
 use App\Models\AuditLog;
 use App\Models\Barrier;
 use App\Models\CalendarEvent;
-use App\Models\Comment;
 use App\Models\Group;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
@@ -146,11 +144,6 @@ class GroupProfileController extends Controller
             );
         }
 
-        // Concerning comments do NOT depend on the clinical gate — only on each
-        // comment's own visibility (visible_to / author_only, Session 9). A
-        // comment the user can't see contributes to no count.
-        $marks = array_merge($marks, $this->concerningCommentMarks($studentIds, $user, $from, $to));
-
         // Calendar events are school-level (never per student), so they are
         // always present — GroupPolicy::view over the group already covers them.
         $marks = array_merge($marks, $this->calendarEventMarks($from, $to));
@@ -258,38 +251,6 @@ class GroupProfileController extends Controller
                 'type' => 'barrier_registered',
                 'date' => $date,
                 'count' => $onDate->pluck('student_id')->unique()->count(),
-            ];
-        }
-
-        return $marks;
-    }
-
-    /**
-     * Concerning comments on the group's students, honoring each comment's
-     * visibility for the requesting user (Session 9). Aggregated by date; the
-     * count is of visible comments, mirroring the student timeline's one mark
-     * per comment.
-     *
-     * @return list<array<string, mixed>>
-     */
-    protected function concerningCommentMarks(Collection $studentIds, $user, $from, $to): array
-    {
-        $comments = Comment::query()
-            ->where('commentable_type', Student::class)
-            ->whereIn('commentable_id', $studentIds)
-            ->where('tone', CommentTone::Concerning)
-            ->visibleToRole($user)
-            ->when($from, fn ($query) => $query->whereDate('created_at', '>=', $from))
-            ->when($to, fn ($query) => $query->whereDate('created_at', '<=', $to))
-            ->get();
-
-        $marks = [];
-
-        foreach ($comments->groupBy(fn (Comment $c): string => $c->created_at->toDateString()) as $date => $onDate) {
-            $marks[] = [
-                'type' => 'concerning_comment',
-                'date' => $date,
-                'count' => $onDate->count(),
             ];
         }
 
