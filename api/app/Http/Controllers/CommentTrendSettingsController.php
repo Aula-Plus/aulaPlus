@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\Role;
+use App\Http\Requests\UpdateCommentTrendSettingsRequest;
 use App\Models\School;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,30 +10,24 @@ use Illuminate\Http\Request;
 /**
  * The school's recurrence threshold for the comment trend mark: "at least N
  * comments of the same category in D days". Psychopedagogy and direction read
- * it; only direction changes it. Always the caller's own school.
+ * it; only direction changes it (SchoolPolicy). Always the caller's own school.
  */
 class CommentTrendSettingsController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasAnyRole(Role::schoolWideValues()), 403);
+        $school = $this->school($request);
+        $this->authorize('viewCommentTrendSettings', $school);
 
-        return response()->json(['data' => $this->present($this->school($request))]);
+        return response()->json(['data' => $this->present($school)]);
     }
 
-    public function update(Request $request): JsonResponse
+    public function update(UpdateCommentTrendSettingsRequest $request): JsonResponse
     {
-        abort_unless($request->user()->hasRole(Role::Director->value), 403);
-
-        $data = $request->validate([
-            'min_count' => ['required', 'integer', 'min:2', 'max:50'],
-            'days' => ['required', 'integer', 'min:1', 'max:365'],
-        ]);
-
         $school = $this->school($request);
         $school->update([
-            'comment_trend_min_count' => $data['min_count'],
-            'comment_trend_days' => $data['days'],
+            'comment_trend_min_count' => $request->validated('min_count'),
+            'comment_trend_days' => $request->validated('days'),
         ]);
 
         return response()->json(['data' => $this->present($school)]);
