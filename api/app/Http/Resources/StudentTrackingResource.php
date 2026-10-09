@@ -66,7 +66,7 @@ class StudentTrackingResource extends JsonResource
         $alerts = $openAlerts
             ->filter(fn ($alert) => $alert->isVisibleTo($user))
             ->values()
-            ->load('subject:id,name');
+            ->load(AlertResource::RELATIONS);
         // Same rule as Alert::scopeCountableFor(): legacy alerts are still
         // counted for everyone, new ones only once they reach this viewer.
         $openAlertsCount = $openAlerts

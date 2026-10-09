@@ -11,7 +11,9 @@ use App\Models\AlertRoutingSetting;
  * 86e3jpzcv). Product defaults: performance alerts go first only to the
  * teacher of that subject; every other type goes to the teacher and
  * psychopedagogy at once. Direction never gets a new alert by default — the
- * school can change any of this from the alert settings screen.
+ * school can change any of this from the alert settings screen. An escalated
+ * alert (ClickUp 86e3jpzdp) always reaches the two people involved; the roles
+ * configured here are added on top.
  */
 class AlertRouting
 {
@@ -22,6 +24,9 @@ class AlertRouting
     {
         return match ($type) {
             AlertType::Performance => [AlertRecipient::Teacher->value],
+            // Always reaches the two people involved (who handed it off and who
+            // had to resolve it) individually; no role gets it by default.
+            AlertType::EscalatedOverdue => [],
             default => [AlertRecipient::Teacher->value, AlertRecipient::Psychopedagogue->value],
         };
     }

@@ -6,6 +6,7 @@ use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
+use App\Http\Controllers\AlertOutcomeController;
 use App\Http\Controllers\AlertSettingsController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentResultController;
@@ -112,6 +113,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('/alert-rules/{alertRule}', [AlertSettingsController::class, 'updateRule']);
         Route::delete('/alert-rules/{alertRule}', [AlertSettingsController::class, 'destroyRule']);
         Route::put('/alert-routing/{type}', [AlertSettingsController::class, 'updateRouting']);
+
+        // The three ways out of an alert (ClickUp 86e3jpzdp): me ocupo yo / se
+        // la paso a otro rol / la dejo en observación, each with responsible
+        // and deadline; plus who it can be handed to.
+        Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
+        Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
 
         // Comment categories (replace the old comment "tone"): a school-
         // editable catalog (director writes) plus the school's recurrence

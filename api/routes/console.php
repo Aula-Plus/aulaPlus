@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 // Sustained-low-performance alerts (ClickUp 86e3jpzcv): evaluates each
 // school's configured conditions once a day.
 Schedule::command('alerts:performance')->daily();
+
+// "Alerta escalada con plazo vencido" (ClickUp 86e3jpzdp): handed-off alerts
+// whose deadline passed without a way out.
+Schedule::command('alerts:escalate')->daily();
