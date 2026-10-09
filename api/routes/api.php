@@ -30,6 +30,7 @@ use App\Http\Controllers\StudentPerformanceTimelineController;
 use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
+use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -94,6 +95,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
         Route::get('/groups/{group}/alerts', [AlertController::class, 'forGroup']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+
+        Route::post('/support-messages', [SupportMessageController::class, 'store'])->middleware('throttle:10,1');
 
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
         Route::get('/schools/{school}/adoption-dashboard/teachers', [AdoptionDashboardController::class, 'teachers']);
