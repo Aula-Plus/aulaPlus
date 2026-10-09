@@ -134,6 +134,17 @@ it('keeps the file when its text cannot be extracted', function () {
     expect($this->subject->fresh()->syllabus_path)->not->toBeNull();
 });
 
+it('strips control characters such as NUL from the extracted text (PostgreSQL rejects them)', function () {
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)(syllabusPdf('Unidad\\000 uno'))->assertOk()->assertJsonPath('data.syllabus.text_extracted', true);
+
+    $text = $this->subject->fresh()->syllabus_text;
+    expect($text)->toContain('Unidad')
+        ->and($text)->toContain('uno')
+        ->and($text)->not->toContain("\0");
+});
+
 it('only lets direction upload or remove it', function () {
     foreach ([$this->teacher, $this->psychopedagogue] as $user) {
         Sanctum::actingAs($user);
