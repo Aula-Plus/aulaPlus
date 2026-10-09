@@ -64,7 +64,6 @@ const allMarks: GroupPerformanceMark[] = [
   { type: "accommodation_activated", date: "2026-03-01", accommodation_type: "tiempo extra", count: 2 },
   { type: "accommodation_deactivated", date: "2026-03-02", accommodation_type: "tiempo extra", count: 1 },
   { type: "barrier_registered", date: "2026-03-03", count: 1 },
-  { type: "concerning_comment", date: "2026-03-04", count: 3 },
   { type: "calendar_event", date: "2026-03-05", calendar_event_id: 4, title: "Reunión de padres" },
 ]
 

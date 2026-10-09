@@ -25,6 +25,7 @@ import {
   type Accommodation,
   type Alert,
   type Comment,
+  type CommentCategory,
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
@@ -68,6 +69,7 @@ export function StudentTrackingPage() {
   const [tab, setTab] = useState<TabKey>("summary")
   const [tracking, setTracking] = useState<StudentTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
+  const [categories, setCategories] = useState<CommentCategory[]>([])
   const [error, setError] = useState<string | null>(null)
   const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
@@ -89,6 +91,10 @@ export function StudentTrackingPage() {
   useEffect(() => {
     loadTracking()
     loadComments()
+    trackingApi
+      .fetchCommentCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]))
   }, [loadTracking, loadComments])
 
   async function handleCreateComment(input: CommentInput) {
@@ -181,6 +187,19 @@ export function StudentTrackingPage() {
         )}
       </PageHeader>
 
+      {/* Recurrence mark (psychopedagogy/direction only — absent for a teacher).
+          A mark to look at, not an alert: no owner, no deadline. */}
+      {(tracking.comment_trends ?? []).map((trend) => (
+        <div
+          key={trend.category_id}
+          role="note"
+          className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          Tendencia: {trend.count} comentarios de «{trend.category_name}» de {trend.authors}{" "}
+          {trend.authors === 1 ? "persona" : "personas"} en {trend.days} días
+        </div>
+      ))}
+
       <div role="tablist" aria-label="Secciones del perfil" className="flex flex-wrap gap-1 border-b">
         {TABS.map((item) => (
           <button
@@ -253,14 +272,21 @@ export function StudentTrackingPage() {
                         </div>
                         <p className="mt-1 text-sm">{alert.description}</p>
                       </div>
-                      {showResolve && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleResolveAlert(alert.id)}
-                        >
-                          Resolver
+                      {alert.can?.act ? (
+                        // The three ways out live on the Alertas screen (ClickUp 86e3jpzdp).
+                        <Button asChild variant="outline" size="sm">
+                          <Link to="/alertas">Elegir una salida</Link>
                         </Button>
+                      ) : (
+                        (alert.can ? alert.can.resolve : showResolve) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResolveAlert(alert.id)}
+                          >
+                            Resolver
+                          </Button>
+                        )
                       )}
                     </li>
                   ))}
@@ -420,6 +446,7 @@ export function StudentTrackingPage() {
             comments={comments ?? []}
             onCreate={handleCreateComment}
             title="Observaciones"
+            categories={categories}
           />
         )}
 
@@ -443,6 +470,43 @@ export function StudentTrackingPage() {
                       <TableCell className="pl-6">{assessmentTypeLabels[assessment.type]}</TableCell>
                       <TableCell>{assessment.variant_number ?? "—"}</TableCell>
                       <TableCell className="pr-6">{formatShortDate(assessment.created_at)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </SectionCard>
+
+          {tracking.grades_view.restricted && (
+            <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {tracking.grades_view.mode === "all_periodic" && tracking.grades_view.cutoff_at
+                ? `Notas de otras materias al ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
+                : tracking.grades_view.mode === "all_periodic"
+                  ? "Todavía no hay un corte: por ahora ves solo las notas de tu materia."
+                  : "Ves solo las notas de las materias que dictás."}
+            </p>
+          )}
+
+          <SectionCard title="Notas" bare={tracking.grades.length > 0}>
+            {tracking.grades.length === 0 ? (
+              <EmptyState icon={FileText} message="Sin notas para mostrar." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Materia</TableHead>
+                    <TableHead>Instancia</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="pr-6">Nota</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tracking.grades.map((grade) => (
+                    <TableRow key={grade.id}>
+                      <TableCell className="pl-6">{grade.subject_name}</TableCell>
+                      <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
+                      <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
+                      <TableCell className="pr-6 tabular-nums">{grade.score ?? "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

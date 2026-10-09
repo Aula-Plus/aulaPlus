@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
-import { FileText, MessageSquare, Users } from "lucide-react"
+import { FileText, Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageScreeningTests } from "@/lib/permissions"
 import { Badge } from "@/components/ui/badge"
@@ -10,9 +10,10 @@ import { RowLink } from "@/components/ui/row-link"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { Comment, GroupTracking } from "@/types"
+import type { Comment, CommentCategory, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
 import { GroupAccommodationsSummary } from "./GroupAccommodationsSummary"
+import { GroupOpenAlerts } from "./GroupOpenAlerts"
 import { GroupOverdueFollowUps } from "./GroupOverdueFollowUps"
 import { GroupPerformanceChart } from "./GroupPerformanceChart"
 import * as trackingApi from "./trackingApi"
@@ -26,6 +27,7 @@ export function GroupTrackingPage() {
 
   const [tracking, setTracking] = useState<GroupTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
+  const [categories, setCategories] = useState<CommentCategory[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const loadTracking = useCallback(() => {
@@ -45,6 +47,10 @@ export function GroupTrackingPage() {
   useEffect(() => {
     loadTracking()
     loadComments()
+    trackingApi
+      .fetchCommentCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]))
   }, [loadTracking, loadComments])
 
   async function handleCreateComment(input: CommentInput) {
@@ -76,18 +82,14 @@ export function GroupTrackingPage() {
         )}
       </PageHeader>
 
-      {/*
-        `comments_count` is omitted by the backend for a viewer without a
-        school-wide role (docs/prompts/19-comentarios-alcance.md §5), so we
-        hide that card entirely instead of rendering a misleading `0`, and drop
-        to a single column when it is absent rather than leaving a gap.
-      */}
-      <div className={`grid gap-4 ${trend.comments_count !== undefined ? "sm:grid-cols-2" : ""}`}>
+      <div className="grid gap-4">
         <StatCard label="Evaluaciones tomadas" value={trend.assessments_count} icon={FileText} />
-        {trend.comments_count !== undefined && (
-          <StatCard label="Comentarios cargados" value={trend.comments_count} icon={MessageSquare} />
-        )}
       </div>
+
+      <GroupOpenAlerts
+        groupId={group.id}
+        studentNames={Object.fromEntries(tracking.students.map((s) => [s.id, s.full_name]))}
+      />
 
       <SectionCard title="Alumnos" bare={tracking.students.length > 0}>
         {tracking.students.length === 0 ? (
@@ -134,6 +136,7 @@ export function GroupTrackingPage() {
         comments={comments ?? []}
         onCreate={handleCreateComment}
         title="Comentarios de la clase"
+        categories={categories}
       />
     </div>
   )

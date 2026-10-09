@@ -83,6 +83,14 @@ export function canManageSubjects(user: User | null): boolean {
   return isDirector(user)
 }
 
+/**
+ * Directors edit the comment categories and the trend threshold (mirror of
+ * CommentCategoryPolicy / CommentTrendSettingsController). UX-only gate.
+ */
+export function canManageCommentSettings(user: User | null): boolean {
+  return isDirector(user)
+}
+
 // ── Users / staff management ────────────────────────────────────────────────
 
 /**
@@ -163,6 +171,14 @@ export function canResolveAlert(user: User | null): boolean {
 }
 
 /**
+ * Configure the school's alert conditions and who each alert type reaches
+ * first. Director or psychopedagogue. Mirror of `AlertRulePolicy`.
+ */
+export function canManageAlertSettings(user: User | null): boolean {
+  return isSchoolWideStaff(user)
+}
+
+/**
  * Approve/reject an accommodation. Director or psychopedagogue.
  * Mirror of `AccommodationPolicy::approve`.
  */
@@ -207,6 +223,14 @@ export function canViewStudentHistory(user: User | null): boolean {
  * Mirror of `SchoolPolicy::viewAdoptionDashboard`.
  */
 export function canViewAdoptionDashboard(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
+ * Configure how much of other subjects' grades teachers see. Director only.
+ * Mirror of `UpdateGradesVisibilityRequest::authorize`.
+ */
+export function canManageGradesVisibility(user: User | null): boolean {
   return isDirector(user)
 }
 

@@ -32,6 +32,23 @@ it('lets psychopedagogy create a type and returns its (absent) current design', 
     ]);
 });
 
+it('stores the optional area of a type and validates its length', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+
+    $this->postJson('/api/v1/screening-test-types', ['name' => 'TECLE', 'area' => 'lectoescritura'])
+        ->assertCreated()
+        ->assertJsonPath('data.area', 'lectoescritura');
+
+    $this->postJson('/api/v1/screening-test-types', ['name' => 'BADyG'])
+        ->assertCreated()
+        ->assertJsonPath('data.area', null);
+
+    $this->postJson('/api/v1/screening-test-types', ['name' => 'X', 'area' => str_repeat('a', 101)])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('area');
+});
+
 it('forbids a teacher and a director from creating a type', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();

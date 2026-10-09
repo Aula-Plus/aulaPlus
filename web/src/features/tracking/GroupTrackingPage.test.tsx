@@ -52,13 +52,13 @@ describe("GroupTrackingPage", () => {
   it("renders the trend, per-student summary rows and a per-student tracking link", async () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(tracking())
     vi.spyOn(trackingApi, "fetchGroupComments").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([])
 
     renderPage()
 
     expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
-    // Trend counts.
+    // Assessments count.
     expect(screen.getByText("5")).toBeInTheDocument()
-    expect(screen.getByText("8")).toBeInTheDocument()
 
     const juanRow = screen.getByText("Juan Pérez").closest("tr")
     expect(juanRow).not.toBeNull()
@@ -71,20 +71,16 @@ describe("GroupTrackingPage", () => {
     expect(link).toHaveAttribute("href", "/alumnos/3/seguimiento")
   })
 
-  it("hides the 'Comentarios cargados' card when comments_count is absent", async () => {
-    // The backend omits comments_count for a viewer without a school-wide role
-    // (docs/prompts/19-comentarios-alcance.md §5); the card must not render a
-    // misleading 0.
-    const data = tracking()
-    delete data.trend.comments_count
-    vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(data)
+  it("no longer shows the 'Comentarios cargados' card", async () => {
+    vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(tracking())
     vi.spyOn(trackingApi, "fetchGroupComments").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([])
 
-    renderPage("teacher")
+    renderPage("psychopedagogue")
 
     expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
-    expect(screen.getByText("5")).toBeInTheDocument()
     expect(screen.getByText("Evaluaciones tomadas")).toBeInTheDocument()
     expect(screen.queryByText("Comentarios cargados")).not.toBeInTheDocument()
+    expect(screen.queryByText("Alertas del grupo")).not.toBeInTheDocument()
   })
 })

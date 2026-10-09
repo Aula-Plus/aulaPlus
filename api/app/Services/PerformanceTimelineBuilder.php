@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\AuditAction;
-use App\Enums\CommentTone;
 use App\Models\Accommodation;
 use App\Models\AccommodationInstanceOverride;
 use App\Models\AssessmentResult;
@@ -22,9 +21,9 @@ use Illuminate\Support\Facades\Gate;
  * `marks` array aggregated from six sources built across Sessions 3, 6, 8, 9
  * and the pre-existing Barrier/CalendarEvent models.
  *
- * Two orthogonal authorization axes decide which marks a given user sees —
- * both re-evaluated here for the requesting user, never trusted from the
- * client (CLAUDE.md security rule 3, "Non-negotiable" in §Architecture):
+ * The clinical-profile gate decides which marks a given user sees — it is
+ * re-evaluated here for the requesting user, never trusted from the client
+ * (CLAUDE.md security rule 3, "Non-negotiable" in §Architecture):
  *
  *  - The clinical-profile gate (`view-clinical-profile`, i.e.
  *    StudentPolicy::viewClinicalProfile): the four clinical mark types
@@ -32,10 +31,6 @@ use Illuminate\Support\Facades\Gate;
  *    `accommodation_instance_override`, `barrier_registered`) are omitted
  *    entirely for a user who fails it — not returned as an empty list, simply
  *    absent, exactly like the rest of the clinical domain.
- *  - Comment visibility (`visible_to`/`author_only`, Session 9): a
- *    `concerning_comment` mark appears only if the comment is visible to the
- *    user. This is independent of the clinical gate — a teacher who can't see
- *    the clinical profile still sees concerning comments addressed to them.
  *
  * `calendar_event` marks are school-level (never student-linked in the domain
  * model) and are always included — no gate.
@@ -45,13 +40,15 @@ use Illuminate\Support\Facades\Gate;
  */
 class PerformanceTimelineBuilder
 {
+    public function __construct(protected StudentGradeAccess $gradeAccess) {}
+
     /**
      * @return array{results: Collection<int, AssessmentResult>, marks: array<int, array<string, mixed>>}
      */
     public function build(Student $student, User $user, ?string $from, ?string $to, ?int $subjectId = null): array
     {
         return [
-            'results' => $this->results($student, $from, $to, $subjectId),
+            'results' => $this->results($student, $user, $from, $to, $subjectId),
             'marks' => $this->marks($student, $user, $from, $to),
         ];
     }
@@ -64,11 +61,15 @@ class PerformanceTimelineBuilder
      *
      * @return Collection<int, AssessmentResult>
      */
-    protected function results(Student $student, ?string $from, ?string $to, ?int $subjectId = null): Collection
+    protected function results(Student $student, User $user, ?string $from, ?string $to, ?int $subjectId = null): Collection
     {
-        return AssessmentResult::query()
-            ->where('assessment_results.student_id', $student->id)
-            ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
+        return $this->gradeAccess->restrict(
+            AssessmentResult::query()
+                ->where('assessment_results.student_id', $student->id)
+                ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
+            $user,
+            $student,
+        )
             ->when($from, fn (Builder $q) => $q->whereDate('assessments.administered_at', '>=', $from))
             ->when($to, fn (Builder $q) => $q->whereDate('assessments.administered_at', '<=', $to))
             ->when($subjectId, fn (Builder $q) => $q->where('assessments.subject_id', $subjectId))
@@ -96,7 +97,6 @@ class PerformanceTimelineBuilder
             $this->appendClinicalMarks($entries, $student, $fromBound, $toBound);
         }
 
-        $this->appendConcerningComments($entries, $student, $user, $fromBound, $toBound);
         $this->appendCalendarEvents($entries, $from, $to);
 
         // Single flat array, chronological. All mark dates are UTC ISO-8601, so
@@ -192,32 +192,6 @@ class PerformanceTimelineBuilder
                     'mark' => [
                         'type' => 'barrier_registered',
                         'barrier_id' => $barrier->id,
-                    ],
-                ]);
-            }
-        }
-    }
-
-    /**
-     * concerning_comment — the student's `concerning`-toned comments, filtered
-     * by the same visibility rule as every other read of Comment (Session 9),
-     * which is orthogonal to the clinical gate.
-     *
-     * @param  Collection<int, array{date: Carbon, mark: array<string, mixed>}>  $entries
-     */
-    protected function appendConcerningComments(Collection $entries, Student $student, User $user, ?Carbon $from, ?Carbon $to): void
-    {
-        $comments = $student->comments()
-            ->where('tone', CommentTone::Concerning->value)
-            ->get();
-
-        foreach ($comments as $comment) {
-            if ($comment->isVisibleTo($user) && $this->inRange($comment->created_at, $from, $to)) {
-                $entries->push([
-                    'date' => $comment->created_at,
-                    'mark' => [
-                        'type' => 'concerning_comment',
-                        'comment_id' => $comment->id,
                     ],
                 ]);
             }

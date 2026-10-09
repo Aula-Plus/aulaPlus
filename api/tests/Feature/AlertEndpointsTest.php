@@ -49,11 +49,24 @@ it('lets a director list alerts for a student and for a group', function () {
     $this->getJson("/api/v1/groups/{$group->id}/alerts")->assertOk()->assertJsonCount(1, 'data');
 });
 
-it('forbids a teacher from listing alerts for a student or group', function () {
+it('hides legacy alerts (no recipients snapshot) from a teacher who teaches the student', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
     leadGroup($group, $teacher);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+    Alert::factory()->create(['student_id' => $student->id, 'resolved' => false]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/students/{$student->id}/alerts")->assertOk()->assertJsonCount(0, 'data');
+    $this->getJson("/api/v1/groups/{$group->id}/alerts")->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('forbids a teacher from listing alerts for a student or group they do not teach', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
     Alert::factory()->create(['student_id' => $student->id, 'resolved' => false]);

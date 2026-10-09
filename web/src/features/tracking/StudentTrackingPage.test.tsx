@@ -34,6 +34,10 @@ function baseTracking(): StudentTracking {
     by_subject: [
       { subject_id: 1, subject_name: "Matemática", average: 7, assessment_count: 2 },
     ],
+    grades: [
+      { id: 1, assessment_id: 10, subject_id: 1, subject_name: "Matemática", type: "written", administered_at: "2026-08-01", score: 7 },
+    ],
+    grades_view: { mode: "own_subject", restricted: false, own_subject_ids: [], cutoff_at: null },
   }
 }
 
@@ -86,6 +90,7 @@ describe("StudentTrackingPage", () => {
     // self-fetch on mount; stub them so these tests (about alerts/
     // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -102,9 +107,9 @@ describe("StudentTrackingPage", () => {
       {
         id: 5,
         student_id: 3,
-        type: "behavior",
+        type: "performance",
         severity: "medium",
-        description: "Acumuló observaciones preocupantes.",
+        description: "Desempeño bajo sostenido.",
         resolved: false,
         resolved_by_id: null,
         resolved_at: null,
@@ -121,7 +126,7 @@ describe("StudentTrackingPage", () => {
     renderPage("psychopedagogue")
 
     expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
-    expect(screen.getByText("Acumuló observaciones preocupantes.")).toBeInTheDocument()
+    expect(screen.getByText("Desempeño bajo sostenido.")).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: /resolver/i }))
     expect(resolveAlert).toHaveBeenCalledWith(5)
@@ -137,7 +142,19 @@ describe("StudentTrackingPage", () => {
     expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/promedio general/i)).toBeInTheDocument()
     expect(screen.getByText("Desempeño por materia")).toBeInTheDocument()
-    expect(screen.getByText("Matemática")).toBeInTheDocument()
+    expect(screen.getAllByText("Matemática").length).toBeGreaterThan(0)
+  })
+
+  it("tells a restricted teacher which cutoff the other subjects' grades are from", async () => {
+    const tracking = baseTracking()
+    tracking.grades_view = { mode: "all_periodic", restricted: true, own_subject_ids: [1], cutoff_at: "2026-07-01" }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Evaluaciones")
+
+    expect(await screen.findByRole("note")).toHaveTextContent(/notas de otras materias al/i)
   })
 
   it("shows an empty state for per-subject performance when there are no scores", async () => {
@@ -518,7 +535,7 @@ describe("StudentTrackingPage", () => {
         commentable_type: "Student",
         commentable_id: 3,
         content: "Nueva observación",
-        tone: null,
+        categories: [],
         visible_to: null,
         author_only: false,
         created_at: "2026-08-20T10:00:00+00:00",
@@ -531,9 +548,34 @@ describe("StudentTrackingPage", () => {
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Nueva observación")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
-    expect(createComment).toHaveBeenCalledWith(3, { content: "Nueva observación", tone: null })
+    expect(createComment).toHaveBeenCalledWith(3, { content: "Nueva observación" })
     // loadComments runs once on mount and again after creating.
     expect(fetchComments).toHaveBeenCalledTimes(2)
+  })
+
+  it("shows the comment trend mark when the server sends it, and nothing when it is absent", async () => {
+    const tracking = baseTracking()
+    tracking.comment_trends = [
+      { category_id: 3, category_name: "Social", count: 4, authors: 3, days: 21 },
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("psychopedagogue")
+
+    expect(
+      await screen.findByText(/tendencia: 4 comentarios de «social» de 3 personas en 21 días/i),
+    ).toBeInTheDocument()
+  })
+
+  it("does not show a trend mark to a teacher (the field is absent)", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    await screen.findByText("Perfil del alumno — Juan Pérez")
+    expect(screen.queryByText(/tendencia:/i)).not.toBeInTheDocument()
   })
 
   it("shows the six profile tabs, the team summary and support chips that lead to Ajustes (teacher)", async () => {

@@ -10,6 +10,10 @@ use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
 use App\Models\Student;
+use App\Models\User;
+use App\Services\CommentTrendDetector;
+use App\Services\StudentGradeAccess;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
@@ -40,9 +44,12 @@ class StudentTrackingController extends Controller
 
     protected const RECENT_COMMENTS_LIMIT = 10;
 
+    public function __construct(protected StudentGradeAccess $gradeAccess) {}
+
     public function show(Student $student): StudentTrackingResource
     {
         $this->authorize('view', $student);
+        $user = request()->user();
 
         // The Resource renders the student's classes, so the relation must be
         // eager-loaded here — StudentResource exposes `groups` only whenLoaded,
@@ -53,7 +60,7 @@ class StudentTrackingController extends Controller
         // aggregate shape changes (e.g. adding by_subject/overall_average) so a
         // stale pre-deploy entry can't be read as the new shape for up to 60s.
         $cached = Cache::remember(
-            "student-tracking.v2.{$student->id}",
+            "student-tracking.v3.{$student->id}",
             60,
             fn () => $this->aggregate($student)
         );
@@ -63,10 +70,17 @@ class StudentTrackingController extends Controller
             'assessments' => $this->hydrate(Assessment::class, $cached['assessments']),
             'accommodations' => $this->hydrate(Accommodation::class, $cached['accommodations']),
             'barriers' => $this->hydrate(Barrier::class, $cached['barriers']),
-            'comments' => $this->hydrate(Comment::class, $cached['comments']),
+            'comments' => $this->hydrate(Comment::class, $cached['comments'])->load('categories'),
+            // Never cached: depends on the asking user (visibility + role).
+            'comment_trends' => app(CommentTrendDetector::class)->forStudent($student, request()->user()),
             'alerts' => $this->hydrate(Alert::class, $cached['alerts']),
-            'by_subject' => $cached['by_subject'],
-            'overall_average' => $cached['overall_average'],
+            // Grades are role-dependent (a teacher only sees their own subjects
+            // unless direction opened more), so they are computed per request,
+            // never taken from the shared cache.
+            'by_subject' => $this->subjectAggregates($student, $user),
+            'overall_average' => $this->overallAverage($student, $user),
+            'grades' => $this->grades($student, $user),
+            'grades_view' => $this->gradeAccess->describe($user, $student),
         ]);
     }
 
@@ -105,11 +119,6 @@ class StudentTrackingController extends Controller
             'alerts' => $this->rawAttributes(
                 $student->alerts()->where('resolved', false)->get()
             ),
-            // Academic per-subject aggregates and the overall average are plain
-            // scalars — cache-safe and returned to any viewer of the student
-            // (not clinical, so no per-request re-gating in the Resource).
-            'by_subject' => $this->subjectAggregates($student),
-            'overall_average' => $this->overallAverage($student),
         ];
     }
 
@@ -121,11 +130,9 @@ class StudentTrackingController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
-    protected function subjectAggregates(Student $student): array
+    protected function subjectAggregates(Student $student, User $user): array
     {
-        return AssessmentResult::query()
-            ->where('assessment_results.student_id', $student->id)
-            ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
+        return $this->visibleResults($student, $user)
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->groupBy('subjects.id', 'subjects.name')
             ->orderBy('subjects.name')
@@ -148,13 +155,55 @@ class StudentTrackingController extends Controller
     /**
      * Mean of all the student's assessment-result scores, or null if none.
      */
-    protected function overallAverage(Student $student): ?float
+    protected function overallAverage(Student $student, User $user): ?float
     {
-        $avg = AssessmentResult::query()
-            ->where('student_id', $student->id)
-            ->avg('score');
+        $avg = $this->visibleResults($student, $user)->avg('assessment_results.score');
 
         return $avg === null ? null : round((float) $avg, 2);
+    }
+
+    /**
+     * Every scored instance the viewer may see, newest first: the subject, the
+     * date it was administered and the score.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function grades(Student $student, User $user): array
+    {
+        return $this->visibleResults($student, $user)
+            ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
+            ->orderByDesc('assessments.administered_at')
+            ->orderByDesc('assessment_results.id')
+            ->select('assessment_results.id', 'assessment_results.score', 'assessments.id as assessment_id',
+                'assessments.type', 'assessments.administered_at', 'subjects.id as subject_id',
+                'subjects.name as subject_name')
+            ->limit(100)
+            ->get()
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'assessment_id' => (int) $row->assessment_id,
+                'subject_id' => (int) $row->subject_id,
+                'subject_name' => $row->subject_name,
+                'type' => $row->type,
+                'administered_at' => $row->administered_at
+                    ? substr((string) $row->administered_at, 0, 10) : null,
+                'score' => $row->score === null ? null : (float) $row->score,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return Builder<AssessmentResult>
+     */
+    protected function visibleResults(Student $student, User $user): Builder
+    {
+        return $this->gradeAccess->restrict(
+            AssessmentResult::query()
+                ->where('assessment_results.student_id', $student->id)
+                ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
+            $user,
+            $student,
+        );
     }
 
     /**

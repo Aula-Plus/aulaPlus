@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AnepPrimaryBody;
 use App\Enums\AnepSecondaryBody;
+use App\Enums\GradesVisibility;
 use Database\Factories\SchoolFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,11 +26,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'anep_secondary_body',
     'levels_offered',
     'instruction_languages',
+    'grades_visibility',
+    'grades_cutoff_months',
+    'grades_cutoff_anchor',
+    'comment_trend_min_count',
+    'comment_trend_days',
 ])]
 class School extends Model
 {
     /** @use HasFactory<SchoolFactory> */
     use HasFactory;
+
+    protected static function booted(): void
+    {
+        static::created(fn (School $school) => CommentCategory::seedDefaults($school->id));
+    }
 
     protected function casts(): array
     {
@@ -38,6 +49,8 @@ class School extends Model
             'anep_secondary_body' => AnepSecondaryBody::class,
             'levels_offered' => 'array',
             'instruction_languages' => 'array',
+            'grades_visibility' => GradesVisibility::class,
+            'grades_cutoff_anchor' => 'date',
         ];
     }
 

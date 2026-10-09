@@ -11,6 +11,10 @@ import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
+import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
+import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
+import { MyFollowUpsPage } from "@/features/tracking/MyFollowUpsPage"
+import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
@@ -18,6 +22,8 @@ import { ScreeningTestApplicationPage } from "@/features/screening-tests/Screeni
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
+import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
+import { MyAlertsPage } from "@/features/alerts/MyAlertsPage"
 
 function App() {
   return (
@@ -73,6 +79,22 @@ function App() {
             }
           />
           <Route
+            path="/ajustes/comentarios"
+            element={
+              <ProtectedLayout>
+                <CommentSettingsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/mis-seguimientos"
+            element={
+              <ProtectedLayout>
+                <MyFollowUpsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
             path="/clases/:id/seguimiento"
             element={
               <ProtectedLayout>
@@ -124,10 +146,42 @@ function App() {
             <Route path=":id" element={<UserFormPage />} />
           </Route>
           <Route
+            path="/ajustes/notas"
+            element={
+              <ProtectedLayout>
+                <GradesVisibilityPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/alertas"
+            element={
+              <ProtectedLayout>
+                <MyAlertsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/configuracion/alertas"
+            element={
+              <ProtectedLayout>
+                <AlertSettingsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
             path="/adopcion"
             element={
               <ProtectedLayout>
                 <AdoptionDashboardPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/ayuda"
+            element={
+              <ProtectedLayout>
+                <SupportPage />
               </ProtectedLayout>
             }
           />
