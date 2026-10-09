@@ -4,6 +4,8 @@ use App\Models\School;
 use App\Models\SupportMessage;
 use App\Models\User;
 use App\Notifications\SupportMessageNotification;
+use App\Support\Tenancy;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
@@ -70,4 +72,38 @@ it('still stores the message when no recipients are configured', function () {
 
     Notification::assertNothingSent();
     expect(SupportMessage::query()->count())->toBe(1);
+});
+
+it('forbids an authenticated user without a staff role', function () {
+    Notification::fake();
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->create());
+
+    $this->postJson('/api/v1/support-messages', ['kind' => 'issue', 'message' => 'No guarda nada'])
+        ->assertForbidden();
+
+    Notification::assertNothingSent();
+    expect(SupportMessage::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('builds the queued mail outside any tenant context (as a queue worker would)', function () {
+    $school = School::factory()->create(['name' => 'Colegio Norte']);
+    $user = User::factory()->forSchool($school)->teacher()->create(['name' => 'Ana Pérez']);
+    $message = Tenancy::forSchool($school, fn () => SupportMessage::create([
+        'user_id' => $user->id,
+        'kind' => SupportMessage::KIND_ISSUE,
+        'message' => 'No me deja guardar las notas',
+        'role' => 'teacher',
+        'screen' => '/evaluaciones',
+    ]));
+
+    // Round-trip through queue serialization, then render with no tenant set.
+    $notification = unserialize(serialize(new SupportMessageNotification($message)));
+    Tenancy::forget();
+    $mail = $notification->toMail(new AnonymousNotifiable);
+
+    expect($mail->subject)->toBe('[Aula+] Algo no funciona')
+        ->and($mail->introLines)->toContain('No me deja guardar las notas')
+        ->and(implode("\n", $mail->introLines))->toContain('Ana Pérez')
+        ->toContain('Colegio Norte')
+        ->toContain('/evaluaciones');
 });
