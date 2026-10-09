@@ -83,6 +83,14 @@ export function canManageSubjects(user: User | null): boolean {
   return isDirector(user)
 }
 
+/**
+ * Directors edit the comment categories and the trend threshold (mirror of
+ * CommentCategoryPolicy / CommentTrendSettingsController). UX-only gate.
+ */
+export function canManageCommentSettings(user: User | null): boolean {
+  return isDirector(user)
+}
+
 // ── Users / staff management ────────────────────────────────────────────────
 
 /**
@@ -159,6 +167,14 @@ export function canManageAssessments(
  * Mirror of `AlertPolicy::resolve` → `StudentPolicy::viewClinicalProfile`.
  */
 export function canResolveAlert(user: User | null): boolean {
+  return isSchoolWideStaff(user)
+}
+
+/**
+ * Configure the school's alert conditions and who each alert type reaches
+ * first. Director or psychopedagogue. Mirror of `AlertRulePolicy`.
+ */
+export function canManageAlertSettings(user: User | null): boolean {
   return isSchoolWideStaff(user)
 }
 

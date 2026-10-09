@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,11 +12,6 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withSchedule(function (Schedule $schedule): void {
-        // Early-alert generation (docs/prompts/04-seguimiento-institucional.md
-        // §4) — daily is enough for a v1 threshold rule over a 15-day window.
-        $schedule->command('alerts:generate')->daily();
-    })
     ->withMiddleware(function (Middleware $middleware): void {
         // Enable Sanctum SPA (cookie-based) authentication for the API group.
         // Requests coming from configured stateful domains receive session +

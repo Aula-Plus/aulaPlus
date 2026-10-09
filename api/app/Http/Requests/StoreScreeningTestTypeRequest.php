@@ -24,6 +24,7 @@ class StoreScreeningTestTypeRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'area' => ['nullable', 'string', 'max:100'],
             'active' => ['sometimes', 'boolean'],
         ];
     }

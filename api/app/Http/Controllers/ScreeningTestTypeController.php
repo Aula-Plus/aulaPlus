@@ -36,6 +36,7 @@ class ScreeningTestTypeController extends Controller
     {
         $type = ScreeningTestType::create([
             'name' => $request->validated('name'),
+            'area' => $request->validated('area'),
             'active' => $request->validated('active') ?? true,
             'created_by_id' => $request->user()->id,
         ]);

@@ -1,9 +1,14 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  BellRing,
   BookOpen,
+  CalendarClock,
   ClipboardList,
   GraduationCap,
+  MessageSquare,
   Home,
+  TriangleAlert,
+  LifeBuoy,
   TrendingUp,
   UserCog,
   Users,
@@ -11,6 +16,8 @@ import {
 import type { User } from "@/types"
 import {
   canApproveScreeningTestDesign,
+  canManageAlertSettings,
+  canManageCommentSettings,
   canManageScreeningTests,
   canManageSubjects,
   canManageUsers,
@@ -23,6 +30,8 @@ export interface NavItem {
   icon: LucideIcon
   /** Passed to `NavLink` so "/" only matches the index route exactly. */
   end?: boolean
+  /** Passes the originating screen to the target (e.g. the support form). */
+  passFrom?: boolean
 }
 
 export interface NavSection {
@@ -49,6 +58,9 @@ export function buildNavSections(user: User | null): NavSection[] {
       items: [
         { to: "/clases", label: "Clases", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
+        // The open alerts that reach the user, for every role (ClickUp 86e3jpzdp).
+        { to: "/alertas", label: "Alertas", icon: TriangleAlert },
+        { to: "/mis-seguimientos", label: "Mis seguimientos", icon: CalendarClock },
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
@@ -67,11 +79,24 @@ export function buildNavSections(user: User | null): NavSection[] {
         ...(canManageSubjects(user)
           ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
           : []),
+        // Alert conditions and routing: direction and psychopedagogy
+        // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.
+        ...(canManageAlertSettings(user)
+          ? [{ to: "/configuracion/alertas", label: "Configurar alertas", icon: BellRing }]
+          : []),
+        // Comment categories + trend threshold: director-only.
+        ...(canManageCommentSettings(user)
+          ? [{ to: "/ajustes/comentarios", label: "Comentarios", icon: MessageSquare }]
+          : []),
         // The adoption dashboard is director-only.
         ...(canViewAdoptionDashboard(user)
           ? [{ to: "/adopcion", label: "Adopción", icon: TrendingUp }]
           : []),
       ],
+    },
+    // Fixed item for every role: support / improvement form.
+    {
+      items: [{ to: "/ayuda", label: "Ayuda y sugerencias", icon: LifeBuoy, passFrom: true }],
     },
   ]
 

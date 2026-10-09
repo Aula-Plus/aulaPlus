@@ -21,6 +21,8 @@ function baseTracking(): StudentTracking {
       has_therapeutic_companion: true,
       groups: [{ id: 1, name: "3° A", school_year: 2026 }],
     },
+    team_summary: null,
+    support_chips: { accommodations: [], barriers: [] },
     recent_assessments: [
       { id: 10, group_id: 1, subject_id: 3, type: "written", variant_number: 2, created_at: "2026-08-01T10:00:00+00:00" },
     ],
@@ -73,12 +75,18 @@ function renderPage(role: Role, userId = 1) {
   )
 }
 
+/** Switch to a profile tab once the page has loaded (the six tabs are always present). */
+async function openTab(name: string) {
+  await userEvent.click(await screen.findByRole("tab", { name }))
+}
+
 describe("StudentTrackingPage", () => {
   beforeEach(() => {
     // The embedded ScheduledFollowUpsPanel and StudentPerformanceChart both
     // self-fetch on mount; stub them so these tests (about alerts/
     // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -95,9 +103,9 @@ describe("StudentTrackingPage", () => {
       {
         id: 5,
         student_id: 3,
-        type: "behavior",
+        type: "performance",
         severity: "medium",
-        description: "Acumuló observaciones preocupantes.",
+        description: "Desempeño bajo sostenido.",
         resolved: false,
         resolved_by_id: null,
         resolved_at: null,
@@ -114,7 +122,7 @@ describe("StudentTrackingPage", () => {
     renderPage("psychopedagogue")
 
     expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
-    expect(screen.getByText("Acumuló observaciones preocupantes.")).toBeInTheDocument()
+    expect(screen.getByText("Desempeño bajo sostenido.")).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: /resolver/i }))
     expect(resolveAlert).toHaveBeenCalledWith(5)
@@ -125,6 +133,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("teacher")
+    await openTab("Evaluaciones")
 
     expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/promedio general/i)).toBeInTheDocument()
@@ -140,6 +149,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("teacher")
+    await openTab("Evaluaciones")
 
     expect(await screen.findByText("Perfil del alumno — Juan Pérez")).toBeInTheDocument()
     expect(screen.getByText(/sin evaluaciones por materia/i)).toBeInTheDocument()
@@ -169,6 +179,7 @@ describe("StudentTrackingPage", () => {
     )
 
     renderPage("psychopedagogue")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     // Pending badge visible before, approved badge after — checks the in-place update.
@@ -197,6 +208,7 @@ describe("StudentTrackingPage", () => {
     )
 
     renderPage("director")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /rechazar/i }))
@@ -212,6 +224,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("psychopedagogue")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(screen.getByText(/aprobada/i)).toBeInTheDocument()
@@ -282,6 +295,7 @@ describe("StudentTrackingPage", () => {
       })
 
     renderPage("psychopedagogue")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
@@ -324,6 +338,7 @@ describe("StudentTrackingPage", () => {
     ])
 
     renderPage("psychopedagogue", 7)
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
@@ -353,6 +368,7 @@ describe("StudentTrackingPage", () => {
     })
 
     renderPage("director")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /nueva adaptación/i }))
@@ -390,6 +406,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("teacher")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
@@ -412,6 +429,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("director")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     expect(
@@ -435,6 +453,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("director")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
@@ -471,6 +490,7 @@ describe("StudentTrackingPage", () => {
       .mockRejectedValue(forbidden)
 
     renderPage("psychopedagogue")
+    await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /desactivar para una evaluación/i }))
@@ -499,20 +519,106 @@ describe("StudentTrackingPage", () => {
         commentable_type: "Student",
         commentable_id: 3,
         content: "Nueva observación",
-        tone: null,
+        categories: [],
         visible_to: null,
         author_only: false,
         created_at: "2026-08-20T10:00:00+00:00",
       })
 
     renderPage("teacher")
+    await openTab("Observaciones")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Nueva observación")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
-    expect(createComment).toHaveBeenCalledWith(3, { content: "Nueva observación", tone: null })
+    expect(createComment).toHaveBeenCalledWith(3, { content: "Nueva observación" })
     // loadComments runs once on mount and again after creating.
     expect(fetchComments).toHaveBeenCalledTimes(2)
+  })
+
+  it("shows the comment trend mark when the server sends it, and nothing when it is absent", async () => {
+    const tracking = baseTracking()
+    tracking.comment_trends = [
+      { category_id: 3, category_name: "Social", count: 4, authors: 3, days: 21 },
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("psychopedagogue")
+
+    expect(
+      await screen.findByText(/tendencia: 4 comentarios de «social» de 3 personas en 21 días/i),
+    ).toBeInTheDocument()
+  })
+
+  it("does not show a trend mark to a teacher (the field is absent)", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    await screen.findByText("Perfil del alumno — Juan Pérez")
+    expect(screen.queryByText(/tendencia:/i)).not.toBeInTheDocument()
+  })
+
+  it("shows the six profile tabs, the team summary and support chips that lead to Ajustes (teacher)", async () => {
+    const tracking = baseTracking()
+    tracking.team_summary = {
+      strengths: "Buena comprensión oral.",
+      difficulties: "Leer textos largos.",
+      adjustments: "Tiempo extendido 25%.",
+      confirmed_at: "2026-09-01T10:00:00+00:00",
+    }
+    tracking.support_chips = {
+      accommodations: [{ id: 1, label: "Tiempo extendido 25%" }],
+      barriers: [{ id: 2, label: "Lectura de textos largos" }],
+    }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    expect(await screen.findAllByRole("tab")).toHaveLength(6)
+    expect(screen.getByText("Buena comprensión oral.")).toBeInTheDocument()
+    // The old big "Adaptaciones vigentes"/"Barreras activas" stat cards are gone.
+    expect(screen.queryByText("Barreras activas")).not.toBeInTheDocument()
+    // A teacher cannot edit the summary.
+    expect(screen.queryByRole("button", { name: /editar resumen/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Lectura de textos largos" }))
+    expect(screen.getByRole("tab", { name: "Ajustes" })).toHaveAttribute("aria-selected", "true")
+    // Read-only list of names, no clinical controls.
+    expect(screen.getByText("Tiempo extendido 25%")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
+  })
+
+  it("lets psychopedagogy write and confirm the team summary", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const save = vi.spyOn(trackingApi, "updateTeamSummary").mockResolvedValue({
+      strengths: "Fuerte",
+      difficulties: "Cuesta",
+      adjustments: "Ajusta",
+      confirmed_at: "2026-10-04T10:00:00+00:00",
+    })
+
+    renderPage("psychopedagogue")
+
+    await userEvent.click(await screen.findByRole("button", { name: /escribir resumen/i }))
+    await userEvent.type(screen.getByLabelText("Fortalezas"), "Fuerte")
+    await userEvent.type(screen.getByLabelText("Qué le cuesta"), "Cuesta")
+    await userEvent.click(screen.getByRole("button", { name: /guardar y confirmar/i }))
+    expect(screen.getByText(/completá las tres partes/i)).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText("Ajustes"), "Ajusta")
+    await userEvent.click(screen.getByRole("button", { name: /guardar y confirmar/i }))
+
+    expect(save).toHaveBeenCalledWith(3, {
+      strengths: "Fuerte",
+      difficulties: "Cuesta",
+      adjustments: "Ajusta",
+    })
+    expect(await screen.findByText("Cuesta")).toBeInTheDocument()
   })
 })

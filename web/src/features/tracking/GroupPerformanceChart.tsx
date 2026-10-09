@@ -55,7 +55,6 @@ function markTooltip(mark: GroupPerformanceMark): string {
     case "accommodation_deactivated":
       return `${label}: ${mark.count} · ${mark.accommodation_type} · ${date}`
     case "barrier_registered":
-    case "concerning_comment":
       return `${label}: ${mark.count} · ${date}`
     case "calendar_event":
       return `${label} · ${mark.title} · ${date}`

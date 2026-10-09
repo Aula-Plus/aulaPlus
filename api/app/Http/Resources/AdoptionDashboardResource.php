@@ -15,6 +15,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *     teacher_planning_rate: float,
  *     weekly_login_series: array,
  *     weekly_content_series: array,
+ *     weekly_content_by_type: array,
  * }
  */
 class AdoptionDashboardResource extends JsonResource
@@ -29,6 +30,7 @@ class AdoptionDashboardResource extends JsonResource
             'teacher_planning_rate_30d' => $this->resource['teacher_planning_rate'],
             'weekly_login_series' => $this->resource['weekly_login_series'],
             'weekly_content_series' => $this->resource['weekly_content_series'],
+            'weekly_content_by_type' => $this->resource['weekly_content_by_type'],
         ];
     }
 }
