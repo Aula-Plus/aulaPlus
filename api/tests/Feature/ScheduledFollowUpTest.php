@@ -326,9 +326,43 @@ it('rejects assigning to or sharing with someone who cannot see the student', fu
 
     $this->postJson($url, $base + ['assigned_to_id' => $strangerTeacher->id])->assertJsonValidationErrors('assigned_to_id');
     $this->postJson($url, $base + ['assigned_to_id' => $outsider->id])->assertJsonValidationErrors('assigned_to_id');
-    $this->postJson($url, $base + ['shared_with_ids' => [$outsider->id]])->assertJsonValidationErrors('shared_with_ids');
+    $this->postJson($url, $base + ['shared_with_ids' => [$outsider->id]])->assertJsonValidationErrors('shared_with_ids.0');
+    $this->postJson($url, $base + ['assigned_to_id' => 999999])->assertJsonValidationErrors('assigned_to_id');
 
-    expect(ScheduledFollowUp::count())->toBe(0);
+    // A deactivated colleague can no longer log in: not a valid responsible/sharer.
+    $disabledPsico = User::factory()->forSchool($school)->psychopedagogue()->create(['disabled_at' => now()]);
+    $this->postJson($url, $base + ['assigned_to_id' => $disabledPsico->id])->assertJsonValidationErrors('assigned_to_id');
+    $this->postJson($url, $base + ['shared_with_ids' => [$disabledPsico->id]])->assertJsonValidationErrors('shared_with_ids.0');
+
+    expect(ScheduledFollowUp::count())->toBe(0)
+        ->and($outsider->notifications()->count())->toBe(0)
+        ->and($disabledPsico->notifications()->count())->toBe(0);
+});
+
+it('drops a shared follow-up from the pending list once the person loses access to the student', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $otherTeacher = User::factory()->forSchool($school)->teacher()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    teachStudent($teacher, $student);
+    $group = $student->groups()->first();
+    leadGroup($group, $otherTeacher);
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'description' => 'x',
+        'due_date' => now()->addWeek()->toDateString(),
+        'shared_with_ids' => [$otherTeacher->id],
+    ])->assertCreated();
+
+    Sanctum::actingAs($otherTeacher);
+    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->assertJsonCount(1, 'data');
+
+    // Being shared on a follow-up grants no access of its own: once the
+    // teacher no longer teaches the student, both the list and the record close.
+    $group->teachers()->detach($otherTeacher->id);
+    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->assertJsonCount(0, 'data');
+    $this->getJson("/api/v1/students/{$student->id}/scheduled-follow-ups")->assertForbidden();
+    $this->getJson("/api/v1/students/{$student->id}/follow-up-candidates")->assertForbidden();
 });
 
 it('lists follow-up candidates filtered by role, only people who see the student', function () {
@@ -350,6 +384,13 @@ it('lists follow-up candidates filtered by role, only people who see the student
     expect(array_keys($psicos->json('data.0')))->toEqualCanonicalizing(['id', 'name', 'role']);
 
     $this->getJson("/api/v1/students/{$student->id}/follow-up-candidates?role=hacker")->assertUnprocessable();
+
+    // Deactivated colleagues and other schools' staff are never offered.
+    $disabledPsico = User::factory()->forSchool($school)->psychopedagogue()->create(['disabled_at' => now()]);
+    User::factory()->forSchool(School::factory()->create())->psychopedagogue()->create();
+    $all = $this->getJson("/api/v1/students/{$student->id}/follow-up-candidates")->assertOk();
+    expect($ids($all))->toEqualCanonicalizing([$teacher->id, $psico->id])
+        ->and($ids($all))->not->toContain($disabledPsico->id);
 
     Sanctum::actingAs($strangerTeacher);
     $this->getJson("/api/v1/students/{$student->id}/follow-up-candidates")->assertForbidden();

@@ -89,6 +89,8 @@ class ScheduledFollowUpController extends Controller
 
         $users = User::query()
             ->where('school_id', $student->school_id)
+            // A deactivated person can no longer log in to pick it up.
+            ->whereNull('disabled_at')
             ->with('roles')
             ->orderBy('name')
             ->get()

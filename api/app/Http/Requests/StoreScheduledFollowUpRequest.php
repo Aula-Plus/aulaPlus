@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Policies\ScheduledFollowUpPolicy;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 
 /**
  * Create a scheduled follow-up on a student. Authorization delegates to
@@ -34,13 +36,29 @@ class StoreScheduledFollowUpRequest extends FormRequest
      */
     public function rules(): array
     {
+        /** @var Student $student */
+        $student = $this->route('student');
+
         return [
             'description' => ['required', 'string'],
             'due_date' => ['required', 'date'],
-            'assigned_to_id' => ['nullable', 'integer'],
+            'assigned_to_id' => ['nullable', 'integer', $this->activeColleague($student)],
             'shared_with_ids' => ['nullable', 'array', 'max:20'],
-            'shared_with_ids.*' => ['integer', 'distinct'],
+            'shared_with_ids.*' => ['integer', 'distinct', $this->activeColleague($student)],
         ];
+    }
+
+    /**
+     * An existing, not deactivated user of the student's own school. User is
+     * not tenant-scoped, so the school is pinned here explicitly (defence in
+     * depth before the policy check in `after()`); a deactivated person can
+     * no longer log in, so a follow-up handed to them would be lost.
+     */
+    protected function activeColleague(Student $student): Exists
+    {
+        return Rule::exists('users', 'id')
+            ->where('school_id', $student->school_id)
+            ->whereNull('disabled_at');
     }
 
     /**
