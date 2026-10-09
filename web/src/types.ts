@@ -648,6 +648,25 @@ export interface AuditLogEntry {
   created_at: string | null
 }
 
+/** A colleague as exposed by `StaffMemberResource`: id, name and role only. */
+export interface StaffMember {
+  id: number
+  name: string
+  role: Role | null
+}
+
+/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+export interface AppNotification {
+  id: string
+  data: {
+    type: string
+    follow_up_id: number
+    student_id: number
+    due_date: string
+  }
+  created_at: string | null
+}
+
 /**
  * A scheduled follow-up on a student (`ScheduledFollowUpResource`, backend
  * Sesión 7 — docs/prompts/17-seguimiento-programado.md). The concrete face of
@@ -656,9 +675,16 @@ export interface AuditLogEntry {
 export interface ScheduledFollowUp {
   id: number
   student_id: number
+  /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
+  student?: { id: number; full_name: string }
   description: string
   due_date: string
   created_by_id: number
+  /** Responsible person — the creator unless they picked someone else. */
+  assigned_to_id?: number | null
+  assigned_to?: StaffMember | null
+  /** People, besides the responsible one, who also follow it. */
+  shared_with?: StaffMember[]
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import {
   BookOpen,
+  CalendarClock,
   ClipboardList,
   GraduationCap,
   Home,
@@ -52,6 +53,7 @@ export function buildNavSections(user: User | null): NavSection[] {
       items: [
         { to: "/clases", label: "Clases", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
+        { to: "/mis-seguimientos", label: "Mis seguimientos", icon: CalendarClock },
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
