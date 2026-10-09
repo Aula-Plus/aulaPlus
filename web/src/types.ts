@@ -405,6 +405,31 @@ export interface GroupAccommodationSummaryEntry {
 }
 
 /**
+ * AI text summary of the group's accommodations. `published` is what teachers
+ * read; `draft` (psychopedagogy only) is the latest generation awaiting review.
+ * `outdated` means the accommodations changed after the text was generated.
+ */
+export interface AccommodationNarrativeView {
+  can_generate: boolean
+  published: {
+    id: number
+    content: string
+    published_at: string | null
+    published_by: string | null
+    outdated: boolean
+  } | null
+  draft: {
+    id: number
+    status: "pending" | "draft" | "error"
+    content: string | null
+    error_message: string | null
+    /** The accommodation data itself names a student: nothing was sent to the AI. */
+    name_in_data?: boolean
+    outdated: boolean
+  } | null
+}
+
+/**
  * One point of the group performance line: one per Assessment of the group (not
  * per time window). `average_score` is the mean of its results; `results_count`
  * is how many students have a score loaded (may be less than the group size).

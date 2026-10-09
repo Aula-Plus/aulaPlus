@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { accommodationCategoryLabels, type GroupAccommodationSummaryEntry } from "@/types"
+import { GroupAccommodationNarrative } from "./GroupAccommodationNarrative"
 import { fetchGroupAccommodationsSummary } from "./trackingApi"
 
 interface GroupAccommodationsSummaryProps {
@@ -41,6 +42,7 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
 
   return (
     <SectionCard title="Ajustes activos">
+      <GroupAccommodationNarrative groupId={groupId} canSummarise={(entries?.length ?? 0) > 0} />
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : entries === null ? (
