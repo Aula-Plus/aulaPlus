@@ -79,7 +79,7 @@ describe("MyFollowUpsPage", () => {
       </AuthContext>,
     )
 
-    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 1 aviso sin leer" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 1 aviso de seguimiento sin leer" })).toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole("button", { name: /entendido/i }))
 

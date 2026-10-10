@@ -184,6 +184,8 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
             {section.items.map((item) => {
               const Icon = item.icon
               const badge = item.badge && item.badge > 0 ? item.badge : null
+              // The count is unread follow-up notices only (never alerts), and
+              // the screen-reader text says so: it sits next to "Alertas".
               // The «Mis seguimientos» part of «Alertas y seguimientos» lists at
               // most NOTIFICATIONS_LIST_LIMIT notices, so past that the count
               // reads "50+" instead of a number the page cannot show in full.
@@ -193,10 +195,10 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                 badge === null
                   ? ""
                   : overLimit
-                    ? `más de ${NOTIFICATIONS_LIST_LIMIT} avisos sin leer`
+                    ? `más de ${NOTIFICATIONS_LIST_LIMIT} avisos de seguimiento sin leer`
                     : badge === 1
-                      ? "1 aviso sin leer"
-                      : `${badge} avisos sin leer`
+                      ? "1 aviso de seguimiento sin leer"
+                      : `${badge} avisos de seguimiento sin leer`
               return (
                 <NavLink
                   key={item.to}

@@ -60,7 +60,7 @@ describe("Sidebar", () => {
     renderSidebar("psychopedagogue")
 
     expect(
-      await screen.findByRole("link", { name: "Alertas y seguimientos, 2 avisos sin leer" }),
+      await screen.findByRole("link", { name: "Alertas y seguimientos, 2 avisos de seguimiento sin leer" }),
     ).toHaveAttribute("href", "/alertas")
   })
 
@@ -80,7 +80,7 @@ describe("Sidebar", () => {
     renderSidebar("psychopedagogue")
 
     expect(
-      await screen.findByRole("link", { name: "Alertas y seguimientos, más de 50 avisos sin leer" }),
+      await screen.findByRole("link", { name: "Alertas y seguimientos, más de 50 avisos de seguimiento sin leer" }),
     ).toBeInTheDocument()
     expect(screen.getByText("50+")).toBeInTheDocument()
   })
@@ -108,7 +108,7 @@ describe("Sidebar", () => {
     const userB = { id: 2, name: "Bruno", email: "bruno@escuela.test", roles: ["teacher" as Role] }
 
     const { rerender } = render(tree(auth(userA)))
-    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 3 avisos sin leer" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 3 avisos de seguimiento sin leer" })).toBeInTheDocument()
 
     // A navigates (a refresh starts and hangs), logs out, then B logs in.
     await userEvent.click(screen.getByRole("link", { name: "Alumnos" }))
