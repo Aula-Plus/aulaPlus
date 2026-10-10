@@ -291,12 +291,18 @@ export interface Subject {
   syllabus?: SubjectSyllabus | null
 }
 
+export type SyllabusTextStatus = "pending" | "ready" | "failed"
+
 export interface SubjectSyllabus {
   name: string
   size: number | null
   uploaded_at: string | null
-  /** Whether its text could be extracted for the AI assistant. */
-  text_extracted: boolean
+  /**
+   * Text extraction for the AI assistant (queued after each upload): `pending`
+   * until it runs, then `ready` (the AI uses it) or `failed` (scanned,
+   * encrypted or unreadable PDF — stored, but the AI doesn't use it).
+   */
+  text_status: SyllabusTextStatus
   /** Decided by `SubjectPolicy::viewSyllabus` for the current user. */
   can_view: boolean
 }

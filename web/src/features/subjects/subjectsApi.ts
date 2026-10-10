@@ -24,6 +24,11 @@ export async function fetchSubjects(): Promise<Subject[]> {
   return data.data
 }
 
+export async function fetchSubject(id: number): Promise<Subject> {
+  const { data } = await api.get<{ data: Subject }>(`/api/v1/subjects/${id}`)
+  return data.data
+}
+
 export async function createSubject(input: SubjectInput): Promise<Subject> {
   const { data } = await api.post<{ data: Subject }>("/api/v1/subjects", input)
   return data.data

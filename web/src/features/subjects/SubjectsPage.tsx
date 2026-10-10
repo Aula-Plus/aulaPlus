@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/ui/page-header"
 import type { Subject } from "@/types"
 import * as subjectsApi from "./subjectsApi"
 import { SubjectSyllabus } from "./SubjectSyllabus"
-import { syllabusFileError } from "./syllabusFile"
+import { SYLLABUS_PII_NOTICE, syllabusFileError, syllabusUploadErrorMessage } from "./syllabusFile"
 
 const subjectSchema = z.object({
   name: z.string().min(1, "Ingresá el nombre"),
@@ -85,8 +85,13 @@ export function SubjectsPage() {
     if (syllabusFile) {
       try {
         await subjectsApi.uploadSyllabus(created.id, syllabusFile)
-      } catch {
-        setFormError("La materia se creó, pero no pudimos subir el programa. Probá de nuevo desde la lista.")
+      } catch (err) {
+        setFormError(
+          syllabusUploadErrorMessage(
+            err,
+            "La materia se creó, pero no pudimos subir el programa. Probá de nuevo desde la lista.",
+          ),
+        )
       }
     }
     setSyllabusFile(null)
@@ -141,7 +146,8 @@ export function SubjectsPage() {
                   onChange={(event) => setSyllabusFile(event.target.files?.[0] ?? null)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Da contexto para planificar la materia hasta que la carguemos en el catálogo de Aula+.
+                  Da contexto para planificar la materia hasta que la carguemos en el catálogo de Aula+.{" "}
+                  {SYLLABUS_PII_NOTICE}
                 </p>
               </div>
               {formError && (

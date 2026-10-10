@@ -88,13 +88,14 @@ describe("SubjectsPage", () => {
           name: "Programa 2027.pdf",
           size: 1000,
           uploaded_at: null,
-          text_extracted: true,
+          text_status: "ready",
           can_view: true,
         },
       },
     ])
     vi.mocked(subjectsApi.fetchSyllabusUrl).mockResolvedValue("https://files.test/x")
-    const open = vi.spyOn(window, "open").mockReturnValue(null)
+    const tab = { opener: {}, location: { href: "" }, close: vi.fn() }
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window)
     render(<SubjectsPage />)
 
     expect(await screen.findByText("Programa: Programa 2027.pdf")).toBeInTheDocument()
@@ -102,6 +103,7 @@ describe("SubjectsPage", () => {
     expect(screen.queryByRole("button", { name: "Reemplazar PDF" })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: "Ver programa" }))
-    await waitFor(() => expect(open).toHaveBeenCalledWith("https://files.test/x", "_blank", "noopener,noreferrer"))
+    expect(open).toHaveBeenCalledWith("", "_blank")
+    await waitFor(() => expect(tab.location.href).toBe("https://files.test/x"))
   })
 })
