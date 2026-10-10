@@ -213,10 +213,69 @@ describe("CommentsPanel observations bank", () => {
       <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} showAuthors currentUserId={7} />,
     )
 
-    await choose(/filtrar por autor/i, "Lucía")
+    await choose(/filtrar por autor/i, "Lucía · Psicopedagogo")
 
     expect(screen.getByText("Trabaja mejor en grupo.")).toBeInTheDocument()
     expect(screen.queryByText("Avanzó mucho este mes.")).not.toBeInTheDocument()
+  })
+
+  it("labels the viewer as 'Vos' in the author filter and tells same-name authors apart by role", async () => {
+    const namesake: Comment = {
+      ...sampleComment,
+      id: 12,
+      content: "Mejoró la convivencia.",
+      author_id: 9,
+      author: { id: 9, name: "Lucía", role: "director" },
+      categories: [],
+    }
+    render(
+      <CommentsPanel
+        comments={[mine, other, namesake]}
+        onCreate={vi.fn()}
+        canComment={false}
+        showAuthors
+        currentUserId={7}
+      />,
+    )
+
+    await userEvent.click(screen.getByLabelText(/filtrar por autor/i))
+    expect(await screen.findByRole("button", { name: "Vos" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /mariana/i })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Lucía · Psicopedagogo" })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Lucía · Director" }))
+
+    expect(screen.getByText("Mejoró la convivencia.")).toBeInTheDocument()
+    expect(screen.queryByText("Trabaja mejor en grupo.")).not.toBeInTheDocument()
+    expect(screen.queryByText("Avanzó mucho este mes.")).not.toBeInTheDocument()
+  })
+
+  it("filters by category, including comments without a category", async () => {
+    const categories = [
+      { id: 1, name: "Académico", position: 1 },
+      { id: 2, name: "Conducta", position: 2 },
+    ]
+    render(
+      <CommentsPanel
+        comments={[mine, other]}
+        onCreate={vi.fn()}
+        canComment={false}
+        categories={categories}
+        showAuthors
+        currentUserId={7}
+      />,
+    )
+
+    await choose(/filtrar por categoría/i, "Académico")
+    expect(screen.getByText("Avanzó mucho este mes.")).toBeInTheDocument()
+    expect(screen.queryByText("Trabaja mejor en grupo.")).not.toBeInTheDocument()
+
+    await choose(/filtrar por categoría/i, "Sin categoría")
+    expect(screen.getByText("Trabaja mejor en grupo.")).toBeInTheDocument()
+    expect(screen.queryByText("Avanzó mucho este mes.")).not.toBeInTheDocument()
+
+    await choose(/filtrar por categoría/i, "Conducta")
+    expect(screen.getByText(/ninguna observación coincide con el filtro/i)).toBeInTheDocument()
   })
 
   it("shows the total only when showCount is set", () => {

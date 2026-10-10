@@ -134,9 +134,18 @@ export function CommentsPanel({
     }
   }
 
+  // Filter labels match the list ("Vos" for the viewer) and carry the role so
+  // two colleagues with the same name can be told apart.
   const authors = new Map<number, string>()
-  for (const comment of comments) {
-    if (comment.author) authors.set(comment.author.id, comment.author.name)
+  for (const { author } of comments) {
+    if (!author) continue
+    const label =
+      author.id === currentUserId
+        ? "Vos"
+        : author.role
+          ? `${author.name} · ${roleLabels[author.role]}`
+          : author.name
+    authors.set(author.id, label)
   }
   const visibleComments = comments.filter((comment) => {
     if (authorFilter !== ALL && String(comment.author_id) !== authorFilter) return false
@@ -208,7 +217,7 @@ export function CommentsPanel({
               onChange={setAuthorFilter}
               options={[
                 { value: ALL, label: "Todos" },
-                ...[...authors].map(([id, name]) => ({ value: String(id), label: name })),
+                ...[...authors].map(([id, label]) => ({ value: String(id), label })),
               ]}
             />
           </div>
