@@ -93,7 +93,7 @@ export function GroupTrackingPage() {
 
       <SectionCard title="Alumnos" bare={tracking.students.length > 0}>
         {tracking.students.length === 0 ? (
-          <EmptyState icon={Users} message="La clase no tiene alumnos." />
+          <EmptyState icon={Users} message="El grupo no tiene alumnos." />
         ) : (
           <Table>
             <TableHeader>
@@ -135,7 +135,7 @@ export function GroupTrackingPage() {
       <CommentsPanel
         comments={comments ?? []}
         onCreate={handleCreateComment}
-        title="Comentarios de la clase"
+        title="Comentarios del grupo"
         categories={categories}
       />
     </div>

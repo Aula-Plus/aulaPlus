@@ -91,7 +91,7 @@ export function GroupPerformanceChart({ groupId, studentCount }: GroupPerformanc
       const data = await fetchGroupPerformanceTimeline(groupId, { from, to })
       setTimeline(data)
     } catch {
-      setError("No pudimos cargar el desempeño de la clase.")
+      setError("No pudimos cargar el desempeño del grupo.")
       setTimeline(null)
     }
   }, [groupId, from, to])

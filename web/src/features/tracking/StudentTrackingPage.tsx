@@ -243,7 +243,7 @@ export function StudentTrackingPage() {
                 value={student.has_therapeutic_companion ? "Sí" : "No"}
               />
               <Row
-                label="Clases"
+                label="Grupos"
                 value={student.groups.map((group) => group.name).join(", ") || "—"}
               />
             </div>

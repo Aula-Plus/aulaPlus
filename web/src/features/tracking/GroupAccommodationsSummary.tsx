@@ -46,7 +46,7 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
       ) : entries === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : entries.length === 0 ? (
-        <EmptyState icon={HeartHandshake} message="La clase no tiene ajustes activos." />
+        <EmptyState icon={HeartHandshake} message="El grupo no tiene ajustes activos." />
       ) : (
         <Table>
           <TableHeader>

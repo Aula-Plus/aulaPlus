@@ -80,7 +80,7 @@ describe("GroupFormPage", () => {
   it("does not show a delete button when creating a new group", () => {
     renderCreate()
 
-    expect(screen.queryByRole("button", { name: /eliminar clase/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /eliminar grupo/i })).not.toBeInTheDocument()
   })
 
   it("does not render a teacher multi-select (membership is managed per subject)", () => {
@@ -113,7 +113,7 @@ describe("GroupFormPage", () => {
 
       renderEdit()
 
-      const deleteButton = await screen.findByRole("button", { name: /eliminar clase/i })
+      const deleteButton = await screen.findByRole("button", { name: /eliminar grupo/i })
       await userEvent.click(deleteButton)
       await userEvent.click(await screen.findByRole("button", { name: "Eliminar" }))
 
@@ -125,7 +125,7 @@ describe("GroupFormPage", () => {
 
       renderEdit()
 
-      const deleteButton = await screen.findByRole("button", { name: /eliminar clase/i })
+      const deleteButton = await screen.findByRole("button", { name: /eliminar grupo/i })
       await userEvent.click(deleteButton)
       await userEvent.click(await screen.findByRole("button", { name: "Cancelar" }))
 
