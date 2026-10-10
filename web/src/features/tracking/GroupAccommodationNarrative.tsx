@@ -9,6 +9,12 @@ import {
 } from "./trackingApi"
 
 const POLL_MS = 2000
+/**
+ * Polls before giving up (~3 min, past the job's own timeout). The backend
+ * reports a generation that never finished as failed after 10 min anyway;
+ * this only keeps the page from polling forever if no worker is running.
+ */
+const MAX_POLLS = 90
 
 interface GroupAccommodationNarrativeProps {
   groupId: number
@@ -27,6 +33,7 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
   const [view, setView] = useState<AccommodationNarrativeView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pollsLeft, setPollsLeft] = useState(MAX_POLLS)
 
   const load = useCallback(async () => {
     try {
@@ -41,11 +48,15 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
   }, [load])
 
   const pending = view?.draft?.status === "pending"
+  const waiting = pending && pollsLeft > 0
   useEffect(() => {
-    if (!pending) return
-    const timer = setInterval(load, POLL_MS)
+    if (!waiting) return
+    const timer = setInterval(() => {
+      setPollsLeft((left) => left - 1)
+      load()
+    }, POLL_MS)
     return () => clearInterval(timer)
-  }, [pending, load])
+  }, [waiting, load])
 
   async function run(action: () => Promise<void>, failure: string) {
     setBusy(true)
@@ -88,17 +99,16 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
 
       {canGenerate && draft && (
         <div className="rounded-md border border-dashed p-3 text-sm">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Borrador (solo lo ves vos)</p>
-          {draft.status === "pending" && <p className="text-muted-foreground">Generando resumen…</p>}
-          {draft.status === "error" &&
-            (draft.name_in_data ? (
-              <p className="text-destructive">
-                Algún ajuste del grupo menciona el nombre de un alumno, así que no lo enviamos a la IA.
-                Corregí ese ajuste y volvé a generar el resumen.
-              </p>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Borrador (solo lo ve psicopedagogía)</p>
+          {draft.status === "pending" &&
+            (waiting ? (
+              <p className="text-muted-foreground">Generando resumen…</p>
             ) : (
-              <p className="text-destructive">No pudimos generar el resumen. Probá de nuevo.</p>
+              <p className="text-muted-foreground">
+                La generación está tardando más de lo esperado. Volvé a intentarlo en unos minutos.
+              </p>
             ))}
+          {draft.status === "error" && <NarrativeError draft={draft} />}
           {draft.status === "draft" && (
             <>
               <p className="whitespace-pre-wrap">{draft.content}</p>
@@ -126,8 +136,11 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
           <Button
             variant="outline"
             size="sm"
-            disabled={busy || pending || !canSummarise}
-            onClick={() => run(() => generateAccommodationNarrative(groupId), "No pudimos generar el resumen.")}
+            disabled={busy || waiting || !canSummarise}
+            onClick={() => {
+              setPollsLeft(MAX_POLLS)
+              run(() => generateAccommodationNarrative(groupId), "No pudimos generar el resumen.")
+            }}
           >
             {published || draft ? "Generar nuevo resumen" : "Generar resumen"}
           </Button>
@@ -135,4 +148,36 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
       )}
     </div>
   )
+}
+
+type Draft = NonNullable<AccommodationNarrativeView["draft"]>
+
+/** Why the last generation failed, and what to do about it. */
+function NarrativeError({ draft }: { draft: Draft }) {
+  if (draft.name_in_data) {
+    const types = draft.flagged_types ?? []
+    return (
+      <div className="text-destructive">
+        <p>
+          {types.length === 1
+            ? "Este ajuste menciona el nombre de un alumno, así que no lo enviamos a la IA:"
+            : types.length > 1
+              ? "Estos ajustes mencionan el nombre de un alumno, así que no los enviamos a la IA:"
+              : "Algún ajuste del grupo menciona el nombre de un alumno, así que no lo enviamos a la IA."}
+        </p>
+        {types.length > 0 && (
+          <ul className="my-1 list-disc pl-5">
+            {types.map((type) => (
+              <li key={type}>«{type}»</li>
+            ))}
+          </ul>
+        )}
+        <p>Corregí {types.length > 1 ? "esos ajustes" : "ese ajuste"} y volvé a generar el resumen.</p>
+      </div>
+    )
+  }
+  if (draft.stale) {
+    return <p className="text-destructive">La generación anterior no terminó. Generá el resumen de nuevo.</p>
+  }
+  return <p className="text-destructive">No pudimos generar el resumen. Probá de nuevo.</p>
 }

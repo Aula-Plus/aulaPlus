@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { AccommodationNarrativeView } from "@/types"
@@ -18,7 +18,10 @@ const published = {
 }
 
 describe("GroupAccommodationNarrative", () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it("shows the published text with who and when, and warns when outdated", async () => {
     vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
@@ -59,6 +62,7 @@ describe("GroupAccommodationNarrative", () => {
     render(<GroupAccommodationNarrative groupId={7} canSummarise />)
 
     expect(await screen.findByText("Borrador de prueba")).toBeInTheDocument()
+    expect(screen.getByText("Borrador (solo lo ve psicopedagogía)")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: /publicar para los docentes/i }))
     expect(publish).toHaveBeenCalledWith(7, 9)
   })
@@ -74,6 +78,65 @@ describe("GroupAccommodationNarrative", () => {
 
     expect(await screen.findByText(/menciona el nombre de un alumno/i)).toBeInTheDocument()
     expect(screen.queryByText(/probá de nuevo/i)).not.toBeInTheDocument()
+  })
+
+  it("names the accommodation to fix, as redacted by the backend", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
+      view({
+        can_generate: true,
+        draft: {
+          id: 9,
+          status: "error",
+          content: null,
+          error_message: "x",
+          name_in_data: true,
+          flagged_types: ["lectura en voz alta para …"],
+          outdated: false,
+        },
+      }),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+
+    expect(await screen.findByText(/este ajuste menciona el nombre de un alumno/i)).toBeInTheDocument()
+    expect(screen.getByText("«lectura en voz alta para …»")).toBeInTheDocument()
+  })
+
+  it("explains a generation that never finished and lets it be generated again", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
+      view({
+        can_generate: true,
+        draft: { id: 9, status: "error", content: null, error_message: "x", stale: true, outdated: false },
+      }),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+
+    expect(await screen.findByText(/la generación anterior no terminó/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Generar nuevo resumen" })).toBeEnabled()
+  })
+
+  it("stops polling a generation that takes too long and lets it be retried", async () => {
+    vi.useFakeTimers()
+    const fetch = vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
+      view({
+        can_generate: true,
+        draft: { id: 9, status: "pending", content: null, error_message: null, outdated: false },
+      }),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    expect(screen.getByText("Generando resumen…")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Generar nuevo resumen" })).toBeDisabled()
+
+    // One poll at a time, so React re-renders between them as in a browser.
+    for (let i = 0; i < 150; i++) await act(() => vi.advanceTimersByTimeAsync(2000))
+    const calls = fetch.mock.calls.length
+    expect(calls).toBeLessThan(100)
+    for (let i = 0; i < 30; i++) await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(fetch).toHaveBeenCalledTimes(calls)
+
+    expect(screen.getByText(/está tardando más de lo esperado/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Generar nuevo resumen" })).toBeEnabled()
   })
 
   it("disables generation when the group has no accommodations", async () => {

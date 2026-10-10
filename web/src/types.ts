@@ -425,6 +425,10 @@ export interface AccommodationNarrativeView {
     error_message: string | null
     /** The accommodation data itself names a student: nothing was sent to the AI. */
     name_in_data?: boolean
+    /** Accommodation types that name a student, with the name redacted ("…"). */
+    flagged_types?: string[]
+    /** A generation that never finished (reported as `error`): it can be retried. */
+    stale?: boolean
     outdated: boolean
   } | null
 }
