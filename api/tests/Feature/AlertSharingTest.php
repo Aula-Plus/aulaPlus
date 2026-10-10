@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 // ClickUp 86e3jpzdp follow-up (Eitán): an alert can only be handed to or
@@ -282,4 +283,91 @@ it('shows who has the alert on the group card only to whoever sees that alert', 
             ->assertJsonCount(0, 'data')
             ->assertJsonMissing(['name' => 'Galia Cohen']);
     }
+});
+
+it('takes notes only from whoever is in charge, never before a way out was chosen', function () {
+    // Nobody chose yet: the alert reaches Mariana, but there is no one in
+    // charge to leave a note.
+    Sanctum::actingAs($this->mariana);
+    $this->getJson('/api/v1/alerts')
+        ->assertJsonPath('data.0.can.act', true)
+        ->assertJsonPath('data.0.can.note', false);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/notes", ['note' => 'x'])->assertForbidden();
+
+    // Once she takes it, she is in charge and may.
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/outcome", [
+        'outcome' => 'owned', 'due_on' => now()->addWeek()->toDateString(),
+    ])->assertOk()->assertJsonPath('data.can.note', true);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/notes", ['note' => 'Hablé con la familia.'])->assertOk();
+});
+
+it('takes neither shares nor notes on a resolved alert', function () {
+    ($this->handOff)($this->mariana, $this->galia)->assertOk();
+    Sanctum::actingAs($this->galia);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/resolve")->assertOk();
+
+    ($this->share)($this->galia, $this->mariana)->assertForbidden();
+    Sanctum::actingAs($this->galia);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/notes", ['note' => 'x'])->assertForbidden();
+    expect($this->alert->actions()->count())->toBe(1);
+});
+
+it('takes neither shares nor notes on an escalated alert', function () {
+    ($this->handOff)($this->mariana, $this->galia, 2)->assertOk();
+    $this->travel(4)->days();
+    $this->artisan('alerts:escalate')->assertSuccessful();
+    $escalation = Alert::query()->withoutGlobalScopes()->where('type', AlertType::EscalatedOverdue->value)->sole();
+
+    foreach ([$this->galia, $this->mariana] as $person) {
+        Sanctum::actingAs($person);
+        $this->getJson('/api/v1/alerts')
+            ->assertJsonPath('data.1.id', $escalation->id)
+            ->assertJsonPath('data.1.can.share', false)
+            ->assertJsonPath('data.1.can.note', false);
+        $this->postJson("/api/v1/alerts/{$escalation->id}/share", ['user_id' => $this->adriana->id])->assertForbidden();
+        $this->postJson("/api/v1/alerts/{$escalation->id}/notes", ['note' => 'x'])->assertForbidden();
+    }
+});
+
+it('fails cleanly when the alert is about a student who was removed', function () {
+    Sanctum::actingAs($this->mariana);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/outcome", [
+        'outcome' => 'owned', 'due_on' => now()->addWeek()->toDateString(),
+    ])->assertOk();
+
+    $this->student->delete();
+
+    // Nobody can receive it any more: no candidates, and both a hand-off and
+    // a share are rejected as invalid instead of crashing.
+    expect(($this->candidateIds)($this->mariana))->toBe([]);
+    ($this->handOff)($this->mariana, $this->galia)->assertJsonValidationErrors('assignee_id');
+    ($this->share)($this->mariana, $this->galia)->assertJsonValidationErrors('user_id');
+
+    // Whoever is in charge can still close it.
+    Sanctum::actingAs($this->mariana);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/resolve")->assertOk();
+});
+
+it('lists the candidates in a constant number of queries, however many staff the school has', function () {
+    ($this->handOff)($this->mariana, $this->galia)->assertOk();
+
+    $queriesFor = function (): int {
+        Sanctum::actingAs($this->galia);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson("/api/v1/alerts/{$this->alert->id}/handoff-candidates")->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $queriesFor(); // warm-up: the permission cache loads once per process
+    $before = $queriesFor();
+    foreach (range(1, 5) as $i) {
+        leadGroup($this->group, User::factory()->forSchool($this->school)->teacher()->create(), $this->language);
+        User::factory()->forSchool($this->school)->teacher()->create();
+    }
+
+    expect($queriesFor())->toBe($before)
+        ->and(($this->candidateIds)($this->galia))->toHaveCount(3 + 5);
 });
