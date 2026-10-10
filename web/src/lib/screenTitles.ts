@@ -10,12 +10,14 @@ import { matchPath } from "react-router-dom"
  * group's name (e.g. "Perfil del alumno — <nombre>"), and that must never leave
  * the app in a support message (CLAUDE.md rule 11). Order matters: the first
  * matching pattern wins, so literal segments ("nuevo") go before ":id".
+ * Titles must stay plain words (letters, digits, spaces, parentheses, hyphen,
+ * em dash): the API rejects anything else (`StoreSupportMessageRequest`).
  */
-const screenTitles: { pattern: string; title: string }[] = [
+export const screenTitles: { pattern: string; title: string }[] = [
   { pattern: "/", title: "Inicio" },
-  { pattern: "/clases", title: "Clases" },
-  { pattern: "/clases/nueva", title: "Nueva clase" },
-  { pattern: "/clases/:id", title: "Editar clase" },
+  { pattern: "/clases", title: "Grupos" },
+  { pattern: "/clases/nueva", title: "Nuevo grupo" },
+  { pattern: "/clases/:id", title: "Editar grupo" },
   { pattern: "/clases/:id/seguimiento", title: "Perfil del grupo" },
   { pattern: "/clases/:id/evaluaciones", title: "Evaluaciones" },
   { pattern: "/clases/:id/pruebas-de-sondeo", title: "Screenings del grupo" },
