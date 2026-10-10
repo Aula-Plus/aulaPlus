@@ -107,6 +107,8 @@ export interface CommentTrend {
 export interface Comment {
   id: number
   author_id: number
+  /** Present on the student comment list only. */
+  author?: { id: number; name: string; role: Role | null } | null
   /** Polymorphic base name, e.g. "Student" or "Group". */
   commentable_type: string
   commentable_id: number

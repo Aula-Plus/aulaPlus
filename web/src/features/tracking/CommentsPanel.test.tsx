@@ -180,3 +180,54 @@ describe("CommentsPanel", () => {
     expect(screen.queryByRole("button", { name: /comentar/i })).not.toBeInTheDocument()
   })
 })
+
+describe("CommentsPanel observations bank", () => {
+  const mine: Comment = {
+    ...sampleComment,
+    id: 10,
+    author_id: 7,
+    author: { id: 7, name: "Mariana", role: "teacher" },
+    categories: [{ id: 1, name: "Académico" }],
+  }
+  const other: Comment = {
+    ...sampleComment,
+    id: 11,
+    content: "Trabaja mejor en grupo.",
+    author_id: 8,
+    author: { id: 8, name: "Lucía", role: "psychopedagogue" },
+    categories: [],
+  }
+
+  it("shows author name and role, and 'Vos' for the viewer's own comments", () => {
+    render(
+      <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} showAuthors currentUserId={7} />,
+    )
+
+    expect(screen.getByText("Vos")).toBeInTheDocument()
+    expect(screen.getByText("Lucía")).toBeInTheDocument()
+    expect(screen.getByText(/^·\s*Psicopedagogo$/)).toBeInTheDocument()
+  })
+
+  it("filters by author", async () => {
+    render(
+      <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} showAuthors currentUserId={7} />,
+    )
+
+    await choose(/filtrar por autor/i, "Lucía")
+
+    expect(screen.getByText("Trabaja mejor en grupo.")).toBeInTheDocument()
+    expect(screen.queryByText("Avanzó mucho este mes.")).not.toBeInTheDocument()
+  })
+
+  it("shows the total only when showCount is set", () => {
+    const { rerender } = render(
+      <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} title="Observaciones" showAuthors />,
+    )
+    expect(screen.queryByText(/observaciones \(2\)/i)).not.toBeInTheDocument()
+
+    rerender(
+      <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} title="Observaciones" showAuthors showCount />,
+    )
+    expect(screen.getByText(/observaciones \(2\)/i)).toBeInTheDocument()
+  })
+})

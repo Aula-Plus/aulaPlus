@@ -22,7 +22,7 @@ class StudentCommentController extends Controller
         $this->authorize('view', $student);
 
         $comments = $student->comments()
-            ->with('categories')
+            ->with(['categories', 'author.roles'])
             ->visibleToRole(request()->user())
             ->latest()
             ->get();
