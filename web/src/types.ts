@@ -695,8 +695,13 @@ export interface BarrierAccommodationLink {
   /** The Accommodation's id — the link is uniquely keyed by (barrier, accommodation). */
   id: number
   type: string
-  description: string | null
-  focus_area: string | null
+  /**
+   * Clinical detail: only sent to a viewer with clinical access
+   * (psychopedagogy/direction); absent for a teacher. A teacher also only gets
+   * the linked accommodations they may see (general or of a subject they teach).
+   */
+  description?: string | null
+  focus_area?: string | null
   proposed_by_id: number
   validated: boolean
   validated_by_id: number | null
