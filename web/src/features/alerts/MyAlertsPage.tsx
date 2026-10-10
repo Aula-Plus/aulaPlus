@@ -13,7 +13,7 @@ import * as alertsApi from "./alertsApi"
  * each one (`alert.can`). The fuller «Alertas y seguimientos» screen is
  * ClickUp 86e3jdkkr.
  */
-export function MyAlertsPage() {
+export function MyAlertsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [alerts, setAlerts] = useState<Alert[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,17 +45,26 @@ export function MyAlertsPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader
-        title="Alertas"
-        description="Una alerta no se cierra con «ya me encargué»: elegí una salida, con responsable y plazo."
-      />
+      {embedded ? (
+        <div>
+          <h2 className="text-xl font-semibold">Alertas</h2>
+          <p className="text-sm text-muted-foreground">
+            Una alerta no se cierra con «ya me encargué»: elegí una salida, con responsable y plazo.
+          </p>
+        </div>
+      ) : (
+        <PageHeader
+          title="Alertas"
+          description="Una alerta no se cierra con «ya me encargué»: elegí una salida, con responsable y plazo."
+        />
+      )}
       {alerts.length === 0 ? (
         <EmptyState icon={CircleCheck} message="No tenés alertas abiertas." />
       ) : (
         <>
           {pending.length > 0 && (
             <section className="grid gap-3">
-              <h2 className="text-lg font-semibold">Te toca elegir una salida</h2>
+              <h3 className="text-lg font-semibold">Te toca elegir una salida</h3>
               {pending.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} onChange={replace} />
               ))}
@@ -63,7 +72,7 @@ export function MyAlertsPage() {
           )}
           {others.length > 0 && (
             <section className="grid gap-3">
-              <h2 className="text-lg font-semibold">En curso</h2>
+              <h3 className="text-lg font-semibold">En curso</h3>
               {others.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} onChange={replace} />
               ))}
