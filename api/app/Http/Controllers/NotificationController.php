@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\FollowUpAssignedNotification;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -12,11 +14,17 @@ use Illuminate\Http\Request;
  */
 class NotificationController extends Controller
 {
+    /**
+     * The most notices `index` returns. The count is not capped, so the client
+     * can show "50+" when there are more than the list holds.
+     */
+    public const LIST_LIMIT = 50;
+
     public function index(Request $request): JsonResponse
     {
-        $notifications = $request->user()->unreadNotifications()
+        $notifications = $this->unreadFollowUpNotices($request)
             ->latest()
-            ->limit(50)
+            ->limit(self::LIST_LIMIT)
             ->get()
             ->map(fn ($notification) => [
                 'id' => $notification->id,
@@ -28,16 +36,17 @@ class NotificationController extends Controller
     }
 
     /**
-     * How many unread notices the caller has — the same set `index` lists, so
-     * the sidebar count next to "Mis seguimientos" matches the notices shown
-     * there and drops as they are read. A cheap COUNT over the caller's own
-     * notifications only (the relation is keyed by the authenticated user, so
-     * another user's or another school's notices can never be counted).
+     * How many unread notices the caller has — the same set `index` lists (only
+     * uncapped), so the sidebar count next to "Mis seguimientos" matches the
+     * notices shown there and drops as they are read. A cheap COUNT over the
+     * caller's own notifications only (the relation is keyed by the
+     * authenticated user, so another user's or another school's notices can
+     * never be counted).
      */
     public function unreadCount(Request $request): JsonResponse
     {
         return response()->json([
-            'data' => ['count' => $request->user()->unreadNotifications()->count()],
+            'data' => ['count' => $this->unreadFollowUpNotices($request)->count()],
         ]);
     }
 
@@ -46,5 +55,17 @@ class NotificationController extends Controller
         $request->user()->unreadNotifications()->whereKey($notification)->firstOrFail()->markAsRead();
 
         return response()->json(['data' => ['id' => $notification]]);
+    }
+
+    /**
+     * The caller's unread follow-up notices: the only kind "Mis seguimientos"
+     * renders. Both `index` and `unreadCount` read from here so the list and
+     * the sidebar count share one definition — a future database notification
+     * type will not inflate the count with notices the page cannot show.
+     */
+    private function unreadFollowUpNotices(Request $request): MorphMany
+    {
+        return $request->user()->unreadNotifications()
+            ->where('type', FollowUpAssignedNotification::class);
     }
 }
