@@ -234,3 +234,22 @@ it('normalizes an empty visible_to array to null so both visibility paths agree'
         ->assertOk()
         ->assertJsonPath('data.0.content', 'Sin restricción de rol');
 });
+
+it('includes the author name and role in the student comment list', function () {
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create(['name' => 'Ana Psico']);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    Comment::factory()->create([
+        'author_id' => $psychopedagogue->id,
+        'commentable_type' => Student::class,
+        'commentable_id' => $student->id,
+        'school_id' => $school->id,
+    ]);
+    Sanctum::actingAs($psychopedagogue);
+
+    $this->getJson("/api/v1/students/{$student->id}/comments")
+        ->assertOk()
+        ->assertJsonPath('data.0.author.name', 'Ana Psico')
+        ->assertJsonPath('data.0.author.role', 'psychopedagogue')
+        ->assertJsonMissingPath('data.0.author.email');
+});

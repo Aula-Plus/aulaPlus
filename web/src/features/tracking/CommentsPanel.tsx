@@ -70,7 +70,18 @@ export interface CommentsPanelProps {
   title?: string
   /** The school's categories for the optional "De qué trata" picker. */
   categories?: CommentCategory[]
+  /**
+   * Observations bank mode (student profile): shows who wrote each comment and
+   * adds author/category filters. Off for group comments.
+   */
+  showAuthors?: boolean
+  /** Used to label the viewer's own comments "Vos". */
+  currentUserId?: number
+  /** Only psychopedagogy/direction see the total; teachers never do. */
+  showCount?: boolean
 }
+
+const ALL = "all"
 
 export function CommentsPanel({
   comments,
@@ -78,7 +89,12 @@ export function CommentsPanel({
   canComment = true,
   title = "Comentarios",
   categories = [],
+  showAuthors = false,
+  currentUserId,
+  showCount = false,
 }: CommentsPanelProps) {
+  const [authorFilter, setAuthorFilter] = useState<string>(ALL)
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [content, setContent] = useState("")
   const [categoryIds, setCategoryIds] = useState<number[]>([])
   const [scope, setScope] = useState<CommentScopeOption>("everyone")
@@ -118,8 +134,21 @@ export function CommentsPanel({
     }
   }
 
+  const authors = new Map<number, string>()
+  for (const comment of comments) {
+    if (comment.author) authors.set(comment.author.id, comment.author.name)
+  }
+  const visibleComments = comments.filter((comment) => {
+    if (authorFilter !== ALL && String(comment.author_id) !== authorFilter) return false
+    if (categoryFilter === "none") return (comment.categories ?? []).length === 0
+    if (categoryFilter !== ALL) {
+      return (comment.categories ?? []).some((category) => String(category.id) === categoryFilter)
+    }
+    return true
+  })
+
   return (
-    <SectionCard title={title}>
+    <SectionCard title={showCount ? `${title} (${comments.length})` : title}>
       <div className="grid gap-4">
       {canComment && (
         <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border p-4">
@@ -169,13 +198,56 @@ export function CommentsPanel({
         </form>
       )}
 
+      {showAuthors && comments.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="comment-filter-author">Filtrar por autor</Label>
+            <SingleSelect
+              id="comment-filter-author"
+              value={authorFilter}
+              onChange={setAuthorFilter}
+              options={[
+                { value: ALL, label: "Todos" },
+                ...[...authors].map(([id, name]) => ({ value: String(id), label: name })),
+              ]}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="comment-filter-category">Filtrar por categoría</Label>
+            <SingleSelect
+              id="comment-filter-category"
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={[
+                { value: ALL, label: "Todas" },
+                ...categories.map((category) => ({ value: String(category.id), label: category.name })),
+                { value: "none", label: "Sin categoría" },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+
       {comments.length === 0 ? (
         <EmptyState icon={MessageSquare} message="Todavía no hay comentarios." />
+      ) : visibleComments.length === 0 ? (
+        <EmptyState icon={MessageSquare} message="Ninguna observación coincide con el filtro." />
       ) : (
         <ul className="grid gap-3">
-          {comments.map((comment) => (
+          {visibleComments.map((comment) => (
             <li key={comment.id} className="rounded-md border p-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {showAuthors && comment.author && (
+                  <span className="text-sm font-medium">
+                    {comment.author_id === currentUserId ? "Vos" : comment.author.name}
+                    {comment.author.role && (
+                      <span className="font-normal text-muted-foreground">
+                        {" · "}
+                        {roleLabels[comment.author.role]}
+                      </span>
+                    )}
+                  </span>
+                )}
                 {(comment.categories ?? []).map((category) => (
                   <Badge key={category.id} tone="neutral">
                     {category.name}

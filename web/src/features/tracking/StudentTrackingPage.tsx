@@ -447,6 +447,9 @@ export function StudentTrackingPage() {
             onCreate={handleCreateComment}
             title="Observaciones"
             categories={categories}
+            showAuthors
+            currentUserId={user?.id}
+            showCount={!(user?.roles ?? []).includes("teacher")}
           />
         )}
 
