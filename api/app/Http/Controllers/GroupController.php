@@ -66,15 +66,10 @@ class GroupController extends Controller
             }
         };
 
-        // An Accommodation counts when it is effective: replicate
-        // Accommodation::isEffective() in SQL (active AND, if it requires
-        // external approval, that approval was granted) rather than hydrating
+        // An Accommodation counts when it is effective: the SQL side of
+        // Accommodation::isEffective() (scopeEffective) rather than hydrating
         // and calling the method per row, which would reintroduce N+1.
-        $union(Accommodation::query()
-            ->where('accommodations.active', true)
-            ->where(fn (Builder $q) => $q
-                ->where('accommodations.requires_external_approval', false)
-                ->orWhere('accommodations.approved', true)));
+        $union(Accommodation::query()->effective());
 
         $union(Barrier::query()->where('barriers.active', true));
 

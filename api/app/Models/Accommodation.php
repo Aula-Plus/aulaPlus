@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Enums\AccommodationCategory;
+use App\Enums\AssessmentType;
 use App\Enums\Role;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\TracksAuthorship;
+use Carbon\CarbonInterface;
 use Database\Factories\AccommodationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -88,6 +90,59 @@ class Accommodation extends Model
     public function isEffective(): bool
     {
         return $this->active && (! $this->requires_external_approval || $this->approved === true);
+    }
+
+    /**
+     * Query equivalent of {@see self::isEffective()} — keep the two in sync.
+     */
+    public function scopeEffective(Builder $query): Builder
+    {
+        return $query
+            ->where('accommodations.active', true)
+            ->where(fn (Builder $approval) => $approval
+                ->where('accommodations.requires_external_approval', false)
+                ->orWhere('accommodations.approved', true));
+    }
+
+    /**
+     * Accommodations whose start date has been reached (`starts_on` <= the
+     * given date, today by default).
+     */
+    public function scopeStarted(Builder $query, ?CarbonInterface $on = null): Builder
+    {
+        return $query->whereDate('accommodations.starts_on', '<=', ($on ?? now())->toDateString());
+    }
+
+    /**
+     * Accommodations that apply in the given subject: the general ones (no
+     * accommodation_subject rows) plus those scoped to it. Query side of the
+     * subject half of {@see self::appliesToAssessment()}.
+     */
+    public function scopeAppliesToSubject(Builder $query, int $subjectId): Builder
+    {
+        return $query->where(fn (Builder $scope) => $scope
+            ->whereNotExists(fn (QueryBuilder $general) => $general
+                ->selectRaw('1')
+                ->from('accommodation_subject')
+                ->whereColumn('accommodation_subject.accommodation_id', 'accommodations.id'))
+            ->orWhereExists(fn (QueryBuilder $scoped) => $scoped
+                ->selectRaw('1')
+                ->from('accommodation_subject')
+                ->whereColumn('accommodation_subject.accommodation_id', 'accommodations.id')
+                ->where('accommodation_subject.subject_id', $subjectId)));
+    }
+
+    /**
+     * Accommodations that apply to the given assessment type: no type
+     * restriction, or the type is in `assessment_types`. Query side of the type
+     * half of {@see self::appliesToAssessment()}.
+     */
+    public function scopeAppliesToAssessmentType(Builder $query, AssessmentType $type): Builder
+    {
+        return $query->where(fn (Builder $scope) => $scope
+            ->whereNull('accommodations.assessment_types')
+            ->orWhereJsonLength('accommodations.assessment_types', 0)
+            ->orWhereJsonContains('accommodations.assessment_types', $type->value));
     }
 
     public function student(): BelongsTo
