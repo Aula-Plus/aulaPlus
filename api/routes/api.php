@@ -8,6 +8,7 @@ use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AlertOutcomeController;
 use App\Http\Controllers\AlertSettingsController;
+use App\Http\Controllers\AlertThreadController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
@@ -119,6 +120,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and deadline; plus who it can be handed to.
         Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
         Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
+        // Following an alert together (ClickUp 86e3jpzdp follow-up): share it
+        // with a co-responsible, and leave notes in its thread.
+        Route::post('/alerts/{alert}/share', [AlertThreadController::class, 'share']);
+        Route::post('/alerts/{alert}/notes', [AlertThreadController::class, 'note']);
 
         // Comment categories (replace the old comment "tone"): a school-
         // editable catalog (director writes) plus the school's recurrence

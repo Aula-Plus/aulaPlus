@@ -16,8 +16,9 @@ use Illuminate\Support\Facades\DB;
  * "Alerta escalada con plazo vencido" (ClickUp 86e3jpzdp; documento vivo
  * screen 11): when an alert was handed off and its deadline passed without
  * the receiver choosing a way out, a second alert is born. It reaches the
- * person who handed it off and the person who had to resolve it (plus any
- * role the school added in the alert settings), and it speaks about the
+ * person who handed it off and the person who had to resolve it (and whoever
+ * that person shared it with — they are in charge too), plus any role the
+ * school added in the alert settings, and it speaks about the
  * circuit — who received what and when — never about the student.
  *
  * Each hand-off escalates at most once (`alerts.escalated_at`); choosing a
@@ -38,7 +39,7 @@ class OverdueAlertEscalator
             ->where('resolved', false)
             ->whereNull('escalated_at')
             ->whereDate('due_on', '<', $today->toDateString())
-            ->with(['assignee:id,name', 'outcomeBy:id,name'])
+            ->with(['assignee:id,name', 'outcomeBy:id,name', 'collaborators:users.id'])
             ->get();
 
         $recipients = AlertRouting::recipientsFor(AlertType::EscalatedOverdue);
@@ -66,9 +67,12 @@ class OverdueAlertEscalator
                     'resolved' => false,
                 ]);
 
+                // Whoever handed it off and whoever had to resolve it — including
+                // anyone it was shared with since, who is in charge too.
                 $escalation->people()->sync(array_values(array_unique(array_filter([
                     $alert->outcome_by_id,
                     $alert->assignee_id,
+                    ...$alert->collaborators->pluck('id')->all(),
                 ]))));
 
                 $alert->update(['escalated_at' => now()]);

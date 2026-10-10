@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Models\Alert;
 use App\Models\Group;
 use App\Models\User;
+use App\Support\AlertCirculation;
 
 /**
  * Alerts surface behavior/performance concerns about a student — sensitive
@@ -40,8 +41,26 @@ class AlertPolicy
     }
 
     /**
+     * Share the alert with a co-responsible — see {@see Alert::canBeSharedBy()}.
+     * Who it can be shared with is validated by ShareAlertRequest through
+     * {@see AlertCirculation}.
+     */
+    public function share(User $user, Alert $alert): bool
+    {
+        return $alert->canBeSharedBy($user);
+    }
+
+    /**
+     * Leave a note in the alert's thread — see {@see Alert::canBeNotedBy()}.
+     */
+    public function note(User $user, Alert $alert): bool
+    {
+        return $alert->canBeNotedBy($user);
+    }
+
+    /**
      * See {@see Alert::canBeResolvedBy()}: a new alert closes only after a way
-     * out was chosen, and only by the person responsible.
+     * out was chosen, and only by whoever is in charge of it.
      */
     public function resolve(User $user, Alert $alert): bool
     {

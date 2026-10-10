@@ -1,0 +1,68 @@
+<?php
+
+namespace App\Support;
+
+use App\Enums\Role;
+use App\Models\Alert;
+use App\Models\User;
+use App\Policies\ScheduledFollowUpPolicy;
+use Illuminate\Support\Collection;
+
+/**
+ * Who an alert can be handed to or shared with (ClickUp 86e3jpzdp, Eitán's
+ * follow-up). The single source of truth for both the picker endpoint and the
+ * FormRequests that validate a hand-off or a share, so the list the UI offers
+ * and what the server accepts can never drift.
+ *
+ * A person can receive an alert from `$actor` when they are:
+ *
+ * - someone else, of the alert's school, active (not deactivated, invitation
+ *   accepted — a person who can't log in would never pick it up);
+ * - someone who already sees the student — the exact rule scheduled
+ *   follow-ups use for their responsible/co-followers
+ *   ({@see ScheduledFollowUpPolicy::canFollow()}): teaches the student, or is
+ *   psychopedagogy/direction of that school. An alert never opens a student
+ *   to someone who had no access to them;
+ * - never teacher-to-teacher: "un docente solo puede pasarla o compartirla
+ *   con Psicopedagogía o Dirección" and "a un docente solo le pueden llegar
+ *   alertas de Psicopedagogía o de Dirección". So unless the actor is
+ *   psychopedagogy/direction, the receiver must be.
+ */
+class AlertCirculation
+{
+    public function __construct(protected ScheduledFollowUpPolicy $studentAccess) {}
+
+    public function canReceive(User $actor, User $candidate, Alert $alert): bool
+    {
+        return $candidate->id !== $actor->id
+            && $candidate->school_id === $alert->school_id
+            && $candidate->disabled_at === null
+            && $candidate->password !== null
+            && ($this->isSchoolWide($actor) || $this->isSchoolWide($candidate))
+            && $this->studentAccess->canFollow($candidate, $alert->student);
+    }
+
+    /**
+     * Everyone `$actor` may hand the alert to or share it with, by name.
+     *
+     * @return Collection<int, User>
+     */
+    public function candidates(User $actor, Alert $alert): Collection
+    {
+        return User::query()
+            ->where('school_id', $alert->school_id)
+            ->whereKeyNot($actor->id)
+            ->whereNull('disabled_at')
+            ->whereNotNull('password')
+            ->with('roles:id,name')
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (User $candidate) => $this->canReceive($actor, $candidate, $alert))
+            ->values();
+    }
+
+    protected function isSchoolWide(User $user): bool
+    {
+        return $user->hasAnyRole(Role::schoolWideValues());
+    }
+}

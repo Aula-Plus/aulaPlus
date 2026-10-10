@@ -58,6 +58,12 @@ class Alert extends Model
     public static array $auditableExcludeFromDiff = ['description'];
 
     /**
+     * At most this many co-responsible besides the person responsible: "una
+     * alerta puede quedar a cargo de dos roles a la vez".
+     */
+    public const MAX_COLLABORATORS = 1;
+
+    /**
      * Users this instance is already known to be visible to — see
      * {@see self::markVisibleTo()}. Per instance, never persisted.
      *
@@ -139,16 +145,76 @@ class Alert extends Model
     }
 
     /**
+     * The co-responsible: people the alert was shared with, who follow it
+     * together with the person responsible (`assignee`). Each of them sees it,
+     * may leave notes in its thread, choose a way out and close it — see
+     * {@see self::isInChargeBy()}.
+     */
+    public function collaborators(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'alert_collaborators')
+            ->withPivot('shared_by_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Whether the user is in charge of the alert once a way out was chosen:
+     * the person responsible or a co-responsible it was shared with.
+     */
+    public function isInChargeBy(User $user): bool
+    {
+        if ($this->assignee_id !== null && $this->assignee_id === $user->id) {
+            return true;
+        }
+
+        return $this->relationLoaded('collaborators')
+            ? $this->collaborators->contains('id', $user->id)
+            : $this->collaborators()->whereKey($user->id)->exists();
+    }
+
+    protected function collaboratorCount(): int
+    {
+        return $this->relationLoaded('collaborators')
+            ? $this->collaborators->count()
+            : $this->collaborators()->count();
+    }
+
+    /**
      * Whether the user may choose one of the three ways out now: someone it
-     * reaches while nobody has chosen yet, and afterwards only the person
-     * currently responsible. An escalated alert takes no way out of its own —
-     * it closes when the escalated alert moves.
+     * reaches while nobody has chosen yet, and afterwards only whoever is in
+     * charge — the person responsible or a co-responsible. An escalated alert
+     * takes no way out of its own — it closes when the escalated alert moves.
      */
     public function canBeActedOnBy(User $user): bool
     {
         return ! $this->resolved
             && $this->type !== AlertType::EscalatedOverdue
-            && ($this->outcome === null || $this->assignee_id === $user->id)
+            && ($this->outcome === null || $this->isInChargeBy($user))
+            && $this->isVisibleTo($user);
+    }
+
+    /**
+     * Whether the user may leave a note in the alert's thread: the same people
+     * who may move it (both co-responsible, once it is shared).
+     */
+    public function canBeNotedBy(User $user): bool
+    {
+        return $this->canBeActedOnBy($user);
+    }
+
+    /**
+     * Whether the user may share the alert with a co-responsible. Only once a
+     * way out was chosen — sharing keeps the person responsible and the
+     * deadline, so there has to be one — only by whoever is in charge, and
+     * only while there is room for one more ("dos roles a la vez").
+     */
+    public function canBeSharedBy(User $user): bool
+    {
+        return ! $this->resolved
+            && $this->type !== AlertType::EscalatedOverdue
+            && $this->outcome !== null
+            && $this->isInChargeBy($user)
+            && $this->collaboratorCount() < self::MAX_COLLABORATORS
             && $this->isVisibleTo($user);
     }
 
@@ -156,7 +222,8 @@ class Alert extends Model
      * Whether the user may mark the alert resolved. Legacy alerts (no
      * recipients snapshot) keep the original rule — any school-wide role that
      * sees them. Any other alert closes only after a way out was chosen, and
-     * only by the person responsible: never with a bare "ya me encargué".
+     * only by whoever is in charge (the person responsible or a
+     * co-responsible): never with a bare "ya me encargué".
      */
     public function canBeResolvedBy(User $user): bool
     {
@@ -169,7 +236,7 @@ class Alert extends Model
         }
 
         return $this->outcome !== null
-            && $this->assignee_id === $user->id
+            && $this->isInChargeBy($user)
             && $this->isVisibleTo($user);
     }
 
@@ -185,8 +252,8 @@ class Alert extends Model
      *   when `teacher` is in the snapshot AND they teach the alert's subject in
      *   one of the student's groups (any subject, for an alert with none).
      * - Anyone listed in `alert_user` sees it too: the person it was handed
-     *   to "la ve desde ese momento" (ClickUp 86e3jpzdp), and whoever handed
-     *   it keeps seeing it.
+     *   to "la ve desde ese momento" (ClickUp 86e3jpzdp), whoever handed it
+     *   keeps seeing it, and so does anyone it was shared with.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {

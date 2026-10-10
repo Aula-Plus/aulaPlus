@@ -160,12 +160,21 @@ export interface AlertPerson {
   name: string | null
 }
 
+/**
+ * Mirror of `App\Enums\AlertActionKind`: a way out chosen, a share with a
+ * co-responsible, or a plain note.
+ */
+export type AlertActionKind = "outcome" | "share" | "note"
+
 /** One step of an alert's thread. */
 export interface AlertActionEntry {
   id: number
-  outcome: AlertOutcome
+  kind: AlertActionKind
+  /** Only on `outcome` steps. */
+  outcome: AlertOutcome | null
   actor: AlertPerson
-  assignee: AlertPerson
+  /** Who became responsible (`outcome`) or co-responsible (`share`); `null` on a note. */
+  assignee: AlertPerson | null
   due_on: string | null
   note: string | null
   created_at: string | null
@@ -201,13 +210,15 @@ export interface Alert {
   outcome?: AlertOutcome | null
   /** The person responsible — «la tiene X desde el dd/mm». */
   assignee?: AlertPerson | null
+  /** Who it was shared with: in charge together with `assignee`. */
+  collaborators?: AlertPerson[]
   outcome_by?: AlertPerson | null
   outcome_at?: string | null
   due_on?: string | null
   is_overdue?: boolean
   actions?: AlertActionEntry[]
   /** What the current user may do, decided by `AlertPolicy`. */
-  can?: { act: boolean; resolve: boolean }
+  can?: { act: boolean; share?: boolean; note?: boolean; resolve: boolean }
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null

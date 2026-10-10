@@ -14,11 +14,12 @@ class AlertResource extends JsonResource
 {
     /**
      * Relations every alert list eager-loads so the resource renders without
-     * N+1 queries (subject, responsible person, thread).
+     * N+1 queries (subject, responsible person, co-responsible, thread).
      */
     public const RELATIONS = [
         'subject:id,name',
         'assignee:id,name',
+        'collaborators:users.id,users.name',
         'outcomeBy:id,name',
         'actions.actor:id,name',
         'actions.assignee:id,name',
@@ -49,6 +50,11 @@ class AlertResource extends JsonResource
             'assignee' => $this->whenLoaded('assignee', fn () => $this->assignee
                 ? ['id' => $this->assignee->id, 'name' => $this->assignee->name]
                 : null),
+            // Who it was shared with (ClickUp 86e3jpzdp follow-up): in charge
+            // together with the assignee — «la tienen X e Y».
+            'collaborators' => $this->whenLoaded('collaborators', fn () => $this->collaborators
+                ->map(fn ($collaborator) => ['id' => $collaborator->id, 'name' => $collaborator->name])
+                ->values()),
             'outcome_by' => $this->whenLoaded('outcomeBy', fn () => $this->outcomeBy
                 ? ['id' => $this->outcomeBy->id, 'name' => $this->outcomeBy->name]
                 : null),
@@ -57,15 +63,20 @@ class AlertResource extends JsonResource
             'is_overdue' => ! $this->resolved && $this->due_on !== null && $this->due_on->lt(today()),
             'actions' => $this->whenLoaded('actions', fn () => $this->actions->map(fn (AlertAction $action) => [
                 'id' => $action->id,
-                'outcome' => $action->outcome->value,
+                'kind' => $action->kind->value,
+                'outcome' => $action->outcome?->value,
                 'actor' => ['id' => $action->actor_id, 'name' => $action->actor?->name],
-                'assignee' => ['id' => $action->assignee_id, 'name' => $action->assignee?->name],
+                'assignee' => $action->assignee_id !== null
+                    ? ['id' => $action->assignee_id, 'name' => $action->assignee?->name]
+                    : null,
                 'due_on' => $action->due_on?->toDateString(),
                 'note' => $action->note,
                 'created_at' => $action->created_at?->toIso8601String(),
             ])->values()),
             'can' => $this->when($user !== null, fn () => [
                 'act' => $this->resource->canBeActedOnBy($user),
+                'share' => $this->resource->canBeSharedBy($user),
+                'note' => $this->resource->canBeNotedBy($user),
                 'resolve' => $this->resource->canBeResolvedBy($user),
             ]),
             'resolved' => $this->resolved,

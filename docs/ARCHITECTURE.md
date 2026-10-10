@@ -88,6 +88,40 @@ eso nunca es la barrera de seguridad.
   Ver `GroupPolicy` / `StudentPolicy` como patrón de referencia.
 - Alumnos = registros (tabla `students`), sin login.
 
+## Alertas: circulación entre roles
+
+Reglas de quién puede pasar o compartir una alerta y con quién (ClickUp
+86e3jpzdp; documento vivo, pantalla 11). Fuente única en el backend:
+`App\Support\AlertCirculation` (la usan el endpoint de candidatos y las
+FormRequests `ChooseAlertOutcomeRequest` / `ShareAlertRequest`).
+
+- **Solo a quien ya ve al alumno**: misma regla que el responsable de un
+  seguimiento programado (`ScheduledFollowUpPolicy::canFollow`: da clase al
+  alumno, o es psicopedagogía/dirección del colegio). Además: misma escuela,
+  activo, invitación aceptada, distinto de quien actúa.
+- **Nunca docente → docente**: un docente solo pasa/comparte con
+  psicopedagogía o dirección; a un docente solo le llegan alertas pasadas o
+  compartidas por psicopedagogía o dirección. Un pedido armado a mano con otro
+  destinatario falla validación (422).
+- **Compartir** (`POST /alerts/{alert}/share`, tabla `alert_collaborators`): la
+  alerta queda a cargo de dos personas — el responsable (`alerts.assignee_id`)
+  y un co-responsable (máximo uno, `Alert::MAX_COLLABORATORS`). Las dos la ven,
+  pueden dejar notas (`POST /alerts/{alert}/notes`), elegir una salida y
+  cerrarla. Solo se puede compartir una vez elegida una salida y solo lo hace
+  quien la tiene a cargo.
+- **Compartir no es una salida**: no cambia responsable, salida ni plazo, ni
+  reinicia o cierra la «alerta escalada con plazo vencido». Si el
+  co-responsable elige «me ocupo yo» / «en observación», pasa a ser el
+  responsable y el anterior queda como co-responsable. «Se la paso a otro rol»
+  es una transferencia: el receptor queda solo a cargo (puede volver a
+  compartir); quienes la tenían siguen viéndola.
+- **Escalada**: solo escalan las pasadas a otro rol; la escalada le llega a
+  quien la pasó, a quien la tenía que resolver y a su co-responsable, más los
+  roles que el colegio sume en la configuración (p. ej. dirección).
+- El hilo (`alert_actions.kind`: `outcome` / `share` / `note`) es operativo:
+  qué se hizo con el caso, nunca un diagnóstico; las notas quedan fuera del
+  diff de auditoría.
+
 ## Autenticación (SPA + Sanctum)
 
 - Login por cookies (no tokens). Flujo: `GET /sanctum/csrf-cookie` →

@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AlertActionKind;
 use App\Enums\AlertOutcome;
 use App\Http\Requests\ChooseAlertOutcomeRequest;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\User;
+use App\Support\AlertCirculation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +19,12 @@ use Illuminate\Support\Facades\DB;
  * Each one records a responsible person and a deadline, appends a step to the
  * alert's thread, and closes any open "escalated, deadline passed" alert for
  * it — the circuit moved again.
+ *
+ * A shared alert (two people in charge) keeps its pair when one of them
+ * takes it or leaves it in observation: the actor becomes the person
+ * responsible and the previous one stays as co-responsible. Handing it off
+ * transfers it: the receiver is the only one in charge (they may share it
+ * again); everyone involved keeps seeing it.
  */
 class AlertOutcomeController extends Controller
 {
@@ -29,8 +37,12 @@ class AlertOutcomeController extends Controller
             : $user->id;
 
         DB::transaction(function () use ($request, $alert, $user, $outcome, $assigneeId): void {
+            $previousAssigneeId = $alert->assignee_id;
+            $actorWasCollaborator = $alert->collaborators()->whereKey($user->id)->exists();
+
             $alert->actions()->create([
                 'actor_id' => $user->id,
+                'kind' => AlertActionKind::Outcome,
                 'outcome' => $outcome,
                 'assignee_id' => $assigneeId,
                 'due_on' => $request->validated('due_on'),
@@ -49,6 +61,16 @@ class AlertOutcomeController extends Controller
             // Whoever chose and whoever is now responsible both keep seeing it.
             $alert->people()->syncWithoutDetaching(array_unique([$user->id, $assigneeId]));
 
+            if ($outcome === AlertOutcome::HandedOff) {
+                $alert->collaborators()->detach();
+            } elseif ($actorWasCollaborator) {
+                // The co-responsible took it: the pair stays, swapped.
+                $alert->collaborators()->detach($user->id);
+                if ($previousAssigneeId !== null && $previousAssigneeId !== $user->id) {
+                    $alert->collaborators()->syncWithoutDetaching([$previousAssigneeId => ['shared_by_id' => $user->id]]);
+                }
+            }
+
             $alert->escalations()->where('resolved', false)->update([
                 'resolved' => true,
                 'resolved_by_id' => $user->id,
@@ -60,22 +82,16 @@ class AlertOutcomeController extends Controller
     }
 
     /**
-     * GET /api/v1/alerts/{alert}/handoff-candidates — the active staff members
-     * of the school the alert can be handed to (everyone but the caller), with
-     * their roles so the UI can group them by role.
+     * GET /api/v1/alerts/{alert}/handoff-candidates — the people the caller
+     * may hand the alert to or share it with ({@see AlertCirculation}: active
+     * colleagues who already see the student, never teacher-to-teacher), with
+     * their roles so the UI can show them. Names and roles only.
      */
-    public function candidates(Request $request, Alert $alert): JsonResponse
+    public function candidates(Request $request, Alert $alert, AlertCirculation $circulation): JsonResponse
     {
         $this->authorize('act', $alert);
 
-        $candidates = User::query()
-            ->where('school_id', $request->user()->school_id)
-            ->whereKeyNot($request->user()->id)
-            ->whereNull('disabled_at')
-            ->whereNotNull('password')
-            ->with('roles:id,name')
-            ->orderBy('name')
-            ->get(['id', 'name'])
+        $candidates = $circulation->candidates($request->user(), $alert)
             ->map(fn (User $candidate) => [
                 'id' => $candidate->id,
                 'name' => $candidate->name,

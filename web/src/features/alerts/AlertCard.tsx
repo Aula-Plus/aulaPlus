@@ -13,8 +13,10 @@ import {
   alertTypeLabels,
   roleLabels,
   type Alert,
+  type AlertActionEntry,
   type AlertOutcome,
 } from "@/types"
+import { alertHolderPhrase } from "./alertHolder"
 import * as alertsApi from "./alertsApi"
 import type { HandoffCandidate } from "./alertsApi"
 
@@ -33,6 +35,12 @@ function isoInDays(days: number): string {
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
   return `${date.getFullYear()}-${month}-${day}`
+}
+
+function candidateLabel(candidate: HandoffCandidate): string {
+  return candidate.roles.length > 0
+    ? `${candidate.name} · ${candidate.roles.map((role) => roleLabels[role] ?? role).join(", ")}`
+    : candidate.name
 }
 
 function OutcomeForm({
@@ -84,11 +92,6 @@ function OutcomeForm({
       setSaving(false)
     }
   }
-
-  const candidateLabel = (candidate: HandoffCandidate) =>
-    candidate.roles.length > 0
-      ? `${candidate.name} · ${candidate.roles.map((role) => roleLabels[role] ?? role).join(", ")}`
-      : candidate.name
 
   return (
     <form onSubmit={submit} className="mt-3 grid gap-3 rounded-md bg-muted/40 p-3" noValidate>
@@ -166,26 +169,196 @@ function OutcomeForm({
 }
 
 function statusLine(alert: Alert): string | null {
-  if (!alert.outcome || !alert.assignee) return null
-  const since = formatShortDate(alert.outcome_at)
+  const holder = alertHolderPhrase(alert)
+  if (!holder) return null
   const due = formatShortDate(alert.due_on)
   if (alert.outcome === "observing") {
-    return `En observación: la tiene ${alert.assignee.name} desde el ${since}, para mirar de nuevo el ${due}.`
+    return `En observación: ${holder}, para mirar de nuevo el ${due}.`
   }
-  return `La tiene ${alert.assignee.name} desde el ${since} · plazo al ${due}.`
+  return `${holder.charAt(0).toUpperCase()}${holder.slice(1)} · plazo al ${due}.`
 }
+
+/**
+ * Share the alert with a co-responsible (ClickUp 86e3jpzdp follow-up). The
+ * picker lists only who the server says can receive it from the current user
+ * — people who already see the student, never teacher-to-teacher — minus
+ * whoever is already in charge; the server validates it again.
+ */
+function ShareForm({
+  alert,
+  onDone,
+  onCancel,
+}: {
+  alert: Alert
+  onDone: (updated: Alert) => void
+  onCancel: () => void
+}) {
+  const [userId, setUserId] = useState("")
+  const [note, setNote] = useState("")
+  const [candidates, setCandidates] = useState<HandoffCandidate[] | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const inCharge = new Set([alert.assignee?.id, ...(alert.collaborators ?? []).map((person) => person.id)])
+    alertsApi
+      .fetchHandoffCandidates(alert.id)
+      .then((list) => setCandidates(list.filter((candidate) => !inCharge.has(candidate.id))))
+      .catch(() => setError("No pudimos cargar con quién la podés compartir."))
+  }, [alert.id, alert.assignee?.id, alert.collaborators])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!userId) {
+      setError("Elegí con quién la compartís.")
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      onDone(
+        await alertsApi.shareAlert(alert.id, {
+          user_id: Number(userId),
+          note: note.trim() ? note.trim() : null,
+        }),
+      )
+    } catch {
+      setError("No pudimos compartirla.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-3 grid gap-3 rounded-md bg-muted/40 p-3" noValidate>
+      <p className="text-sm font-medium">Compartir con otro rol</p>
+      <div className="grid gap-2">
+        <Label htmlFor={`alert-${alert.id}-share`}>¿Con quién la compartís?</Label>
+        <SingleSelect
+          id={`alert-${alert.id}-share`}
+          value={userId}
+          onChange={setUserId}
+          placeholder="Elegí una persona…"
+          options={(candidates ?? []).map((candidate) => ({
+            value: String(candidate.id),
+            label: candidateLabel(candidate),
+          }))}
+        />
+        <p className="text-xs text-muted-foreground">
+          La siguen juntos: las dos personas la ven, pueden dejar notas y cualquiera puede cerrarla. El
+          responsable y el plazo no cambian.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`alert-${alert.id}-share-note`}>Nota para quien la recibe (opcional)</Label>
+        <Textarea
+          id={`alert-${alert.id}-share-note`}
+          value={note}
+          maxLength={2000}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Qué observaste o qué hiciste — nunca un diagnóstico."
+        />
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Guardando…" : "Compartir"}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function NoteForm({
+  alert,
+  onDone,
+  onCancel,
+}: {
+  alert: Alert
+  onDone: (updated: Alert) => void
+  onCancel: () => void
+}) {
+  const [note, setNote] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!note.trim()) {
+      setError("Escribí la nota.")
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      onDone(await alertsApi.addAlertNote(alert.id, note.trim()))
+    } catch {
+      setError("No pudimos guardar la nota.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-3 grid gap-3 rounded-md bg-muted/40 p-3" noValidate>
+      <div className="grid gap-2">
+        <Label htmlFor={`alert-${alert.id}-thread-note`}>Nota</Label>
+        <Textarea
+          id={`alert-${alert.id}-thread-note`}
+          value={note}
+          maxLength={2000}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Qué observaste o qué hiciste — nunca un diagnóstico."
+        />
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar nota"}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+/** What a thread step adds next to its author, beyond its note: who it was shared with. */
+function threadHeadline(action: AlertActionEntry): string | null {
+  if (action.kind === "share" && action.assignee?.name) {
+    return `la compartió con ${action.assignee.name}`
+  }
+  return null
+}
+
+type Panel = AlertOutcome | "share" | "note" | null
 
 /**
  * One alert with its three ways out (ClickUp 86e3jpzdp; documento vivo screen
  * 11): "me ocupo yo", "se la paso a otro rol", "la dejo en observación", each
- * with a responsible person and a suggested deadline. Whether the buttons
- * show comes from `alert.can`, decided server-side by `AlertPolicy`.
+ * with a responsible person and a suggested deadline; once someone has it,
+ * sharing it with a co-responsible and leaving notes in its thread. Whether
+ * the buttons show comes from `alert.can`, decided server-side by
+ * `AlertPolicy`.
  */
 export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (updated: Alert) => void }) {
-  const [choosing, setChoosing] = useState<AlertOutcome | null>(null)
+  const [choosing, setChoosing] = useState<Panel>(null)
   const [error, setError] = useState<string | null>(null)
   const status = statusLine(alert)
   const escalated = alert.type === "escalated_overdue"
+  const thread = (alert.actions ?? []).filter((action) => action.note || action.kind === "share")
 
   async function resolve() {
     setError(null)
@@ -224,19 +397,20 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
       <p className="mt-2 text-sm">{alert.description}</p>
       {status && <p className="mt-1 text-sm text-muted-foreground">{status}</p>}
 
-      {alert.actions && alert.actions.some((action) => action.note) && (
+      {thread.length > 0 && (
         <ul className="mt-3 grid gap-2">
-          {alert.actions
-            .filter((action) => action.note)
-            .map((action) => (
+          {thread.map((action) => {
+            const headline = threadHeadline(action)
+            return (
               <li key={action.id} className="rounded-md bg-muted/40 p-2 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{action.actor.name}</span> ·{" "}
-                  {formatShortDate(action.created_at)}
+                  <span className="font-medium text-foreground">{action.actor.name}</span>
+                  {headline && ` ${headline}`} · {formatShortDate(action.created_at)}
                 </p>
-                <p>{action.note}</p>
+                {action.note && <p>{action.note}</p>}
               </li>
-            ))}
+            )
+          })}
         </ul>
       )}
 
@@ -255,7 +429,7 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           ))}
         </div>
       )}
-      {choosing && (
+      {choosing && choosing !== "share" && choosing !== "note" && (
         <OutcomeForm
           alert={alert}
           outcome={choosing}
@@ -266,11 +440,43 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           }}
         />
       )}
-      {alert.can?.resolve && choosing === null && (
-        <div className="mt-3">
-          <Button type="button" size="sm" variant="ghost" onClick={resolve}>
-            Marcar como resuelta
-          </Button>
+      {choosing === "share" && (
+        <ShareForm
+          alert={alert}
+          onCancel={() => setChoosing(null)}
+          onDone={(updated) => {
+            setChoosing(null)
+            onChange(updated)
+          }}
+        />
+      )}
+      {choosing === "note" && (
+        <NoteForm
+          alert={alert}
+          onCancel={() => setChoosing(null)}
+          onDone={(updated) => {
+            setChoosing(null)
+            onChange(updated)
+          }}
+        />
+      )}
+      {choosing === null && (alert.can?.share || alert.can?.note || alert.can?.resolve) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {alert.can?.share && (
+            <Button type="button" size="sm" variant="outline" onClick={() => setChoosing("share")}>
+              Compartir con otro rol
+            </Button>
+          )}
+          {alert.can?.note && (
+            <Button type="button" size="sm" variant="outline" onClick={() => setChoosing("note")}>
+              Dejar una nota
+            </Button>
+          )}
+          {alert.can?.resolve && (
+            <Button type="button" size="sm" variant="ghost" onClick={resolve}>
+              Marcar como resuelta
+            </Button>
+          )}
         </div>
       )}
       {error && (
