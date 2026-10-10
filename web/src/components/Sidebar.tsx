@@ -40,7 +40,7 @@ export function Sidebar() {
   const userId = user?.id
 
   // Keep the unread-notice count fresh: on login and on every navigation (no
-  // polling). Reading a notice refreshes it too (see MyFollowUpsPage). The
+  // polling). Reading a notice refreshes it too (see FollowUpsSection). The
   // store is keyed by user and drops stale responses, so after a logout/login
   // in the same tab the new user never sees the previous user's count.
   useEffect(() => {

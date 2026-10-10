@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { Link } from "react-router-dom"
 import { CalendarClock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
 import { roleLabels } from "@/types"
@@ -13,11 +12,16 @@ import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import { refreshUnreadNoticeCount } from "./unreadNotices"
 
 /**
- * "Mis seguimientos": the caller's pending follow-ups (responsible for, or
- * shared with them) plus the notices of follow-ups assigned to them. A notice
- * is read and dismissed — it is not an alert and asks for nothing.
+ * The «Mis seguimientos» section of «Alertas y seguimientos» (`/alertas`): the
+ * caller's pending follow-ups (responsible for, or shared with them) plus the
+ * notices of follow-ups assigned to them. A notice is read and dismissed — it
+ * is not an alert and asks for nothing.
+ *
+ * A section, not a page: its heading is an <h2> under the page's <h1>, and its
+ * cards («Avisos», «Pendientes») are <h3> subsections.
  */
-export function MyFollowUpsPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function FollowUpsSection() {
+  const headingId = useId()
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -57,20 +61,18 @@ export function MyFollowUpsPage({ embedded = false }: { embedded?: boolean } = {
   )
 
   return (
-    <div className="grid gap-6">
-      {embedded ? (
-        <div>
-          <h2 className="text-xl font-semibold">Mis seguimientos</h2>
-          <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
-        </div>
-      ) : (
-        <PageHeader title="Mis seguimientos" description="Los seguimientos que tenés a cargo o que te compartieron." />
-      )}
+    <section aria-labelledby={headingId} className="grid gap-6">
+      <div>
+        <h2 id={headingId} className="text-xl font-semibold">
+          Mis seguimientos
+        </h2>
+        <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
+      </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {notifications.length > 0 && (
-        <SectionCard title="Avisos">
+        <SectionCard title="Avisos" headingLevel={3}>
           <ul className="grid gap-2">
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
@@ -93,7 +95,7 @@ export function MyFollowUpsPage({ embedded = false }: { embedded?: boolean } = {
         </SectionCard>
       )}
 
-      <SectionCard title="Pendientes">
+      <SectionCard title="Pendientes" headingLevel={3}>
         {followUps === null ? (
           <p className="text-muted-foreground">Cargando…</p>
         ) : followUps.length === 0 ? (
@@ -119,6 +121,6 @@ export function MyFollowUpsPage({ embedded = false }: { embedded?: boolean } = {
           </ul>
         )}
       </SectionCard>
-    </div>
+    </section>
   )
 }

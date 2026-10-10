@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Sidebar } from "@/components/Sidebar"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import type { ScheduledFollowUp } from "@/types"
-import { MyFollowUpsPage } from "./MyFollowUpsPage"
+import { FollowUpsSection } from "./FollowUpsSection"
 import * as api from "./scheduledFollowUpsApi"
 import { resetUnreadNoticeCount } from "./unreadNotices"
 
@@ -30,12 +30,28 @@ function pendingFollowUp(overrides: Partial<ScheduledFollowUp> = {}): ScheduledF
   }
 }
 
-describe("MyFollowUpsPage", () => {
+describe("FollowUpsSection", () => {
   beforeEach(() => {
     resetUnreadNoticeCount()
     vi.spyOn(api, "fetchUnreadNotificationCount").mockResolvedValue(0)
   })
   afterEach(() => vi.restoreAllMocks())
+
+  it("is a section: an h2 heading with h3 subsections, shown while loading", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockReturnValue(new Promise<ScheduledFollowUp[]>(() => {}))
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole("heading", { level: 2, name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { level: 3, name: "Pendientes" })).toBeInTheDocument()
+    expect(screen.getByText("Cargando…")).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument()
+  })
 
   it("labels a follow-up past its date without calling it expired", async () => {
     vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([pendingFollowUp({ is_overdue: true })])
@@ -43,7 +59,7 @@ describe("MyFollowUpsPage", () => {
 
     render(
       <MemoryRouter>
-        <MyFollowUpsPage />
+        <FollowUpsSection />
       </MemoryRouter>,
     )
 
@@ -74,7 +90,7 @@ describe("MyFollowUpsPage", () => {
       <AuthContext value={auth}>
         <MemoryRouter>
           <Sidebar />
-          <MyFollowUpsPage />
+          <FollowUpsSection />
         </MemoryRouter>
       </AuthContext>,
     )
@@ -118,7 +134,7 @@ describe("MyFollowUpsPage", () => {
 
     render(
       <MemoryRouter>
-        <MyFollowUpsPage />
+        <FollowUpsSection />
       </MemoryRouter>,
     )
 

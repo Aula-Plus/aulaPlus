@@ -25,4 +25,24 @@ describe("AlertsAndFollowUpsPage", () => {
     expect(await screen.findByText(/no tenés seguimientos pendientes/i)).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "Mis seguimientos" })).toBeInTheDocument()
   })
+
+  it("keeps a page → section → subsection heading outline, even while loading", () => {
+    vi.spyOn(alertsApi, "fetchMyAlerts").mockReturnValue(new Promise(() => {}))
+    vi.spyOn(scheduledFollowUpsApi, "fetchMyFollowUps").mockReturnValue(new Promise(() => {}))
+    vi.spyOn(scheduledFollowUpsApi, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <AlertsAndFollowUpsPage />
+      </MemoryRouter>,
+    )
+
+    const headings = screen.getAllByRole("heading").map((heading) => [heading.tagName, heading.textContent])
+    expect(headings).toEqual([
+      ["H1", "Alertas y seguimientos"],
+      ["H2", "Alertas"],
+      ["H2", "Mis seguimientos"],
+      ["H3", "Pendientes"],
+    ])
+  })
 })
