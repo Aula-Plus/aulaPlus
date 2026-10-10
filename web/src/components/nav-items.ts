@@ -31,10 +31,15 @@ export interface NavItem {
   end?: boolean
   /** Passes the originating screen to the target (e.g. the support form). */
   passFrom?: boolean
+  /**
+   * A count shown next to the label (e.g. unread follow-up notices on
+   * "Alertas y seguimientos"). Omitted or 0 means no count is rendered.
+   */
+  badge?: number
 }
 
 export interface NavSection {
-  /** Optional section heading, e.g. "Seguimiento". Hidden when the sidebar is collapsed. */
+  /** Optional section heading, e.g. "Administración". Hidden when the sidebar is collapsed. */
   heading?: string
   items: NavItem[]
 }
@@ -49,16 +54,23 @@ export interface NavSection {
  * A section is only included when it has at least one visible item, so a role
  * never sees an empty section heading.
  */
-export function buildNavSections(user: User | null): NavSection[] {
+export function buildNavSections(
+  user: User | null,
+  { unreadNotices = 0 }: { unreadNotices?: number } = {},
+): NavSection[] {
   const sections: NavSection[] = [
     { items: [{ to: "/", label: "Inicio", icon: Home, end: true }] },
     {
-      heading: "Seguimiento",
+      // No heading on purpose: Grupos / Alumnos are first-class entries, not a
+      // "Seguimiento" sub-section (product rule — "seguimiento" is not a section).
+      // Perfil de grupo / Perfil de alumno open from these lists.
       items: [
-        { to: "/clases", label: "Clases", icon: Users },
+        { to: "/clases", label: "Grupos", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
-        // The open alerts that reach the user, for every role (ClickUp 86e3jpzdp).
-        { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },
+        // One screen for the alerts that reach the user and their own scheduled
+        // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
+        // is unread follow-up notices only (not alerts); it goes away once read.
+        { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)

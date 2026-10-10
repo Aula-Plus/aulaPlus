@@ -209,7 +209,7 @@ export function StudentFormPage() {
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="group_id">Clase ({currentYear})</Label>
+            <Label htmlFor="group_id">Grupo ({currentYear})</Label>
             <Controller
               name="group_id"
               control={control}
@@ -217,7 +217,7 @@ export function StudentFormPage() {
                 <SingleSelect
                   id="group_id"
                   options={[
-                    { value: "", label: "Sin clase asignada" },
+                    { value: "", label: "Sin grupo asignado" },
                     ...groups.map((group) => ({
                       value: String(group.id),
                       label: group.name,

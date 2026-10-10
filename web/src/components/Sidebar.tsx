@@ -3,6 +3,12 @@ import { NavLink, useLocation } from "react-router-dom"
 import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { buildNavSections } from "@/components/nav-items"
+import {
+  refreshUnreadNoticeCount,
+  resetUnreadNoticeCount,
+  useUnreadNoticeCount,
+} from "@/features/tracking/unreadNotices"
+import { NOTIFICATIONS_LIST_LIMIT } from "@/features/tracking/scheduledFollowUpsApi"
 import { roleLabels } from "@/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -30,6 +36,20 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  const { user } = useAuth()
+  const userId = user?.id
+
+  // Keep the unread-notice count fresh: on login and on every navigation (no
+  // polling). Reading a notice refreshes it too (see MyFollowUpsPage). The
+  // store is keyed by user and drops stale responses, so after a logout/login
+  // in the same tab the new user never sees the previous user's count.
+  useEffect(() => {
+    if (userId === undefined) {
+      resetUnreadNoticeCount()
+      return
+    }
+    void refreshUnreadNoticeCount(userId)
+  }, [userId, location.pathname])
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -119,7 +139,8 @@ interface SidebarContentProps {
 function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: SidebarContentProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const sections = buildNavSections(user)
+  const unreadNotices = useUnreadNoticeCount()
+  const sections = buildNavSections(user, { unreadNotices })
 
   return (
     <div className="flex h-full flex-col">
@@ -162,13 +183,27 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
             )}
             {section.items.map((item) => {
               const Icon = item.icon
+              const badge = item.badge && item.badge > 0 ? item.badge : null
+              // The «Mis seguimientos» part of «Alertas y seguimientos» lists at
+              // most NOTIFICATIONS_LIST_LIMIT notices, so past that the count
+              // reads "50+" instead of a number the page cannot show in full.
+              const overLimit = badge !== null && badge > NOTIFICATIONS_LIST_LIMIT
+              const badgeLabel = overLimit ? `${NOTIFICATIONS_LIST_LIMIT}+` : String(badge)
+              const badgeText =
+                badge === null
+                  ? ""
+                  : overLimit
+                    ? `más de ${NOTIFICATIONS_LIST_LIMIT} avisos sin leer`
+                    : badge === 1
+                      ? "1 aviso sin leer"
+                      : `${badge} avisos sin leer`
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.end}
                   state={item.passFrom ? { from: location.pathname } : undefined}
-                  title={collapsed ? item.label : undefined}
+                  title={collapsed ? (badge === null ? item.label : `${item.label} (${badgeLabel})`) : undefined}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center gap-3 rounded-md px-2 py-2 text-sm font-semibold transition-colors",
@@ -179,8 +214,26 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                     )
                   }
                 >
-                  <Icon className="size-5 shrink-0" aria-hidden="true" />
-                  {!collapsed && <span>{item.label}</span>}
+                  <span className="relative shrink-0">
+                    <Icon className="size-5" aria-hidden="true" />
+                    {badge !== null && collapsed && (
+                      // Collapsed: a dot on the icon; the number is in the title.
+                      <span
+                        className="absolute -top-1 -right-1 size-2.5 rounded-full bg-nav-accent"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                  {!collapsed && <span className="flex-1">{item.label}</span>}
+                  {badge !== null && !collapsed && (
+                    <span
+                      className="min-w-5 rounded-full bg-nav-accent px-1.5 text-center text-xs leading-5 font-bold text-nav-background"
+                      aria-hidden="true"
+                    >
+                      {badgeLabel}
+                    </span>
+                  )}
+                  {badge !== null && <span className="sr-only">{`, ${badgeText}`}</span>}
                 </NavLink>
               )
             })}

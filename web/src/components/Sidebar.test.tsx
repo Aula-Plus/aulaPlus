@@ -1,9 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Sidebar } from "./Sidebar"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
+import * as scheduledFollowUpsApi from "@/features/tracking/scheduledFollowUpsApi"
+import { resetUnreadNoticeCount } from "@/features/tracking/unreadNotices"
 import type { Role } from "@/types"
 
 function renderSidebar(role: Role = "director", logout = vi.fn()) {
@@ -27,10 +29,13 @@ function renderSidebar(role: Role = "director", logout = vi.fn()) {
 
 beforeEach(() => {
   localStorage.clear()
+  resetUnreadNoticeCount()
+  vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(0)
 })
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 describe("Sidebar", () => {
@@ -38,8 +43,83 @@ describe("Sidebar", () => {
     renderSidebar()
 
     expect(screen.getByRole("link", { name: "Inicio" })).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Clases" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Grupos" })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Alumnos" })).toBeInTheDocument()
+  })
+
+  it("lists Grupos and Alumnos directly, without a 'Seguimiento' section heading", () => {
+    renderSidebar()
+
+    expect(screen.getByRole("link", { name: "Grupos" })).toHaveAttribute("href", "/clases")
+    expect(screen.getByRole("link", { name: "Alumnos" })).toHaveAttribute("href", "/alumnos")
+    expect(screen.queryByRole("heading", { name: /seguimiento/i })).not.toBeInTheDocument()
+  })
+
+  it("shows the unread follow-up notice count next to 'Alertas y seguimientos'", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(2)
+    renderSidebar("psychopedagogue")
+
+    expect(
+      await screen.findByRole("link", { name: "Alertas y seguimientos, 2 avisos sin leer" }),
+    ).toHaveAttribute("href", "/alertas")
+  })
+
+  it("shows no count next to 'Alertas y seguimientos' when every notice is read", async () => {
+    const fetchCount = vi
+      .spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount")
+      .mockResolvedValue(0)
+    renderSidebar("psychopedagogue")
+
+    await waitFor(() => expect(fetchCount).toHaveBeenCalled())
+    expect(screen.getByRole("link", { name: "Alertas y seguimientos" })).toHaveAttribute("href", "/alertas")
+    expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
+  })
+
+  it("shows '50+' past the number of notices the page lists", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(51)
+    renderSidebar("psychopedagogue")
+
+    expect(
+      await screen.findByRole("link", { name: "Alertas y seguimientos, más de 50 avisos sin leer" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("50+")).toBeInTheDocument()
+  })
+
+  it("does not carry the previous user's count over to the next login", async () => {
+    let releaseA!: (count: number) => void
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount")
+      .mockResolvedValueOnce(3)
+      .mockReturnValueOnce(new Promise<number>((resolve) => (releaseA = resolve)))
+      .mockResolvedValue(0)
+    const auth = (user: AuthContextValue["user"]): AuthContextValue => ({
+      user,
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+    })
+    const tree = (value: AuthContextValue) => (
+      <AuthContext value={value}>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </AuthContext>
+    )
+    const userA = { id: 1, name: "Ana", email: "ana@escuela.test", roles: ["psychopedagogue" as Role] }
+    const userB = { id: 2, name: "Bruno", email: "bruno@escuela.test", roles: ["teacher" as Role] }
+
+    const { rerender } = render(tree(auth(userA)))
+    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 3 avisos sin leer" })).toBeInTheDocument()
+
+    // A navigates (a refresh starts and hangs), logs out, then B logs in.
+    await userEvent.click(screen.getByRole("link", { name: "Alumnos" }))
+    rerender(tree(auth(null)))
+    rerender(tree(auth(userB)))
+    expect(screen.getByRole("link", { name: "Alertas y seguimientos" })).toBeInTheDocument()
+
+    // A's late answer must not show up for B.
+    await act(async () => releaseA(7))
+    expect(screen.getByText("Bruno")).toBeInTheDocument()
+    expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
   })
 
   it("shows the help and suggestions link to every role", () => {

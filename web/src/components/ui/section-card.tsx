@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 interface SectionCardProps {
   /** Rendered as an <h2> so the page keeps a real heading outline. */
   title: ReactNode
-  /** Right-aligned action for the section (e.g. "Nueva adaptación"). */
+  /** Right-aligned action for the section (e.g. "Nuevo ajuste"). */
   action?: ReactNode
   children: ReactNode
   className?: string

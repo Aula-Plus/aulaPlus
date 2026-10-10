@@ -61,7 +61,7 @@ describe("GroupAccommodationsSummary", () => {
 
     renderAs("teacher")
 
-    expect(await screen.findByText("La clase no tiene ajustes activos.")).toBeInTheDocument()
+    expect(await screen.findByText("El grupo no tiene ajustes activos.")).toBeInTheDocument()
     expect(screen.queryByRole("table")).not.toBeInTheDocument()
   })
 })

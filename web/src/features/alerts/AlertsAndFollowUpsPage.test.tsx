@@ -12,6 +12,7 @@ describe("AlertsAndFollowUpsPage", () => {
     vi.spyOn(alertsApi, "fetchMyAlerts").mockResolvedValue([])
     vi.spyOn(scheduledFollowUpsApi, "fetchMyFollowUps").mockResolvedValue([])
     vi.spyOn(scheduledFollowUpsApi, "fetchNotifications").mockResolvedValue([])
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(0)
 
     render(
       <MemoryRouter>

@@ -42,7 +42,7 @@ describe("GroupOverdueFollowUps", () => {
 
     renderPanel()
 
-    await screen.findByText("No hay seguimientos vencidos.")
+    await screen.findByText("No hay seguimientos sin resolver.")
     expect(spy).toHaveBeenCalledWith(1, true)
   })
 
@@ -67,6 +67,6 @@ describe("GroupOverdueFollowUps", () => {
 
     renderPanel()
 
-    expect(await screen.findByText("No hay seguimientos vencidos.")).toBeInTheDocument()
+    expect(await screen.findByText("No hay seguimientos sin resolver.")).toBeInTheDocument()
   })
 })

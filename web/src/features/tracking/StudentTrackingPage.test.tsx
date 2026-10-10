@@ -298,11 +298,11 @@ describe("StudentTrackingPage", () => {
     await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
-    await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
+    await userEvent.click(screen.getByRole("button", { name: /ver ajustes vinculados/i }))
     expect(fetchLinks).toHaveBeenCalledWith(55)
-    await screen.findByText(/todavía no hay adaptaciones vinculadas/i)
+    await screen.findByText(/todavía no hay ajustes vinculados/i)
 
-    await userEvent.click(screen.getByLabelText(/vincular adaptación existente/i))
+    await userEvent.click(screen.getByLabelText(/vincular ajuste existente/i))
     await userEvent.click(await screen.findByRole("button", { name: /tiempo extra/i }))
     await userEvent.click(screen.getByRole("button", { name: /^vincular$/i }))
     expect(linkApi).toHaveBeenCalledWith(55, 91)
@@ -328,7 +328,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(trackingApi, "fetchBarrierAccommodations").mockResolvedValue([
       {
         id: 91,
-        type: "Adaptación X",
+        type: "Ajuste X",
         description: null,
         focus_area: null,
         proposed_by_id: 7,
@@ -341,8 +341,8 @@ describe("StudentTrackingPage", () => {
     await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
-    await userEvent.click(screen.getByRole("button", { name: /ver adaptaciones vinculadas/i }))
-    const panel = await screen.findByText("Adaptación X")
+    await userEvent.click(screen.getByRole("button", { name: /ver ajustes vinculados/i }))
+    const panel = await screen.findByText("Ajuste X")
     // The "Pendiente" badge should be there, but NOT a Validar button.
     expect(within(panel.closest("li") as HTMLElement).getByText(/pendiente/i)).toBeInTheDocument()
     expect(
@@ -371,7 +371,7 @@ describe("StudentTrackingPage", () => {
     await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
-    await userEvent.click(screen.getByRole("button", { name: /nueva adaptación/i }))
+    await userEvent.click(screen.getByRole("button", { name: /nuevo ajuste/i }))
 
     // Fill everything except the category, then try to save.
     await userEvent.type(screen.getByLabelText(/^tipo$/i), "Lectura en voz alta")
@@ -399,7 +399,7 @@ describe("StudentTrackingPage", () => {
     })
   })
 
-  it("hides 'Nueva adaptación' and 'Editar' from a viewer without clinical access", async () => {
+  it("hides 'Nuevo ajuste' and 'Editar' from a viewer without clinical access", async () => {
     // A teacher's payload omits the accommodations array entirely — the whole
     // section (and its manage buttons) never renders.
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
@@ -409,7 +409,7 @@ describe("StudentTrackingPage", () => {
     await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
-    expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /nuevo ajuste/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument()
   })
 
@@ -581,7 +581,7 @@ describe("StudentTrackingPage", () => {
 
     expect(await screen.findAllByRole("tab")).toHaveLength(6)
     expect(screen.getByText("Buena comprensión oral.")).toBeInTheDocument()
-    // The old big "Adaptaciones vigentes"/"Barreras activas" stat cards are gone.
+    // The old big "Ajustes vigentes"/"Barreras activas" stat cards are gone.
     expect(screen.queryByText("Barreras activas")).not.toBeInTheDocument()
     // A teacher cannot edit the summary.
     expect(screen.queryByRole("button", { name: /editar resumen/i })).not.toBeInTheDocument()
@@ -590,7 +590,7 @@ describe("StudentTrackingPage", () => {
     expect(screen.getByRole("tab", { name: "Ajustes" })).toHaveAttribute("aria-selected", "true")
     // Read-only list of names, no clinical controls.
     expect(screen.getByText("Tiempo extendido 25%")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /nueva adaptación/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /nuevo ajuste/i })).not.toBeInTheDocument()
   })
 
   it("lets psychopedagogy write and confirm the team summary", async () => {
