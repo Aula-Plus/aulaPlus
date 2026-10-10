@@ -66,7 +66,11 @@ class StudentTrackingResource extends JsonResource
         $alerts = $openAlerts
             ->filter(fn ($alert) => $alert->isVisibleTo($user))
             ->values()
-            ->load(AlertResource::RELATIONS);
+            ->load(AlertResource::RELATIONS)
+            // Just checked: spare AlertResource's `can` flags re-running the
+            // visibility query per alert. These are fresh instances hydrated
+            // per request, so the mark never outlives it.
+            ->each(fn ($alert) => $alert->markVisibleTo($user));
         // Same rule as Alert::scopeCountableFor(): legacy alerts are still
         // counted for everyone, new ones only once they reach this viewer.
         $openAlertsCount = $openAlerts
