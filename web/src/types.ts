@@ -604,7 +604,10 @@ export type SupportMessageKind = "issue" | "improvement"
 export interface SupportMessageInput {
   kind: SupportMessageKind
   message: string
+  /** Route path of the originating screen, e.g. "/alumnos/3/seguimiento". */
   screen?: string | null
+  /** Generic name of that screen for the email, e.g. "Perfil del alumno". Never PII. */
+  screen_name?: string | null
 }
 
 /** One weekly bucket of the adoption dashboard time series (Monday-start). */
