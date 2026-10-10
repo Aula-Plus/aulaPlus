@@ -21,8 +21,11 @@ class StoreSupportMessageRequest extends FormRequest
         return [
             'kind' => ['required', Rule::in(SupportMessage::kinds())],
             'message' => ['required', 'string', 'min:5', 'max:3000'],
-            // Free label of the screen the user was on (route path or title).
+            // Route path of the screen the user was on (stored).
             'screen' => ['nullable', 'string', 'max:255'],
+            // Generic name of that screen ("Perfil del alumno"), only used to
+            // make the notification email readable; not stored.
+            'screen_name' => ['nullable', 'string', 'max:100'],
         ];
     }
 }
