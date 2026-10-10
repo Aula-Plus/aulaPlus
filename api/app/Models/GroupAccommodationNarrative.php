@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'content',
     'fingerprint',
     'error_message',
+    'flagged_types',
     'generated_by_id',
     'published_by_id',
     'published_at',
@@ -34,6 +35,7 @@ class GroupAccommodationNarrative extends Model
         return [
             'status' => AccommodationNarrativeStatus::class,
             'published_at' => 'datetime',
+            'flagged_types' => 'array',
         ];
     }
 

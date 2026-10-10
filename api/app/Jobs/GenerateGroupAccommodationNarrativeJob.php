@@ -5,7 +5,7 @@ namespace App\Jobs;
 use App\Actions\Groups\BuildGroupAccommodationSummary;
 use App\Enums\AccommodationNarrativeStatus;
 use App\Models\GroupAccommodationNarrative;
-use App\Models\Student;
+use App\Support\StudentNameMatcher;
 use App\Support\Tenancy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,7 +15,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -24,11 +23,19 @@ use Throwable;
  *
  * The model only receives the aggregated accommodations (type, category,
  * number of students) — never a name or id of a student (CLAUDE.md rule 11).
- * `type` is free text typed by staff, so the outgoing prompt is checked too:
- * if it contains a student's name nothing is sent. The answer is checked
- * again before being stored: if it names any student of the school it is
- * discarded. Logs carry only the narrative id, never the context
- * or the text (rules 2 and 11).
+ * `type` is free text typed by staff, so each one is checked before sending:
+ * if any names a student of the group (even a single name part) nothing is
+ * sent, and the offending types are stored redacted so the UI can say which
+ * one to fix. The answer is checked again before being stored and discarded
+ * if it contains a student's full name — the model never saw a name, so a
+ * single common word ("de forma clara") is not treated as one. Logs carry
+ * only the narrative id, never the context or the text (rules 2 and 11).
+ *
+ * Timing: one attempt only ($tries = 1; the HTTP client already retries).
+ * The HTTP budget (2 × 30 s + 1 s backoff) fits in $timeout, which in turn
+ * stays below the queue's `retry_after` (90 s, config/queue.php), so a slow
+ * run is never handed to a second worker while the first is still calling
+ * the API. On timeout the job fails and failed() records the error.
  */
 class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
 {
@@ -38,11 +45,11 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
 
     protected const ANTHROPIC_VERSION = '2023-06-01';
 
-    protected const MAX_HTTP_ATTEMPTS = 3;
+    protected const MAX_HTTP_ATTEMPTS = 2;
 
     protected const RETRY_BACKOFF_MS = 1000;
 
-    protected const HTTP_TIMEOUT_SECONDS = 60;
+    protected const HTTP_TIMEOUT_SECONDS = 30;
 
     protected const MAX_TOKENS = 1024;
 
@@ -51,17 +58,25 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
 
     public const ERROR_NO_ACCOMMODATIONS = 'The group has no active accommodations.';
 
-    /** Name fragments too generic to prove a student is being named. */
-    protected const NAME_STOPWORDS = ['del', 'las', 'los', 'van', 'von', 'dos', 'san', 'que'];
+    /** Never retried by the queue: a retry would pay for a second AI call. */
+    public int $tries = 1;
 
-    /** Lower-cased name parts of the school's students, loaded once per run. */
-    protected ?array $studentNameParts = null;
+    /** Seconds; above the HTTP budget, below the queue's `retry_after` (90). */
+    public int $timeout = 75;
+
+    public bool $failOnTimeout = true;
 
     public function __construct(public GroupAccommodationNarrative $narrative) {}
 
     public function handle(BuildGroupAccommodationSummary $summarize): void
     {
         Tenancy::forSchool($this->narrative->school_id, function () use ($summarize): void {
+            // A pending row given up as stale (and replaced by a newer
+            // generation) must not still reach the AI if a worker picks it up late.
+            if ($this->narrative->refresh()->status !== AccommodationNarrativeStatus::Pending) {
+                return;
+            }
+
             $group = $this->narrative->group;
             $summary = $summarize($group);
 
@@ -73,15 +88,28 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
                 return;
             }
 
-            $prompt = $this->userPrompt($group->name, $summary);
+            $names = StudentNameMatcher::forGroup($group);
 
             // Free-text accommodation types could carry a name: never let it
-            // reach the third-party API (rule 11).
-            if ($this->namesAStudent($prompt)) {
-                $this->markError(self::ERROR_NAME_IN_DATA);
+            // reach the third-party API (rule 11). Each type is checked on its
+            // own so the UI can point at the one to fix (stored redacted).
+            $flagged = collect($summary)
+                ->pluck('type')
+                ->filter(fn (string $type): bool => $names->containsAnyName($type))
+                ->map(fn (string $type): string => $names->redact($type))
+                ->values()
+                ->all();
+
+            if ($flagged !== []) {
+                $this->markError(self::ERROR_NAME_IN_DATA, $flagged);
 
                 return;
             }
+
+            // The group name is not a student's: only a full name is a red
+            // flag there ("San José" with a student José is fine). If it does
+            // carry one, the group name is simply left out of the prompt.
+            $prompt = $this->userPrompt($names->containsFullName($group->name) ? null : $group->name, $summary);
 
             try {
                 $response = Http::withHeaders([
@@ -117,9 +145,14 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
                 return;
             }
 
-            if ($this->namesAStudent($text)) {
+            if ($names->containsFullName($text)) {
                 $this->markError('AI response named a student and was discarded.');
 
+                return;
+            }
+
+            // Given up as stale while the AI was answering: keep it that way.
+            if ($this->narrative->fresh()?->status !== AccommodationNarrativeStatus::Pending) {
                 return;
             }
 
@@ -140,10 +173,17 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
      */
     public function failed(?Throwable $exception): void
     {
-        Tenancy::forSchool($this->narrative->school_id, fn () => $this->markError('Generation failed unexpectedly.'));
+        Tenancy::forSchool($this->narrative->school_id, function (): void {
+            if ($this->narrative->refresh()->status === AccommodationNarrativeStatus::Pending) {
+                $this->markError('Generation failed unexpectedly.');
+            }
+        });
     }
 
-    protected function markError(string $message): void
+    /**
+     * @param  list<string>|null  $flaggedTypes  redacted accommodation types that name a student
+     */
+    protected function markError(string $message, ?array $flaggedTypes = null): void
     {
         Log::warning('Group accommodation narrative generation failed', [
             'narrative_id' => $this->narrative->id,
@@ -153,44 +193,8 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
         $this->narrative->update([
             'status' => AccommodationNarrativeStatus::Error,
             'error_message' => $message,
+            'flagged_types' => $flaggedTypes,
         ]);
-    }
-
-    /**
-     * True when the text contains the full name or any name part (3+ letters)
-     * of a student of the school, as a whole word, ignoring case and accents
-     * ("Lucia" must still match "Lucía").
-     */
-    protected function namesAStudent(string $text): bool
-    {
-        $text = $this->normalize($text);
-
-        foreach ($this->studentNameParts() as $part) {
-            if (preg_match('/(?<!\pL)'.preg_quote($part, '/').'(?!\pL)/iu', $text) === 1) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @return list<string>
-     */
-    protected function studentNameParts(): array
-    {
-        return $this->studentNameParts ??= Student::query()->pluck('full_name')
-            ->flatMap(fn ($fullName) => preg_split('/\s+/u', $this->normalize(trim((string) $fullName))) ?: [])
-            ->filter(fn (string $part) => mb_strlen($part) >= 3 && ! in_array($part, self::NAME_STOPWORDS, true))
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    /** Lower-case and strip diacritics, so accent differences don't hide a name. */
-    protected function normalize(string $text): string
-    {
-        return mb_strtolower(Str::ascii($text));
     }
 
     protected function systemPrompt(): string
@@ -212,13 +216,15 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
     /**
      * @param  list<array<string, mixed>>  $summary
      */
-    protected function userPrompt(string $groupName, array $summary): string
+    protected function userPrompt(?string $groupName, array $summary): string
     {
         $lines = array_map(
             fn (array $entry): string => sprintf('%s, %s, %d alumnos', $entry['type'], $entry['category'] ?? 'sin categoría', $entry['student_count']),
             $summary,
         );
 
-        return "Grupo: {$groupName}\n\nAJUSTES ACTIVOS (ajuste, categoría, cantidad de alumnos):\n".implode("\n", $lines);
+        $header = $groupName !== null ? "Grupo: {$groupName}\n\n" : '';
+
+        return $header."AJUSTES ACTIVOS (ajuste, categoría, cantidad de alumnos):\n".implode("\n", $lines);
     }
 }
