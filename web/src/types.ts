@@ -469,7 +469,25 @@ export interface GroupPerformanceTimeline {
   marks: GroupPerformanceMark[]
 }
 
-export interface Accommodation {
+/** A subject an accommodation is restricted to (`AccommodationSubjectResource`). */
+export interface AccommodationSubjectRef {
+  id: number
+  name: string
+}
+
+/**
+ * Where and since when an accommodation applies (ClickUp 86e3dpbwy follow-up):
+ *   - `starts_on`: ISO date (`YYYY-MM-DD`) it is in force from.
+ *   - `subjects`: the subjects it is restricted to; empty = every subject.
+ *   - `assessment_types`: the assessment types it is restricted to; null = every type.
+ */
+export interface AccommodationScope {
+  starts_on: string | null
+  subjects: AccommodationSubjectRef[]
+  assessment_types: AssessmentType[] | null
+}
+
+export interface Accommodation extends AccommodationScope {
   id: number
   student_id: number
   type: string
@@ -512,6 +530,12 @@ export interface AccommodationInput {
   category: AccommodationCategory
   requires_external_approval: boolean
   active: boolean
+  /** ISO date (`YYYY-MM-DD`); required by the backend. */
+  starts_on: string
+  /** Empty = a general accommodation (every subject). */
+  subject_ids: number[]
+  /** Empty = every assessment type (stored as null). */
+  assessment_types: AssessmentType[]
 }
 
 export interface Barrier {
@@ -552,11 +576,19 @@ export interface SupportChip {
   label: string
 }
 
+/**
+ * An accommodation chip: the name plus since when and where it applies, so a
+ * teacher knows whether it applies in their class. The server only sends a
+ * teacher the general ones and those scoped to a subject they teach the
+ * student — never origin, validator or review date.
+ */
+export interface AccommodationChip extends SupportChip, AccommodationScope {}
+
 export interface StudentTracking {
   student: Student
   /** `null` until psychopedagogy writes and confirms it. */
   team_summary: TeamSummary | null
-  support_chips: { accommodations: SupportChip[]; barriers: SupportChip[] }
+  support_chips: { accommodations: AccommodationChip[]; barriers: SupportChip[] }
   recent_assessments: AssessmentSummary[]
   /** Mean of every scored assessment, across subjects; null when there are none. */
   overall_average: number | null

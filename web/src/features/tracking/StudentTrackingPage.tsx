@@ -29,6 +29,7 @@ import {
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
+import { describeAccommodationScope } from "./accommodationScope"
 import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
@@ -363,6 +364,9 @@ export function StudentTrackingPage() {
                             {accommodation.description && (
                               <p className="text-muted-foreground">{accommodation.description}</p>
                             )}
+                            <p className="text-muted-foreground">
+                              {capitalize(describeAccommodationScope(accommodation))}
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <AccommodationStatusBadge accommodation={accommodation} />
@@ -582,6 +586,10 @@ function OverallAverageBadge({ value }: { value: number | null }) {
   )
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between border-b py-1 last:border-b-0">
@@ -592,8 +600,11 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * What a viewer without clinical-profile access sees in "Ajustes": the names of
- * the supports to apply, nothing else (the server sends no detail).
+ * What a viewer without clinical-profile access sees in "Ajustes": each support
+ * to apply with since when and where it applies — «Ortografía no puntúa — desde
+ * el 02/04 — en Idioma Español y Literatura». The server only sends a teacher
+ * the general accommodations and those scoped to a subject they teach the
+ * student, and never their origin, validator or review date.
  */
 function SupportsReadOnly({ chips }: { chips: StudentTracking["support_chips"] }) {
   return (
@@ -605,7 +616,8 @@ function SupportsReadOnly({ chips }: { chips: StudentTracking["support_chips"] }
           <ul className="grid gap-2">
             {chips.accommodations.map((chip) => (
               <li key={chip.id} className="rounded-md border p-3 text-sm">
-                {chip.label}
+                <span className="font-medium">{chip.label}</span>
+                <span className="text-muted-foreground"> — {describeAccommodationScope(chip)}</span>
               </li>
             ))}
           </ul>

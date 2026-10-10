@@ -8,6 +8,7 @@ import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as trackingApi from "./trackingApi"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import * as performanceApi from "./performanceApi"
+import * as subjectsApi from "@/features/subjects/subjectsApi"
 import type { Accommodation, Role, StudentTracking } from "@/types"
 
 function baseTracking(): StudentTracking {
@@ -43,6 +44,9 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     student_id: 3,
     type: "Tiempo extra en evaluaciones",
     category: "access",
+    starts_on: "2026-03-15",
+    subjects: [],
+    assessment_types: null,
     active: true,
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
@@ -87,6 +91,10 @@ describe("StudentTrackingPage", () => {
     // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
+    vi.spyOn(subjectsApi, "fetchSubjects").mockResolvedValue([
+      { id: 4, name: "Matemática", short_code: null, color: null },
+      { id: 5, name: "Ciencias", short_code: null, color: null },
+    ])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -387,6 +395,14 @@ describe("StudentTrackingPage", () => {
     // Now choose a category and the write goes through with it.
     await userEvent.click(screen.getByLabelText(/categoría/i))
     await userEvent.click(await screen.findByRole("button", { name: "Contenido" }))
+
+    // Scope: since when, which subjects, which assessment types.
+    const startsOn = screen.getByLabelText(/vigente desde/i)
+    await userEvent.clear(startsOn)
+    await userEvent.type(startsOn, "2026-04-02")
+    await userEvent.click(screen.getByLabelText(/materias/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Matemática" }))
+    await userEvent.click(screen.getByRole("checkbox", { name: "Escrita" }))
     await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
@@ -396,6 +412,9 @@ describe("StudentTrackingPage", () => {
       category: "content",
       requires_external_approval: false,
       active: true,
+      starts_on: "2026-04-02",
+      subject_ids: [4],
+      assessment_types: ["written"],
     })
   })
 
@@ -571,7 +590,9 @@ describe("StudentTrackingPage", () => {
       confirmed_at: "2026-09-01T10:00:00+00:00",
     }
     tracking.support_chips = {
-      accommodations: [{ id: 1, label: "Tiempo extendido 25%" }],
+      accommodations: [
+        { id: 1, label: "Tiempo extendido 25%", starts_on: null, subjects: [], assessment_types: null },
+      ],
       barriers: [{ id: 2, label: "Lectura de textos largos" }],
     }
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
@@ -620,5 +641,74 @@ describe("StudentTrackingPage", () => {
       adjustments: "Ajusta",
     })
     expect(await screen.findByText("Cuesta")).toBeInTheDocument()
+  })
+
+  // ── ClickUp 86e3dpbwy follow-up: since when and where each support applies ─
+
+  it("shows a teacher each accommodation with since when and in which subjects it applies", async () => {
+    const tracking = baseTracking()
+    const year = new Date().getFullYear()
+    tracking.support_chips = {
+      accommodations: [
+        {
+          id: 1,
+          label: "Ortografía no puntúa",
+          starts_on: `${year}-04-02`,
+          subjects: [
+            { id: 7, name: "Idioma Español" },
+            { id: 8, name: "Literatura" },
+          ],
+          assessment_types: null,
+        },
+        {
+          id: 2,
+          label: "Sentarla cerca del pizarrón",
+          starts_on: "2025-03-15",
+          subjects: [],
+          assessment_types: null,
+        },
+        {
+          id: 3,
+          label: "Calculadora",
+          starts_on: `${year}-05-04`,
+          subjects: [{ id: 4, name: "Matemática" }],
+          assessment_types: ["written", "oral"],
+        },
+      ],
+      barriers: [],
+    }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    const items = within(await screen.findByRole("list")).getAllByRole("listitem")
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Ortografía no puntúa — desde el 02/04 — en Idioma Español y Literatura",
+      "Sentarla cerca del pizarrón — desde el 15/03/2025 — en todas las materias",
+      "Calculadora — desde el 04/05 — en Matemática — solo en escritos y orales",
+    ])
+    // Never the origin, validator or review date (the server doesn't send them).
+    expect(screen.queryByText(/origen|validó|revisión/i)).not.toBeInTheDocument()
+  })
+
+  it("shows psychopedagogy the same scope on each accommodation of the full list", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [
+      pendingAccommodation({
+        requires_external_approval: false,
+        is_effective: true,
+        starts_on: "2024-04-02",
+        subjects: [{ id: 7, name: "Idioma Español" }],
+      }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("psychopedagogue")
+    await openTab("Ajustes")
+
+    expect(await screen.findByText("Desde el 02/04/2024 — en Idioma Español")).toBeInTheDocument()
   })
 })

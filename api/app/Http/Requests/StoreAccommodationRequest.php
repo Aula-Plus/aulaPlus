@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\AccommodationCategory;
+use App\Http\Requests\Concerns\ValidatesAccommodationScope;
 use App\Models\Accommodation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,10 +18,14 @@ use Illuminate\Validation\Rule;
  * Authorization reuses the existing AccommodationPolicy::create (role check
  * only) as the spec asks — it is deliberately NOT hardened further here. The
  * target {student} is resolved through the SchoolScope, so a student from
- * another tenant 404s before this runs.
+ * another tenant 404s before this runs. `starts_on` is required; subjects and
+ * assessment types are optional (absent = general) — see
+ * ValidatesAccommodationScope.
  */
 class StoreAccommodationRequest extends FormRequest
 {
+    use ValidatesAccommodationScope;
+
     public function authorize(): bool
     {
         return $this->user()->can('create', Accommodation::class);
@@ -39,6 +44,7 @@ class StoreAccommodationRequest extends FormRequest
             'active' => ['sometimes', 'boolean'],
             'requires_external_approval' => ['sometimes', 'boolean'],
             'llm_rule' => ['nullable', 'array'],
+            ...$this->accommodationScopeRules(creating: true),
         ];
     }
 }

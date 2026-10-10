@@ -5,17 +5,36 @@ import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { fetchSubjects } from "@/features/subjects/subjectsApi"
 import {
   accommodationCategoryLabels,
+  assessmentTypeLabels,
   type Accommodation,
   type AccommodationCategory,
+  type AssessmentType,
+  type Subject,
 } from "@/types"
 import * as trackingApi from "./trackingApi"
 
 const CATEGORY_VALUES: readonly AccommodationCategory[] = ["access", "content", "criteria"]
+const ASSESSMENT_TYPE_VALUES = [
+  "written",
+  "assignment",
+  "project",
+  "oral",
+  "submission",
+] as const satisfies readonly AssessmentType[]
+
+/** Today as a local `YYYY-MM-DD` (not UTC: late evening in UTC-3 is already tomorrow in UTC). */
+function todayIso(): string {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
 
 const accommodationSchema = z.object({
   type: z.string().min(1, "Ingresá un tipo"),
@@ -31,6 +50,11 @@ const accommodationSchema = z.object({
     ),
   requires_external_approval: z.boolean(),
   active: z.boolean(),
+  starts_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Elegí desde cuándo rige"),
+  // Empty = a general accommodation (every subject).
+  subject_ids: z.array(z.number()),
+  // Empty = every assessment type.
+  assessment_types: z.array(z.enum(ASSESSMENT_TYPE_VALUES)),
 })
 
 type AccommodationValues = z.infer<typeof accommodationSchema>
@@ -52,6 +76,11 @@ interface AccommodationFormDialogProps {
  * + Zod). `category` is required; `active` is only offered when editing (a brand
  * new accommodation is never created already-inactive).
  *
+ * Scope (ClickUp 86e3dpbwy follow-up): «Vigente desde» (defaults to today),
+ * the subjects it is restricted to (none = every subject — the server then
+ * shows it to every teacher of the student; otherwise only to the teachers of
+ * those subjects) and the assessment types (none = every type).
+ *
  * On save it calls `onSaved()` and closes — the parent refetches the whole
  * tracking aggregate, which is enough here: unlike the approve/reject of
  * Sesión 9, this writes a field that no other path changes, so it does not race
@@ -66,6 +95,7 @@ export function AccommodationFormDialog({
 }: AccommodationFormDialogProps) {
   const isEdit = Boolean(accommodation)
   const [formError, setFormError] = useState<string | null>(null)
+  const [subjects, setSubjects] = useState<Subject[]>([])
 
   const {
     register,
@@ -82,8 +112,18 @@ export function AccommodationFormDialog({
       category: "",
       requires_external_approval: false,
       active: true,
+      starts_on: todayIso(),
+      subject_ids: [],
+      assessment_types: [],
     },
   })
+
+  useEffect(() => {
+    if (!open) return
+    fetchSubjects()
+      .then(setSubjects)
+      .catch(() => setSubjects([]))
+  }, [open])
 
   // Reset the fields whenever the dialog (re)opens: to the edited row's values,
   // or back to blanks for a new accommodation.
@@ -97,6 +137,9 @@ export function AccommodationFormDialog({
       category: accommodation?.category ?? "",
       requires_external_approval: accommodation?.requires_external_approval ?? false,
       active: accommodation?.active ?? true,
+      starts_on: accommodation?.starts_on ?? todayIso(),
+      subject_ids: accommodation?.subjects.map((subject) => subject.id) ?? [],
+      assessment_types: accommodation?.assessment_types ?? [],
     })
   }, [open, accommodation, reset])
 
@@ -110,6 +153,9 @@ export function AccommodationFormDialog({
       requires_external_approval: values.requires_external_approval,
       // On create the checkbox isn't shown; a new accommodation is always active.
       active: isEdit ? values.active : true,
+      starts_on: values.starts_on,
+      subject_ids: values.subject_ids,
+      assessment_types: values.assessment_types,
     }
     try {
       if (accommodation) {
@@ -172,6 +218,64 @@ export function AccommodationFormDialog({
               <p className="text-sm text-destructive">{errors.category.message}</p>
             )}
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="accommodation-starts-on">Vigente desde</Label>
+            <Input id="accommodation-starts-on" type="date" {...register("starts_on")} />
+            {errors.starts_on && (
+              <p className="text-sm text-destructive">{errors.starts_on.message}</p>
+            )}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="accommodation-subjects">Materias</Label>
+            <Controller
+              name="subject_ids"
+              control={control}
+              render={({ field }) => (
+                <MultiSelect
+                  id="accommodation-subjects"
+                  options={subjects.map((subject) => ({ id: subject.id, label: subject.name }))}
+                  selected={field.value}
+                  onChange={field.onChange}
+                  placeholder="Todas las materias"
+                />
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              Sin materias elegidas, aplica en todas. Si elegís materias, solo lo ven los docentes
+              que le dan esas materias al alumno.
+            </p>
+          </div>
+          <fieldset className="grid gap-2">
+            <legend className="text-sm font-medium">Evaluaciones</legend>
+            <Controller
+              name="assessment_types"
+              control={control}
+              render={({ field }) => (
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  {ASSESSMENT_TYPE_VALUES.map((type) => (
+                    <label key={type} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="size-4"
+                        checked={field.value.includes(type)}
+                        onChange={(event) =>
+                          field.onChange(
+                            event.target.checked
+                              ? [...field.value, type]
+                              : field.value.filter((value) => value !== type),
+                          )
+                        }
+                      />
+                      {assessmentTypeLabels[type]}
+                    </label>
+                  ))}
+                </div>
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              Sin tipos marcados, aplica en todas las evaluaciones.
+            </p>
+          </fieldset>
           <div className="flex items-center gap-2">
             <input
               id="accommodation-requires-approval"
