@@ -110,6 +110,15 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
   return data.data
 }
 
+/**
+ * How many unread notices the caller has (the same set `fetchNotifications`
+ * lists). Feeds the count next to "Mis seguimientos" in the sidebar.
+ */
+export async function fetchUnreadNotificationCount(): Promise<number> {
+  const { data } = await api.get<{ data: { count: number } }>("/api/v1/notifications/unread-count")
+  return data.data.count
+}
+
 export async function markNotificationRead(id: string): Promise<void> {
   await api.post(`/api/v1/notifications/${id}/read`)
 }

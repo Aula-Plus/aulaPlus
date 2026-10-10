@@ -10,6 +10,7 @@ import { formatShortDate } from "@/lib/utils"
 import { roleLabels } from "@/types"
 import type { AppNotification, ScheduledFollowUp } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import { refreshUnreadNoticeCount } from "./unreadNotices"
 
 /**
  * "Mis seguimientos": the caller's pending follow-ups (responsible for, or
@@ -46,6 +47,8 @@ export function MyFollowUpsPage() {
     } catch {
       setError("No pudimos marcar el aviso como leído.")
     }
+    // Re-sync the sidebar count with the server (it disappears at 0).
+    void refreshUnreadNoticeCount()
   }
 
   // Notices carry ids only; the student's name comes from the pending list.
@@ -96,14 +99,14 @@ export function MyFollowUpsPage() {
                   {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
                   <p className="whitespace-pre-wrap">{followUp.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Vence: {formatShortDate(followUp.due_date)}
+                    Fecha prevista: {formatShortDate(followUp.due_date)}
                     {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
                   </p>
                   <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
                     Ver ficha del alumno
                   </Link>
                 </div>
-                {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
+                {followUp.is_overdue && <Badge tone="danger">Llegó a su fecha sin resolver</Badge>}
               </li>
             ))}
           </ul>

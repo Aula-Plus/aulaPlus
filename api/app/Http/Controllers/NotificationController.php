@@ -27,6 +27,20 @@ class NotificationController extends Controller
         return response()->json(['data' => $notifications]);
     }
 
+    /**
+     * How many unread notices the caller has — the same set `index` lists, so
+     * the sidebar count next to "Mis seguimientos" matches the notices shown
+     * there and drops as they are read. A cheap COUNT over the caller's own
+     * notifications only (the relation is keyed by the authenticated user, so
+     * another user's or another school's notices can never be counted).
+     */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        return response()->json([
+            'data' => ['count' => $request->user()->unreadNotifications()->count()],
+        ]);
+    }
+
     public function markRead(Request $request, string $notification): JsonResponse
     {
         $request->user()->unreadNotifications()->whereKey($notification)->firstOrFail()->markAsRead();

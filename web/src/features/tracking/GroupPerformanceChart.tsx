@@ -43,7 +43,7 @@ function defaultRange(): { from: string; to: string } {
 
 /**
  * The tooltip text for one aggregated mark: its label, its count and any
- * type-specific detail (spec §6, e.g. "Adaptaciones activadas: 2"). Every mark
+ * type-specific detail (spec §6, e.g. "Ajustes activados: 2"). Every mark
  * is a (type, date) aggregate — none carries a student identifier, so the
  * tooltip never can either.
  */

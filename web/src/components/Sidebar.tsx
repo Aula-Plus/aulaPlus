@@ -3,6 +3,11 @@ import { NavLink, useLocation } from "react-router-dom"
 import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { buildNavSections } from "@/components/nav-items"
+import {
+  refreshUnreadNoticeCount,
+  resetUnreadNoticeCount,
+  useUnreadNoticeCount,
+} from "@/features/tracking/unreadNotices"
 import { roleLabels } from "@/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -30,6 +35,18 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  const { user } = useAuth()
+  const userId = user?.id
+
+  // Keep the unread-notice count fresh: on login and on every navigation (no
+  // polling). Reading a notice refreshes it too (see MyFollowUpsPage).
+  useEffect(() => {
+    if (userId === undefined) {
+      resetUnreadNoticeCount()
+      return
+    }
+    void refreshUnreadNoticeCount()
+  }, [userId, location.pathname])
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -119,7 +136,8 @@ interface SidebarContentProps {
 function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: SidebarContentProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const sections = buildNavSections(user)
+  const unreadNotices = useUnreadNoticeCount()
+  const sections = buildNavSections(user, { unreadNotices })
 
   return (
     <div className="flex h-full flex-col">
@@ -162,13 +180,15 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
             )}
             {section.items.map((item) => {
               const Icon = item.icon
+              const badge = item.badge && item.badge > 0 ? item.badge : null
+              const badgeText = badge === null ? "" : badge === 1 ? "1 aviso sin leer" : `${badge} avisos sin leer`
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.end}
                   state={item.passFrom ? { from: location.pathname } : undefined}
-                  title={collapsed ? item.label : undefined}
+                  title={collapsed ? (badge === null ? item.label : `${item.label} (${badge})`) : undefined}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center gap-3 rounded-md px-2 py-2 text-sm font-semibold transition-colors",
@@ -179,8 +199,26 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                     )
                   }
                 >
-                  <Icon className="size-5 shrink-0" aria-hidden="true" />
-                  {!collapsed && <span>{item.label}</span>}
+                  <span className="relative shrink-0">
+                    <Icon className="size-5" aria-hidden="true" />
+                    {badge !== null && collapsed && (
+                      // Collapsed: a dot on the icon; the number is in the title.
+                      <span
+                        className="absolute -top-1 -right-1 size-2.5 rounded-full bg-nav-accent"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                  {!collapsed && <span className="flex-1">{item.label}</span>}
+                  {badge !== null && !collapsed && (
+                    <span
+                      className="min-w-5 rounded-full bg-nav-accent px-1.5 text-center text-xs leading-5 font-bold text-nav-background"
+                      aria-hidden="true"
+                    >
+                      {badge}
+                    </span>
+                  )}
+                  {badge !== null && <span className="sr-only">{`, ${badgeText}`}</span>}
                 </NavLink>
               )
             })}

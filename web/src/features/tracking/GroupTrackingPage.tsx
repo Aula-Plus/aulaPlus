@@ -72,7 +72,7 @@ export function GroupTrackingPage() {
     <div className="grid gap-6">
       <PageHeader
         backTo="/clases"
-        backLabel="Volver a clases"
+        backLabel="Volver a grupos"
         title={`Perfil del grupo — ${group.name}`}
         description={`Tendencia de los últimos ${trend.period_days} días`}
       >

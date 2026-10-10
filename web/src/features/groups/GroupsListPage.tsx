@@ -87,7 +87,7 @@ export function GroupsListPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Clases">
+      <PageHeader title="Grupos">
         {canManage && (
           <Button asChild>
             <Link to="/clases/nueva">Nueva clase</Link>

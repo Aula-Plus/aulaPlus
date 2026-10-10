@@ -1,9 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Sidebar } from "./Sidebar"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
+import * as scheduledFollowUpsApi from "@/features/tracking/scheduledFollowUpsApi"
+import { resetUnreadNoticeCount } from "@/features/tracking/unreadNotices"
 import type { Role } from "@/types"
 
 function renderSidebar(role: Role = "director", logout = vi.fn()) {
@@ -27,10 +29,13 @@ function renderSidebar(role: Role = "director", logout = vi.fn()) {
 
 beforeEach(() => {
   localStorage.clear()
+  resetUnreadNoticeCount()
+  vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(0)
 })
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 describe("Sidebar", () => {
@@ -38,8 +43,36 @@ describe("Sidebar", () => {
     renderSidebar()
 
     expect(screen.getByRole("link", { name: "Inicio" })).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "Clases" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Grupos" })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Alumnos" })).toBeInTheDocument()
+  })
+
+  it("lists Grupos and Alumnos directly, without a 'Seguimiento' section heading", () => {
+    renderSidebar()
+
+    expect(screen.getByRole("link", { name: "Grupos" })).toHaveAttribute("href", "/clases")
+    expect(screen.getByRole("link", { name: "Alumnos" })).toHaveAttribute("href", "/alumnos")
+    expect(screen.queryByRole("heading", { name: /seguimiento/i })).not.toBeInTheDocument()
+  })
+
+  it("shows the unread notice count next to 'Mis seguimientos'", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(2)
+    renderSidebar("psychopedagogue")
+
+    expect(
+      await screen.findByRole("link", { name: "Mis seguimientos, 2 avisos sin leer" }),
+    ).toHaveAttribute("href", "/mis-seguimientos")
+  })
+
+  it("shows no count next to 'Mis seguimientos' when every notice is read", async () => {
+    const fetchCount = vi
+      .spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount")
+      .mockResolvedValue(0)
+    renderSidebar("psychopedagogue")
+
+    await waitFor(() => expect(fetchCount).toHaveBeenCalled())
+    expect(screen.getByRole("link", { name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
   })
 
   it("shows the help and suggestions link to every role", () => {
