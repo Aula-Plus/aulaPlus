@@ -194,12 +194,19 @@ class Alert extends Model
     }
 
     /**
-     * Whether the user may leave a note in the alert's thread: the same people
-     * who may move it (both co-responsible, once it is shared).
+     * Whether the user may leave a note in the alert's thread: only whoever is
+     * in charge of it — the person responsible or a co-responsible — so only
+     * once a way out was chosen. Before that the alert reaches people but
+     * nobody has it yet; the first step is choosing a way out (which takes
+     * its own note). Never on a closed or an escalated alert.
      */
     public function canBeNotedBy(User $user): bool
     {
-        return $this->canBeActedOnBy($user);
+        return ! $this->resolved
+            && $this->type !== AlertType::EscalatedOverdue
+            && $this->outcome !== null
+            && $this->isInChargeBy($user)
+            && $this->isVisibleTo($user);
     }
 
     /**

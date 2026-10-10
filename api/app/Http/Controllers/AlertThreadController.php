@@ -54,7 +54,8 @@ class AlertThreadController extends Controller
     }
 
     /**
-     * POST /api/v1/alerts/{alert}/notes — a note from whoever is in charge.
+     * POST /api/v1/alerts/{alert}/notes — a note from whoever is in charge
+     * (the person responsible or a co-responsible, once a way out was chosen).
      */
     public function note(StoreAlertNoteRequest $request, Alert $alert): AlertResource
     {

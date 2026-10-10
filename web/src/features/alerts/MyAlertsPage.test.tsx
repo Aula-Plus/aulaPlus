@@ -227,6 +227,16 @@ describe("MyAlertsPage", () => {
     expect(screen.queryByRole("button", { name: "Dejar una nota" })).not.toBeInTheDocument()
   })
 
+  it("offers no note before a way out was chosen: nobody has the alert yet", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      { ...newAlert, can: { act: true, share: false, note: false, resolve: false } },
+    ])
+    renderPage()
+
+    expect(await screen.findByRole("button", { name: "Me ocupo yo" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Dejar una nota" })).not.toBeInTheDocument()
+  })
+
   it("says so when there are no alerts", async () => {
     vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([])
     renderPage()

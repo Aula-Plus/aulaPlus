@@ -120,7 +120,12 @@ FormRequests `ChooseAlertOutcomeRequest` / `ShareAlertRequest`).
   roles que el colegio sume en la configuración (p. ej. dirección).
 - El hilo (`alert_actions.kind`: `outcome` / `share` / `note`) es operativo:
   qué se hizo con el caso, nunca un diagnóstico; las notas quedan fuera del
-  diff de auditoría.
+  diff de auditoría. Solo deja notas quien la tiene a cargo (responsable o
+  co-responsable), así que no antes de elegir una salida, ni en una alerta
+  cerrada o escalada.
+- **Alumno dado de baja** (soft delete): su alerta no le llega a nadie nuevo
+  (sin candidatos; pasarla o compartirla da 422). Quien la tiene a cargo puede
+  igual tomarla, dejarla en observación, anotarla y cerrarla.
 
 ## Autenticación (SPA + Sanctum)
 
