@@ -564,6 +564,11 @@ export interface StudentTracking {
   by_subject: SubjectStat[]
   /** Scored instances the viewer may see (already filtered by the server), newest first. */
   grades: StudentGrade[]
+  /**
+   * True when `grades` was cut to the most recent ones (server limit: 100);
+   * `by_subject`/`overall_average` always cover every visible grade.
+   */
+  grades_truncated: boolean
   grades_view: GradesView
   accommodations?: Accommodation[]
   accommodations_count: number
@@ -933,7 +938,7 @@ export interface GradesView {
   mode: GradesVisibilityMode
   restricted: boolean
   own_subject_ids: number[]
-  /** Periodic mode: date of the last cutoff shown for other subjects. */
+  /** Periodic mode: other subjects show grades loaded before this day. */
   cutoff_at: string | null
 }
 

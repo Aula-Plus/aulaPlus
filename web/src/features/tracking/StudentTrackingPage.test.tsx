@@ -37,6 +37,7 @@ function baseTracking(): StudentTracking {
     grades: [
       { id: 1, assessment_id: 10, subject_id: 1, subject_name: "Matemática", type: "written", administered_at: "2026-08-01", score: 7 },
     ],
+    grades_truncated: false,
     grades_view: { mode: "own_subject", restricted: false, own_subject_ids: [], cutoff_at: null },
   }
 }
@@ -154,7 +155,21 @@ describe("StudentTrackingPage", () => {
     renderPage("teacher")
     await openTab("Evaluaciones")
 
-    expect(await screen.findByRole("note")).toHaveTextContent(/notas de otras materias al/i)
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      /notas de otras materias cargadas antes del corte del/i,
+    )
+  })
+
+  it("says when the grades list only shows the most recent ones", async () => {
+    const tracking = baseTracking()
+    tracking.grades_truncated = true
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Evaluaciones")
+
+    expect(await screen.findByText(/se muestran las 1 notas más recientes/i)).toBeInTheDocument()
   })
 
   it("shows an empty state for per-subject performance when there are no scores", async () => {

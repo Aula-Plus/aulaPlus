@@ -4,6 +4,8 @@ import type { GradesVisibilityMode, GradesVisibilitySettings } from "@/types"
 export interface GradesVisibilityInput {
   mode: GradesVisibilityMode
   cutoff_months?: number | null
+  /** YYYY-MM-DD; cutoffs fall every `cutoff_months` counted from it. */
+  cutoff_anchor?: string | null
 }
 
 export async function fetchGradesVisibility(): Promise<GradesVisibilitySettings> {

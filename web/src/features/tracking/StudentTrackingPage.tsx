@@ -475,12 +475,17 @@ export function StudentTrackingPage() {
                 </TableBody>
               </Table>
             )}
+            {tracking.grades_truncated && (
+              <p className="px-6 py-3 text-xs text-muted-foreground">
+                Se muestran las {tracking.grades.length} notas más recientes. Los promedios incluyen todas.
+              </p>
+            )}
           </SectionCard>
 
           {tracking.grades_view.restricted && (
             <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               {tracking.grades_view.mode === "all_periodic" && tracking.grades_view.cutoff_at
-                ? `Notas de otras materias al ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
+                ? `Notas de otras materias cargadas antes del corte del ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
                 : tracking.grades_view.mode === "all_periodic"
                   ? "Todavía no hay un corte: por ahora ves solo las notas de tu materia."
                   : "Ves solo las notas de las materias que dictás."}

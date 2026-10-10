@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
+import { formatShortDate } from "@/lib/utils"
 import type { GradesVisibilityMode, GradesVisibilitySettings } from "@/types"
 import * as gradesVisibilityApi from "./gradesVisibilityApi"
 
@@ -23,9 +24,16 @@ const OPTIONS: { mode: GradesVisibilityMode; label: string; help: string }[] = [
   {
     mode: "all_periodic",
     label: "Todas las materias, con corte periódico",
-    help: "Las notas de otras materias se ven como estaban en el último corte. Las de su materia siempre están al día.",
+    help: "De otras materias se ven las notas cargadas hasta el último corte (las correcciones posteriores de esas notas se reflejan). Las de su materia siempre están al día.",
   },
 ]
+
+/** Today as YYYY-MM-DD in the browser's local time (the `max` of the anchor). */
+function localToday(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
 
 /**
  * School-wide setting, route `/ajustes/notas`: how much of the grades in other
@@ -38,6 +46,8 @@ export function GradesVisibilityPage() {
   const [settings, setSettings] = useState<GradesVisibilitySettings | null>(null)
   const [mode, setMode] = useState<GradesVisibilityMode>("own_subject")
   const [months, setMonths] = useState("3")
+  // Empty = let the server keep the stored anchor (or use today the first time).
+  const [anchor, setAnchor] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -48,6 +58,7 @@ export function GradesVisibilityPage() {
         setSettings(data)
         setMode(data.mode)
         if (data.cutoff_months) setMonths(String(data.cutoff_months))
+        if (data.cutoff_anchor) setAnchor(data.cutoff_anchor)
       })
       .catch(() => setError("No pudimos cargar la configuración."))
   }, [])
@@ -56,14 +67,18 @@ export function GradesVisibilityPage() {
     setError(null)
     setSaved(false)
     try {
-      const next = await gradesVisibilityApi.updateGradesVisibility({
-        mode,
-        cutoff_months: mode === "all_periodic" ? Number(months) : null,
-      })
+      const next = await gradesVisibilityApi.updateGradesVisibility(
+        mode === "all_periodic"
+          ? { mode, cutoff_months: Number(months), cutoff_anchor: anchor || null }
+          : { mode },
+      )
       setSettings(next)
+      if (next.cutoff_anchor) setAnchor(next.cutoff_anchor)
       setSaved(true)
     } catch {
-      setError("No pudimos guardar. Revisá que el corte sea un número de meses entre 1 y 60.")
+      setError(
+        "No pudimos guardar. Revisá que el corte sea un número de meses entre 1 y 60 y que la fecha de inicio no sea futura.",
+      )
     }
   }
 
@@ -108,9 +123,21 @@ export function GradesVisibilityPage() {
               value={months}
               onChange={(event) => setMonths(event.target.value)}
             />
-            {settings?.last_cutoff_at && (
+            <Label htmlFor="cutoff-anchor">Contar los cortes desde</Label>
+            <Input
+              id="cutoff-anchor"
+              type="date"
+              min="2000-01-01"
+              max={localToday()}
+              value={anchor}
+              onChange={(event) => setAnchor(event.target.value)}
+            />
+            {!settings?.cutoff_anchor && (
+              <p className="text-xs text-muted-foreground">Si la dejás vacía, se cuenta desde hoy.</p>
+            )}
+            {settings?.mode === "all_periodic" && settings.last_cutoff_at && (
               <p className="text-xs text-muted-foreground">
-                Último corte: {settings.last_cutoff_at}
+                Último corte: {formatShortDate(settings.last_cutoff_at)}
               </p>
             )}
           </div>
