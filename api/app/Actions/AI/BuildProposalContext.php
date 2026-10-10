@@ -7,6 +7,7 @@ use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
+use Illuminate\Support\Collection;
 
 /**
  * Assembles the (dynamic) context that gets sent to the model for one
@@ -38,7 +39,7 @@ class BuildProposalContext
                 'profile' => $group->group_profile,
             ],
             'curricular_framework' => $this->curricularContext($group, $parameters),
-            'subject_program' => $this->subjectProgram($parameters),
+            'subject_program' => $this->subjectProgram($proposal, $parameters),
             'student_cohort_summary' => $this->cohortSummary($group),
             'target_student' => $this->targetStudent($parameters),
             'reference_example' => $this->referenceExample($proposal),
@@ -109,12 +110,15 @@ class BuildProposalContext
      * (its units/objectives subtree) and the school's PDF is no longer used;
      * until then, the text extracted from the program PDF the school uploaded
      * is sent as provisional context, so a teacher never plans without a
-     * program. A curriculum document — no student data.
+     * program. A curriculum document — no student data. The PDF text is only
+     * sent when the requesting user may open that PDF themselves
+     * (SubjectPolicy::viewSyllabus), so the assistant can't be used to read a
+     * program they have no access to.
      *
      * @param  array<string, mixed>  $parameters
      * @return array<string, mixed>|null
      */
-    protected function subjectProgram(array $parameters): ?array
+    protected function subjectProgram(AIProposal $proposal, array $parameters): ?array
     {
         $subject = isset($parameters['subject_id']) ? Subject::find($parameters['subject_id']) : null;
 
@@ -128,9 +132,7 @@ class BuildProposalContext
             return [
                 'source' => 'curricular_catalog',
                 'subject' => $subject->name,
-                'items' => collect([$item])
-                    ->concat($item->descendants())
-                    ->take(self::MAX_CURRICULAR_ITEMS)
+                'items' => $this->boundedSubtree($item)
                     ->map(fn (CurricularItem $node): array => [
                         'code' => $node->code,
                         'name' => $node->name,
@@ -142,7 +144,9 @@ class BuildProposalContext
             ];
         }
 
-        if ($subject->syllabus_text === null) {
+        $requester = $proposal->requestedBy;
+
+        if ($subject->syllabus_text === null || $requester === null || ! $requester->can('viewSyllabus', $subject)) {
             return null;
         }
 
@@ -151,6 +155,30 @@ class BuildProposalContext
             'subject' => $subject->name,
             'text' => mb_substr($subject->syllabus_text, 0, self::MAX_PROGRAM_TEXT_LENGTH),
         ];
+    }
+
+    /**
+     * $root and its descendants, level by level (units before their
+     * objectives), stopping at MAX_CURRICULAR_ITEMS — one query per level,
+     * never walking the rest of a large subtree.
+     *
+     * @return Collection<int, CurricularItem>
+     */
+    protected function boundedSubtree(CurricularItem $root): Collection
+    {
+        $items = collect([$root]);
+        $level = collect([$root]);
+
+        while ($level->isNotEmpty() && $items->count() < self::MAX_CURRICULAR_ITEMS) {
+            $level = CurricularItem::query()
+                ->whereIn('parent_id', $level->pluck('id'))
+                ->orderBy('id')
+                ->limit(self::MAX_CURRICULAR_ITEMS - $items->count())
+                ->get();
+            $items = $items->concat($level);
+        }
+
+        return $items->values();
     }
 
     /**
