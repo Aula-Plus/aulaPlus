@@ -8,11 +8,16 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\HtmlString;
 
 /**
  * Tells the Aula+ team about a new support/improvement message. Only the
  * message id (plus the generic screen name) is queued; the content is loaded
  * when the mail is built.
+ *
+ * Every line carries user-supplied text (message, screen, names), and Laravel
+ * runs mail lines through CommonMark: each line is passed through literal() so
+ * nobody can plant a link, image or heading in the team's inbox.
  */
 class SupportMessageNotification extends Notification implements ShouldQueue
 {
@@ -53,9 +58,29 @@ class SupportMessageNotification extends Notification implements ShouldQueue
 
         return (new MailMessage)
             ->subject("[Aula+] {$kind}")
-            ->line($message->message)
-            ->line("Desde: {$this->origin($message->screen)} — {$role} — {$message->school->name}")
-            ->line("Enviado por: {$message->user->name}");
+            ->line(self::literal($message->message))
+            ->line(self::literal("Desde: {$this->origin($message->screen)} — {$role} — {$message->school->name}"))
+            ->line(self::literal("Enviado por: {$message->user->name}"));
+    }
+
+    /**
+     * Encodes every ASCII punctuation character as a numeric HTML reference.
+     * CommonMark never reads a character reference as syntax, so the text
+     * renders literally (no links, images, HTML, emphasis…), and the plain-text
+     * part decodes the references back to what the user typed. Returned as
+     * HtmlString so Blade does not encode the references a second time.
+     *
+     * Laravel's Markdown::withSecuredEncoding() is not used: it only escapes
+     * "[", so "\[text](url)" still renders as a link, and it drops attribute
+     * escaping for every mail (e.g. action-button URLs).
+     */
+    private static function literal(string $text): HtmlString
+    {
+        return new HtmlString(preg_replace_callback(
+            '/[!-\/:-@\[-`{-~]/',
+            fn (array $match) => '&#'.ord($match[0]).';',
+            $text,
+        ));
     }
 
     /**

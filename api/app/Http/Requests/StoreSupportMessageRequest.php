@@ -24,8 +24,10 @@ class StoreSupportMessageRequest extends FormRequest
             // Route path of the screen the user was on (stored).
             'screen' => ['nullable', 'string', 'max:255'],
             // Generic name of that screen ("Perfil del alumno"), only used to
-            // make the notification email readable; not stored.
-            'screen_name' => ['nullable', 'string', 'max:100'],
+            // make the notification email readable; not stored. Plain words
+            // only (letters, digits, spaces, parentheses, hyphen, em dash), so
+            // it can never carry Markdown/HTML or a URL into that email.
+            'screen_name' => ['nullable', 'string', 'max:100', 'regex:/^[\pL\pN ()\-—]+$/u'],
         ];
     }
 }
