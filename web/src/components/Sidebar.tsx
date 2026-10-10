@@ -8,6 +8,7 @@ import {
   resetUnreadNoticeCount,
   useUnreadNoticeCount,
 } from "@/features/tracking/unreadNotices"
+import { NOTIFICATIONS_LIST_LIMIT } from "@/features/tracking/scheduledFollowUpsApi"
 import { roleLabels } from "@/types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -39,13 +40,15 @@ export function Sidebar() {
   const userId = user?.id
 
   // Keep the unread-notice count fresh: on login and on every navigation (no
-  // polling). Reading a notice refreshes it too (see MyFollowUpsPage).
+  // polling). Reading a notice refreshes it too (see MyFollowUpsPage). The
+  // store is keyed by user and drops stale responses, so after a logout/login
+  // in the same tab the new user never sees the previous user's count.
   useEffect(() => {
     if (userId === undefined) {
       resetUnreadNoticeCount()
       return
     }
-    void refreshUnreadNoticeCount()
+    void refreshUnreadNoticeCount(userId)
   }, [userId, location.pathname])
 
   // Close the mobile drawer whenever the route changes.
@@ -181,14 +184,26 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
             {section.items.map((item) => {
               const Icon = item.icon
               const badge = item.badge && item.badge > 0 ? item.badge : null
-              const badgeText = badge === null ? "" : badge === 1 ? "1 aviso sin leer" : `${badge} avisos sin leer`
+              // "Mis seguimientos" lists at most NOTIFICATIONS_LIST_LIMIT notices,
+              // so past that the count reads "50+" instead of a number the page
+              // cannot show in full.
+              const overLimit = badge !== null && badge > NOTIFICATIONS_LIST_LIMIT
+              const badgeLabel = overLimit ? `${NOTIFICATIONS_LIST_LIMIT}+` : String(badge)
+              const badgeText =
+                badge === null
+                  ? ""
+                  : overLimit
+                    ? `más de ${NOTIFICATIONS_LIST_LIMIT} avisos sin leer`
+                    : badge === 1
+                      ? "1 aviso sin leer"
+                      : `${badge} avisos sin leer`
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.end}
                   state={item.passFrom ? { from: location.pathname } : undefined}
-                  title={collapsed ? (badge === null ? item.label : `${item.label} (${badge})`) : undefined}
+                  title={collapsed ? (badge === null ? item.label : `${item.label} (${badgeLabel})`) : undefined}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center gap-3 rounded-md px-2 py-2 text-sm font-semibold transition-colors",
@@ -215,7 +230,7 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                       className="min-w-5 rounded-full bg-nav-accent px-1.5 text-center text-xs leading-5 font-bold text-nav-background"
                       aria-hidden="true"
                     >
-                      {badge}
+                      {badgeLabel}
                     </span>
                   )}
                   {badge !== null && <span className="sr-only">{`, ${badgeText}`}</span>}
