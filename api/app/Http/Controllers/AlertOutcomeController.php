@@ -9,6 +9,7 @@ use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\User;
 use App\Support\AlertCirculation;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,7 +37,16 @@ class AlertOutcomeController extends Controller
             ? (int) $request->validated('assignee_id')
             : $user->id;
 
-        DB::transaction(function () use ($request, $alert, $user, $outcome, $assigneeId): void {
+        $alert = DB::transaction(function () use ($request, $alert, $user, $outcome, $assigneeId): Alert {
+            // Lock the row (as sharing does) and work on what it holds now,
+            // so two simultaneous moves can't both act on a stale person in
+            // charge or a stale pair. Re-check under the lock: someone else
+            // may have just handed it off or closed it.
+            $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
+            if (! $alert->canBeActedOnBy($user)) {
+                throw new AuthorizationException;
+            }
+
             $previousAssigneeId = $alert->assignee_id;
             $actorWasCollaborator = $alert->collaborators()->whereKey($user->id)->exists();
 
@@ -76,6 +86,8 @@ class AlertOutcomeController extends Controller
                 'resolved_by_id' => $user->id,
                 'resolved_at' => now(),
             ]);
+
+            return $alert;
         });
 
         return new AlertResource($alert->fresh()->load(AlertResource::RELATIONS));
