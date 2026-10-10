@@ -253,3 +253,49 @@ it('includes the author name and role in the student comment list', function () 
         ->assertJsonPath('data.0.author.role', 'psychopedagogue')
         ->assertJsonMissingPath('data.0.author.email');
 });
+
+it('shows a teacher the author of a colleague\'s visible comment, but never restricted ones', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create(['name' => 'Ana Psico']);
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+
+    Comment::factory()->forSubject($student)->create([
+        'content' => 'Nota visible para todos',
+        'author_id' => $psychopedagogue->id,
+    ]);
+    Comment::factory()->forSubject($student)->visibleTo(['psychopedagogue'])->create([
+        'content' => 'Nota privada de psicopedagogía',
+        'author_id' => $psychopedagogue->id,
+    ]);
+    Comment::factory()->forSubject($student)->authorOnly()->create([
+        'content' => 'Nota solo para la autora',
+        'author_id' => $psychopedagogue->id,
+    ]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/students/{$student->id}/comments")
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.content', 'Nota visible para todos')
+        ->assertJsonPath('data.0.author.id', $psychopedagogue->id)
+        ->assertJsonPath('data.0.author.name', 'Ana Psico')
+        ->assertJsonPath('data.0.author.role', 'psychopedagogue');
+});
+
+it('does not include the author in group comments', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher);
+    Comment::factory()->forSubject($group)->create(['author_id' => $teacher->id]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/groups/{$group->id}/comments")
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonMissingPath('data.0.author');
+});
