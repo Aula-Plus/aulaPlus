@@ -16,7 +16,7 @@ import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
  * shared with them) plus the notices of follow-ups assigned to them. A notice
  * is read and dismissed — it is not an alert and asks for nothing.
  */
-export function MyFollowUpsPage() {
+export function MyFollowUpsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +55,14 @@ export function MyFollowUpsPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Mis seguimientos" description="Los seguimientos que tenés a cargo o que te compartieron." />
+      {embedded ? (
+        <div>
+          <h2 className="text-xl font-semibold">Mis seguimientos</h2>
+          <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
+        </div>
+      ) : (
+        <PageHeader title="Mis seguimientos" description="Los seguimientos que tenés a cargo o que te compartieron." />
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

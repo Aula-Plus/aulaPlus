@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react"
 import {
   BellRing,
   BookOpen,
-  CalendarClock,
   ClipboardList,
   GraduationCap,
   MessageSquare,
@@ -59,8 +58,7 @@ export function buildNavSections(user: User | null): NavSection[] {
         { to: "/clases", label: "Clases", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
         // The open alerts that reach the user, for every role (ClickUp 86e3jpzdp).
-        { to: "/alertas", label: "Alertas", icon: TriangleAlert },
-        { to: "/mis-seguimientos", label: "Mis seguimientos", icon: CalendarClock },
+        { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)

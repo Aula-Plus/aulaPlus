@@ -12,7 +12,6 @@ import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
-import { MyFollowUpsPage } from "@/features/tracking/MyFollowUpsPage"
 import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
 import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
@@ -22,7 +21,7 @@ import { SubjectsPage } from "@/features/subjects/SubjectsPage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
-import { MyAlertsPage } from "@/features/alerts/MyAlertsPage"
+import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
 
 function App() {
   return (
@@ -85,14 +84,8 @@ function App() {
               </ProtectedLayout>
             }
           />
-          <Route
-            path="/mis-seguimientos"
-            element={
-              <ProtectedLayout>
-                <MyFollowUpsPage />
-              </ProtectedLayout>
-            }
-          />
+          {/* «Mis seguimientos» is now part of «Alertas y seguimientos». */}
+          <Route path="/mis-seguimientos" element={<Navigate to="/alertas" replace />} />
           <Route
             path="/clases/:id/seguimiento"
             element={
@@ -148,7 +141,7 @@ function App() {
             path="/alertas"
             element={
               <ProtectedLayout>
-                <MyAlertsPage />
+                <AlertsAndFollowUpsPage />
               </ProtectedLayout>
             }
           />
