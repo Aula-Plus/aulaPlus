@@ -2,32 +2,45 @@
 
 use App\Actions\AI\BuildProposalContext;
 use App\Enums\AIProposalType;
+use App\Jobs\ExtractSubjectSyllabusText;
 use App\Models\AIProposal;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Subject;
 use App\Models\User;
+use App\Support\Pdf\BoundedPdfParser;
 use App\Support\Tenancy;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use Smalot\PdfParser\Config;
 
 // ClickUp 86e3dt6ag — "Agregar campo de programa curricular a la sección
 // Materias": an optional program PDF per subject, private, temporary URL only,
 // readable by the subject's teachers and psychopedagogy, and used as
 // provisional AI context until the subject is in the curricular catalog.
 
-/** A tiny but valid one-page PDF whose text layer reads $text. */
-function syllabusPdf(string $text): string
+/**
+ * A tiny but valid one-page PDF whose text layer reads $text — its content
+ * stream Flate-compressed when $compressed.
+ */
+function syllabusPdf(string $text, bool $compressed = false): string
 {
     $stream = "BT /F1 12 Tf 72 720 Td ({$text}) Tj ET";
+    $filter = '';
+    if ($compressed) {
+        $stream = gzcompress($stream);
+        $filter = ' /Filter /FlateDecode';
+    }
     $objects = [
         '<< /Type /Catalog /Pages 2 0 R >>',
         '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
         '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-        '<< /Length '.strlen($stream)." >>\nstream\n{$stream}\nendstream",
+        '<< /Length '.strlen($stream)."{$filter} >>\nstream\n{$stream}\nendstream",
         '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
     ];
 
@@ -49,8 +62,8 @@ function syllabusPdf(string $text): string
 }
 
 beforeEach(function () {
-    Storage::fake('local');
-    Storage::disk('local')->buildTemporaryUrlsUsing(
+    Storage::fake('syllabi');
+    Storage::disk('syllabi')->buildTemporaryUrlsUsing(
         fn (string $path, $expiration) => 'https://files.test/'.$path.'?expires='.$expiration->getTimestamp()
     );
 
@@ -80,12 +93,12 @@ it('lets direction upload the program PDF privately and extracts its text', func
     ($this->upload)()
         ->assertOk()
         ->assertJsonPath('data.syllabus.name', 'Programa Ayuda Social 2027.pdf')
-        ->assertJsonPath('data.syllabus.text_extracted', true)
+        ->assertJsonPath('data.syllabus.text_status', 'ready')
         ->assertJsonPath('data.in_catalog', false)
         ->assertJsonMissingPath('data.syllabus.path');
 
     $subject = $this->subject->fresh();
-    Storage::disk('local')->assertExists($subject->syllabus_path);
+    Storage::disk('syllabi')->assertExists($subject->syllabus_path);
     expect($subject->syllabus_path)->toStartWith("schools/{$this->school->id}/syllabi/")
         ->and($subject->syllabus_path)->not->toContain('Ayuda')
         ->and($subject->syllabus_text)->toContain('Proyecto comunitario');
@@ -99,13 +112,13 @@ it('replaces the previous PDF (one per subject) and can remove it', function () 
     ($this->upload)('', 'v2.pdf')->assertOk()->assertJsonPath('data.syllabus.name', 'v2.pdf');
     $second = $this->subject->fresh()->syllabus_path;
 
-    Storage::disk('local')->assertMissing($first);
-    Storage::disk('local')->assertExists($second);
+    Storage::disk('syllabi')->assertMissing($first);
+    Storage::disk('syllabi')->assertExists($second);
 
     $this->deleteJson("/api/v1/subjects/{$this->subject->id}/syllabus")
         ->assertOk()
         ->assertJsonPath('data.syllabus', null);
-    Storage::disk('local')->assertMissing($second);
+    Storage::disk('syllabi')->assertMissing($second);
     expect($this->subject->fresh()->syllabus_text)->toBeNull();
 });
 
@@ -129,7 +142,7 @@ it('keeps the file when its text cannot be extracted', function () {
 
     $this->post("/api/v1/subjects/{$this->subject->id}/syllabus", [
         'file' => UploadedFile::fake()->create('escaneado.pdf', 20, 'application/pdf'),
-    ], ['Accept' => 'application/json'])->assertOk()->assertJsonPath('data.syllabus.text_extracted', false);
+    ], ['Accept' => 'application/json'])->assertOk()->assertJsonPath('data.syllabus.text_status', 'failed');
 
     expect($this->subject->fresh()->syllabus_path)->not->toBeNull();
 });
@@ -137,7 +150,7 @@ it('keeps the file when its text cannot be extracted', function () {
 it('strips control characters such as NUL from the extracted text (PostgreSQL rejects them)', function () {
     Sanctum::actingAs($this->director);
 
-    ($this->upload)(syllabusPdf('Unidad\\000 uno'))->assertOk()->assertJsonPath('data.syllabus.text_extracted', true);
+    ($this->upload)(syllabusPdf('Unidad\\000 uno'))->assertOk()->assertJsonPath('data.syllabus.text_status', 'ready');
 
     $text = $this->subject->fresh()->syllabus_text;
     expect($text)->toContain('Unidad')
@@ -167,11 +180,13 @@ it('serves it through a temporary URL to direction, psychopedagogy and the subje
     }
 
     Sanctum::actingAs($this->teacher);
-    $this->getJson('/api/v1/subjects')->assertOk()->assertJsonPath('data.0.syllabus.can_view', true);
+    $canView = fn () => collect($this->getJson('/api/v1/subjects')->assertOk()->json('data'))
+        ->firstWhere('id', $this->subject->id)['syllabus']['can_view'];
+    expect($canView())->toBeTrue();
 
     Sanctum::actingAs($this->otherTeacher);
     $this->getJson("/api/v1/subjects/{$this->subject->id}/syllabus")->assertForbidden();
-    $this->getJson('/api/v1/subjects')->assertOk()->assertJsonPath('data.0.syllabus.can_view', false);
+    expect($canView())->toBeFalse();
 });
 
 it('returns 404 when the subject has no program, and isolates schools', function () {
@@ -214,4 +229,152 @@ it('sends the PDF text to the AI until the subject is in the catalog, then the c
     expect($program['source'])->toBe('curricular_catalog')
         ->and(collect($program['items'])->pluck('name')->all())->toBe(['Ayuda Social', 'Unidad: Comunidad'])
         ->and(json_encode($program))->not->toContain('Proyecto comunitario');
+});
+
+it('stores programs on the dedicated syllabi disk, not the default one', function () {
+    Storage::fake('local');
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertOk();
+
+    Storage::disk('syllabi')->assertExists($this->subject->fresh()->syllabus_path);
+    expect(Storage::disk('local')->allFiles())->toBe([]);
+});
+
+it('refuses uploads in production while the syllabi disk is the ephemeral local one', function () {
+    config(['filesystems.disks.syllabi.driver' => 'local']);
+    $this->app['env'] = 'production';
+    Log::shouldReceive('error')->once()->with('subject.syllabus.storage_not_durable', ['disk_driver' => 'local']);
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()
+        ->assertStatus(503)
+        ->assertJsonPath('message', fn (string $message) => str_contains($message, 'almacenamiento'));
+
+    expect(Storage::disk('syllabi')->allFiles())->toBe([])
+        ->and($this->subject->fresh()->syllabus_path)->toBeNull();
+});
+
+it('accepts uploads in production on a durable (s3) syllabi disk', function () {
+    config(['filesystems.disks.syllabi.driver' => 's3']);
+    $this->app['env'] = 'production';
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertOk();
+});
+
+it('answers text_status pending until the queued extraction runs, then ready', function () {
+    Queue::fake();
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertOk()->assertJsonPath('data.syllabus.text_status', 'pending');
+
+    $subject = $this->subject->fresh();
+    Queue::assertPushed(ExtractSubjectSyllabusText::class, fn ($job) => $job->path === $subject->syllabus_path);
+
+    (new ExtractSubjectSyllabusText($subject, $subject->syllabus_path))->handle();
+
+    $this->getJson("/api/v1/subjects/{$this->subject->id}")->assertJsonPath('data.syllabus.text_status', 'ready');
+});
+
+it('settles as failed, not pending forever, when the extraction job dies', function () {
+    Queue::fake();
+    Sanctum::actingAs($this->director);
+    ($this->upload)()->assertOk();
+    $subject = $this->subject->fresh();
+
+    (new ExtractSubjectSyllabusText($subject, $subject->syllabus_path))->failed(new RuntimeException('Timed out'));
+
+    $this->getJson("/api/v1/subjects/{$this->subject->id}")->assertJsonPath('data.syllabus.text_status', 'failed');
+});
+
+it('leaves a replaced program alone when a stale extraction job fails', function () {
+    Queue::fake();
+    Sanctum::actingAs($this->director);
+    ($this->upload)()->assertOk();
+    $stale = $this->subject->fresh()->syllabus_path;
+    ($this->upload)()->assertOk();
+
+    (new ExtractSubjectSyllabusText($this->subject->fresh(), $stale))->failed(null);
+
+    $this->getJson("/api/v1/subjects/{$this->subject->id}")->assertJsonPath('data.syllabus.text_status', 'pending');
+});
+
+it('caps the total bytes decoded for one PDF, across all its streams', function () {
+    $pdf = syllabusPdf('Unidad 1 Proyecto comunitario', compressed: true);
+    $config = new Config;
+    $config->setDecodeMemoryLimit(ExtractSubjectSyllabusText::MAX_DECODED_STREAM_BYTES);
+
+    $roomy = new BoundedPdfParser($config, 1024);
+    expect($roomy->parseContent($pdf)->getText())->toContain('Proyecto comunitario')
+        ->and($roomy->budgetExceeded())->toBeFalse();
+
+    $tight = new BoundedPdfParser($config, 10);
+    $text = $tight->parseContent($pdf)->getText();
+    expect($tight->budgetExceeded())->toBeTrue()
+        ->and($text)->not->toContain('Proyecto comunitario');
+});
+
+it('detects the PDF type from the file bytes, not from its name', function () {
+    Sanctum::actingAs($this->director);
+    $realFile = function (string $bytes): UploadedFile {
+        $path = tempnam(sys_get_temp_dir(), 'syllabus');
+        file_put_contents($path, $bytes);
+
+        return new UploadedFile($path, 'programa.pdf', 'application/pdf', null, true);
+    };
+
+    $this->post("/api/v1/subjects/{$this->subject->id}/syllabus", [
+        'file' => $realFile(syllabusPdf('Unidad 1')),
+    ], ['Accept' => 'application/json'])->assertOk();
+
+    $this->post("/api/v1/subjects/{$this->subject->id}/syllabus", [
+        'file' => $realFile("Nombre,Apellido\nAna,Pérez\n"),
+    ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('file');
+});
+
+it('deletes the uploaded file when saving the subject fails', function () {
+    Subject::saving(fn () => throw new RuntimeException('DB down'));
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertServerError();
+
+    expect(Storage::disk('syllabi')->allFiles())->toBe([]);
+});
+
+it('lists subjects without one teachers query per subject (can_view)', function () {
+    $listQueries = function (): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/subjects')->assertOk();
+
+        return count(DB::getQueryLog());
+    };
+    Sanctum::actingAs($this->teacher);
+    $this->subject->forceFill(['syllabus_path' => 'a.pdf'])->save();
+    $listQueries(); // warm up: auth + roles load once per user
+
+    $withOne = $listQueries();
+    Subject::factory()->count(4)->create(['school_id' => $this->school->id, 'syllabus_path' => 'b.pdf']);
+    $withFive = $listQueries();
+
+    expect($withFive)->toBe($withOne);
+    $canView = collect($this->getJson('/api/v1/subjects')->json('data'))->whereNotNull('syllabus')->pluck('syllabus.can_view', 'id');
+    expect($canView->pull($this->subject->id))->toBeTrue()
+        ->and($canView->unique()->values()->all())->toBe([false]);
+});
+
+it('keeps the PDF text out of the AI context when the requester cannot open the program', function () {
+    $this->subject->forceFill(['syllabus_path' => 'x.pdf', 'syllabus_text' => 'Unidad 1: Proyecto comunitario'])->save();
+    $proposalBy = fn (User $user) => AIProposal::factory()->create([
+        'group_id' => $this->group->id,
+        'requested_by_id' => $user->id,
+        'type' => AIProposalType::Unit,
+        'input_parameters' => ['subject_id' => $this->subject->id],
+    ]);
+    $build = fn (AIProposal $proposal) => Tenancy::forSchool($this->school, fn () => (new BuildProposalContext)($proposal));
+
+    expect($build($proposalBy($this->otherTeacher))['subject_program'])->toBeNull()
+        ->and($build($proposalBy($this->teacher))['subject_program']['source'])->toBe('school_program_pdf')
+        ->and($build($proposalBy($this->psychopedagogue))['subject_program']['source'])->toBe('school_program_pdf');
 });

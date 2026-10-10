@@ -60,7 +60,7 @@ class SubjectPolicy
         }
 
         return $user->hasAnyRole(Role::schoolWideValues())
-            || $subject->teachers()->whereKey($user->id)->exists();
+            || $subject->isTaughtBy($user);
     }
 
     protected function sharesSchool(User $user, Subject $subject): bool

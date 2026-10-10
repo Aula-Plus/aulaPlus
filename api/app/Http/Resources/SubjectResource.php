@@ -32,7 +32,8 @@ class SubjectResource extends JsonResource
                 'name' => $this->syllabus_original_name,
                 'size' => $this->syllabus_size,
                 'uploaded_at' => $this->syllabus_uploaded_at?->toIso8601String(),
-                'text_extracted' => $this->syllabus_text_extracted_at !== null && $this->syllabus_text !== null,
+                // pending → ready | failed; the UI polls while pending.
+                'text_status' => $this->syllabusTextStatus(),
                 'can_view' => $user?->can('viewSyllabus', $this->resource) ?? false,
             ] : null,
         ];
