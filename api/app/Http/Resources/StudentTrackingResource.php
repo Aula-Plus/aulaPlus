@@ -41,6 +41,9 @@ use Illuminate\Support\Facades\Gate;
  *     comment_trends: array<int, array<string, mixed>>,
  *     by_subject: array<int, array<string, mixed>>,
  *     overall_average: float|null,
+ *     grades: array<int, array<string, mixed>>,
+ *     grades_truncated: bool,
+ *     grades_view: array<string, mixed>,
  * }
  */
 class StudentTrackingResource extends JsonResource
@@ -114,7 +117,11 @@ class StudentTrackingResource extends JsonResource
             // subjects they teach unless direction opened more.
             'overall_average' => $this->resource['overall_average'],
             'by_subject' => $this->resource['by_subject'],
+            // The most recent visible grades only (StudentTrackingController::
+            // GRADES_LIMIT); `grades_truncated` says when older ones were left
+            // out. The aggregates above always cover every visible grade.
             'grades' => $this->resource['grades'],
+            'grades_truncated' => $this->resource['grades_truncated'],
             'grades_view' => $this->resource['grades_view'],
         ];
     }

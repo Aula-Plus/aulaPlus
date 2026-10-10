@@ -10,8 +10,8 @@ use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
 use App\Models\Student;
-use App\Models\User;
 use App\Services\CommentTrendDetector;
+use App\Services\GradeAccessRule;
 use App\Services\StudentGradeAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -44,6 +44,9 @@ class StudentTrackingController extends Controller
 
     protected const RECENT_COMMENTS_LIMIT = 10;
 
+    /** Most recent grade rows listed in `grades`; the aggregates use all of them. */
+    public const GRADES_LIMIT = 100;
+
     public function __construct(protected StudentGradeAccess $gradeAccess) {}
 
     public function show(Student $student): StudentTrackingResource
@@ -56,9 +59,16 @@ class StudentTrackingController extends Controller
         // and the SPA's "Clases" row expects it present.
         $student->load('groups');
 
+        // Resolved once and applied to every grade query below (school setting,
+        // the teacher's subjects and the last cutoff are looked up once).
+        $gradeRule = $this->gradeAccess->forStudent($user, $student);
+        $grades = $this->grades($student, $gradeRule);
+
         // The cache key carries a schema version: bump it whenever the cached
         // aggregate shape changes (e.g. adding by_subject/overall_average) so a
         // stale pre-deploy entry can't be read as the new shape for up to 60s.
+        // (Dropping keys, as when grades left the cache, needs no bump: a stale
+        // entry's extra keys are simply ignored.)
         $cached = Cache::remember(
             "student-tracking.v3.{$student->id}",
             60,
@@ -77,18 +87,19 @@ class StudentTrackingController extends Controller
             // Grades are role-dependent (a teacher only sees their own subjects
             // unless direction opened more), so they are computed per request,
             // never taken from the shared cache.
-            'by_subject' => $this->subjectAggregates($student, $user),
-            'overall_average' => $this->overallAverage($student, $user),
-            'grades' => $this->grades($student, $user),
-            'grades_view' => $this->gradeAccess->describe($user, $student),
+            'by_subject' => $this->subjectAggregates($student, $gradeRule),
+            'overall_average' => $this->overallAverage($student, $gradeRule),
+            'grades' => array_slice($grades, 0, self::GRADES_LIMIT),
+            'grades_truncated' => count($grades) > self::GRADES_LIMIT,
+            'grades_view' => $gradeRule->describe(),
         ]);
     }
 
     /**
      * Cache-safe snapshot: each model-backed key holds a list of raw attribute
      * arrays (primitive scalars only), never hydrated models — see the class
-     * docblock. The academic aggregate keys (`by_subject`, `overall_average`)
-     * are likewise plain scalars.
+     * docblock. Grades (`by_subject`, `overall_average`, `grades`) are NOT part
+     * of it: they depend on the viewer, see {@see self::show()}.
      *
      * @return array<string, mixed>
      */
@@ -124,15 +135,16 @@ class StudentTrackingController extends Controller
 
     /**
      * Academic per-subject aggregates: for each subject the student has results
-     * in, the mean score and number of scored assessments. Academic data — not
-     * clinical — so it is cached and returned to anyone who can view the student
-     * (no clinical gate). Ordered by subject name for a stable UI.
+     * in, the mean score and number of scored assessments, over the results
+     * the viewer may see (never cached: it depends on the viewer). Academic data
+     * — not clinical — so there is no clinical gate. Ordered by subject name for
+     * a stable UI.
      *
      * @return array<int, array<string, mixed>>
      */
-    protected function subjectAggregates(Student $student, User $user): array
+    protected function subjectAggregates(Student $student, GradeAccessRule $rule): array
     {
-        return $this->visibleResults($student, $user)
+        return $this->visibleResults($student, $rule)
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->groupBy('subjects.id', 'subjects.name')
             ->orderBy('subjects.name')
@@ -153,31 +165,34 @@ class StudentTrackingController extends Controller
     }
 
     /**
-     * Mean of all the student's assessment-result scores, or null if none.
+     * Mean of the student's assessment-result scores the viewer may see, or
+     * null if none.
      */
-    protected function overallAverage(Student $student, User $user): ?float
+    protected function overallAverage(Student $student, GradeAccessRule $rule): ?float
     {
-        $avg = $this->visibleResults($student, $user)->avg('assessment_results.score');
+        $avg = $this->visibleResults($student, $rule)->avg('assessment_results.score');
 
         return $avg === null ? null : round((float) $avg, 2);
     }
 
     /**
-     * Every scored instance the viewer may see, newest first: the subject, the
-     * date it was administered and the score.
+     * The scored instances the viewer may see, newest first: the subject, the
+     * date it was administered and the score. Fetches one row past
+     * GRADES_LIMIT so show() can flag the list as truncated (`grades_truncated`)
+     * — `by_subject`/`overall_average` always cover every visible grade.
      *
      * @return array<int, array<string, mixed>>
      */
-    protected function grades(Student $student, User $user): array
+    protected function grades(Student $student, GradeAccessRule $rule): array
     {
-        return $this->visibleResults($student, $user)
+        return $this->visibleResults($student, $rule)
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->orderByDesc('assessments.administered_at')
             ->orderByDesc('assessment_results.id')
             ->select('assessment_results.id', 'assessment_results.score', 'assessments.id as assessment_id',
                 'assessments.type', 'assessments.administered_at', 'subjects.id as subject_id',
                 'subjects.name as subject_name')
-            ->limit(100)
+            ->limit(self::GRADES_LIMIT + 1)
             ->get()
             ->map(fn ($row) => [
                 'id' => (int) $row->id,
@@ -195,14 +210,12 @@ class StudentTrackingController extends Controller
     /**
      * @return Builder<AssessmentResult>
      */
-    protected function visibleResults(Student $student, User $user): Builder
+    protected function visibleResults(Student $student, GradeAccessRule $rule): Builder
     {
-        return $this->gradeAccess->restrict(
+        return $rule->apply(
             AssessmentResult::query()
                 ->where('assessment_results.student_id', $student->id)
                 ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
-            $user,
-            $student,
         );
     }
 

@@ -132,7 +132,7 @@ it('hides clinical marks from a teacher without view-clinical-profile but keeps 
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
-    leadGroup($group, $teacher);
+    $subject = leadGroup($group, $teacher);
     $student = Student::factory()->create(['school_id' => $school->id]);
     $student->groups()->attach($group, ['school_year' => now()->year]);
 
@@ -140,7 +140,11 @@ it('hides clinical marks from a teacher without view-clinical-profile but keeps 
     Accommodation::factory()->create(['student_id' => $student->id, 'type' => 'tiempo extra', 'active' => true]);
     Barrier::factory()->create(['student_id' => $student->id, 'active' => true]);
     // Non-clinical sources — must be present.
-    $assessment = Assessment::factory()->create(['group_id' => $group->id, 'administered_at' => '2026-03-01']);
+    // Of the teacher's own subject: other subjects' averages are hidden from a
+    // teacher by default (StudentGradeAccess).
+    $assessment = Assessment::factory()->create([
+        'group_id' => $group->id, 'subject_id' => $subject->id, 'administered_at' => '2026-03-01',
+    ]);
     AssessmentResult::factory()->create(['assessment_id' => $assessment->id, 'student_id' => $student->id, 'score' => 9]);
     Comment::factory()->forSubject($student)->create(); // comments are not a mark
     CalendarEvent::factory()->create(['school_id' => $school->id, 'title' => 'Feriado']);
