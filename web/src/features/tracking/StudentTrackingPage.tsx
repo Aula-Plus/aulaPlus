@@ -8,6 +8,7 @@ import {
   canResolveAlert,
   canViewStudentHistory,
   isPsychopedagogue,
+  isSchoolWideStaff,
 } from "@/lib/permissions"
 import { cn, formatShortDate } from "@/lib/utils"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
@@ -449,7 +450,7 @@ export function StudentTrackingPage() {
             categories={categories}
             showAuthors
             currentUserId={user?.id}
-            showCount={!(user?.roles ?? []).includes("teacher")}
+            showCount={isSchoolWideStaff(user)}
           />
         )}
 
