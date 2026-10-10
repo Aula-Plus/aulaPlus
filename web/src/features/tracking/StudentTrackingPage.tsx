@@ -29,7 +29,7 @@ import {
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
-import { describeAccommodationScope } from "./accommodationScope"
+import { accommodationAppliesToAssessment, describeAccommodationScope } from "./accommodationScope"
 import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
@@ -404,7 +404,11 @@ export function StudentTrackingPage() {
                         {accommodation.is_effective && (
                           <AccommodationInstanceOverrideForm
                             accommodationId={accommodation.id}
-                            assessments={tracking.recent_assessments}
+                            // Only the assessments it applies to (subject +
+                            // type): the server 422s any other one.
+                            assessments={tracking.recent_assessments.filter((assessment) =>
+                              accommodationAppliesToAssessment(accommodation, assessment),
+                            )}
                           />
                         )}
                       </li>

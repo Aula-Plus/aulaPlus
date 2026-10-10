@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  accommodationAppliesToAssessment,
   describeAccommodationScope,
   formatSinceDate,
   joinSpanishList,
@@ -26,5 +27,23 @@ describe("accommodationScope", () => {
         new Date(2026, 9, 10),
       ),
     ).toBe("desde el 15/03 — en todas las materias")
+  })
+
+  it("applies to an assessment only when both its subject and its type are in scope", () => {
+    const math = { id: 4, name: "Matemática", deleted: false }
+    const writtenMath = { subject_id: 4, type: "written" as const }
+    const oralMath = { subject_id: 4, type: "oral" as const }
+    const writtenScience = { subject_id: 5, type: "written" as const }
+
+    const general = { subjects: [], assessment_types: null }
+    expect(accommodationAppliesToAssessment(general, writtenScience)).toBe(true)
+
+    const mathOnly = { subjects: [math], assessment_types: [] }
+    expect(accommodationAppliesToAssessment(mathOnly, oralMath)).toBe(true)
+    expect(accommodationAppliesToAssessment(mathOnly, writtenScience)).toBe(false)
+
+    const writtenMathOnly = { subjects: [math], assessment_types: ["written" as const] }
+    expect(accommodationAppliesToAssessment(writtenMathOnly, writtenMath)).toBe(true)
+    expect(accommodationAppliesToAssessment(writtenMathOnly, oralMath)).toBe(false)
   })
 })

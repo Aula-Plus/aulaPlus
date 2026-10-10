@@ -473,6 +473,11 @@ export interface GroupPerformanceTimeline {
 export interface AccommodationSubjectRef {
   id: number
   name: string
+  /**
+   * Soft-deleted since it was attached. The accommodation stays scoped to it
+   * (it never turns general); the edit form shows it as «(eliminada)».
+   */
+  deleted: boolean
 }
 
 /**

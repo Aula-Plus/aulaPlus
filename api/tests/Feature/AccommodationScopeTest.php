@@ -7,6 +7,7 @@ use App\Models\School;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -78,7 +79,7 @@ it('shows the teacher of the scoped subject the accommodation with its start dat
     $calculator = collect($response->json('data.support_chips.accommodations'))
         ->firstWhere('label', 'Calculadora en evaluaciones');
     expect($calculator['starts_on'])->toBe('2026-03-15')
-        ->and($calculator['subjects'])->toBe([['id' => $math->id, 'name' => 'Matemática']])
+        ->and($calculator['subjects'])->toBe([['id' => $math->id, 'name' => 'Matemática', 'deleted' => false]])
         ->and($calculator['assessment_types'])->toBe(['written']);
 
     $response->assertJsonPath('data.accommodations_count', 2);
@@ -325,4 +326,49 @@ it('rejects deactivating, for one assessment, an accommodation scoped to another
         'assessment_id' => $assessment->id,
         'reason' => 'Prueba oral en el patio',
     ])->assertCreated();
+});
+
+it('keeps accepting, on edit, a subject already attached that was soft-deleted since', function () {
+    ['school' => $school, 'calculator' => $calculator, 'math' => $math, 'science' => $science] = scopeScenario();
+    $math->delete();
+    $director = User::factory()->forSchool($school)->director()->create();
+    Sanctum::actingAs($director);
+
+    // The edit form resends every attached subject, the deleted one included.
+    $this->patchJson("/api/v1/accommodations/{$calculator->id}", [
+        'category' => 'access',
+        'subject_ids' => [$math->id, $science->id],
+    ])->assertOk()
+        ->assertJsonCount(2, 'data.subjects')
+        ->assertJsonPath('data.subjects.0.id', $science->id)
+        ->assertJsonPath('data.subjects.0.deleted', false)
+        ->assertJsonPath('data.subjects.1.id', $math->id)
+        ->assertJsonPath('data.subjects.1.deleted', true);
+
+    // …and removing it works too.
+    $this->patchJson("/api/v1/accommodations/{$calculator->id}", [
+        'category' => 'access',
+        'subject_ids' => [$science->id],
+    ])->assertOk()->assertJsonCount(1, 'data.subjects');
+});
+
+it('still rejects, on edit, a deleted subject that was not attached', function () {
+    ['school' => $school, 'spelling' => $spelling] = scopeScenario();
+    $deleted = Subject::factory()->create(['school_id' => $school->id]);
+    $deleted->delete();
+    $director = User::factory()->forSchool($school)->director()->create();
+    Sanctum::actingAs($director);
+
+    $this->patchJson("/api/v1/accommodations/{$spelling->id}", [
+        'category' => 'criteria',
+        'subject_ids' => [$deleted->id],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['subject_ids.0']);
+});
+
+it('refuses to hard-delete a subject an accommodation is scoped to', function () {
+    ['calculator' => $calculator, 'math' => $math] = scopeScenario();
+
+    // Cascading would silently turn the scoped accommodation into a general one.
+    expect(fn () => $math->forceDelete())->toThrow(QueryException::class);
+    expect($calculator->subjects()->count())->toBe(1);
 });

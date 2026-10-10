@@ -655,8 +655,8 @@ describe("StudentTrackingPage", () => {
           label: "Ortografía no puntúa",
           starts_on: `${year}-04-02`,
           subjects: [
-            { id: 7, name: "Idioma Español" },
-            { id: 8, name: "Literatura" },
+            { id: 7, name: "Idioma Español", deleted: false },
+            { id: 8, name: "Literatura", deleted: false },
           ],
           assessment_types: null,
         },
@@ -671,7 +671,7 @@ describe("StudentTrackingPage", () => {
           id: 3,
           label: "Calculadora",
           starts_on: `${year}-05-04`,
-          subjects: [{ id: 4, name: "Matemática" }],
+          subjects: [{ id: 4, name: "Matemática", deleted: false }],
           assessment_types: ["written", "oral"],
         },
       ],
@@ -700,7 +700,7 @@ describe("StudentTrackingPage", () => {
         requires_external_approval: false,
         is_effective: true,
         starts_on: "2024-04-02",
-        subjects: [{ id: 7, name: "Idioma Español" }],
+        subjects: [{ id: 7, name: "Idioma Español", deleted: false }],
       }),
     ]
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
@@ -710,5 +710,70 @@ describe("StudentTrackingPage", () => {
     await openTab("Ajustes")
 
     expect(await screen.findByText("Desde el 02/04/2024 — en Idioma Español")).toBeInTheDocument()
+  })
+
+  it("shows a soft-deleted subject of the edited accommodation as «(eliminada)» and lets it be removed", async () => {
+    const tracking = baseTracking()
+    const accommodation = pendingAccommodation({
+      requires_external_approval: false,
+      is_effective: true,
+      focus_area: "Cálculo",
+      subjects: [
+        { id: 9, name: "Dibujo", deleted: true },
+        { id: 4, name: "Matemática", deleted: false },
+      ],
+    })
+    tracking.accommodations = [accommodation]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const update = vi.spyOn(trackingApi, "updateAccommodation").mockResolvedValue(accommodation)
+
+    renderPage("psychopedagogue")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /^editar$/i }))
+
+    // Not «Todas las materias»: the trigger shows both attached subjects.
+    const trigger = await screen.findByLabelText(/materias/i)
+    expect(await within(trigger).findByText("Dibujo (eliminada)")).toBeInTheDocument()
+    expect(within(trigger).getByText("Matemática")).toBeInTheDocument()
+    expect(within(trigger).queryByText("Todas las materias")).not.toBeInTheDocument()
+
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole("button", { name: "Dibujo (eliminada)" }))
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
+
+    expect(update).toHaveBeenCalledWith(
+      accommodation.id,
+      expect.objectContaining({ subject_ids: [4] }),
+    )
+  })
+
+  it("only offers, to deactivate an accommodation, the assessments it applies to", async () => {
+    const tracking = baseTracking()
+    tracking.recent_assessments = [
+      { id: 10, group_id: 1, subject_id: 4, type: "written", variant_number: null, created_at: "2026-08-01T10:00:00+00:00" },
+      { id: 11, group_id: 1, subject_id: 4, type: "oral", variant_number: null, created_at: "2026-08-02T10:00:00+00:00" },
+      { id: 12, group_id: 1, subject_id: 5, type: "written", variant_number: null, created_at: "2026-08-03T10:00:00+00:00" },
+    ]
+    tracking.accommodations = [
+      pendingAccommodation({
+        requires_external_approval: false,
+        is_effective: true,
+        subjects: [{ id: 4, name: "Matemática", deleted: false }],
+        assessment_types: ["written"],
+      }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("director")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /desactivar para una evaluación/i }))
+    await userEvent.click(screen.getByLabelText(/^evaluación$/i))
+
+    // Only the written Matemática one: not the oral one, not the Ciencias one.
+    expect(await screen.findByRole("button", { name: /escrita · /i })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /oral · /i })).not.toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: / · / })).toHaveLength(1)
   })
 })

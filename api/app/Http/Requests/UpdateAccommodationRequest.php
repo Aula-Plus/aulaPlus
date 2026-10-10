@@ -39,7 +39,7 @@ class UpdateAccommodationRequest extends FormRequest
             'active' => ['sometimes', 'boolean'],
             'requires_external_approval' => ['sometimes', 'boolean'],
             'llm_rule' => ['nullable', 'array'],
-            ...$this->accommodationScopeRules(creating: false),
+            ...$this->accommodationScopeRules(editing: $this->route('accommodation')),
         ];
     }
 }

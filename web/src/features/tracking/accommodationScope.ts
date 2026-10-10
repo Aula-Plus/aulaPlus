@@ -1,4 +1,4 @@
-import type { AccommodationScope, AssessmentType } from "@/types"
+import type { AccommodationScope, AssessmentSummary, AssessmentType } from "@/types"
 
 /**
  * Spanish phrasing for where and since when an accommodation applies (ClickUp
@@ -64,4 +64,24 @@ export function describeAccommodationScope(scope: AccommodationScope, today: Dat
     describeAssessmentTypes(scope),
   ]
   return parts.filter((part): part is string => part !== null).join(" — ")
+}
+
+/**
+ * Whether the accommodation applies to an assessment: general or scoped to its
+ * subject, and covering its type (or not restricted by type). Mirror of
+ * `Accommodation::appliesToAssessment()` — the server rejects (422) a
+ * per-assessment deactivation that fails it, so the form only offers these.
+ */
+export function accommodationAppliesToAssessment(
+  scope: Pick<AccommodationScope, "subjects" | "assessment_types">,
+  assessment: Pick<AssessmentSummary, "subject_id" | "type">,
+): boolean {
+  const subjectApplies =
+    scope.subjects.length === 0 ||
+    scope.subjects.some((subject) => subject.id === assessment.subject_id)
+  const typeApplies =
+    !scope.assessment_types ||
+    scope.assessment_types.length === 0 ||
+    scope.assessment_types.includes(assessment.type)
+  return subjectApplies && typeApplies
 }

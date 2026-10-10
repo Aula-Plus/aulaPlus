@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -118,6 +118,30 @@ export function AccommodationFormDialog({
     },
   })
 
+  // The live catalog, plus the subjects already attached to the edited
+  // accommodation that it no longer lists — a soft-deleted one shows as
+  // «(eliminada)». Without them MultiSelect would hide those ids and read
+  // «Todas las materias» while the accommodation is actually scoped, with no
+  // way to remove them.
+  const subjectOptions = useMemo(() => {
+    const attached = accommodation?.subjects ?? []
+    const isDeletedAttachment = (id: number) =>
+      attached.some((subject) => subject.id === id && subject.deleted)
+    return [
+      ...subjects
+        .filter((subject) => !isDeletedAttachment(subject.id))
+        .map((subject) => ({ id: subject.id, label: subject.name })),
+      ...attached
+        .filter(
+          (subject) => subject.deleted || !subjects.some((live) => live.id === subject.id),
+        )
+        .map((subject) => ({
+          id: subject.id,
+          label: subject.deleted ? `${subject.name} (eliminada)` : subject.name,
+        })),
+    ]
+  }, [subjects, accommodation])
+
   useEffect(() => {
     if (!open) return
     fetchSubjects()
@@ -233,7 +257,7 @@ export function AccommodationFormDialog({
               render={({ field }) => (
                 <MultiSelect
                   id="accommodation-subjects"
-                  options={subjects.map((subject) => ({ id: subject.id, label: subject.name }))}
+                  options={subjectOptions}
                   selected={field.value}
                   onChange={field.onChange}
                   placeholder="Todas las materias"

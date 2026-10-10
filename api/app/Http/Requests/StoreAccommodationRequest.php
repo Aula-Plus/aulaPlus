@@ -44,7 +44,7 @@ class StoreAccommodationRequest extends FormRequest
             'active' => ['sometimes', 'boolean'],
             'requires_external_approval' => ['sometimes', 'boolean'],
             'llm_rule' => ['nullable', 'array'],
-            ...$this->accommodationScopeRules(creating: true),
+            ...$this->accommodationScopeRules(),
         ];
     }
 }
