@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { isAxiosError } from "axios"
 import { Button } from "@/components/ui/button"
 import { formatShortDate } from "@/lib/utils"
 import type { AccommodationNarrativeView } from "@/types"
@@ -15,6 +16,12 @@ const POLL_MS = 2000
  * this only keeps the page from polling forever if no worker is running.
  */
 const MAX_POLLS = 90
+
+/** Backend `AiProvider::NOT_CONFIGURED`, stored on a generation that ran without AI. */
+const AI_NOT_CONFIGURED = "The AI provider is not configured."
+
+const AI_UNAVAILABLE_MESSAGE =
+  "La generación con IA todavía no está habilitada. El resumen publicado se sigue viendo."
 
 interface GroupAccommodationNarrativeProps {
   groupId: number
@@ -64,8 +71,14 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
     try {
       await action()
       await load()
-    } catch {
-      setError(failure)
+    } catch (err) {
+      // 503: the AI provider is not configured in this environment.
+      if (isAxiosError(err) && err.response?.status === 503) {
+        setError(AI_UNAVAILABLE_MESSAGE)
+        await load()
+      } else {
+        setError(failure)
+      }
     } finally {
       setBusy(false)
     }
@@ -73,7 +86,7 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
 
   if (!view) return error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null
 
-  const { published, draft, can_generate: canGenerate } = view
+  const { published, draft, can_generate: canGenerate, ai_available: aiAvailable } = view
   const hasContent = Boolean(published || draft)
   if (!hasContent && !canGenerate) return null
 
@@ -133,10 +146,15 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
 
       {canGenerate && (
         <div>
+          {!aiAvailable && error !== AI_UNAVAILABLE_MESSAGE && (
+            <p className="mb-2 text-sm text-muted-foreground" role="status">
+              {AI_UNAVAILABLE_MESSAGE}
+            </p>
+          )}
           <Button
             variant="outline"
             size="sm"
-            disabled={busy || waiting || !canSummarise}
+            disabled={busy || waiting || !canSummarise || !aiAvailable}
             onClick={() => {
               setPollsLeft(MAX_POLLS)
               run(() => generateAccommodationNarrative(groupId), "No pudimos generar el resumen.")
@@ -175,6 +193,9 @@ function NarrativeError({ draft }: { draft: Draft }) {
         <p>Corregí {types.length > 1 ? "esos ajustes" : "ese ajuste"} y volvé a generar el resumen.</p>
       </div>
     )
+  }
+  if (draft.error_message === AI_NOT_CONFIGURED) {
+    return <p className="text-destructive">No se pudo generar: la IA todavía no está configurada.</p>
   }
   if (draft.stale) {
     return <p className="text-destructive">La generación anterior no terminó. Generá el resumen de nuevo.</p>

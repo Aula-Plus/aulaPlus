@@ -1,12 +1,13 @@
 import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { AxiosError, AxiosHeaders } from "axios"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { AccommodationNarrativeView } from "@/types"
 import { GroupAccommodationNarrative } from "./GroupAccommodationNarrative"
 import * as trackingApi from "./trackingApi"
 
 function view(overrides: Partial<AccommodationNarrativeView> = {}): AccommodationNarrativeView {
-  return { can_generate: false, published: null, draft: null, ...overrides }
+  return { can_generate: false, ai_available: true, published: null, draft: null, ...overrides }
 }
 
 const published = {
@@ -49,6 +50,48 @@ describe("GroupAccommodationNarrative", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Generar resumen" }))
     expect(generate).toHaveBeenCalledWith(7)
+  })
+
+  it("disables generating while AI is not configured, but keeps the published text", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
+      view({ can_generate: true, ai_available: false, published }),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+
+    expect(await screen.findByText(published.content)).toBeInTheDocument()
+    expect(screen.getByText(/todavía no está habilitada/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Generar nuevo resumen" })).toBeDisabled()
+  })
+
+  it("explains a 503 from generate instead of a generic failure", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(view({ can_generate: true }))
+    const response = { status: 503, statusText: "", headers: {}, config: { headers: new AxiosHeaders() }, data: {} }
+    vi.spyOn(trackingApi, "generateAccommodationNarrative").mockRejectedValue(
+      new AxiosError("Service Unavailable", "ERR_BAD_RESPONSE", undefined, undefined, response),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+
+    await userEvent.click(await screen.findByRole("button", { name: "Generar resumen" }))
+    expect(await screen.findByText(/todavía no está habilitada/)).toBeInTheDocument()
+    expect(screen.queryByText("No pudimos generar el resumen.")).not.toBeInTheDocument()
+  })
+
+  it("says AI is not configured when a queued generation failed for that reason", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationNarrative").mockResolvedValue(
+      view({
+        can_generate: true,
+        draft: {
+          id: 4,
+          status: "error",
+          content: null,
+          error_message: "The AI provider is not configured.",
+          outdated: false,
+        },
+      }),
+    )
+    render(<GroupAccommodationNarrative groupId={7} canSummarise />)
+
+    expect(await screen.findByText(/la IA todavía no está configurada/)).toBeInTheDocument()
   })
 
   it("lets psychopedagogy read the draft and publish it", async () => {

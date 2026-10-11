@@ -450,3 +450,35 @@ it('requires authentication', function () {
     $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")->assertUnauthorized();
     $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->assertUnauthorized();
 });
+
+it('refuses to generate with 503 and creates nothing when the AI provider is not configured', function () {
+    [, $psico, $group] = narrativeSetup();
+    config(['services.anthropic.key' => null]);
+    Http::fake();
+    Sanctum::actingAs($psico);
+
+    $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")
+        ->assertOk()
+        ->assertJsonPath('ai_available', false);
+
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")
+        ->assertStatus(503)
+        ->assertJsonPath('message', 'The AI assistant is not available right now.');
+
+    expect(GroupAccommodationNarrative::query()->count())->toBe(0);
+    Http::assertNothingSent();
+});
+
+it('marks a queued generation failed without calling the API when the provider is not configured', function () {
+    [, $psico, $group] = narrativeSetup();
+    config(['services.anthropic.model' => '']);
+    Http::fake();
+    Sanctum::actingAs($psico);
+    $narrative = pendingNarrative($group, $psico);
+
+    GenerateGroupAccommodationNarrativeJob::dispatchSync($narrative);
+
+    expect($narrative->refresh()->status)->toBe(AccommodationNarrativeStatus::Error)
+        ->and($narrative->error_message)->toBe('The AI provider is not configured.');
+    Http::assertNothingSent();
+});

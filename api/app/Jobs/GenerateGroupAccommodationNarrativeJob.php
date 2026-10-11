@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Actions\Groups\BuildGroupAccommodationSummary;
 use App\Enums\AccommodationNarrativeStatus;
 use App\Models\GroupAccommodationNarrative;
+use App\Support\AiProvider;
 use App\Support\StudentNameMatcher;
 use App\Support\Tenancy;
 use Illuminate\Bus\Queueable;
@@ -74,6 +75,14 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
             // A pending row given up as stale (and replaced by a newer
             // generation) must not still reach the AI if a worker picks it up late.
             if ($this->narrative->refresh()->status !== AccommodationNarrativeStatus::Pending) {
+                return;
+            }
+
+            // Queued before the provider was removed: record the error
+            // without calling the API, so the UI stops waiting.
+            if (! AiProvider::isConfigured()) {
+                $this->markError(AiProvider::NOT_CONFIGURED);
+
                 return;
             }
 

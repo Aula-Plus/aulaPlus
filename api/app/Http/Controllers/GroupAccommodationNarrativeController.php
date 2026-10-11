@@ -7,6 +7,7 @@ use App\Enums\AccommodationNarrativeStatus;
 use App\Jobs\GenerateGroupAccommodationNarrativeJob;
 use App\Models\Group;
 use App\Models\GroupAccommodationNarrative;
+use App\Support\AiProvider;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,9 @@ class GroupAccommodationNarrativeController extends Controller
 
         return response()->json([
             'can_generate' => $canGenerate,
+            // False while this environment has no AI provider: the UI keeps the
+            // published text readable but disables generating a new one.
+            'ai_available' => AiProvider::isConfigured(),
             'published' => $published ? [
                 'id' => $published->id,
                 'content' => $published->content,
@@ -95,6 +99,8 @@ class GroupAccommodationNarrativeController extends Controller
     public function generate(Group $group, BuildGroupAccommodationSummary $summarize): JsonResponse
     {
         $this->authorize('generateAccommodationNarrative', $group);
+
+        abort_unless(AiProvider::isConfigured(), Response::HTTP_SERVICE_UNAVAILABLE, AiProvider::UNAVAILABLE);
 
         $summary = $summarize($group);
 

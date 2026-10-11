@@ -411,6 +411,8 @@ export interface GroupAccommodationSummaryEntry {
  */
 export interface AccommodationNarrativeView {
   can_generate: boolean
+  /** False while the environment has no AI provider configured: generating is disabled. */
+  ai_available: boolean
   published: {
     id: number
     content: string
