@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\StudentTrackingResource;
 use App\Models\Accommodation;
+use App\Models\AccommodationInstanceOverride;
 use App\Models\Alert;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
 use App\Models\Student;
+use App\Models\User;
 use App\Services\CommentTrendDetector;
 use App\Services\GradeAccessRule;
 use App\Services\StudentGradeAccess;
@@ -91,7 +93,7 @@ class StudentTrackingController extends Controller
             // never taken from the shared cache.
             'by_subject' => $this->subjectAggregates($student, $gradeRule),
             'overall_average' => $this->overallAverage($student, $gradeRule),
-            'grades' => array_slice($grades, 0, self::GRADES_LIMIT),
+            'grades' => $this->withAccommodationsInForce(array_slice($grades, 0, self::GRADES_LIMIT), $student, $user),
             'grades_truncated' => count($grades) > self::GRADES_LIMIT,
             'grades_view' => $gradeRule->describe(),
         ]);
@@ -207,6 +209,66 @@ class StudentTrackingController extends Controller
                 'score' => $row->score === null ? null : (float) $row->score,
             ])
             ->all();
+    }
+
+    /**
+     * Next to each grade, the accommodations that were in force for it (living
+     * document screen 04 · Evaluaciones: «cada instancia con su nota y, al
+     * lado, qué ajustes estaban activos ese día»; PO ClickUp 86e3d1bwa):
+     *
+     * - in force on the instance's date (Accommodation::isInForceOn — started
+     *   by then, not switched off before or on it);
+     * - applying to that instance's subject and assessment type;
+     * - not deactivated for that very instance (AccommodationInstanceOverride);
+     * - and only those the viewer may see (Accommodation::scopeVisibleTo — a
+     *   teacher never gets one scoped to a subject they don't teach).
+     *
+     * Each one is just `{id, label}` for every viewer (CLAUDE.md rule 11, the
+     * AccommodationSupportChipResource rule): never the description, origin,
+     * validator or the override reason. Two queries per request (the student's
+     * visible accommodations with their subjects, and the overrides of the
+     * listed instances), matched in memory.
+     *
+     * @param  array<int, array<string, mixed>>  $grades
+     * @return array<int, array<string, mixed>>
+     */
+    protected function withAccommodationsInForce(array $grades, Student $student, User $user): array
+    {
+        if ($grades === []) {
+            return $grades;
+        }
+
+        $accommodations = Accommodation::query()
+            ->where('student_id', $student->id)
+            ->visibleTo($user)
+            ->with('subjects')
+            ->orderBy('type')
+            ->get();
+
+        $overridden = $accommodations->isEmpty()
+            ? collect()
+            : AccommodationInstanceOverride::query()
+                ->whereIn('assessment_id', array_unique(array_column($grades, 'assessment_id')))
+                ->whereIn('accommodation_id', $accommodations->modelKeys())
+                ->get(['accommodation_id', 'assessment_id'])
+                ->mapWithKeys(fn (AccommodationInstanceOverride $override) => [
+                    "{$override->assessment_id}:{$override->accommodation_id}" => true,
+                ]);
+
+        return array_map(function (array $grade) use ($accommodations, $overridden): array {
+            $grade['accommodations'] = $grade['administered_at'] === null ? [] : $accommodations
+                ->filter(fn (Accommodation $accommodation): bool => $accommodation->isInForceOn($grade['administered_at'])
+                    && $accommodation->appliesIn($grade['subject_id'], $grade['type'])
+                    && ! $overridden->has("{$grade['assessment_id']}:{$accommodation->id}"))
+                ->map(fn (Accommodation $accommodation): array => [
+                    'id' => $accommodation->id,
+                    'label' => $accommodation->type,
+                ])
+                ->values()
+                ->all();
+
+            return $grade;
+        }, $grades);
     }
 
     /**

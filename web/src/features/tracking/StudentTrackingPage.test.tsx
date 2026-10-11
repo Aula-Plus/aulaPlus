@@ -36,7 +36,7 @@ function baseTracking(): StudentTracking {
       { subject_id: 1, subject_name: "Matemática", average: 7, assessment_count: 2 },
     ],
     grades: [
-      { id: 1, assessment_id: 10, subject_id: 1, subject_name: "Matemática", type: "written", administered_at: "2026-08-01", score: 7 },
+      { id: 1, assessment_id: 10, subject_id: 1, subject_name: "Matemática", type: "written", administered_at: "2026-08-01", score: 7, accommodations: [] },
     ],
     grades_truncated: false,
     grades_view: { mode: "own_subject", restricted: false, own_subject_ids: [], cutoff_at: null },
@@ -167,6 +167,51 @@ describe("StudentTrackingPage", () => {
     expect(await screen.findByRole("note")).toHaveTextContent(
       /notas de otras materias cargadas antes del corte del/i,
     )
+  })
+
+  it("shows, next to each grade, the accommodations that were active that day", async () => {
+    const tracking = baseTracking()
+    tracking.grades = [
+      {
+        id: 1,
+        assessment_id: 10,
+        subject_id: 1,
+        subject_name: "Matemática",
+        type: "written",
+        administered_at: "2026-04-10",
+        score: 7,
+        accommodations: [
+          { id: 5, label: "Calculadora" },
+          { id: 6, label: "Tiempo extendido" },
+        ],
+      },
+      {
+        id: 2,
+        assessment_id: 11,
+        subject_id: 1,
+        subject_name: "Matemática",
+        type: "oral",
+        administered_at: "2026-04-20",
+        score: 9,
+        accommodations: [],
+      },
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Evaluaciones")
+
+    expect(await screen.findByRole("columnheader", { name: "Ajustes activos ese día" })).toBeInTheDocument()
+    const [written, oral] = screen
+      .getAllByRole("row")
+      .filter((row) => within(row).queryByText(/^(7|9)$/))
+    const writtenAccommodations = within(written).getByRole("list", { name: "Ajustes activos ese día" })
+    expect(within(writtenAccommodations).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Calculadora",
+      "Tiempo extendido",
+    ])
+    expect(within(oral).getByText("Ninguno")).toBeInTheDocument()
   })
 
   it("says when the grades list only shows the most recent ones", async () => {

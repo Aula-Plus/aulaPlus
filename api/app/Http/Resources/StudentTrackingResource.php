@@ -129,7 +129,9 @@ class StudentTrackingResource extends JsonResource
             'by_subject' => $this->resource['by_subject'],
             // The most recent visible grades only (StudentTrackingController::
             // GRADES_LIMIT); `grades_truncated` says when older ones were left
-            // out. The aggregates above always cover every visible grade.
+            // out. The aggregates above always cover every visible grade. Each
+            // grade carries `accommodations` ({id, label} only): the ones in
+            // force that day for that instance that this viewer may see.
             'grades' => $this->resource['grades'],
             'grades_truncated' => $this->resource['grades_truncated'],
             'grades_view' => $this->resource['grades_view'],

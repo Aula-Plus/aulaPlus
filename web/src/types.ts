@@ -971,6 +971,14 @@ export interface Paginated<T> {
   }
 }
 
+/**
+ * An accommodation in force for one grade (name only — never clinical detail).
+ */
+export interface GradeAccommodation {
+  id: number
+  label: string
+}
+
 export interface StudentGrade {
   id: number
   assessment_id: number
@@ -979,6 +987,12 @@ export interface StudentGrade {
   type: AssessmentType
   administered_at: string | null
   score: number | null
+  /**
+   * The accommodations that were in force on the instance's date for its
+   * subject and type, minus any deactivated for that instance — only the ones
+   * the viewer may see (server-side rule; PO ClickUp 86e3d1bwa).
+   */
+  accommodations: GradeAccommodation[]
 }
 
 export type GradesVisibilityMode = "own_subject" | "all_live" | "all_periodic"

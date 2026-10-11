@@ -26,6 +26,7 @@ import {
   type Alert,
   type Comment,
   type CommentCategory,
+  type GradeAccommodation,
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
@@ -510,7 +511,8 @@ export function StudentTrackingPage() {
                     <TableHead className="pl-6">Materia</TableHead>
                     <TableHead>Instancia</TableHead>
                     <TableHead>Fecha</TableHead>
-                    <TableHead className="pr-6">Nota</TableHead>
+                    <TableHead>Nota</TableHead>
+                    <TableHead className="pr-6">Ajustes activos ese día</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -519,7 +521,10 @@ export function StudentTrackingPage() {
                       <TableCell className="pl-6">{grade.subject_name}</TableCell>
                       <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
                       <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
-                      <TableCell className="pr-6 tabular-nums">{grade.score ?? "—"}</TableCell>
+                      <TableCell className="tabular-nums">{grade.score ?? "—"}</TableCell>
+                      <TableCell className="pr-6">
+                        <GradeAccommodations accommodations={grade.accommodations} />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -595,6 +600,26 @@ export function StudentTrackingPage() {
  *   - Otherwise: fall back to the vigency flag `is_effective` — no approval
  *     badge is added when approval does not apply (docs/prompts/09 §3).
  */
+/**
+ * The accommodations that were in force for one grade (name only), as neutral
+ * chips; «Ninguno» when there were none. Server-filtered: the list only holds
+ * what this viewer may see.
+ */
+function GradeAccommodations({ accommodations }: { accommodations: GradeAccommodation[] }) {
+  if (accommodations.length === 0) {
+    return <span className="text-muted-foreground">Ninguno</span>
+  }
+  return (
+    <ul className="flex flex-wrap gap-1" aria-label="Ajustes activos ese día">
+      {accommodations.map((accommodation) => (
+        <li key={accommodation.id}>
+          <Badge tone="neutral">{accommodation.label}</Badge>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
   if (accommodation.requires_external_approval) {
     if (accommodation.approved === true) {
