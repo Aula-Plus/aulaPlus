@@ -217,7 +217,7 @@ it('stores a general accommodation when no subjects or assessment types are sent
         ->assertJsonPath('data.assessment_types', null);
 });
 
-it('requires a start date and validates the scope fields', function () {
+it('validates the start date format and the scope fields', function () {
     ['school' => $school, 'lucia' => $lucia] = scopeScenario();
     $director = User::factory()->forSchool($school)->director()->create();
     Sanctum::actingAs($director);
@@ -227,6 +227,7 @@ it('requires a start date and validates the scope fields', function () {
         'type' => 'Tiempo extendido',
         'description' => 'x',
         'focus_area' => 'attention',
+        'starts_on' => '02/04/2026',
         'assessment_types' => ['not-a-type'],
         'subject_ids' => ['abc'],
     ])->assertUnprocessable()

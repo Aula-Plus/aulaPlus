@@ -504,6 +504,11 @@ export interface Accommodation extends AccommodationScope {
    */
   category: AccommodationCategory | null
   active: boolean
+  /**
+   * ISO date the accommodation was switched off, recorded by the server (PO,
+   * ClickUp 86e3d1bwa: no user-entered end date). `null` while it is in force.
+   */
+  deactivated_on: string | null
   description: string | null
   focus_area: string | null
   requires_external_approval: boolean
@@ -535,7 +540,10 @@ export interface AccommodationInput {
   category: AccommodationCategory
   requires_external_approval: boolean
   active: boolean
-  /** ISO date (`YYYY-MM-DD`); required by the backend. */
+  /**
+   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form always sends it (today
+   * by default); the backend also defaults it to today when absent.
+   */
   starts_on: string
   /** Empty = a general accommodation (every subject). */
   subject_ids: number[]

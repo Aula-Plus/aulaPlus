@@ -76,7 +76,9 @@ interface AccommodationFormDialogProps {
  * + Zod). `category` is required; `active` is only offered when editing (a brand
  * new accommodation is never created already-inactive).
  *
- * Scope (ClickUp 86e3dpbwy follow-up): «Vigente desde» (defaults to today),
+ * Scope (ClickUp 86e3dpbwy follow-up): «Vigente desde» (defaults to today,
+ * editable; there is no end-date field — the server records the day it is
+ * switched off, PO ClickUp 86e3d1bwa),
  * the subjects it is restricted to (none = every subject — the server then
  * shows it to every teacher of the student; otherwise only to the teachers of
  * those subjects) and the assessment types (none = every type).
@@ -248,6 +250,10 @@ export function AccommodationFormDialog({
             {errors.starts_on && (
               <p className="text-sm text-destructive">{errors.starts_on.message}</p>
             )}
+            <p className="text-xs text-muted-foreground">
+              Se completa con el día en que se activa y podés cambiarla. No lleva fecha de
+              vencimiento: rige hasta que alguien lo desactive.
+            </p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="accommodation-subjects">Materias</Label>
@@ -310,14 +316,19 @@ export function AccommodationFormDialog({
             <Label htmlFor="accommodation-requires-approval">Requiere aprobación externa</Label>
           </div>
           {isEdit && (
-            <div className="flex items-center gap-2">
-              <input
-                id="accommodation-active"
-                type="checkbox"
-                className="size-4"
-                {...register("active")}
-              />
-              <Label htmlFor="accommodation-active">Activa</Label>
+            <div className="grid gap-1">
+              <div className="flex items-center gap-2">
+                <input
+                  id="accommodation-active"
+                  type="checkbox"
+                  className="size-4"
+                  {...register("active")}
+                />
+                <Label htmlFor="accommodation-active">Activa</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Al desactivarla, el sistema registra el día de hoy como fecha de baja.
+              </p>
             </div>
           )}
           {formError && (

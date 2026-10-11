@@ -18,7 +18,8 @@ use Illuminate\Validation\Rule;
  * Authorization reuses the existing AccommodationPolicy::create (role check
  * only) as the spec asks — it is deliberately NOT hardened further here. The
  * target {student} is resolved through the SchoolScope, so a student from
- * another tenant 404s before this runs. `starts_on` is required; subjects and
+ * another tenant 404s before this runs. `starts_on` is optional (the model
+ * defaults it to today, school time); subjects and
  * assessment types are optional (absent = general) — see
  * ValidatesAccommodationScope.
  */

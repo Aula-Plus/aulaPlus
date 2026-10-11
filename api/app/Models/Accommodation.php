@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\TracksAuthorship;
+use App\Support\SchoolTime;
 use Carbon\CarbonInterface;
 use Database\Factories\AccommodationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -32,6 +33,13 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * accommodation, every subject); `assessment_types` restricts it to some
  * assessment types (null = every type). A teacher only sees the accommodations
  * that apply to a subject they teach the student — see {@see self::scopeVisibleTo()}.
+ *
+ * Dates in force (PO, ClickUp 86e3d1bwa, option A): `starts_on` («Vigente
+ * desde») fills itself with the day the accommodation becomes effective and
+ * stays editable; there is no end date a user types in. When it stops being
+ * effective (switched off), the system records that day in `deactivated_on` —
+ * never fillable, never in a Form Request. See {@see self::booted()} and
+ * {@see self::isInForceOn()}.
  */
 #[Fillable([
     'student_id',
@@ -60,6 +68,7 @@ class Accommodation extends Model
         return [
             'category' => AccommodationCategory::class,
             'starts_on' => 'date',
+            'deactivated_on' => 'date',
             'assessment_types' => 'array',
             'active' => 'boolean',
             'llm_rule' => 'array',
@@ -69,14 +78,48 @@ class Accommodation extends Model
     }
 
     /**
-     * Every accommodation has a start date (NOT NULL). An HTTP write always
-     * sends it (StoreAccommodationRequest requires it); any other creation path
-     * that doesn't say otherwise means "in force from today".
+     * Keeps `starts_on`/`deactivated_on` in step with whether the accommodation
+     * is effective (school-local calendar days, App\Support\SchoolTime):
+     *
+     * - Creating: `starts_on` defaults to today (the form sends today unless the
+     *   user picks another day).
+     * - Becoming effective (switched back on, or its external approval granted):
+     *   `starts_on` moves up to today unless this same write sets it explicitly
+     *   — it was not in force before — and `deactivated_on` is cleared. A start
+     *   date already in the future is kept. Only one interval is stored: after
+     *   a re-activation the earlier one lives in the audit log only.
+     * - Stopping being effective (switched off): `deactivated_on` = today.
      */
     protected static function booted(): void
     {
         static::creating(function (self $accommodation): void {
-            $accommodation->starts_on ??= now()->toDateString();
+            $accommodation->starts_on ??= SchoolTime::today()->toDateString();
+        });
+
+        static::updating(function (self $accommodation): void {
+            $wasEffective = (bool) $accommodation->getOriginal('active')
+                && (! $accommodation->getOriginal('requires_external_approval')
+                    || $accommodation->getOriginal('approved') === true);
+            $isEffective = $accommodation->isEffective();
+
+            if ($wasEffective === $isEffective) {
+                return;
+            }
+
+            $today = SchoolTime::today()->toDateString();
+
+            if (! $isEffective) {
+                $accommodation->deactivated_on = $today;
+
+                return;
+            }
+
+            $accommodation->deactivated_on = null;
+
+            if (! $accommodation->isDirty('starts_on')
+                && ($accommodation->starts_on === null || $accommodation->starts_on->toDateString() < $today)) {
+                $accommodation->starts_on = $today;
+            }
         });
     }
 
@@ -106,11 +149,42 @@ class Accommodation extends Model
 
     /**
      * Accommodations whose start date has been reached (`starts_on` <= the
-     * given date, today by default).
+     * given date, today in school time by default).
      */
     public function scopeStarted(Builder $query, ?CarbonInterface $on = null): Builder
     {
-        return $query->whereDate('accommodations.starts_on', '<=', ($on ?? now())->toDateString());
+        return $query->whereDate('accommodations.starts_on', '<=', ($on ?? SchoolTime::today())->format('Y-m-d'));
+    }
+
+    /**
+     * Whether it was in force on the given school-local day: started by then,
+     * and either still effective or switched off after that day (the day it
+     * was switched off no longer counts). A pending or rejected one, or one
+     * created inactive and never switched on, was never in force. In-memory
+     * twin of {@see self::scopeInForceOn()} — keep the two in sync.
+     */
+    public function isInForceOn(CarbonInterface|string $day): bool
+    {
+        $day = $day instanceof CarbonInterface ? $day->format('Y-m-d') : substr($day, 0, 10);
+
+        return $this->starts_on !== null
+            && $this->starts_on->toDateString() <= $day
+            && ($this->isEffective()
+                || ($this->deactivated_on !== null && $this->deactivated_on->toDateString() > $day));
+    }
+
+    /**
+     * Query equivalent of {@see self::isInForceOn()}.
+     */
+    public function scopeInForceOn(Builder $query, CarbonInterface|string $day): Builder
+    {
+        $day = $day instanceof CarbonInterface ? $day->format('Y-m-d') : substr($day, 0, 10);
+
+        return $query
+            ->whereDate('accommodations.starts_on', '<=', $day)
+            ->where(fn (Builder $inForce) => $inForce
+                ->where(fn (Builder $effective) => $effective->effective())
+                ->orWhereDate('accommodations.deactivated_on', '>', $day));
     }
 
     /**

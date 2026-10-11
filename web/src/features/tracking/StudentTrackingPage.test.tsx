@@ -48,6 +48,7 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     subjects: [],
     assessment_types: null,
     active: true,
+    deactivated_on: null,
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
     requires_external_approval: true,
@@ -746,6 +747,42 @@ describe("StudentTrackingPage", () => {
       accommodation.id,
       expect.objectContaining({ subject_ids: [4] }),
     )
+  })
+
+  it("edits «Vigente desde» and deactivates without any end date typed in (the server records the day)", async () => {
+    const tracking = baseTracking()
+    const accommodation = pendingAccommodation({
+      requires_external_approval: false,
+      is_effective: true,
+      focus_area: "Cálculo",
+      starts_on: "2026-03-15",
+    })
+    tracking.accommodations = [accommodation]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const update = vi.spyOn(trackingApi, "updateAccommodation").mockResolvedValue(accommodation)
+
+    renderPage("psychopedagogue")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /^editar$/i }))
+
+    const startsOn = await screen.findByLabelText(/vigente desde/i)
+    expect(startsOn).toHaveValue("2026-03-15")
+    expect(screen.getByText(/se completa con el día en que se activa/i)).toBeInTheDocument()
+    expect(screen.getByText(/registra el día de hoy como fecha de baja/i)).toBeInTheDocument()
+    // No «hasta» / expiry field anywhere.
+    expect(screen.queryByLabelText(/hasta|vence|vencimiento/i)).not.toBeInTheDocument()
+
+    await userEvent.clear(startsOn)
+    await userEvent.type(startsOn, "2026-03-02")
+    await userEvent.click(screen.getByLabelText(/^activa$/i))
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
+
+    expect(update).toHaveBeenCalledWith(
+      accommodation.id,
+      expect.objectContaining({ starts_on: "2026-03-02", active: false }),
+    )
+    expect(update.mock.calls[0][1]).not.toHaveProperty("deactivated_on")
   })
 
   it("only offers, to deactivate an accommodation, the assessments it applies to", async () => {

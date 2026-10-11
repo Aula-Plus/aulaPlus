@@ -13,7 +13,11 @@ use Illuminate\Validation\Rules\Enum;
  * Validation shared by the accommodation create/edit requests for where and
  * since when an accommodation applies (ClickUp 86e3dpbwy follow-up):
  *
- * - `starts_on`: the date it is in force from (Y-m-d). Required on create.
+ * - `starts_on`: the date it is in force from («Vigente desde», Y-m-d).
+ *   Optional on create: when absent the model fills it with today (school
+ *   time). Editable. There is deliberately no end-date field: the day an
+ *   accommodation is switched off is recorded by the server
+ *   (Accommodation::booted, `deactivated_on`), never sent by a client.
  * - `subject_ids`: the subjects it is restricted to — each must be a live
  *   subject of the current school (never another tenant's, never a deleted
  *   one). On edit, a subject already attached to the accommodation is still
@@ -31,14 +35,11 @@ trait ValidatesAccommodationScope
      */
     protected function accommodationScopeRules(?Accommodation $editing = null): array
     {
-        $creating = $editing === null;
         // The relation includes trashed subjects (Accommodation::subjects).
         $attachedSubjectIds = $editing?->subjects()->pluck('subjects.id')->all() ?? [];
 
         return [
-            'starts_on' => $creating
-                ? ['required', 'date_format:Y-m-d']
-                : ['sometimes', 'required', 'date_format:Y-m-d'],
+            'starts_on' => ['sometimes', 'required', 'date_format:Y-m-d'],
             'subject_ids' => ['sometimes', 'array'],
             'subject_ids.*' => [
                 'integer',

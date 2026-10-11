@@ -30,6 +30,8 @@ class AccommodationResource extends JsonResource
             'type' => $this->type,
             'category' => $this->category?->value,
             'starts_on' => $this->starts_on?->toDateString(),
+            // Set by the server the day it was switched off; null while in force.
+            'deactivated_on' => $this->deactivated_on?->toDateString(),
             'subjects' => AccommodationSubjectResource::collection($this->subjects),
             'assessment_types' => $this->assessment_types ?: null,
             'active' => $this->active,
