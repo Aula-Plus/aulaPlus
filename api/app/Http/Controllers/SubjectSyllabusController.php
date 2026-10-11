@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Contracts\StatusChangeNotifier;
 use App\Http\Requests\UploadSubjectSyllabusRequest;
 use App\Http\Resources\SubjectResource;
 use App\Jobs\ExtractSubjectSyllabusText;
 use App\Models\Subject;
+use App\Notifications\SubjectSyllabusUploadedNotification;
 use App\Support\SyllabusStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -29,7 +30,7 @@ class SubjectSyllabusController extends Controller
     /** Lifetime of the temporary download URL. */
     protected const URL_TTL_MINUTES = 5;
 
-    public function store(UploadSubjectSyllabusRequest $request, Subject $subject, StatusChangeNotifier $notifier): JsonResponse|SubjectResource
+    public function store(UploadSubjectSyllabusRequest $request, Subject $subject): JsonResponse|SubjectResource
     {
         if (! SyllabusStorage::isDurable()) {
             // Misconfiguration, not a user error: no details beyond the driver.
@@ -81,17 +82,41 @@ class SubjectSyllabusController extends Controller
 
         ExtractSubjectSyllabusText::dispatch($subject, $path);
 
-        // "Avisanos cuando se suba uno": the Aula+ team loads the program into
-        // the curricular catalog. Ids only — never the file or its contents.
-        $notifier->notify('subject.syllabus_uploaded', [
-            'school_id' => $subject->school_id,
-            'subject_id' => $subject->id,
-            'in_catalog' => $subject->curricular_item_id !== null,
-        ]);
+        $this->notifySupport($subject, $request);
 
         // Usually `text_status: pending` — the extraction is queued; the SPA
         // polls the subject until it settles.
         return new SubjectResource($subject->refresh());
+    }
+
+    /**
+     * "Avisanos cuando se suba uno": emails the Aula+ support team, who load
+     * the program into the curricular catalog. Same recipients as the support
+     * form (SUPPORT_NOTIFY_EMAILS); none configured → no mail, and the upload
+     * still succeeds. Metadata only — never the file, its text or a link.
+     */
+    private function notifySupport(Subject $subject, UploadSubjectSyllabusRequest $request): void
+    {
+        $recipients = array_values(array_filter((array) config('services.support.notify_to')));
+
+        if ($recipients === []) {
+            return;
+        }
+
+        try {
+            Notification::route('mail', $recipients)->notify(new SubjectSyllabusUploadedNotification(
+                $subject,
+                $request->user(),
+                Str::limit($request->file('file')->getClientOriginalName(), 250, ''),
+            ));
+        } catch (Throwable $e) {
+            // The program is already saved: a mail/queue hiccup must not turn
+            // the upload into an error. Ids and exception class only.
+            Log::warning('subject.syllabus.support_mail_failed', [
+                'subject_id' => $subject->id,
+                'error' => $e::class,
+            ]);
+        }
     }
 
     public function show(Subject $subject): JsonResponse

@@ -9,11 +9,16 @@ use App\Models\Group;
 use App\Models\School;
 use App\Models\Subject;
 use App\Models\User;
+use App\Notifications\SubjectSyllabusUploadedNotification;
 use App\Support\Pdf\BoundedPdfParser;
 use App\Support\Tenancy;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Mail\Markdown;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
@@ -85,9 +90,6 @@ beforeEach(function () {
 });
 
 it('lets direction upload the program PDF privately and extracts its text', function () {
-    Log::shouldReceive('info')->once()->with('status-change.subject.syllabus_uploaded', Mockery::on(
-        fn (array $context) => $context['subject_id'] === $this->subject->id && $context['in_catalog'] === false
-    ));
     Sanctum::actingAs($this->director);
 
     ($this->upload)()
@@ -378,3 +380,146 @@ it('keeps the PDF text out of the AI context when the requester cannot open the 
         ->and($build($proposalBy($this->teacher))['subject_program']['source'])->toBe('school_program_pdf')
         ->and($build($proposalBy($this->psychopedagogue))['subject_program']['source'])->toBe('school_program_pdf');
 });
+
+/**
+ * The support mail's lines as the reader sees them (they are HTML-encoded so
+ * that CommonMark treats user input as literal text).
+ *
+ * @return array<int, string>
+ */
+function syllabusMailLines(MailMessage $mail): array
+{
+    return array_map(
+        fn ($line) => html_entity_decode((string) $line, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+        $mail->introLines,
+    );
+}
+
+it('emails the Aula+ support team when a program is uploaded or replaced', function () {
+    Notification::fake();
+    config(['services.support.notify_to' => ['soporte@aulaplus.test', 'pipe@aulaplus.test']]);
+    $this->school->update(['name' => 'Ivy Thomas']);
+    $this->subject->update(['short_code' => 'AS']);
+    $this->director->update(['name' => 'Ana Pérez']);
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertOk();
+
+    Notification::assertSentOnDemand(
+        SubjectSyllabusUploadedNotification::class,
+        function (SubjectSyllabusUploadedNotification $notification, array $channels, AnonymousNotifiable $notifiable) {
+            // Round-trip through queue serialization, as a worker would.
+            $mail = unserialize(serialize($notification))->toMail($notifiable);
+
+            return $notifiable->routes['mail'] === ['soporte@aulaplus.test', 'pipe@aulaplus.test']
+                && $channels === ['mail']
+                && $mail->subject === '[Aula+] Ivy Thomas subió el programa de Ayuda Social'
+                && syllabusMailLines($mail) === [
+                    'Ivy Thomas subió el programa de Ayuda Social.',
+                    'Materia: Ayuda Social (AS)',
+                    'Archivo: Programa Ayuda Social 2027.pdf',
+                    'Catálogo: la materia todavía no está en el catálogo curricular.',
+                    'Subido por: Ana Pérez — Dirección',
+                    "Referencia: colegio #{$this->school->id}, materia #{$this->subject->id}",
+                ];
+        },
+    );
+
+    // A replacement is a new program for the catalog team too.
+    $item = CurricularItem::factory()->create();
+    $this->subject->forceFill(['curricular_item_id' => $item->id])->save();
+    ($this->upload)('', 'Programa Ayuda Social 2028.pdf')->assertOk();
+
+    Notification::assertSentOnDemandTimes(SubjectSyllabusUploadedNotification::class, 2);
+    Notification::assertSentOnDemand(
+        SubjectSyllabusUploadedNotification::class,
+        function (SubjectSyllabusUploadedNotification $notification, array $channels, AnonymousNotifiable $notifiable) {
+            $lines = syllabusMailLines($notification->toMail($notifiable));
+
+            return in_array('Archivo: Programa Ayuda Social 2028.pdf', $lines, true)
+                && in_array('Catálogo: la materia ya está vinculada al catálogo curricular.', $lines, true);
+        },
+    );
+});
+
+it('sends no support mail, and still saves the program, when no support address is configured', function () {
+    Notification::fake();
+    config(['services.support.notify_to' => []]);
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertOk()->assertJsonPath('data.syllabus.name', 'Programa Ayuda Social 2027.pdf');
+
+    Notification::assertNothingSent();
+    expect($this->subject->fresh()->syllabus_path)->not->toBeNull();
+});
+
+it('sends no support mail when the upload fails', function () {
+    Notification::fake();
+    config(['services.support.notify_to' => ['soporte@aulaplus.test']]);
+
+    // Not direction.
+    Sanctum::actingAs($this->teacher);
+    ($this->upload)()->assertForbidden();
+
+    // Not a PDF.
+    Sanctum::actingAs($this->director);
+    $this->post("/api/v1/subjects/{$this->subject->id}/syllabus", [
+        'file' => UploadedFile::fake()->create('programa.docx', 10, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+    ], ['Accept' => 'application/json'])->assertUnprocessable();
+
+    // Production without durable storage.
+    config(['filesystems.disks.syllabi.driver' => 'local']);
+    $this->app['env'] = 'production';
+    ($this->upload)()->assertStatus(503);
+
+    Notification::assertNothingSent();
+});
+
+it('keeps the upload successful when the support mail cannot be queued', function () {
+    config(['services.support.notify_to' => ['soporte@aulaplus.test']]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('queue down'));
+    Log::spy();
+    Sanctum::actingAs($this->director);
+
+    ($this->upload)()->assertOk();
+
+    expect($this->subject->fresh()->syllabus_path)->not->toBeNull();
+    Log::shouldHaveReceived('warning')->once()->with('subject.syllabus.support_mail_failed', [
+        'subject_id' => $this->subject->id,
+        'error' => RuntimeException::class,
+    ]);
+});
+
+it('renders school, subject, uploader and file names in the support mail as literal text', function (string $field, string $payload) {
+    $values = ['school' => 'Ivy Thomas', 'subject' => 'Ayuda Social', 'uploader' => 'Ana Pérez', 'file' => 'programa.pdf'];
+    $values[$field] = $payload;
+    $this->school->update(['name' => $values['school']]);
+    $this->subject->update(['name' => $values['subject']]);
+    $this->director->update(['name' => $values['uploader']]);
+
+    $mail = (new SubjectSyllabusUploadedNotification($this->subject->fresh(), $this->director->fresh(), $values['file']))
+        ->toMail(new AnonymousNotifiable);
+    $html = (string) $mail->render();
+    $text = (string) app(Markdown::class)->renderText($mail->markdown, $mail->data());
+    $squash = fn (string $value) => trim(preg_replace('/\s+/', ' ', $value));
+    $visible = $squash(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+    // (The mail layout's own header logo is an <img>, so look for ours.)
+    expect($html)->not->toContain('href="https://evil.example')
+        ->not->toContain('src="https://evil.example')
+        ->not->toContain('<img src=x')
+        ->not->toContain('<b>')
+        // Shown as typed (Laravel's Markdown::render() itself drops a "\" before "[").
+        ->and($visible)->toContain($squash(str_replace('\[', '[', $payload)))
+        // The plain-text part shows the value as typed, without escapes.
+        ->and($text)->toContain($payload);
+})->with([
+    'subject: link' => ['subject', 'Ayuda [Restablecer acceso](https://evil.example)'],
+    'subject: html' => ['subject', 'Ayuda <b>Social</b>'],
+    'file: link' => ['file', '[Abrir programa](https://evil.example).pdf'],
+    'file: backslash bypass' => ['file', '\[Abrir programa](https://evil.example).pdf'],
+    'file: image' => ['file', '![logo](https://evil.example/x.png).pdf'],
+    'file: autolink' => ['file', '<https://evil.example>.pdf'],
+    'school: link' => ['school', '[Colegio](https://evil.example)'],
+    'uploader: html' => ['uploader', 'Ana <img src=x onerror=alert(1)>'],
+]);
