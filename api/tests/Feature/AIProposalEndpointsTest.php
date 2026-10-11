@@ -73,6 +73,22 @@ it('queues a generation and returns 202 with a pending proposal', function () {
     ]);
 });
 
+it('returns 503 and queues nothing when the AI provider is not configured', function () {
+    Queue::fake();
+    config(['services.anthropic.key' => '']);
+    [$school, $teacher, $group, $plan] = teacherWithGroupAndPlan();
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'unit',
+        'parameters' => ['annual_plan_id' => $plan->id, 'focus' => 'fracciones'],
+    ])->assertStatus(503)
+        ->assertJsonPath('message', 'The AI assistant is not available right now.');
+
+    Queue::assertNothingPushed();
+    $this->assertDatabaseCount('ai_proposals', 0);
+});
+
 it('forbids a teacher from generating for a group they do not lead', function () {
     Queue::fake();
     $school = School::factory()->create();
