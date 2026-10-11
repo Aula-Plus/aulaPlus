@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\AlertType;
+use App\Http\Requests\ShareAlertRequest;
 use App\Models\Alert;
 use App\Models\Group;
 use App\Models\School;
@@ -370,4 +371,19 @@ it('lists the candidates in a constant number of queries, however many staff the
 
     expect($queriesFor())->toBe($before)
         ->and(($this->candidateIds)($this->galia))->toHaveCount(3 + 5);
+});
+
+it('re-checks under the lock that the actor is still in charge when sharing', function () {
+    ($this->handOff)($this->mariana, $this->galia)->assertOk();
+
+    // Galia's share passes validation, but before it is written she hands the
+    // alert off to Adriana from another tab: she is no longer in charge.
+    $this->app->afterResolving(ShareAlertRequest::class, function (): void {
+        Alert::query()->withoutGlobalScopes()->whereKey($this->alert->id)->update(['assignee_id' => $this->adriana->id]);
+    });
+
+    ($this->share)($this->galia, $this->mariana)->assertForbidden();
+
+    expect($this->alert->collaborators()->count())->toBe(0)
+        ->and($this->alert->actions()->where('kind', 'share')->count())->toBe(0);
 });

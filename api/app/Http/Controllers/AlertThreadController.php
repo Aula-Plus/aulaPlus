@@ -7,6 +7,7 @@ use App\Http\Requests\ShareAlertRequest;
 use App\Http\Requests\StoreAlertNoteRequest;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -31,12 +32,18 @@ class AlertThreadController extends Controller
         $user = $request->user();
         $collaboratorId = (int) $request->validated('user_id');
 
-        DB::transaction(function () use ($request, $alert, $user, $collaboratorId): void {
-            // Re-check the "two at a time" cap under a row lock, so two
-            // simultaneous shares can't both get in.
-            Alert::query()->whereKey($alert->id)->lockForUpdate()->first();
+        $alert = DB::transaction(function () use ($request, $alert, $user, $collaboratorId): Alert {
+            // Lock the row (as choosing a way out does) and re-check on what
+            // it holds now: it may have just been handed off or closed, so the
+            // actor may no longer be in charge. The "two at a time" cap is
+            // re-checked under the same lock, so two simultaneous shares
+            // can't both get in.
+            $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
             if ($alert->collaborators()->count() >= Alert::MAX_COLLABORATORS) {
                 throw ValidationException::withMessages(['user_id' => 'This alert is already shared.']);
+            }
+            if (! $alert->canBeSharedBy($user)) {
+                throw new AuthorizationException;
             }
 
             $alert->actions()->create([
@@ -48,6 +55,8 @@ class AlertThreadController extends Controller
 
             $alert->collaborators()->syncWithoutDetaching([$collaboratorId => ['shared_by_id' => $user->id]]);
             $alert->people()->syncWithoutDetaching([$user->id, $collaboratorId]);
+
+            return $alert;
         });
 
         return new AlertResource($alert->fresh()->load(AlertResource::RELATIONS));
