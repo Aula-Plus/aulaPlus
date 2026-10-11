@@ -8,6 +8,7 @@ import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as trackingApi from "./trackingApi"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import * as performanceApi from "./performanceApi"
+import * as subjectsApi from "@/features/subjects/subjectsApi"
 import type { Accommodation, Role, StudentTracking } from "@/types"
 
 function baseTracking(): StudentTracking {
@@ -48,7 +49,11 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     student_id: 3,
     type: "Tiempo extra en evaluaciones",
     category: "access",
+    starts_on: "2026-03-15",
+    subjects: [],
+    assessment_types: null,
     active: true,
+    deactivated_on: null,
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
     requires_external_approval: true,
@@ -92,6 +97,10 @@ describe("StudentTrackingPage", () => {
     // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
+    vi.spyOn(subjectsApi, "fetchSubjects").mockResolvedValue([
+      { id: 4, name: "Matemática", short_code: null, color: null },
+      { id: 5, name: "Ciencias", short_code: null, color: null },
+    ])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -418,6 +427,14 @@ describe("StudentTrackingPage", () => {
     // Now choose a category and the write goes through with it.
     await userEvent.click(screen.getByLabelText(/categoría/i))
     await userEvent.click(await screen.findByRole("button", { name: "Contenido" }))
+
+    // Scope: since when, which subjects, which assessment types.
+    const startsOn = screen.getByLabelText(/vigente desde/i)
+    await userEvent.clear(startsOn)
+    await userEvent.type(startsOn, "2026-04-02")
+    await userEvent.click(screen.getByLabelText(/materias/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Matemática" }))
+    await userEvent.click(screen.getByRole("checkbox", { name: "Escrita" }))
     await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
@@ -427,6 +444,9 @@ describe("StudentTrackingPage", () => {
       category: "content",
       requires_external_approval: false,
       active: true,
+      starts_on: "2026-04-02",
+      subject_ids: [4],
+      assessment_types: ["written"],
     })
   })
 
@@ -602,7 +622,9 @@ describe("StudentTrackingPage", () => {
       confirmed_at: "2026-09-01T10:00:00+00:00",
     }
     tracking.support_chips = {
-      accommodations: [{ id: 1, label: "Tiempo extendido 25%" }],
+      accommodations: [
+        { id: 1, label: "Tiempo extendido 25%", starts_on: null, subjects: [], assessment_types: null },
+      ],
       barriers: [{ id: 2, label: "Lectura de textos largos" }],
     }
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
@@ -651,5 +673,175 @@ describe("StudentTrackingPage", () => {
       adjustments: "Ajusta",
     })
     expect(await screen.findByText("Cuesta")).toBeInTheDocument()
+  })
+
+  // ── ClickUp 86e3dpbwy follow-up: since when and where each support applies ─
+
+  it("shows a teacher each accommodation with since when and in which subjects it applies", async () => {
+    const tracking = baseTracking()
+    const year = new Date().getFullYear()
+    tracking.support_chips = {
+      accommodations: [
+        {
+          id: 1,
+          label: "Ortografía no puntúa",
+          starts_on: `${year}-04-02`,
+          subjects: [
+            { id: 7, name: "Idioma Español", deleted: false },
+            { id: 8, name: "Literatura", deleted: false },
+          ],
+          assessment_types: null,
+        },
+        {
+          id: 2,
+          label: "Sentarla cerca del pizarrón",
+          starts_on: "2025-03-15",
+          subjects: [],
+          assessment_types: null,
+        },
+        {
+          id: 3,
+          label: "Calculadora",
+          starts_on: `${year}-05-04`,
+          subjects: [{ id: 4, name: "Matemática", deleted: false }],
+          assessment_types: ["written", "oral"],
+        },
+      ],
+      barriers: [],
+    }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    const items = within(await screen.findByRole("list")).getAllByRole("listitem")
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Ortografía no puntúa — desde el 02/04 — en Idioma Español y Literatura",
+      "Sentarla cerca del pizarrón — desde el 15/03/2025 — en todas las materias",
+      "Calculadora — desde el 04/05 — en Matemática — solo en escritos y orales",
+    ])
+    // Never the origin, validator or review date (the server doesn't send them).
+    expect(screen.queryByText(/origen|validó|revisión/i)).not.toBeInTheDocument()
+  })
+
+  it("shows psychopedagogy the same scope on each accommodation of the full list", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [
+      pendingAccommodation({
+        requires_external_approval: false,
+        is_effective: true,
+        starts_on: "2024-04-02",
+        subjects: [{ id: 7, name: "Idioma Español", deleted: false }],
+      }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("psychopedagogue")
+    await openTab("Ajustes")
+
+    expect(await screen.findByText("Desde el 02/04/2024 — en Idioma Español")).toBeInTheDocument()
+  })
+
+  it("shows a soft-deleted subject of the edited accommodation as «(eliminada)» and lets it be removed", async () => {
+    const tracking = baseTracking()
+    const accommodation = pendingAccommodation({
+      requires_external_approval: false,
+      is_effective: true,
+      focus_area: "Cálculo",
+      subjects: [
+        { id: 9, name: "Dibujo", deleted: true },
+        { id: 4, name: "Matemática", deleted: false },
+      ],
+    })
+    tracking.accommodations = [accommodation]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const update = vi.spyOn(trackingApi, "updateAccommodation").mockResolvedValue(accommodation)
+
+    renderPage("psychopedagogue")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /^editar$/i }))
+
+    // Not «Todas las materias»: the trigger shows both attached subjects.
+    const trigger = await screen.findByLabelText(/materias/i)
+    expect(await within(trigger).findByText("Dibujo (eliminada)")).toBeInTheDocument()
+    expect(within(trigger).getByText("Matemática")).toBeInTheDocument()
+    expect(within(trigger).queryByText("Todas las materias")).not.toBeInTheDocument()
+
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole("button", { name: "Dibujo (eliminada)" }))
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
+
+    expect(update).toHaveBeenCalledWith(
+      accommodation.id,
+      expect.objectContaining({ subject_ids: [4] }),
+    )
+  })
+
+  it("edits «Vigente desde» and deactivates without any end date typed in (the server records the day)", async () => {
+    const tracking = baseTracking()
+    const accommodation = pendingAccommodation({
+      requires_external_approval: false,
+      is_effective: true,
+      focus_area: "Cálculo",
+      starts_on: "2026-03-15",
+    })
+    tracking.accommodations = [accommodation]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const update = vi.spyOn(trackingApi, "updateAccommodation").mockResolvedValue(accommodation)
+
+    renderPage("psychopedagogue")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /^editar$/i }))
+
+    const startsOn = await screen.findByLabelText(/vigente desde/i)
+    expect(startsOn).toHaveValue("2026-03-15")
+    expect(screen.getByText(/se completa con el día en que se activa/i)).toBeInTheDocument()
+    expect(screen.getByText(/registra el día de hoy como fecha de baja/i)).toBeInTheDocument()
+    // No «hasta» / expiry field anywhere.
+    expect(screen.queryByLabelText(/hasta|vence|vencimiento/i)).not.toBeInTheDocument()
+
+    await userEvent.clear(startsOn)
+    await userEvent.type(startsOn, "2026-03-02")
+    await userEvent.click(screen.getByLabelText(/^activa$/i))
+    await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
+
+    expect(update).toHaveBeenCalledWith(
+      accommodation.id,
+      expect.objectContaining({ starts_on: "2026-03-02", active: false }),
+    )
+    expect(update.mock.calls[0][1]).not.toHaveProperty("deactivated_on")
+  })
+
+  it("only offers, to deactivate an accommodation, the assessments it applies to", async () => {
+    const tracking = baseTracking()
+    tracking.recent_assessments = [
+      { id: 10, group_id: 1, subject_id: 4, type: "written", variant_number: null, created_at: "2026-08-01T10:00:00+00:00" },
+      { id: 11, group_id: 1, subject_id: 4, type: "oral", variant_number: null, created_at: "2026-08-02T10:00:00+00:00" },
+      { id: 12, group_id: 1, subject_id: 5, type: "written", variant_number: null, created_at: "2026-08-03T10:00:00+00:00" },
+    ]
+    tracking.accommodations = [
+      pendingAccommodation({
+        requires_external_approval: false,
+        is_effective: true,
+        subjects: [{ id: 4, name: "Matemática", deleted: false }],
+        assessment_types: ["written"],
+      }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("director")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /desactivar para una evaluación/i }))
+    await userEvent.click(screen.getByLabelText(/^evaluación$/i))
+
+    // Only the written Matemática one: not the oral one, not the Ciencias one.
+    expect(await screen.findByRole("button", { name: /escrita · /i })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /oral · /i })).not.toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: / · / })).toHaveLength(1)
   })
 })

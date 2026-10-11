@@ -469,7 +469,30 @@ export interface GroupPerformanceTimeline {
   marks: GroupPerformanceMark[]
 }
 
-export interface Accommodation {
+/** A subject an accommodation is restricted to (`AccommodationSubjectResource`). */
+export interface AccommodationSubjectRef {
+  id: number
+  name: string
+  /**
+   * Soft-deleted since it was attached. The accommodation stays scoped to it
+   * (it never turns general); the edit form shows it as «(eliminada)».
+   */
+  deleted: boolean
+}
+
+/**
+ * Where and since when an accommodation applies (ClickUp 86e3dpbwy follow-up):
+ *   - `starts_on`: ISO date (`YYYY-MM-DD`) it is in force from.
+ *   - `subjects`: the subjects it is restricted to; empty = every subject.
+ *   - `assessment_types`: the assessment types it is restricted to; null = every type.
+ */
+export interface AccommodationScope {
+  starts_on: string | null
+  subjects: AccommodationSubjectRef[]
+  assessment_types: AssessmentType[] | null
+}
+
+export interface Accommodation extends AccommodationScope {
   id: number
   student_id: number
   type: string
@@ -481,6 +504,11 @@ export interface Accommodation {
    */
   category: AccommodationCategory | null
   active: boolean
+  /**
+   * ISO date the accommodation was switched off, recorded by the server (PO,
+   * ClickUp 86e3d1bwa: no user-entered end date). `null` while it is in force.
+   */
+  deactivated_on: string | null
   description: string | null
   focus_area: string | null
   requires_external_approval: boolean
@@ -512,6 +540,15 @@ export interface AccommodationInput {
   category: AccommodationCategory
   requires_external_approval: boolean
   active: boolean
+  /**
+   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form always sends it (today
+   * by default); the backend also defaults it to today when absent.
+   */
+  starts_on: string
+  /** Empty = a general accommodation (every subject). */
+  subject_ids: number[]
+  /** Empty = every assessment type (stored as null). */
+  assessment_types: AssessmentType[]
 }
 
 export interface Barrier {
@@ -552,11 +589,19 @@ export interface SupportChip {
   label: string
 }
 
+/**
+ * An accommodation chip: the name plus since when and where it applies, so a
+ * teacher knows whether it applies in their class. The server only sends a
+ * teacher the general ones and those scoped to a subject they teach the
+ * student — never origin, validator or review date.
+ */
+export interface AccommodationChip extends SupportChip, AccommodationScope {}
+
 export interface StudentTracking {
   student: Student
   /** `null` until psychopedagogy writes and confirms it. */
   team_summary: TeamSummary | null
-  support_chips: { accommodations: SupportChip[]; barriers: SupportChip[] }
+  support_chips: { accommodations: AccommodationChip[]; barriers: SupportChip[] }
   recent_assessments: AssessmentSummary[]
   /** Mean of every scored assessment, across subjects; null when there are none. */
   overall_average: number | null
@@ -671,8 +716,13 @@ export interface BarrierAccommodationLink {
   /** The Accommodation's id — the link is uniquely keyed by (barrier, accommodation). */
   id: number
   type: string
-  description: string | null
-  focus_area: string | null
+  /**
+   * Clinical detail: only sent to a viewer with clinical access
+   * (psychopedagogy/direction); absent for a teacher. A teacher also only gets
+   * the linked accommodations they may see (general or of a subject they teach).
+   */
+  description?: string | null
+  focus_area?: string | null
   proposed_by_id: number
   validated: boolean
   validated_by_id: number | null

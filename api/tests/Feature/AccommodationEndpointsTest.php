@@ -22,6 +22,7 @@ it('lets a staff member create an accommodation with a category', function () {
         'type' => 'spelling_not_scored',
         'description' => 'La ortografía no puntúa en Idioma Español.',
         'focus_area' => 'literacy',
+        'starts_on' => '2026-04-02',
     ])->assertCreated();
 
     $response->assertJsonPath('data.category', 'criteria')
@@ -45,6 +46,7 @@ it('rejects creating an accommodation without a category (422)', function () {
         'type' => 'extra_time',
         'description' => 'Más tiempo en escritas.',
         'focus_area' => 'attention',
+        'starts_on' => '2026-04-02',
     ])->assertUnprocessable()->assertJsonValidationErrorFor('category');
 
     $this->assertDatabaseCount('accommodations', 0);
@@ -61,6 +63,7 @@ it('rejects an invalid category value (422)', function () {
         'type' => 'extra_time',
         'description' => 'x',
         'focus_area' => 'attention',
+        'starts_on' => '2026-04-02',
     ])->assertUnprocessable()->assertJsonValidationErrorFor('category');
 });
 

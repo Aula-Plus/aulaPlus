@@ -70,7 +70,7 @@ class StudentTrackingController extends Controller
         // (Dropping keys, as when grades left the cache, needs no bump: a stale
         // entry's extra keys are simply ignored.)
         $cached = Cache::remember(
-            "student-tracking.v3.{$student->id}",
+            "student-tracking.v4.{$student->id}",
             60,
             fn () => $this->aggregate($student)
         );
@@ -78,7 +78,9 @@ class StudentTrackingController extends Controller
         return new StudentTrackingResource([
             'student' => $student,
             'assessments' => $this->hydrate(Assessment::class, $cached['assessments']),
-            'accommodations' => $this->hydrate(Accommodation::class, $cached['accommodations']),
+            // Subjects are loaded per request (not cached): the Resource filters
+            // accommodations by the viewer's subjects and renders their scope.
+            'accommodations' => $this->hydrate(Accommodation::class, $cached['accommodations'])->load('subjects'),
             'barriers' => $this->hydrate(Barrier::class, $cached['barriers']),
             'comments' => $this->hydrate(Comment::class, $cached['comments'])->load('categories'),
             // Never cached: depends on the asking user (visibility + role).
