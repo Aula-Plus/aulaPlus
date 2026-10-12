@@ -3,10 +3,12 @@
 namespace App\Actions\AI;
 
 use App\Models\AIProposal;
+use App\Models\AnnualPlan;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Unit;
 use Illuminate\Support\Collection;
 
 /**
@@ -120,7 +122,7 @@ class BuildProposalContext
      */
     protected function subjectProgram(AIProposal $proposal, array $parameters): ?array
     {
-        $subject = isset($parameters['subject_id']) ? Subject::find($parameters['subject_id']) : null;
+        $subject = $this->plannedSubject($parameters);
 
         if ($subject === null) {
             return null;
@@ -155,6 +157,30 @@ class BuildProposalContext
             'subject' => $subject->name,
             'text' => mb_substr($subject->syllabus_text, 0, self::MAX_PROGRAM_TEXT_LENGTH),
         ];
+    }
+
+    /**
+     * The subject being planned. Annual-plan and assessment requests carry
+     * `subject_id`; unit and class-session requests don't — they plan inside
+     * an annual plan (`annual_plan_id`, or `unit_id` → its plan), so the
+     * subject is that plan's. AnnualPlan is tenant-scoped, so a plan (or a
+     * unit's plan) from another school resolves to no subject.
+     *
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function plannedSubject(array $parameters): ?Subject
+    {
+        if (isset($parameters['subject_id'])) {
+            return Subject::find($parameters['subject_id']);
+        }
+
+        $plan = match (true) {
+            isset($parameters['annual_plan_id']) => AnnualPlan::find($parameters['annual_plan_id']),
+            isset($parameters['unit_id']) => Unit::find($parameters['unit_id'])?->annualPlan,
+            default => null,
+        };
+
+        return $plan?->subject;
     }
 
     /**

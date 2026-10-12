@@ -4,10 +4,12 @@ use App\Actions\AI\BuildProposalContext;
 use App\Enums\AIProposalType;
 use App\Jobs\ExtractSubjectSyllabusText;
 use App\Models\AIProposal;
+use App\Models\AnnualPlan;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Subject;
+use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\SubjectSyllabusUploadedNotification;
 use App\Support\Pdf\BoundedPdfParser;
@@ -379,6 +381,35 @@ it('keeps the PDF text out of the AI context when the requester cannot open the 
     expect($build($proposalBy($this->otherTeacher))['subject_program'])->toBeNull()
         ->and($build($proposalBy($this->teacher))['subject_program']['source'])->toBe('school_program_pdf')
         ->and($build($proposalBy($this->psychopedagogue))['subject_program']['source'])->toBe('school_program_pdf');
+});
+
+it("uses the annual plan's subject program for unit and class proposals, which carry no subject_id", function () {
+    $this->subject->forceFill(['syllabus_path' => 'x.pdf', 'syllabus_text' => 'Unidad 1: Proyecto comunitario'])->save();
+    $plan = AnnualPlan::factory()->create([
+        'school_id' => $this->school->id,
+        'group_id' => $this->group->id,
+        'subject_id' => $this->subject->id,
+        'teacher_id' => $this->teacher->id,
+    ]);
+    $unit = Unit::factory()->create(['annual_plan_id' => $plan->id]);
+    $build = fn (AIProposalType $type, array $parameters) => Tenancy::forSchool($this->school, fn () => (new BuildProposalContext)(
+        AIProposal::factory()->create([
+            'group_id' => $this->group->id,
+            'requested_by_id' => $this->teacher->id,
+            'type' => $type,
+            'input_parameters' => $parameters,
+        ])
+    ));
+
+    expect($build(AIProposalType::Unit, ['annual_plan_id' => $plan->id, 'focus' => 'x'])['subject_program']['text'])
+        ->toBe('Unidad 1: Proyecto comunitario')
+        ->and($build(AIProposalType::ClassSession, ['unit_id' => $unit->id, 'focus' => 'x'])['subject_program']['text'])
+        ->toBe('Unidad 1: Proyecto comunitario')
+        ->and($build(AIProposalType::ClassSession, ['focus' => 'x'])['subject_program'])->toBeNull();
+
+    // Another school's plan (tenant-scoped) resolves to no subject.
+    $foreignPlan = AnnualPlan::factory()->create(['school_id' => School::factory()->create()->id]);
+    expect($build(AIProposalType::Unit, ['annual_plan_id' => $foreignPlan->id, 'focus' => 'x'])['subject_program'])->toBeNull();
 });
 
 /**
