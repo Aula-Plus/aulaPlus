@@ -7,6 +7,8 @@ use App\Models\ScheduledFollowUp;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Notifications\FollowUpAssignedNotification;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -420,4 +422,113 @@ it('serves and marks read only the caller\'s own notifications', function () {
         ->assertJsonPath('data.0.data.student_id', $student->id);
     $this->postJson("/api/v1/notifications/{$notificationId}/read")->assertOk();
     $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('counts only the caller\'s own unread notices and drops the count as they are read', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psico = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $otherPsico = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    teachStudent($teacher, $student);
+
+    // Another school with its own assigned notice: never counted for $psico.
+    $otherSchool = School::factory()->create();
+    $foreignTeacher = User::factory()->forSchool($otherSchool)->teacher()->create();
+    $foreignPsico = User::factory()->forSchool($otherSchool)->psychopedagogue()->create();
+    $foreignStudent = Student::factory()->create(['school_id' => $otherSchool->id]);
+    teachStudent($foreignTeacher, $foreignStudent);
+
+    $assign = function (User $by, Student $on, User $to): void {
+        Sanctum::actingAs($by);
+        $this->postJson("/api/v1/students/{$on->id}/scheduled-follow-ups", [
+            'description' => 'Revisar si el tiempo extendido le está sirviendo',
+            'due_date' => now()->addWeek()->toDateString(),
+            'assigned_to_id' => $to->id,
+        ])->assertCreated();
+    };
+
+    $assign($teacher, $student, $psico);
+    $assign($teacher, $student, $psico);
+    $assign($teacher, $student, $otherPsico);
+    $assign($foreignTeacher, $foreignStudent, $foreignPsico);
+
+    Sanctum::actingAs($psico);
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertExactJson(['data' => ['count' => 2]]);
+
+    Sanctum::actingAs($otherPsico);
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+
+    Sanctum::actingAs($foreignPsico);
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+
+    // The assigner gets no notice of their own.
+    Sanctum::actingAs($teacher);
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 0);
+
+    // Each read drops the count; once every notice is read it is zero.
+    Sanctum::actingAs($psico);
+    $ids = $psico->unreadNotifications()->pluck('id')->all();
+    $this->postJson("/api/v1/notifications/{$ids[0]}/read")->assertOk();
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+    $this->postJson("/api/v1/notifications/{$ids[1]}/read")->assertOk();
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 0);
+
+    // Reading $psico's notices left everyone else's untouched.
+    Sanctum::actingAs($otherPsico);
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+    Sanctum::actingAs($foreignPsico);
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+});
+
+it('requires authentication to read the unread notice count', function () {
+    $this->getJson('/api/v1/notifications/unread-count')->assertUnauthorized();
+});
+
+it('lists and counts only follow-up notices, so the badge and the list agree', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psico = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    teachStudent($teacher, $student);
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'description' => 'x',
+        'due_date' => now()->addWeek()->toDateString(),
+        'assigned_to_id' => $psico->id,
+    ])->assertCreated();
+
+    // Some other (future) database notification type: not a follow-up notice,
+    // so "Mis seguimientos" neither lists nor counts it.
+    $psico->notifications()->create([
+        'id' => (string) Str::uuid(),
+        'type' => 'App\\Notifications\\SomethingElseNotification',
+        'data' => ['type' => 'something_else'],
+    ]);
+    expect($psico->unreadNotifications()->count())->toBe(2);
+
+    Sanctum::actingAs($psico);
+    $this->getJson('/api/v1/notifications')->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.data.type', 'follow_up_assigned');
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+});
+
+it('counts every unread follow-up notice even past the list cap', function () {
+    $school = School::factory()->create();
+    $psico = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $followUp = ScheduledFollowUp::factory()->create([
+        'school_id' => $school->id,
+        'student_id' => $student->id,
+        'created_by_id' => $psico->id,
+    ]);
+
+    for ($i = 0; $i < 52; $i++) {
+        $psico->notify(new FollowUpAssignedNotification($followUp));
+    }
+
+    Sanctum::actingAs($psico);
+    $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(50, 'data');
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 52);
 });

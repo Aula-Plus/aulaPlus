@@ -110,6 +110,23 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
   return data.data
 }
 
+/** The most notices `fetchNotifications` returns (backend NotificationController::LIST_LIMIT). */
+export const NOTIFICATIONS_LIST_LIMIT = 50
+
+/**
+ * How many unread notices the caller has (the same set `fetchNotifications`
+ * lists, but not capped at {@link NOTIFICATIONS_LIST_LIMIT}). Feeds the count
+ * next to "Alertas y seguimientos" in the sidebar. `signal` lets a superseded
+ * request be aborted (see unreadNotices.ts).
+ */
+export async function fetchUnreadNotificationCount(signal?: AbortSignal): Promise<number> {
+  const { data } = await api.get<{ data: { count: number } }>(
+    "/api/v1/notifications/unread-count",
+    signal ? { signal } : undefined,
+  )
+  return data.data.count
+}
+
 export async function markNotificationRead(id: string): Promise<void> {
   await api.post(`/api/v1/notifications/${id}/read`)
 }

@@ -17,7 +17,7 @@ interface GroupAccommodationsSummaryProps {
  *
  * Deliberately NO role gate: the endpoint is aggregate-only and never names a
  * student, so it is safe for any role that can already see the group — unlike
- * the clinical "Adaptaciones vigentes" section of StudentTrackingPage. Adding a
+ * the clinical "Ajustes vigentes" section of StudentTrackingPage. Adding a
  * `canAccessClinicalProfile` gate here would be more restrictive than necessary
  * (spec §6). Authorization stays the backend's job anyway (CLAUDE.md).
  */
@@ -46,7 +46,7 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
       ) : entries === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : entries.length === 0 ? (
-        <EmptyState icon={HeartHandshake} message="La clase no tiene ajustes activos." />
+        <EmptyState icon={HeartHandshake} message="El grupo no tiene ajustes activos." />
       ) : (
         <Table>
           <TableHeader>

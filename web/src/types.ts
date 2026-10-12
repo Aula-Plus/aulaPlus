@@ -323,9 +323,9 @@ export type PerformanceMarkType =
   | "calendar_event"
 
 export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
-  accommodation_activated: "Adaptación activada",
-  accommodation_deactivated: "Adaptación desactivada",
-  accommodation_instance_override: "Adaptación desactivada para esta evaluación",
+  accommodation_activated: "Ajuste activado",
+  accommodation_deactivated: "Ajuste desactivado",
+  accommodation_instance_override: "Ajuste desactivado para esta evaluación",
   barrier_registered: "Barrera registrada",
   calendar_event: "Evento de calendario",
 }
@@ -430,8 +430,8 @@ export type GroupPerformanceMarkType =
   | "calendar_event"
 
 export const groupPerformanceMarkTypeLabels: Record<GroupPerformanceMarkType, string> = {
-  accommodation_activated: "Adaptaciones activadas",
-  accommodation_deactivated: "Adaptaciones desactivadas",
+  accommodation_activated: "Ajustes activados",
+  accommodation_deactivated: "Ajustes desactivados",
   barrier_registered: "Barreras registradas",
   calendar_event: "Evento de calendario",
 }
