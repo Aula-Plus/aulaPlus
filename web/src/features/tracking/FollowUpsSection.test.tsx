@@ -53,6 +53,21 @@ describe("FollowUpsSection", () => {
     expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument()
   })
 
+  it("says the follow-ups could not be loaded instead of claiming there are none", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockRejectedValue(new Error("network"))
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText("No pudimos cargar tus seguimientos.")).toBeInTheDocument()
+    expect(screen.queryByText(/no tenés seguimientos pendientes/i)).not.toBeInTheDocument()
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument()
+  })
+
   it("labels a follow-up past its date without calling it expired", async () => {
     vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([pendingFollowUp({ is_overdue: true })])
     vi.spyOn(api, "fetchNotifications").mockResolvedValue([])

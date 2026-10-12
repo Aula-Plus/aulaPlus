@@ -4,8 +4,9 @@ import { fetchUnreadNotificationCount } from "./scheduledFollowUpsApi"
 /**
  * Shared unread-notice count: the number next to "Alertas y seguimientos"
  * in the sidebar. A tiny external store so the sidebar (desktop and mobile
- * drawer) and the "Mis seguimientos" section of that screen read the same value — when a notice is read
- * there, the page calls {@link refreshUnreadNoticeCount} and the sidebar count
+ * drawer) and the "Mis seguimientos" section of that screen read the same
+ * value — when a notice is read there, the section calls
+ * {@link refreshUnreadNoticeCount} and the sidebar count
  * updates (or disappears at 0) without a reload. The server is always the
  * source of truth: the store only ever holds the last count it returned.
  *

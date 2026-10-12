@@ -25,6 +25,9 @@ export function FollowUpsSection() {
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [error, setError] = useState<string | null>(null)
+  // A failed load is not an empty list: the error says so, and «Pendientes»
+  // is not rendered rather than claiming there are none.
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -36,7 +39,7 @@ export function FollowUpsSection() {
       setNotifications(notices)
     } catch {
       setError("No pudimos cargar tus seguimientos.")
-      setFollowUps([])
+      setLoadFailed(true)
     }
   }, [])
 
@@ -95,32 +98,34 @@ export function FollowUpsSection() {
         </SectionCard>
       )}
 
-      <SectionCard title="Pendientes" headingLevel={3}>
-        {followUps === null ? (
-          <p className="text-muted-foreground">Cargando…</p>
-        ) : followUps.length === 0 ? (
-          <EmptyState icon={CalendarClock} message="No tenés seguimientos pendientes." />
-        ) : (
-          <ul className="grid gap-3">
-            {followUps.map((followUp) => (
-              <li key={followUp.id} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
-                <div>
-                  {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
-                  <p className="whitespace-pre-wrap">{followUp.description}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Fecha prevista: {formatShortDate(followUp.due_date)}
-                    {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
-                  </p>
-                  <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
-                    Ver ficha del alumno
-                  </Link>
-                </div>
-                {followUp.is_overdue && <Badge tone="danger">Llegó a su fecha sin resolver</Badge>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
+      {!loadFailed && (
+        <SectionCard title="Pendientes" headingLevel={3}>
+          {followUps === null ? (
+            <p className="text-muted-foreground">Cargando…</p>
+          ) : followUps.length === 0 ? (
+            <EmptyState icon={CalendarClock} message="No tenés seguimientos pendientes." />
+          ) : (
+            <ul className="grid gap-3">
+              {followUps.map((followUp) => (
+                <li key={followUp.id} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
+                  <div>
+                    {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
+                    <p className="whitespace-pre-wrap">{followUp.description}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Fecha prevista: {formatShortDate(followUp.due_date)}
+                      {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
+                    </p>
+                    <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </div>
+                  {followUp.is_overdue && <Badge tone="danger">Llegó a su fecha sin resolver</Badge>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+      )}
     </section>
   )
 }
