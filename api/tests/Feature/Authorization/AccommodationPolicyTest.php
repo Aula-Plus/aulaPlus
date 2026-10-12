@@ -2,16 +2,18 @@
 
 use App\Enums\Role;
 use App\Models\Accommodation;
+use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 
-it('lets teacher, psychopedagogue and director all create, update and delete accommodations', function () {
+it('lets psychopedagogue and director view, create, update and delete any accommodation of their school', function () {
     $school = School::factory()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
     $accommodation = Accommodation::factory()->create(['student_id' => $student->id]);
 
-    foreach (Role::cases() as $role) {
+    foreach ([Role::Psychopedagogue, Role::Director] as $role) {
         $user = User::factory()->forSchool($school)->role($role)->create();
 
         expect($user->can('view', $accommodation))->toBeTrue()
@@ -19,6 +21,46 @@ it('lets teacher, psychopedagogue and director all create, update and delete acc
             ->and($user->can('update', $accommodation))->toBeTrue()
             ->and($user->can('delete', $accommodation))->toBeTrue();
     }
+});
+
+// ClickUp 86e3dpbwy follow-up: a teacher proposes accommodations but never
+// edits one (the response would carry the full record), and only views the
+// ones that apply to a subject they teach the student.
+it('lets a teacher create accommodations but never update or delete them', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+    $accommodation = Accommodation::factory()->create(['student_id' => $student->id]);
+
+    expect($teacher->can('create', Accommodation::class))->toBeTrue()
+        ->and($teacher->can('view', $accommodation))->toBeTrue()
+        ->and($teacher->can('update', $accommodation))->toBeFalse()
+        ->and($teacher->can('delete', $accommodation))->toBeFalse();
+});
+
+it('lets a teacher view only the accommodations scoped to a subject they teach the student', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $taught = leadGroup($group, $teacher);
+    $other = Subject::factory()->create(['school_id' => $school->id]);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+
+    $inTaught = Accommodation::factory()->create(['student_id' => $student->id]);
+    $inTaught->subjects()->attach($taught);
+    $inOther = Accommodation::factory()->create(['student_id' => $student->id]);
+    $inOther->subjects()->attach($other);
+    $ofAnotherStudent = Accommodation::factory()->create([
+        'student_id' => Student::factory()->create(['school_id' => $school->id])->id,
+    ]);
+
+    expect($teacher->can('view', $inTaught))->toBeTrue()
+        ->and($teacher->can('view', $inOther))->toBeFalse()
+        ->and($teacher->can('view', $ofAnotherStudent))->toBeFalse();
 });
 
 it('lets only director and psychopedagogue approve an accommodation that requires external approval', function () {

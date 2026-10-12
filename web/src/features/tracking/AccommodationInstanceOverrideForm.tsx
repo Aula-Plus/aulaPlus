@@ -12,7 +12,8 @@ interface AccommodationInstanceOverrideFormProps {
   accommodationId: number
   /**
    * Assessment options, taken straight from `tracking.recent_assessments`
-   * already loaded by StudentTrackingPage — no extra fetch (docs/prompts/24 §5).
+   * already loaded by StudentTrackingPage — no extra fetch (docs/prompts/24 §5)
+   * — narrowed by the caller to the ones the accommodation applies to.
    */
   assessments: AssessmentSummary[]
 }
@@ -160,7 +161,7 @@ export function AccommodationInstanceOverrideForm({
       </div>
       {assessments.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          No hay evaluaciones recientes para desactivar.
+          No hay evaluaciones recientes en las que aplique esta adaptación.
         </p>
       )}
     </form>
