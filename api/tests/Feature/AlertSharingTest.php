@@ -10,6 +10,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Laravel\Sanctum\Sanctum;
 
 // ClickUp 86e3jpzdp follow-up (Eitán): an alert can only be handed to or
@@ -386,4 +387,24 @@ it('re-checks under the lock that the actor is still in charge when sharing', fu
 
     expect($this->alert->collaborators()->count())->toBe(0)
         ->and($this->alert->actions()->where('kind', 'share')->count())->toBe(0);
+});
+
+it('re-checks under the lock that the actor is still in charge when resolving', function () {
+    ($this->handOff)($this->mariana, $this->galia)->assertOk();
+    ($this->share)($this->galia, $this->mariana)->assertOk();
+
+    // Mariana's "resolve" passes the policy, but before it is written Galia
+    // hands the alert off to Adriana from another tab: Mariana is no longer
+    // in charge.
+    Gate::after(function (User $user, string $ability): void {
+        if ($ability === 'resolve' && $user->is($this->mariana)) {
+            Alert::query()->withoutGlobalScopes()->whereKey($this->alert->id)->update(['assignee_id' => $this->adriana->id]);
+            DB::table('alert_collaborators')->where('alert_id', $this->alert->id)->delete();
+        }
+    });
+
+    Sanctum::actingAs($this->mariana);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/resolve")->assertForbidden();
+
+    expect($this->alert->fresh()->resolved)->toBeFalse();
 });

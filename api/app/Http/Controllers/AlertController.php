@@ -6,6 +6,7 @@ use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\Group;
 use App\Models\Student;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -75,13 +76,24 @@ class AlertController extends Controller
             'resolved_at' => now(),
         ];
 
-        DB::transaction(function () use ($alert, $resolution): void {
+        $alert = DB::transaction(function () use ($alert, $resolution): Alert {
+            // Lock the row and re-check on what it holds now, as choosing a
+            // way out and sharing do: with two people in charge, the other one
+            // may have just handed it off (so this user is no longer in
+            // charge) or closed it.
+            $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
+            if (! $alert->canBeResolvedBy(request()->user())) {
+                throw new AuthorizationException;
+            }
+
             $alert->update($resolution);
 
             // An escalated alert has no way out of its own (it can't be acted
             // on or resolved directly): it closes when the alert it escalates
             // moves — including when that alert is resolved.
             $alert->escalations()->where('resolved', false)->update($resolution);
+
+            return $alert;
         });
 
         return new AlertResource($alert->load(AlertResource::RELATIONS));
