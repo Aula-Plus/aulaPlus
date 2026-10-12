@@ -24,8 +24,8 @@ use Illuminate\Validation\Rules\Enum;
  *   accepted after it was soft-deleted: the form resends the current scope,
  *   and keeping it must not 422 (dropping it is always allowed). An empty
  *   list means a general accommodation (every subject).
- * - `assessment_types`: the assessment types it is restricted to. Empty or
- *   null means every type.
+ * - `assessment_types`: the assessment types it is restricted to, as a list.
+ *   Empty or null means every type.
  */
 trait ValidatesAccommodationScope
 {
@@ -50,7 +50,10 @@ trait ValidatesAccommodationScope
                         ->whereNull('deleted_at')
                         ->orWhereIn('id', $attachedSubjectIds))),
             ],
-            'assessment_types' => ['sometimes', 'nullable', 'array'],
+            // `list`, not just `array`: a keyed object would be stored as a
+            // JSON object, which the JSON-array queries (appliesToAssessmentType
+            // → jsonb_array_length on PostgreSQL) and the SPA can't handle.
+            'assessment_types' => ['sometimes', 'nullable', 'array', 'list'],
             'assessment_types.*' => ['distinct', new Enum(AssessmentType::class)],
         ];
     }
