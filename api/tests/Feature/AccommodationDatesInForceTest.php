@@ -234,3 +234,25 @@ it('backfills the deactivation day of accommodations already switched off', func
         ->and($deactivatedOn($active))->toBeNull()
         ->and($deactivatedOn($rejected))->toBeNull();
 });
+
+it('backfills an empty interval for one created inactive and never switched on, even if edited later', function () {
+    ['school' => $school, 'student' => $student] = datesScenario();
+    Tenancy::useSchool($school);
+    $migration = require database_path('migrations/2026_10_10_000002_add_deactivated_on_to_accommodations.php');
+
+    $neverOn = Accommodation::factory()->create([
+        'student_id' => $student->id,
+        'starts_on' => '2026-03-10',
+        'active' => false,
+    ]);
+    // A later edit that leaves `active` alone: audited, but no true → false flip.
+    $neverOn->update(['focus_area' => 'literacy']);
+
+    $migration->down();
+    DB::table('accommodations')->where('id', $neverOn->id)->update(['updated_at' => '2026-04-20 15:00:00']);
+    $migration->up();
+
+    expect(substr((string) DB::table('accommodations')->where('id', $neverOn->id)->value('deactivated_on'), 0, 10))
+        ->toBe('2026-03-10')
+        ->and(Accommodation::find($neverOn->id)->isInForceOn('2026-04-01'))->toBeFalse();
+});

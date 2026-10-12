@@ -18,9 +18,11 @@ use Illuminate\Support\Facades\Schema;
  * Backfill for accommodations that are already switched off (and were ever
  * effective, i.e. no pending/rejected external approval): the school-local
  * date of the latest audit-log entry that flipped `active` from true to false;
- * failing that, the date of the row's last write (`updated_at`). A row created
- * inactive and never activated then gets starts_on == deactivated_on, an empty
- * interval — correctly "never in force".
+ * failing that, the date of the row's last write (`updated_at`). A row whose
+ * audit trail shows it was created inactive and never switched on gets
+ * starts_on == deactivated_on, an empty interval — correctly "never in force",
+ * even if it was edited later (its `updated_at` would otherwise open a false
+ * in-force period).
  */
 return new class extends Migration
 {
@@ -42,29 +44,57 @@ return new class extends Migration
                 ->orWhere('approved', true))
             ->select(['id', 'starts_on', 'updated_at', 'created_at'])
             ->chunkById(200, function ($rows) use ($localDate, $timezone): void {
-                $flips = DB::table('audit_logs')
+                // Ordered by id (insertion order; created_at only has second
+                // precision), so the last flip per accommodation wins below.
+                $logs = DB::table('audit_logs')
                     ->where('auditable_type', 'App\\Models\\Accommodation')
                     ->whereIn('auditable_id', $rows->pluck('id'))
-                    ->where('action', 'updated')
-                    ->orderBy('created_at')
-                    ->get(['auditable_id', 'changes', 'created_at'])
-                    ->filter(function ($log): bool {
-                        $active = json_decode((string) $log->changes, true)['active'] ?? null;
+                    ->whereIn('action', ['created', 'updated'])
+                    ->orderBy('id')
+                    ->get(['auditable_id', 'action', 'changes', 'created_at'])
+                    ->map(function ($log) {
+                        $log->changes = json_decode((string) $log->changes, true) ?: [];
 
-                        return is_array($active)
-                            && ($active['before'] ?? null) === true
-                            && ($active['after'] ?? null) === false;
-                    })
-                    // Ordered ascending, so the last one per accommodation wins.
+                        return $log;
+                    });
+
+                // `active` flips, tolerant of 1/0 storage like
+                // PerformanceTimelineBuilder: before truthy → after falsy (off),
+                // or the other way round (on).
+                $flipped = fn ($log, bool $on): bool => $log->action === 'updated'
+                    && is_array($log->changes['active'] ?? null)
+                    && (bool) ($log->changes['active']['before'] ?? null) !== $on
+                    && (bool) ($log->changes['active']['after'] ?? null) === $on;
+
+                $switchedOff = $logs
+                    ->filter(fn ($log): bool => $flipped($log, false))
                     ->mapWithKeys(fn ($log) => [$log->auditable_id => $log->created_at]);
 
+                // Created inactive (per the creation snapshot) and never
+                // switched on or off since: it was never in force.
+                $neverOn = $logs
+                    ->groupBy('auditable_id')
+                    ->filter(fn ($trail): bool => $trail->contains(fn ($log): bool => $log->action === 'created'
+                            && array_key_exists('active', $log->changes)
+                            && ! $log->changes['active'])
+                        && ! $trail->contains(fn ($log): bool => $flipped($log, true) || $flipped($log, false)))
+                    ->keys()
+                    ->flip();
+
                 foreach ($rows as $row) {
-                    $day = $localDate($flips[$row->id] ?? $row->updated_at ?? $row->created_at)
+                    $startsOn = substr((string) $row->starts_on, 0, 10);
+
+                    if ($neverOn->has($row->id)) {
+                        DB::table('accommodations')->where('id', $row->id)->update(['deactivated_on' => $startsOn]);
+
+                        continue;
+                    }
+
+                    $day = $localDate($switchedOff[$row->id] ?? $row->updated_at ?? $row->created_at)
                         ?? CarbonImmutable::now($timezone)->toDateString();
 
                     // Never before the start: an interval that ends before it
                     // begins would be meaningless.
-                    $startsOn = substr((string) $row->starts_on, 0, 10);
                     if ($day < $startsOn) {
                         $day = $startsOn;
                     }

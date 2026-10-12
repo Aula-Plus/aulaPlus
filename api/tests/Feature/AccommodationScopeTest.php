@@ -373,3 +373,24 @@ it('refuses to hard-delete a subject an accommodation is scoped to', function ()
     expect(fn () => $math->forceDelete())->toThrow(QueryException::class);
     expect($calculator->subjects()->count())->toBe(1);
 });
+
+it('rejects assessment types sent as a keyed object instead of a list', function () {
+    ['school' => $school, 'lucia' => $lucia, 'calculator' => $calculator] = scopeScenario();
+    $director = User::factory()->forSchool($school)->director()->create();
+    Sanctum::actingAs($director);
+
+    // Stored as a JSON object it would break the JSON-array queries on
+    // PostgreSQL (jsonb_array_length) and the SPA, which expects a list.
+    $this->postJson("/api/v1/students/{$lucia->id}/accommodations", [
+        'category' => 'access',
+        'type' => 'Tiempo extendido',
+        'description' => 'x',
+        'focus_area' => 'attention',
+        'assessment_types' => ['a' => 'written'],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['assessment_types']);
+
+    $this->patchJson("/api/v1/accommodations/{$calculator->id}", [
+        'category' => 'access',
+        'assessment_types' => ['a' => 'oral'],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['assessment_types']);
+});
