@@ -60,6 +60,39 @@ return [
             'report' => false,
         ],
 
+        /*
+        | Subjects' curricular program PDFs (App\Support\SyllabusStorage).
+        | Always private: files are only ever reached through short-lived
+        | temporary URLs (CLAUDE.md rule 7). SYLLABUS_DISK picks the backend:
+        | "s3" (any S3-compatible private bucket, AWS_* vars) — required in
+        | production, where the container's local disk does not survive a
+        | redeploy — or "local" (development; signed URLs served by the app).
+        */
+        'syllabi' => match (env('SYLLABUS_DISK', 'local')) {
+            's3' => [
+                'driver' => 's3',
+                'key' => env('AWS_ACCESS_KEY_ID'),
+                'secret' => env('AWS_SECRET_ACCESS_KEY'),
+                'region' => env('AWS_DEFAULT_REGION'),
+                'bucket' => env('AWS_BUCKET'),
+                'endpoint' => env('AWS_ENDPOINT'),
+                'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+                'visibility' => 'private',
+                'throw' => true,
+                'report' => false,
+            ],
+            default => [
+                'driver' => 'local',
+                'root' => storage_path('app/private'),
+                // Own URL prefix: each served disk needs a unique one.
+                'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/syllabus-files',
+                'serve' => true,
+                'visibility' => 'private',
+                'throw' => true,
+                'report' => false,
+            ],
+        },
+
     ],
 
     /*

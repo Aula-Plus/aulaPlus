@@ -66,6 +66,12 @@ export function buildNavSections(user: User | null): NavSection[] {
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
           ? [{ to: "/pruebas-de-sondeo/tipos", label: "Screenings", icon: ClipboardList }]
           : []),
+        // Read-only subjects list for everyone but the director (who manages
+        // it under Administración): teachers open their subject's program PDF
+        // from there (ClickUp 86e3dt6ag).
+        ...(user && !canManageSubjects(user)
+          ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
+          : []),
       ],
     },
     {

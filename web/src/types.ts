@@ -285,6 +285,26 @@ export interface Subject {
   name: string
   short_code: string | null
   color: string | null
+  /** Whether the Aula+ team already loaded it into the curricular catalog (ClickUp 86e3dt6ag). */
+  in_catalog?: boolean
+  /** Curricular program PDF metadata; the file itself is reached via a temporary URL. */
+  syllabus?: SubjectSyllabus | null
+}
+
+export type SyllabusTextStatus = "pending" | "ready" | "failed"
+
+export interface SubjectSyllabus {
+  name: string
+  size: number | null
+  uploaded_at: string | null
+  /**
+   * Text extraction for the AI assistant (queued after each upload): `pending`
+   * until it runs, then `ready` (the AI uses it) or `failed` (scanned,
+   * encrypted or unreadable PDF — stored, but the AI doesn't use it).
+   */
+  text_status: SyllabusTextStatus
+  /** Decided by `SubjectPolicy::viewSyllabus` for the current user. */
+  can_view: boolean
 }
 
 /**
