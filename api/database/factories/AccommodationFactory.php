@@ -26,6 +26,8 @@ class AccommodationFactory extends Factory
             'student_id' => Student::factory(),
             'type' => fake()->randomElement(['extra_time', 'adapted_material', 'visual_support']),
             'category' => fake()->randomElement(AccommodationCategory::values()),
+            'starts_on' => fake()->dateTimeBetween('-6 months', 'now')->format('Y-m-d'),
+            'assessment_types' => null,
             'active' => true,
             'description' => fake()->paragraph(),
             'focus_area' => fake()->randomElement(['literacy', 'mathematics', 'attention']),

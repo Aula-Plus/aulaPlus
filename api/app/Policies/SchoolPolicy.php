@@ -9,7 +9,8 @@ use App\Models\User;
 /**
  * School-level authorization decisions, always tied to that specific school
  * (never "any director"): the adoption dashboard (docs/prompts/04-seguimiento-
- * institucional.md §5) and the comment trend threshold settings.
+ * institucional.md §5), the comment trend threshold and the grades visibility
+ * settings.
  */
 class SchoolPolicy
 {
@@ -33,6 +34,15 @@ class SchoolPolicy
      * Only direction changes the comment trend threshold.
      */
     public function updateCommentTrendSettings(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
+
+    /**
+     * Only direction decides what teachers see of other subjects' grades.
+     */
+    public function updateGradesVisibility(User $user, School $school): bool
     {
         return $user->school_id === $school->id
             && $user->hasRole(Role::Director->value);

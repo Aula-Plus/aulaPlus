@@ -5,6 +5,7 @@ import {
   CalendarClock,
   ClipboardList,
   GraduationCap,
+  Eye,
   MessageSquare,
   Home,
   TriangleAlert,
@@ -16,6 +17,7 @@ import {
 import type { User } from "@/types"
 import {
   canApproveScreeningTestDesign,
+  canManageGradesVisibility,
   canManageAlertSettings,
   canManageCommentSettings,
   canManageScreeningTests,
@@ -78,6 +80,10 @@ export function buildNavSections(user: User | null): NavSection[] {
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
           ? [{ to: "/materias", label: "Materias", icon: BookOpen }]
+          : []),
+        // Grade visibility for teachers is director-only.
+        ...(canManageGradesVisibility(user)
+          ? [{ to: "/ajustes/notas", label: "Visibilidad de notas", icon: Eye }]
           : []),
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.

@@ -11,6 +11,7 @@ import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
+import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { MyFollowUpsPage } from "@/features/tracking/MyFollowUpsPage"
 import { SupportPage } from "@/features/support/SupportPage"
@@ -144,6 +145,14 @@ function App() {
             <Route path="nueva" element={<UserFormPage />} />
             <Route path=":id" element={<UserFormPage />} />
           </Route>
+          <Route
+            path="/ajustes/notas"
+            element={
+              <ProtectedLayout>
+                <GradesVisibilityPage />
+              </ProtectedLayout>
+            }
+          />
           <Route
             path="/alertas"
             element={
