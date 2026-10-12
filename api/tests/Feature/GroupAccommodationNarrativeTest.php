@@ -156,12 +156,13 @@ it('does not start a second generation while one is running, but replaces a stal
     $id = $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->assertStatus(202)->json('id');
     expect($id)->not->toBe($running->id)
         ->and(GroupAccommodationNarrative::find($id)->status)->toBe(AccommodationNarrativeStatus::Draft)
-        ->and($running->refresh()->status)->toBe(AccommodationNarrativeStatus::Error);
+        ->and($running->refresh()->status)->toBe(AccommodationNarrativeStatus::Archived)
+        ->and($running->error_message)->toBe(GroupAccommodationNarrativeController::ERROR_STALE);
 
     // If a worker picks the given-up job late, it does nothing.
     GenerateGroupAccommodationNarrativeJob::dispatchSync($running);
     Http::assertSentCount(1);
-    expect($running->refresh()->status)->toBe(AccommodationNarrativeStatus::Error);
+    expect($running->refresh()->status)->toBe(AccommodationNarrativeStatus::Archived);
 });
 
 it('reports a pending generation that never finished as failed, so it can be generated again', function () {
@@ -371,6 +372,46 @@ it('archives older drafts when a new one is generated, so they can no longer be 
     $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/{$new}/publish")->assertOk();
 
     expect(GroupAccommodationNarrative::where('group_id', $group->id)->where('status', AccommodationNarrativeStatus::Published)->count())->toBe(1);
+});
+
+it('does not show an old failed generation once a newer one is published', function () {
+    [, $psico, $group] = narrativeSetup();
+    Sleep::fake();
+    Http::fake(['api.anthropic.com/*' => Http::sequence()
+        ->push(['error' => ['type' => 'x']], 500)
+        ->push(['error' => ['type' => 'x']], 500)
+        ->push(['content' => [['type' => 'text', 'text' => 'Resumen.']]])]);
+    Sanctum::actingAs($psico);
+
+    $failed = $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->json('id');
+    expect(GroupAccommodationNarrative::find($failed)->status)->toBe(AccommodationNarrativeStatus::Error);
+
+    $id = $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/generate")->json('id');
+    $this->postJson("/api/v1/groups/{$group->id}/accommodation-narrative/{$id}/publish")->assertOk();
+
+    $this->getJson("/api/v1/groups/{$group->id}/accommodation-narrative")
+        ->assertJsonPath('published.content', 'Resumen.')
+        ->assertJsonPath('draft', null);
+});
+
+it('leaves a generation given up while the AI was answering as it is, even if the call fails', function () {
+    [, $psico, $group] = narrativeSetup();
+    Sanctum::actingAs($psico);
+    $narrative = pendingNarrative($group, $psico);
+
+    Sleep::fake();
+
+    // Given up (and superseded) while the job was still calling the AI.
+    Http::fake(['api.anthropic.com/*' => function () use ($narrative) {
+        GroupAccommodationNarrative::query()->whereKey($narrative->id)
+            ->update(['status' => AccommodationNarrativeStatus::Archived]);
+
+        return Http::response(['error' => ['type' => 'x']], 400);
+    }]);
+
+    GenerateGroupAccommodationNarrativeJob::dispatchSync($narrative);
+
+    expect($narrative->refresh()->status)->toBe(AccommodationNarrativeStatus::Archived);
 });
 
 it('never leaves a narrative pending when the job fails', function () {

@@ -26,6 +26,9 @@ class BuildGroupAccommodationSummary
 
         return Accommodation::query()
             ->whereIn('student_id', $studentIds)
+            // Fixed row order, so "the first" category below is always the
+            // same one and the fingerprint does not change between requests.
+            ->orderBy('id')
             ->get()
             ->filter->isEffective()
             ->groupBy('type')

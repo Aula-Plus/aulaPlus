@@ -125,18 +125,20 @@ class GroupAccommodationNarrativeController extends Controller
                     return [$running, false];
                 }
 
-                // A stale one is given up: marked failed, so its job does
-                // nothing if a worker still picks it up later.
+                // A stale one is given up: marked failed (then archived below
+                // with the other superseded rows), so its job does nothing if a
+                // worker still picks it up later.
                 $running?->update([
                     'status' => AccommodationNarrativeStatus::Error,
                     'error_message' => self::ERROR_STALE,
                 ]);
 
                 // Older drafts are superseded by the new generation and can no
-                // longer be published.
+                // longer be published; older failures are superseded too, so
+                // show() never resurfaces one after the new text is published.
                 GroupAccommodationNarrative::query()
                     ->where('group_id', $group->id)
-                    ->where('status', AccommodationNarrativeStatus::Draft)
+                    ->whereIn('status', [AccommodationNarrativeStatus::Draft, AccommodationNarrativeStatus::Error])
                     ->update(['status' => AccommodationNarrativeStatus::Archived]);
 
                 $narrative = GroupAccommodationNarrative::create([

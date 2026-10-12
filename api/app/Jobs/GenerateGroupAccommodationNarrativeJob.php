@@ -194,6 +194,11 @@ class GenerateGroupAccommodationNarrativeJob implements ShouldQueue
      */
     protected function markError(string $message, ?array $flaggedTypes = null): void
     {
+        // Given up as stale (and superseded) while this job ran: keep it that way.
+        if ($this->narrative->fresh()?->status !== AccommodationNarrativeStatus::Pending) {
+            return;
+        }
+
         Log::warning('Group accommodation narrative generation failed', [
             'narrative_id' => $this->narrative->id,
             'reason' => $message,
