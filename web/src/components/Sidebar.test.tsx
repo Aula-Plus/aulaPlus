@@ -75,6 +75,16 @@ describe("Sidebar", () => {
     expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
   })
 
+  it("keeps 'Mis seguimientos' in the link name when collapsed with a count", async () => {
+    localStorage.setItem("aulaplus:sidebar-collapsed", "1")
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(2)
+    renderSidebar("psychopedagogue")
+
+    expect(
+      await screen.findByRole("link", { name: "Mis seguimientos, 2 avisos sin leer" }),
+    ).toHaveAttribute("href", "/mis-seguimientos")
+  })
+
   it("shows '50+' past the number of notices the page lists", async () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(51)
     renderSidebar("psychopedagogue")
