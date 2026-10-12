@@ -61,6 +61,16 @@ final class GradeAccessRule
     }
 
     /**
+     * Whether the viewer gets the student's general average. Not when limited
+     * to their own subjects (PO ClickUp 86e3d1bwa: with «solo su materia» the
+     * teacher sees only their subjects' averages, never a general one).
+     */
+    public function showsOverallAverage(): bool
+    {
+        return ! ($this->restricted && $this->mode === GradesVisibility::OwnSubject);
+    }
+
+    /**
      * What the UI needs to explain the restriction (never any grade data).
      *
      * @return array{mode: string, restricted: bool, own_subject_ids: list<int>, cutoff_at: string|null}

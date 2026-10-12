@@ -484,11 +484,6 @@ export function StudentTrackingPage() {
                 </TableBody>
               </Table>
             )}
-            {tracking.grades_truncated && (
-              <p className="px-6 py-3 text-xs text-muted-foreground">
-                Se muestran las {tracking.grades.length} notas más recientes. Los promedios incluyen todas.
-              </p>
-            )}
           </SectionCard>
 
           {tracking.grades_view.restricted && (
@@ -500,6 +495,38 @@ export function StudentTrackingPage() {
                   : "Ves solo las notas de las materias que dictás."}
             </p>
           )}
+
+          <SectionCard
+            title="Desempeño por materia"
+            action={
+              // A teacher limited to their own subjects gets no general
+              // average (the server sends null): only their subjects' ones.
+              tracking.grades_view.restricted && tracking.grades_view.mode === "own_subject" ? undefined : (
+                <OverallAverageBadge value={tracking.overall_average} />
+              )
+            }
+          >
+            {tracking.by_subject.length === 0 ? (
+              <p className="text-muted-foreground">Sin evaluaciones por materia.</p>
+            ) : (
+              <ul className="grid gap-2">
+                {tracking.by_subject.map((subject) => (
+                  <li
+                    key={subject.subject_id}
+                    className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
+                  >
+                    <span className="font-medium">{subject.subject_name}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {subject.average} ·{" "}
+                      {subject.assessment_count === 1
+                        ? "1 evaluación"
+                        : `${subject.assessment_count} evaluaciones`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
 
           <SectionCard title="Notas" bare={tracking.grades.length > 0}>
             {tracking.grades.length === 0 ? (
@@ -530,31 +557,10 @@ export function StudentTrackingPage() {
                 </TableBody>
               </Table>
             )}
-          </SectionCard>
-
-          <SectionCard
-            title="Desempeño por materia"
-            action={<OverallAverageBadge value={tracking.overall_average} />}
-          >
-            {tracking.by_subject.length === 0 ? (
-              <p className="text-muted-foreground">Sin evaluaciones por materia.</p>
-            ) : (
-              <ul className="grid gap-2">
-                {tracking.by_subject.map((subject) => (
-                  <li
-                    key={subject.subject_id}
-                    className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
-                  >
-                    <span className="font-medium">{subject.subject_name}</span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {subject.average} ·{" "}
-                      {subject.assessment_count === 1
-                        ? "1 evaluación"
-                        : `${subject.assessment_count} evaluaciones`}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            {tracking.grades_truncated && (
+              <p className="px-6 py-3 text-xs text-muted-foreground">
+                Se muestran las {tracking.grades.length} notas más recientes. Los promedios incluyen todas.
+              </p>
             )}
           </SectionCard>
 

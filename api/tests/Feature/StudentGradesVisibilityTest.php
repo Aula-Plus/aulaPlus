@@ -57,8 +57,8 @@ it('shows a teacher only their own subject by default', function () {
 
     expect(subjectNames($response))->toBe(['Matemática']);
     expect(collect($response->json('data.grades'))->pluck('subject_name')->all())->toBe(['Matemática']);
-    // Without the other subjects the general average would leak them.
-    $response->assertJsonPath('data.overall_average', 8);
+    // No general average at all: only their subjects' averages (PO 86e3d1bwa).
+    $response->assertJsonPath('data.overall_average', null);
     $response->assertJsonPath('data.grades_view.restricted', true);
 });
 
@@ -85,7 +85,10 @@ it('shows every subject live when direction allows it', function () {
     $this->school->update(['grades_visibility' => GradesVisibility::AllLive]);
     actingAs($this->teacher);
 
-    expect(subjectNames(getJson($this->url)->assertOk()))->toBe(['Historia', 'Matemática']);
+    $response = getJson($this->url)->assertOk();
+
+    expect(subjectNames($response))->toBe(['Historia', 'Matemática']);
+    $response->assertJsonPath('data.overall_average', 5.5);
 });
 
 it('shows other subjects only as loaded before the last cutoff in periodic mode', function (string $today) {

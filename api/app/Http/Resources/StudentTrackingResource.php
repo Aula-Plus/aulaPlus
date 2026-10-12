@@ -124,7 +124,8 @@ class StudentTrackingResource extends JsonResource
             ),
             'open_alerts_count' => $openAlertsCount,
             // Role-filtered upstream (StudentGradeAccess): a teacher only gets the
-            // subjects they teach unless direction opened more.
+            // subjects they teach unless direction opened more, and no general
+            // average at all while limited to their own subjects.
             'overall_average' => $this->resource['overall_average'],
             'by_subject' => $this->resource['by_subject'],
             // The most recent visible grades only (StudentTrackingController::

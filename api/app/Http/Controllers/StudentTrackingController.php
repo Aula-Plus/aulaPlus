@@ -92,7 +92,11 @@ class StudentTrackingController extends Controller
             // unless direction opened more), so they are computed per request,
             // never taken from the shared cache.
             'by_subject' => $this->subjectAggregates($student, $gradeRule),
-            'overall_average' => $this->overallAverage($student, $gradeRule),
+            // Null for a teacher limited to their own subjects: they get only
+            // their subjects' averages (GradeAccessRule::showsOverallAverage).
+            'overall_average' => $gradeRule->showsOverallAverage()
+                ? $this->overallAverage($student, $gradeRule)
+                : null,
             'grades' => $this->withAccommodationsInForce(array_slice($grades, 0, self::GRADES_LIMIT), $student, $user),
             'grades_truncated' => count($grades) > self::GRADES_LIMIT,
             'grades_view' => $gradeRule->describe(),

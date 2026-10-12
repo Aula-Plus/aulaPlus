@@ -169,6 +169,20 @@ describe("StudentTrackingPage", () => {
     )
   })
 
+  it("hides the general average from a teacher limited to their own subjects", async () => {
+    const tracking = baseTracking()
+    tracking.overall_average = null
+    tracking.grades_view = { mode: "own_subject", restricted: true, own_subject_ids: [1], cutoff_at: null }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Evaluaciones")
+
+    expect(await screen.findByText("Desempeño por materia")).toBeInTheDocument()
+    expect(screen.queryByText(/promedio general/i)).not.toBeInTheDocument()
+  })
+
   it("shows, next to each grade, the accommodations that were active that day", async () => {
     const tracking = baseTracking()
     tracking.grades = [
