@@ -161,10 +161,11 @@ export interface AlertPerson {
 }
 
 /**
- * Mirror of `App\Enums\AlertActionKind`: a way out chosen, a share with a
- * co-responsible, or a plain note.
+ * Mirror of `App\Enums\AlertActionKind`: a way out chosen, a note by whoever
+ * has the alert, or the deadline arriving with the alert still pending
+ * («Llegó a su fecha sin salida»).
  */
-export type AlertActionKind = "outcome" | "share" | "note"
+export type AlertActionKind = "outcome" | "note" | "overdue"
 
 /** One step of an alert's thread. */
 export interface AlertActionEntry {
@@ -172,12 +173,24 @@ export interface AlertActionEntry {
   kind: AlertActionKind
   /** Only on `outcome` steps. */
   outcome: AlertOutcome | null
-  actor: AlertPerson
-  /** Who became responsible (`outcome`) or co-responsible (`share`); `null` on a note. */
+  /** `null` on an `overdue` step: written by the daily run, not by a person. */
+  actor: AlertPerson | null
+  /** Who became responsible (`outcome`) or who had it (`overdue`); `null` on a note. */
   assignee: AlertPerson | null
   due_on: string | null
   note: string | null
   created_at: string | null
+}
+
+/**
+ * A follow-up linked to an alert, as the alert lists it: state and deadline
+ * only; its content is read through the follow-up endpoints.
+ */
+export interface AlertFollowUpLink {
+  id: number
+  due_date: string | null
+  resolved: boolean
+  is_overdue: boolean
 }
 
 /** Mirror of `App\Enums\AlertSeverity`. */
@@ -204,21 +217,27 @@ export interface Alert {
   condition_met_on?: string | null
   /** Who the alert reached first; `null` on alerts created before 86e3jpzcv. */
   recipients?: AlertRecipient[] | null
-  /** Escalated alerts: the alert whose deadline passed. */
+  /** Legacy escalated alerts (no longer created): the alert whose deadline passed. */
   source_alert_id?: number | null
   /** The way out chosen (ClickUp 86e3jpzdp), `null` while none was. */
   outcome?: AlertOutcome | null
   /** The person responsible — «la tiene X desde el dd/mm». */
   assignee?: AlertPerson | null
-  /** Who it was shared with: in charge together with `assignee`. */
-  collaborators?: AlertPerson[]
   outcome_by?: AlertPerson | null
   outcome_at?: string | null
   due_on?: string | null
   is_overdue?: boolean
+  /**
+   * «Llegó a su fecha sin salida»: when the daily run found the current
+   * deadline passed with the alert still pending. The same alert — no second
+   * one is created.
+   */
+  overdue_at?: string | null
   actions?: AlertActionEntry[]
+  /** Follow-ups created from this alert («seguimiento vinculado»). */
+  follow_ups?: AlertFollowUpLink[]
   /** What the current user may do, decided by `AlertPolicy`. */
-  can?: { act: boolean; share?: boolean; note?: boolean; resolve: boolean }
+  can?: { act: boolean; note?: boolean; resolve: boolean; link_follow_up?: boolean }
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null
@@ -729,13 +748,19 @@ export interface StaffMember {
 }
 
 /** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+/**
+ * One unread notice. `follow_up_assigned`: someone assigned you a follow-up;
+ * `alert_overdue`: an alert you have reached its deadline without a way out
+ * («Llegó a su fecha sin salida»). Ids and dates only.
+ */
 export interface AppNotification {
   id: string
   data: {
-    type: string
-    follow_up_id: number
+    type: "follow_up_assigned" | "alert_overdue" | (string & {})
+    follow_up_id?: number
+    alert_id?: number
     student_id: number
-    due_date: string
+    due_date: string | null
   }
   created_at: string | null
 }
@@ -750,6 +775,8 @@ export interface ScheduledFollowUp {
   student_id: number
   /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
   student?: { id: number; full_name: string }
+  /** The alert it was created from («seguimiento vinculado»), if any. */
+  alert_id?: number | null
   description: string
   due_date: string
   created_by_id: number

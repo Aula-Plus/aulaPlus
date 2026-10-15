@@ -14,8 +14,10 @@ import {
   roleLabels,
   type Alert,
   type AlertActionEntry,
+  type AlertFollowUpLink,
   type AlertOutcome,
 } from "@/types"
+import { NewFollowUpForm } from "@/features/tracking/ScheduledFollowUpsPanel"
 import { alertHolderPhrase } from "./alertHolder"
 import * as alertsApi from "./alertsApi"
 import type { HandoffCandidate } from "./alertsApi"
@@ -178,104 +180,6 @@ function statusLine(alert: Alert): string | null {
   return `${holder.charAt(0).toUpperCase()}${holder.slice(1)} · plazo al ${due}.`
 }
 
-/**
- * Share the alert with a co-responsible (ClickUp 86e3jpzdp follow-up). The
- * picker lists only who the server says can receive it from the current user
- * — people who already see the student, never teacher-to-teacher — minus
- * whoever is already in charge; the server validates it again.
- */
-function ShareForm({
-  alert,
-  onDone,
-  onCancel,
-}: {
-  alert: Alert
-  onDone: (updated: Alert) => void
-  onCancel: () => void
-}) {
-  const [userId, setUserId] = useState("")
-  const [note, setNote] = useState("")
-  const [candidates, setCandidates] = useState<HandoffCandidate[] | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const inCharge = new Set([alert.assignee?.id, ...(alert.collaborators ?? []).map((person) => person.id)])
-    alertsApi
-      .fetchHandoffCandidates(alert.id)
-      .then((list) => setCandidates(list.filter((candidate) => !inCharge.has(candidate.id))))
-      .catch(() => setError("No pudimos cargar con quién la podés compartir."))
-  }, [alert.id, alert.assignee?.id, alert.collaborators])
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    if (!userId) {
-      setError("Elegí con quién la compartís.")
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      onDone(
-        await alertsApi.shareAlert(alert.id, {
-          user_id: Number(userId),
-          note: note.trim() ? note.trim() : null,
-        }),
-      )
-    } catch {
-      setError("No pudimos compartirla.")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="mt-3 grid gap-3 rounded-md bg-muted/40 p-3" noValidate>
-      <p className="text-sm font-medium">Compartir con otro rol</p>
-      <div className="grid gap-2">
-        <Label htmlFor={`alert-${alert.id}-share`}>¿Con quién la compartís?</Label>
-        <SingleSelect
-          id={`alert-${alert.id}-share`}
-          value={userId}
-          onChange={setUserId}
-          placeholder="Elegí una persona…"
-          options={(candidates ?? []).map((candidate) => ({
-            value: String(candidate.id),
-            label: candidateLabel(candidate),
-          }))}
-        />
-        <p className="text-xs text-muted-foreground">
-          La siguen juntos: las dos personas la ven, pueden dejar notas y cualquiera puede cerrarla. El
-          responsable y el plazo no cambian.
-        </p>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`alert-${alert.id}-share-note`}>Nota para quien la recibe (opcional)</Label>
-        <Textarea
-          id={`alert-${alert.id}-share-note`}
-          value={note}
-          maxLength={2000}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder="Qué observaste o qué hiciste — nunca un diagnóstico."
-        />
-      </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={saving}>
-          {saving ? "Guardando…" : "Compartir"}
-        </Button>
-        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
-          Cancelar
-        </Button>
-      </div>
-    </form>
-  )
-}
-
 function NoteForm({
   alert,
   onDone,
@@ -335,30 +239,59 @@ function NoteForm({
   )
 }
 
-/** What a thread step adds next to its author, beyond its note: who it was shared with. */
-function threadHeadline(action: AlertActionEntry): string | null {
-  if (action.kind === "share" && action.assignee?.name) {
-    return `la compartió con ${action.assignee.name}`
+/** One step of the thread, in words: who did what, with which deadline. */
+function threadHeadline(action: AlertActionEntry): string {
+  const due = action.due_on ? formatShortDate(action.due_on) : null
+  if (action.kind === "overdue") {
+    const holder = action.assignee?.name ? `, la tenía ${action.assignee.name}` : ""
+    return `Llegó a su fecha sin salida${due ? ` (plazo al ${due}${holder})` : ""}`
   }
-  return null
+  const actor = action.actor?.name ?? "Alguien del equipo"
+  if (action.kind === "note") return actor
+  switch (action.outcome) {
+    case "owned":
+      return `${actor} se ocupa${due ? `, plazo al ${due}` : ""}`
+    case "handed_off":
+      return `${actor} se la pasó a ${action.assignee?.name ?? "otra persona"}${due ? `, plazo al ${due}` : ""}`
+    case "observing":
+      return `${actor} la dejó en observación${due ? ` hasta el ${due}` : ""}`
+    default:
+      return actor
+  }
 }
 
-type Panel = AlertOutcome | "share" | "note" | null
+function followUpState(link: AlertFollowUpLink): string {
+  if (link.resolved) return "Resuelto"
+  if (link.is_overdue) return "Vencido"
+  return "Pendiente"
+}
+
+type Panel = AlertOutcome | "note" | "follow-up" | null
 
 /**
  * One alert with its three ways out (ClickUp 86e3jpzdp; documento vivo screen
  * 11): "me ocupo yo", "se la paso a otro rol", "la dejo en observación", each
- * with a responsible person and a suggested deadline; once someone has it,
- * sharing it with a co-responsible and leaving notes in its thread. Whether
- * the buttons show comes from `alert.can`, decided server-side by
- * `AlertPolicy`.
+ * with a responsible person and a suggested deadline. Once someone has it,
+ * they leave notes in its thread. The alert itself is never shared (review of
+ * 14/10): working the case with several people is done on a follow-up linked
+ * to it («Crear seguimiento vinculado»), which keeps its own state and
+ * deadline. A deadline that passes with the alert pending marks this same
+ * alert «Llegó a su fecha sin salida». Whether the buttons show comes from
+ * `alert.can`, decided server-side by `AlertPolicy`.
  */
 export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (updated: Alert) => void }) {
   const [choosing, setChoosing] = useState<Panel>(null)
   const [error, setError] = useState<string | null>(null)
   const status = statusLine(alert)
+  // Legacy escalated alerts (no longer created) may still be open.
   const escalated = alert.type === "escalated_overdue"
-  const thread = (alert.actions ?? []).filter((action) => action.note || action.kind === "share")
+  const overdue = Boolean(alert.overdue_at) || Boolean(alert.is_overdue)
+  const thread = alert.actions ?? []
+  const followUps = alert.follow_ups ?? []
+
+  function closePanel() {
+    setChoosing(null)
+  }
 
   async function resolve() {
     setError(null)
@@ -371,7 +304,7 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
 
   return (
     <article
-      className={`rounded-md border border-l-4 p-4 ${escalated || alert.is_overdue ? "border-l-destructive" : "border-l-warning"}`}
+      className={`rounded-md border border-l-4 p-4 ${escalated || overdue ? "border-l-destructive" : "border-l-warning"}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         {alert.student_name ? (
@@ -392,26 +325,42 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
         ) : (
           !escalated && <Badge tone="warning">Sin salida elegida</Badge>
         )}
-        {alert.is_overdue && <Badge tone="danger">Plazo vencido</Badge>}
+        {overdue && <Badge tone="danger">Llegó a su fecha sin salida</Badge>}
       </div>
       <p className="mt-2 text-sm">{alert.description}</p>
       {status && <p className="mt-1 text-sm text-muted-foreground">{status}</p>}
 
       {thread.length > 0 && (
         <ul className="mt-3 grid gap-2">
-          {thread.map((action) => {
-            const headline = threadHeadline(action)
-            return (
-              <li key={action.id} className="rounded-md bg-muted/40 p-2 text-sm">
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{action.actor.name}</span>
-                  {headline && ` ${headline}`} · {formatShortDate(action.created_at)}
-                </p>
-                {action.note && <p>{action.note}</p>}
-              </li>
-            )
-          })}
+          {thread.map((action) => (
+            <li key={action.id} className="rounded-md bg-muted/40 p-2 text-sm">
+              <p
+                className={`text-xs ${action.kind === "overdue" ? "font-medium text-destructive" : "text-muted-foreground"}`}
+              >
+                {threadHeadline(action)} · {formatShortDate(action.created_at)}
+              </p>
+              {action.note && <p>{action.note}</p>}
+            </li>
+          ))}
         </ul>
+      )}
+
+      {followUps.length > 0 && (
+        <div className="mt-3 grid gap-1 text-sm">
+          <p className="text-xs font-medium text-muted-foreground">Seguimientos vinculados</p>
+          <ul className="grid gap-1">
+            {followUps.map((link) => (
+              <li key={link.id} className="flex flex-wrap items-center gap-2 text-xs">
+                <Link to={`/alumnos/${alert.student_id}/seguimiento`} className="hover:underline">
+                  Seguimiento · vence el {formatShortDate(link.due_date)}
+                </Link>
+                <Badge tone={link.resolved ? "success" : link.is_overdue ? "danger" : "info"}>
+                  {followUpState(link)}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {alert.can?.act && choosing === null && (
@@ -429,20 +378,10 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           ))}
         </div>
       )}
-      {choosing && choosing !== "share" && choosing !== "note" && (
+      {choosing && choosing !== "note" && choosing !== "follow-up" && (
         <OutcomeForm
           alert={alert}
           outcome={choosing}
-          onCancel={() => setChoosing(null)}
-          onDone={(updated) => {
-            setChoosing(null)
-            onChange(updated)
-          }}
-        />
-      )}
-      {choosing === "share" && (
-        <ShareForm
-          alert={alert}
           onCancel={() => setChoosing(null)}
           onDone={(updated) => {
             setChoosing(null)
@@ -460,11 +399,38 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           }}
         />
       )}
-      {choosing === null && (alert.can?.share || alert.can?.note || alert.can?.resolve) && (
+      {choosing === "follow-up" && (
+        <div className="mt-3">
+          <NewFollowUpForm
+            studentId={alert.student_id}
+            alertId={alert.id}
+            idPrefix={`alert-${alert.id}-follow-up`}
+            title="Seguimiento vinculado a esta alerta"
+            onCancel={closePanel}
+            onCreated={(created) => {
+              closePanel()
+              // The alert itself does not change: only its list of links.
+              onChange({
+                ...alert,
+                follow_ups: [
+                  ...followUps,
+                  {
+                    id: created.id,
+                    due_date: created.due_date,
+                    resolved: created.resolved,
+                    is_overdue: created.is_overdue,
+                  },
+                ],
+              })
+            }}
+          />
+        </div>
+      )}
+      {choosing === null && (alert.can?.note || alert.can?.resolve || alert.can?.link_follow_up) && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {alert.can?.share && (
-            <Button type="button" size="sm" variant="outline" onClick={() => setChoosing("share")}>
-              Compartir con otro rol
+          {alert.can?.link_follow_up && (
+            <Button type="button" size="sm" variant="outline" onClick={() => setChoosing("follow-up")}>
+              Crear seguimiento vinculado
             </Button>
           )}
           {alert.can?.note && (

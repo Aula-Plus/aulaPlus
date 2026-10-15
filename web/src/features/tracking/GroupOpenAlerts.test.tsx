@@ -63,7 +63,6 @@ describe("GroupOpenAlerts", () => {
       alert(1, {
         outcome: "handed_off",
         assignee: { id: 3, name: "Galia Cohen" },
-        collaborators: [{ id: 1, name: "Mariana López" }],
         outcome_at: "2026-09-13T10:00:00Z",
       }),
       alert(2, { outcome: "owned", assignee: { id: 1, name: "Mariana López" }, outcome_at: "2026-09-14T10:00:00Z" }),
@@ -71,10 +70,10 @@ describe("GroupOpenAlerts", () => {
     ])
     renderCard()
 
-    expect(await screen.findByText(/^La tienen Galia Cohen y Mariana López desde el/)).toBeInTheDocument()
+    expect(await screen.findByText(/^La tiene Galia Cohen desde el/)).toBeInTheDocument()
     expect(screen.getByText(/^La tiene Mariana López desde el/)).toBeInTheDocument()
     // A new alert nobody took yet shows no holder.
-    expect(screen.getAllByText(/^La tienen? /)).toHaveLength(2)
+    expect(screen.getAllByText(/^La tiene /)).toHaveLength(2)
   })
 
   it("renders nothing when there are no open alerts or the request is forbidden", async () => {

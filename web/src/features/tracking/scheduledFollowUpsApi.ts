@@ -57,6 +57,8 @@ export async function createScheduledFollowUp(
     /** Omitted when the creator keeps it (the default). */
     assigned_to_id?: number
     shared_with_ids?: number[]
+    /** The alert it is created from («Crear seguimiento vinculado»). */
+    alert_id?: number
   },
 ): Promise<ScheduledFollowUp> {
   const { data } = await api.post<{ data: ScheduledFollowUp }>(
