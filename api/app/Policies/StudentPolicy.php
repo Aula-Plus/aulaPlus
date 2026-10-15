@@ -60,6 +60,19 @@ class StudentPolicy
     }
 
     /**
+     * Open the change history of the student's file (ClickUp 86e3qkwmc):
+     * psychopedagogy and direction of the student's school. Teachers never —
+     * not even for their own students. This only opens the endpoint; each
+     * entry is then checked against its own record's visibility rules
+     * (App\Services\StudentChangeHistory).
+     */
+    public function viewChangeHistory(User $user, Student $student): bool
+    {
+        return $this->sharesSchool($user, $student)
+            && $user->hasAnyRole([Role::Psychopedagogue->value, Role::Director->value]);
+    }
+
+    /**
      * Write/confirm the team-facing summary of the technical report. Only
      * psychopedagogy edits it; director and teachers read it (it carries no
      * diagnosis, so reading follows plain `view`).
