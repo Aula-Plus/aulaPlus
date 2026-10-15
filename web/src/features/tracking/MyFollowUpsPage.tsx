@@ -16,6 +16,11 @@ import { refreshUnreadNoticeCount } from "./unreadNotices"
  * "Mis seguimientos": the caller's pending follow-ups (responsible for, or
  * shared with them) plus the notices of follow-ups assigned to them. A notice
  * is read and dismissed — it is not an alert and asks for nothing.
+ *
+ * Wording (PO review 14/10): "Pendientes" is every open follow-up; one past
+ * its date is still pending and only carries a "Fuera de fecha" badge —
+ * reaching the date never closes it. "Entendido" only marks the notice read
+ * (and drops the sidebar unread count); it never resolves the follow-up.
  */
 export function MyFollowUpsPage() {
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
@@ -106,7 +111,7 @@ export function MyFollowUpsPage() {
                     Ver ficha del alumno
                   </Link>
                 </div>
-                {followUp.is_overdue && <Badge tone="danger">Llegó a su fecha sin resolver</Badge>}
+                {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
               </li>
             ))}
           </ul>

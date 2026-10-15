@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -37,8 +37,11 @@ describe("MyFollowUpsPage", () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it("labels a follow-up past its date without calling it expired", async () => {
-    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([pendingFollowUp({ is_overdue: true })])
+  it("keeps an out-of-date follow-up under 'Pendientes', marked 'Fuera de fecha'", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([
+      pendingFollowUp({ id: 1, description: "Revisar tiempo extendido", is_overdue: true }),
+      pendingFollowUp({ id: 2, description: "Coordinar con familia", is_overdue: false }),
+    ])
     vi.spyOn(api, "fetchNotifications").mockResolvedValue([])
 
     render(
@@ -47,8 +50,37 @@ describe("MyFollowUpsPage", () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText("Llegó a su fecha sin resolver")).toBeInTheDocument()
-    expect(screen.queryByText(/vencid/i)).not.toBeInTheDocument()
+    const pending = (await screen.findByRole("heading", { name: "Pendientes" })).closest<HTMLElement>("[data-slot=\"card\"]")!
+    const overdueRow = within(pending).getByText("Revisar tiempo extendido").closest("li")!
+    const onTimeRow = within(pending).getByText("Coordinar con familia").closest("li")!
+    expect(within(overdueRow).getByText("Fuera de fecha")).toBeInTheDocument()
+    expect(within(onTimeRow).queryByText("Fuera de fecha")).not.toBeInTheDocument()
+    expect(screen.queryByText(/vencid|sin resolver|llegó a su fecha/i)).not.toBeInTheDocument()
+  })
+
+  it("'Entendido' only marks the notice read; the follow-up stays pending", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([pendingFollowUp()])
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([
+      {
+        id: "n1",
+        data: { type: "follow_up_assigned", follow_up_id: 1, student_id: 3, due_date: "2026-10-30" },
+        created_at: null,
+      },
+    ])
+    const markRead = vi.spyOn(api, "markNotificationRead").mockResolvedValue()
+    const resolve = vi.spyOn(api, "resolveScheduledFollowUp")
+
+    render(
+      <MemoryRouter>
+        <MyFollowUpsPage />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole("button", { name: /entendido/i }))
+
+    expect(markRead).toHaveBeenCalledWith("n1")
+    expect(resolve).not.toHaveBeenCalled()
+    expect(screen.getByText("Revisar tiempo extendido")).toBeInTheDocument()
   })
 
   it("drops the sidebar count once the notice is read", async () => {

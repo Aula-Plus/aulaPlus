@@ -343,7 +343,7 @@ function FollowUpRow({
         </div>
         {/* Painted straight from the server boolean — the component never does
             date arithmetic (spec §4). */}
-        {followUp.is_overdue && <Badge tone="danger">Llegó a su fecha sin resolver</Badge>}
+        {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
       </div>
 
       {followUp.resolved ? (
