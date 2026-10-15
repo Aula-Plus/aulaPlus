@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AlertActionKind;
 use App\Enums\AlertOutcome;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
@@ -10,13 +11,20 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One step in an alert's thread (ClickUp 86e3jpzdp): someone chose a way out
- * — "me ocupo yo", "se la paso a otro rol", "la dejo en observación" — with a
- * responsible person, a deadline and an optional note for whoever receives
- * it. The note is operational (what was done with the case), never a
- * diagnosis, and is kept out of the audit diff (CLAUDE.md rule 11).
+ * One step in an alert's thread (ClickUp 86e3jpzdp), see AlertActionKind:
+ *
+ * - `outcome`: someone chose a way out — "me ocupo yo", "se la paso a otro
+ *   rol", "la dejo en observación" — with a responsible person (`assignee_id`),
+ *   a deadline and an optional note for whoever receives it;
+ * - `note`: whoever has the alert left a note;
+ * - `overdue`: the deadline arrived with the alert still pending («Llegó a su
+ *   fecha sin salida»), recorded with who had it and the deadline missed.
+ *   Written by `alerts:overdue`, so `actor_id` is null.
+ *
+ * The note is operational (what was done with the case), never a diagnosis,
+ * and is kept out of the audit diff (CLAUDE.md rule 11).
  */
-#[Fillable(['alert_id', 'actor_id', 'outcome', 'assignee_id', 'due_on', 'note'])]
+#[Fillable(['alert_id', 'actor_id', 'kind', 'outcome', 'assignee_id', 'due_on', 'note'])]
 class AlertAction extends Model
 {
     use Auditable, BelongsToSchool;
@@ -26,6 +34,7 @@ class AlertAction extends Model
     protected function casts(): array
     {
         return [
+            'kind' => AlertActionKind::class,
             'outcome' => AlertOutcome::class,
             'due_on' => 'date',
         ];

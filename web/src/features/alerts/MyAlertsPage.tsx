@@ -30,7 +30,8 @@ export function MyAlertsPage() {
         .map((alert) => (alert.id === updated.id ? updated : alert))
         .filter((alert) => !alert.resolved),
     )
-    // A new way out may close an escalated alert: refresh the list quietly.
+    // Refresh the list quietly: a way out may also close a legacy escalated
+    // alert, and the server decides what this user may do now.
     alertsApi
       .fetchMyAlerts()
       .then(setAlerts)

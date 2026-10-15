@@ -3,10 +3,12 @@ import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Alert } from "@/types"
+import * as scheduledFollowUpsApi from "@/features/tracking/scheduledFollowUpsApi"
 import { MyAlertsPage } from "./MyAlertsPage"
 import * as alertsApi from "./alertsApi"
 
 vi.mock("./alertsApi")
+vi.mock("@/features/tracking/scheduledFollowUpsApi")
 
 function isoInDays(days: number): string {
   const date = new Date()
@@ -112,6 +114,227 @@ describe("MyAlertsPage", () => {
 
     expect(await screen.findByText(/La tiene Galia Cohen desde el/)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Me ocupo yo" })).not.toBeInTheDocument()
+  })
+
+  it("offers no way to share the alert itself", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      {
+        ...newAlert,
+        outcome: "owned",
+        assignee: { id: 1, name: "Mariana López" },
+        outcome_at: "2026-09-13T10:00:00Z",
+        due_on: "2026-09-20",
+        can: { act: true, note: true, resolve: true, link_follow_up: true },
+      },
+    ])
+    renderPage()
+
+    expect(await screen.findByRole("button", { name: "Crear seguimiento vinculado" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Compartir/ })).not.toBeInTheDocument()
+    expect("shareAlert" in alertsApi).toBe(false)
+  })
+
+  it("shows the alert read-only to whoever handed it off", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      {
+        ...newAlert,
+        outcome: "handed_off",
+        assignee: { id: 3, name: "Galia Cohen" },
+        outcome_by: { id: 1, name: "Mariana López" },
+        outcome_at: "2026-09-13T10:00:00Z",
+        due_on: "2026-09-20",
+        actions: [
+          {
+            id: 6,
+            kind: "outcome",
+            outcome: "handed_off",
+            actor: { id: 1, name: "Mariana López" },
+            assignee: { id: 3, name: "Galia Cohen" },
+            due_on: "2026-09-20",
+            note: "Bajó de 7 a 4.",
+            created_at: "2026-09-13T10:00:00Z",
+          },
+        ],
+        can: { act: false, note: false, resolve: false, link_follow_up: false },
+      },
+    ])
+    renderPage()
+
+    expect(await screen.findByText(/La tiene Galia Cohen desde el/)).toBeInTheDocument()
+    expect(screen.getByText(/Mariana López se la pasó a Galia Cohen, plazo al/)).toBeInTheDocument()
+    expect(screen.getByText("Bajó de 7 a 4.")).toBeInTheDocument()
+    for (const name of [
+      "Me ocupo yo",
+      "Dejar una nota",
+      "Marcar como resuelta",
+      "Crear seguimiento vinculado",
+    ]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument()
+    }
+  })
+
+  it("marks the same alert when it reached its deadline without a way out, keeping its thread", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      {
+        ...newAlert,
+        outcome: "observing",
+        assignee: { id: 1, name: "Mariana López" },
+        outcome_at: "2026-09-13T10:00:00Z",
+        due_on: "2026-09-20",
+        is_overdue: true,
+        overdue_at: "2026-09-21T03:00:00Z",
+        actions: [
+          {
+            id: 6,
+            kind: "outcome",
+            outcome: "observing",
+            actor: { id: 1, name: "Mariana López" },
+            assignee: { id: 1, name: "Mariana López" },
+            due_on: "2026-09-20",
+            note: null,
+            created_at: "2026-09-13T10:00:00Z",
+          },
+          {
+            id: 9,
+            kind: "overdue",
+            outcome: null,
+            actor: null,
+            assignee: { id: 1, name: "Mariana López" },
+            due_on: "2026-09-20",
+            note: null,
+            created_at: "2026-09-21T03:00:00Z",
+          },
+        ],
+        can: { act: true, note: true, resolve: true, link_follow_up: true },
+      },
+    ])
+    renderPage()
+
+    // One card, the same case: no second "escalated" alert.
+    expect(await screen.findAllByText("Lucía Pereyra")).toHaveLength(1)
+    expect(screen.getByText("Llegó a su fecha sin salida", { selector: "span" })).toBeInTheDocument()
+    expect(screen.getByText(/Mariana López la dejó en observación hasta el/)).toBeInTheDocument()
+    expect(screen.getByText(/^Llegó a su fecha sin salida \(plazo al .*, la tenía Mariana López\)/)).toBeInTheDocument()
+    // Still answerable with a new way out.
+    expect(screen.getByRole("button", { name: "Me ocupo yo" })).toBeInTheDocument()
+  })
+
+  it("creates a follow-up linked to the alert without changing the alert", async () => {
+    const held: Alert = {
+      ...newAlert,
+      outcome: "handed_off",
+      assignee: { id: 3, name: "Galia Cohen" },
+      outcome_at: "2026-09-13T10:00:00Z",
+      due_on: "2026-09-20",
+      follow_ups: [],
+      can: { act: true, note: true, resolve: true, link_follow_up: true },
+    }
+    // The page refreshes the list quietly after any change: the server then
+    // returns the same alert, now listing its linked follow-up.
+    vi.mocked(alertsApi.fetchMyAlerts)
+      .mockResolvedValueOnce([held])
+      .mockResolvedValue([
+        { ...held, follow_ups: [{ id: 40, due_date: "2026-10-30", resolved: false, is_overdue: false }] },
+      ])
+    vi.mocked(scheduledFollowUpsApi.createScheduledFollowUp).mockResolvedValue({
+      id: 40,
+      student_id: 5,
+      alert_id: 10,
+      description: "Armar el plan con la familia.",
+      due_date: "2026-10-30",
+      created_by_id: 3,
+      resolved: false,
+      resolved_by_id: null,
+      resolved_at: null,
+      resolution_note: null,
+      is_overdue: false,
+      created_at: "2026-09-14T10:00:00Z",
+    })
+    renderPage()
+
+    await userEvent.click(await screen.findByRole("button", { name: "Crear seguimiento vinculado" }))
+    await userEvent.type(
+      screen.getByLabelText("Seguimiento vinculado a esta alerta"),
+      "Armar el plan con la familia.",
+    )
+    await userEvent.type(screen.getByLabelText("Fecha límite"), "2026-10-30")
+    await userEvent.click(screen.getByRole("button", { name: "Programar seguimiento" }))
+
+    await waitFor(() =>
+      expect(scheduledFollowUpsApi.createScheduledFollowUp).toHaveBeenCalledWith(5, {
+        description: "Armar el plan con la familia.",
+        due_date: "2026-10-30",
+        alert_id: 10,
+      }),
+    )
+    expect(await screen.findByText("Seguimientos vinculados")).toBeInTheDocument()
+    expect(screen.getByText("Pendiente")).toBeInTheDocument()
+    // The alert keeps its state: no way out was chosen or closed on its behalf.
+    expect(alertsApi.chooseAlertOutcome).not.toHaveBeenCalled()
+    expect(alertsApi.resolveAlert).not.toHaveBeenCalled()
+    expect(screen.getByText("Pasada a otro rol")).toBeInTheDocument()
+  })
+
+  it("leaves a note in the thread", async () => {
+    const held: Alert = {
+      ...newAlert,
+      outcome: "owned",
+      assignee: { id: 1, name: "Mariana López" },
+      outcome_at: "2026-09-13T10:00:00Z",
+      due_on: "2026-09-20",
+      can: { act: true, note: true, resolve: true },
+    }
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([held])
+    const noted: Alert = {
+      ...held,
+      actions: [
+        {
+          id: 8,
+          kind: "note",
+          outcome: null,
+          actor: { id: 1, name: "Mariana López" },
+          assignee: null,
+          due_on: null,
+          note: "Hablé con la familia.",
+          created_at: "2026-09-14T10:00:00Z",
+        },
+      ],
+    }
+    vi.mocked(alertsApi.addAlertNote).mockResolvedValue(noted)
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValueOnce([held]).mockResolvedValue([noted])
+    renderPage()
+
+    await userEvent.click(await screen.findByRole("button", { name: "Dejar una nota" }))
+    await userEvent.type(screen.getByLabelText("Nota"), "Hablé con la familia.")
+    await userEvent.click(screen.getByRole("button", { name: "Guardar nota" }))
+
+    await waitFor(() => expect(alertsApi.addAlertNote).toHaveBeenCalledWith(10, "Hablé con la familia."))
+    expect(await screen.findByText("Hablé con la familia.")).toBeInTheDocument()
+  })
+
+  it("hides notes when the server says the user can't", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      {
+        ...newAlert,
+        outcome: "handed_off",
+        assignee: { id: 3, name: "Galia Cohen" },
+        can: { act: false, note: false, resolve: false },
+      },
+    ])
+    renderPage()
+
+    expect(await screen.findByText(/La tiene Galia Cohen/)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Dejar una nota" })).not.toBeInTheDocument()
+  })
+
+  it("offers no note before a way out was chosen: nobody has the alert yet", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      { ...newAlert, can: { act: true, note: false, resolve: false } },
+    ])
+    renderPage()
+
+    expect(await screen.findByRole("button", { name: "Me ocupo yo" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Dejar una nota" })).not.toBeInTheDocument()
   })
 
   it("says so when there are no alerts", async () => {
