@@ -6,6 +6,7 @@ use App\Actions\AI\BuildProposalContext;
 use App\Enums\AIProposalStatus;
 use App\Enums\AIProposalType;
 use App\Models\AIProposal;
+use App\Support\AiProvider;
 use App\Support\Tenancy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -58,6 +59,14 @@ class GenerateAIProposalJob implements ShouldQueue
     public function handle(BuildProposalContext $buildContext): void
     {
         Tenancy::forSchool($this->proposal->school, function () use ($buildContext): void {
+            // Queued before the provider was removed (or dispatched directly):
+            // record the error without calling the API.
+            if (! AiProvider::isConfigured()) {
+                $this->markError(AiProvider::NOT_CONFIGURED);
+
+                return;
+            }
+
             $context = $buildContext($this->proposal);
             $this->proposal->update(['context_sent' => $context]);
 

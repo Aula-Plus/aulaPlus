@@ -110,3 +110,16 @@ it('marks the proposal errored on a non-2xx API status', function () {
 
     expect($proposal->refresh()->status)->toBe(AIProposalStatus::Error);
 });
+
+it('marks the proposal errored without calling the API when the provider is not configured', function () {
+    config(['services.anthropic.key' => null]);
+    Http::fake();
+    $proposal = pendingProposal();
+
+    GenerateAIProposalJob::dispatchSync($proposal);
+
+    $proposal->refresh();
+    expect($proposal->status)->toBe(AIProposalStatus::Error)
+        ->and($proposal->error_message)->toBe('The AI provider is not configured.');
+    Http::assertNothingSent();
+});
