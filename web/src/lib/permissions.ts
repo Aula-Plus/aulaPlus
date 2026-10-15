@@ -211,8 +211,9 @@ export function canValidateBarrierAccommodation(
 }
 
 /**
- * View a student's tracking history. Director or psychopedagogue.
- * Mirror of `StudentHistoryController` (school-wide staff).
+ * View a student's change history ("Ver historial de cambios"). Director or
+ * psychopedagogue. Mirror of `StudentPolicy::viewChangeHistory`; the server
+ * also drops each entry the viewer could not read in its original place.
  */
 export function canViewStudentHistory(user: User | null): boolean {
   return isSchoolWideStaff(user)

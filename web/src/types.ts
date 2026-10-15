@@ -673,10 +673,11 @@ export interface BarrierAccommodationLink {
 /** Mirror of `App\Enums\AuditAction`. */
 export type AuditAction = "created" | "updated" | "deleted"
 
+/** How the change history names each action ("altas, modificaciones o bajas"). */
 export const auditActionLabels: Record<AuditAction, string> = {
-  created: "Creado",
-  updated: "Actualizado",
-  deleted: "Eliminado",
+  created: "Alta",
+  updated: "Modificación",
+  deleted: "Baja",
 }
 
 /** Mirror of `App\Enums\AuditOrigin`. `system` entries have `user_id === null`. */
@@ -687,27 +688,80 @@ export const auditOriginLabels: Record<AuditOrigin, string> = {
   system: "Sistema",
 }
 
+/** Mirror of `App\Enums\StudentFileSection`: the parts of a student's file. */
+export type StudentFileSection =
+  | "student_data"
+  | "summary"
+  | "learning_profile"
+  | "documents"
+  | "accommodations"
+  | "barriers"
+  | "observations"
+  | "reports"
+  | "follow_ups"
+  | "alerts"
+
+export const studentFileSectionLabels: Record<StudentFileSection, string> = {
+  student_data: "Datos del alumno",
+  summary: "Resumen para el equipo",
+  learning_profile: "Perfil de aprendizaje",
+  documents: "Documentos",
+  accommodations: "Ajustes",
+  barriers: "Barreras",
+  observations: "Observaciones",
+  reports: "Informes",
+  follow_ups: "Seguimientos programados",
+  alerts: "Alertas",
+}
+
 /**
- * One row of the student audit timeline
- * (`GET /api/v1/students/{id}/history`). Mirror of `AuditLogResource`.
- *
- * `auditable_type` is the class-basename ("Accommodation" | "Barrier" |
- * "TechnicalReport"), not the fully-qualified PHP class. `changes` is the raw
- * `audit_logs.changes` JSON; its shape varies by action (a `created` row
- * carries the initial column values, an `updated` row carries
- * `{ before, after }` pairs), so it is typed loosely and rendered as
- * pretty-printed JSON in the UI rather than picked apart per action.
+ * One changed field of a history entry. An addition has `before: null`, a
+ * removal `after: null`. `redacted` fields are reported as changed but their
+ * value is never sent (e.g. the private path of a report file).
  */
-export interface AuditLogEntry {
+export interface StudentHistoryChange {
+  field: string
+  before?: unknown
+  after?: unknown
+  redacted?: boolean
+}
+
+/**
+ * One entry of a student's change history (`GET /api/v1/students/{id}/history`).
+ * Mirror of `StudentHistoryEntryResource`. The server only sends entries the
+ * viewer may read under the original record's own permissions.
+ */
+export interface StudentHistoryEntry {
   id: number
-  auditable_type: string
-  auditable_id: number
-  action: AuditAction
-  /** `null` when `origin === "system"` (background jobs, seeders, etc.). */
-  user_id: number | null
-  origin: AuditOrigin
-  changes: Record<string, unknown>
   created_at: string | null
+  action: AuditAction
+  section: StudentFileSection | null
+  origin: AuditOrigin
+  /** `null` for system changes (no person behind them). */
+  actor: { id: number; name: string; role: Role | null } | null
+  element: { type: string; id: number; label: string | null }
+  changes: StudentHistoryChange[]
+}
+
+/** A person who appears in the history — options of the "Persona" filter. */
+export interface StudentHistoryActor {
+  id: number
+  name: string
+  role: Role | null
+}
+
+export interface StudentHistoryPage extends Paginated<StudentHistoryEntry> {
+  actors: StudentHistoryActor[]
+}
+
+export interface StudentHistoryFilters {
+  user_id?: number
+  section?: StudentFileSection
+  action?: AuditAction
+  /** ISO-8601 instant (start of the viewer's local day). */
+  from?: string
+  /** ISO-8601 instant (end of the viewer's local day). */
+  to?: string
 }
 
 /** A colleague as exposed by `StaffMemberResource`: id, name and role only. */
@@ -900,7 +954,7 @@ export interface ScreeningTestApplicationInput {
 
 /**
  * Wrapper for endpoints paginated with Laravel's default page paginator.
- * Currently only the audit history uses this — every other endpoint uses the
+ * Currently only the change history uses this — every other endpoint uses the
  * unpaginated `{ data: T[] }` sleeve. When a second paginated endpoint appears,
  * this stays as the canonical shape (do not re-derive it per feature).
  */
