@@ -78,9 +78,8 @@ class AlertController extends Controller
 
         $alert = DB::transaction(function () use ($alert, $resolution): Alert {
             // Lock the row and re-check on what it holds now, as choosing a
-            // way out and sharing do: with two people in charge, the other one
-            // may have just handed it off (so this user is no longer in
-            // charge) or closed it.
+            // way out does: it may have just been handed off from another tab
+            // (so this user no longer has it) or closed.
             $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
             if (! $alert->canBeResolvedBy(request()->user())) {
                 throw new AuthorizationException;
@@ -88,9 +87,10 @@ class AlertController extends Controller
 
             $alert->update($resolution);
 
-            // An escalated alert has no way out of its own (it can't be acted
-            // on or resolved directly): it closes when the alert it escalates
-            // moves — including when that alert is resolved.
+            // A legacy escalated alert (no longer created) has no way out of
+            // its own: it closes when the alert it escalates moves —
+            // including when that alert is resolved. Linked follow-ups are
+            // separate records and stay as they are.
             $alert->escalations()->where('resolved', false)->update($resolution);
 
             return $alert;

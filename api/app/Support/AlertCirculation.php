@@ -11,10 +11,11 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 
 /**
- * Who an alert can be handed to or shared with (ClickUp 86e3jpzdp, Eitán's
- * follow-up). The single source of truth for both the picker endpoint and the
- * FormRequests that validate a hand-off or a share, so the list the UI offers
- * and what the server accepts can never drift.
+ * Who an alert can be handed to (ClickUp 86e3jpzdp, Eitán's follow-up; kept
+ * by the review of 14/10). The single source of truth for both the picker
+ * endpoint and ChooseAlertOutcomeRequest, so the list the UI offers and what
+ * the server accepts can never drift. Handing it off is a transfer to exactly
+ * one person.
  *
  * A person can receive an alert from `$actor` when they are:
  *
@@ -25,14 +26,14 @@ use Illuminate\Support\Collection;
  *   ({@see ScheduledFollowUpPolicy::canFollow()}): teaches the student, or is
  *   psychopedagogy/direction of that school. An alert never opens a student
  *   to someone who had no access to them;
- * - never teacher-to-teacher: "un docente solo puede pasarla o compartirla
- *   con Psicopedagogía o Dirección" and "a un docente solo le pueden llegar
+ * - never teacher-to-teacher: "un docente solo puede pasarla a
+ *   Psicopedagogía o Dirección" and "a un docente solo le pueden llegar
  *   alertas de Psicopedagogía o de Dirección". So unless the actor is
  *   psychopedagogy/direction, the receiver must be.
  *
  * An alert whose student was removed (soft-deleted) reaches nobody new: there
- * is no student left to see, so nobody can receive it. Whoever is in charge
- * can still take it, leave it in observation, note it or close it.
+ * is no student left to see, so nobody can receive it. Whoever has it can
+ * still take it, leave it in observation, note it or close it.
  */
 class AlertCirculation
 {
@@ -52,7 +53,7 @@ class AlertCirculation
     }
 
     /**
-     * Everyone `$actor` may hand the alert to or share it with, by name.
+     * Everyone `$actor` may hand the alert to, by name.
      *
      * The same rule as {@see self::canReceive()}, resolved in a single query
      * instead of once per staff member: psychopedagogy/direction always see

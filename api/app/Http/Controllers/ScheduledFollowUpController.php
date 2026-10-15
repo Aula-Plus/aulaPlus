@@ -130,6 +130,9 @@ class ScheduledFollowUpController extends Controller
 
         $followUp = ScheduledFollowUp::create([
             'student_id' => $student->id,
+            // Linking never touches the alert: its state, holder and deadline
+            // stay as they are (review of 14/10).
+            'alert_id' => $request->validated('alert_id'),
             'created_by_id' => $creator->id,
             'assigned_to_id' => $assignedToId,
             'description' => $request->validated('description'),

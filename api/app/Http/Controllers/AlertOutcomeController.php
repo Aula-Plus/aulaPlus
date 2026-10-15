@@ -18,14 +18,15 @@ use Illuminate\Support\Facades\DB;
  * The three ways out of an alert (ClickUp 86e3jpzdp; documento vivo screen
  * 11): "me ocupo yo", "se la paso a otro rol", "la dejo en observación".
  * Each one records a responsible person and a deadline, appends a step to the
- * alert's thread, and closes any open "escalated, deadline passed" alert for
- * it — the circuit moved again.
+ * alert's thread and clears a «Llegó a su fecha sin salida» mark (there is a
+ * new deadline). It also closes any open legacy "escalated" alert for it —
+ * none is created any more, but existing ones close when the circuit moves.
  *
- * A shared alert (two people in charge) keeps its pair when one of them
- * takes it or leaves it in observation: the actor becomes the person
- * responsible and the previous one stays as co-responsible. Handing it off
- * transfers it: the receiver is the only one in charge (they may share it
- * again); everyone involved keeps seeing it.
+ * Handing it off transfers it to exactly one person (review of 14/10): the
+ * receiver is the only one who has it from then on; whoever handed it off
+ * keeps reading it — no actions, no new notices — while they still see the
+ * student. A follow-up linked to the alert is a separate record and is never
+ * touched here.
  */
 class AlertOutcomeController extends Controller
 {
@@ -38,17 +39,14 @@ class AlertOutcomeController extends Controller
             : $user->id;
 
         $alert = DB::transaction(function () use ($request, $alert, $user, $outcome, $assigneeId): Alert {
-            // Lock the row (as sharing does) and work on what it holds now,
-            // so two simultaneous moves can't both act on a stale person in
-            // charge or a stale pair. Re-check under the lock: someone else
-            // may have just handed it off or closed it.
+            // Lock the row and work on what it holds now, so two
+            // simultaneous moves can't both act on a stale person in charge.
+            // Re-check under the lock: someone else may have just handed it
+            // off or closed it.
             $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
             if (! $alert->canBeActedOnBy($user)) {
                 throw new AuthorizationException;
             }
-
-            $previousAssigneeId = $alert->assignee_id;
-            $actorWasCollaborator = $alert->collaborators()->whereKey($user->id)->exists();
 
             $alert->actions()->create([
                 'actor_id' => $user->id,
@@ -65,21 +63,12 @@ class AlertOutcomeController extends Controller
                 'due_on' => $request->validated('due_on'),
                 'outcome_by_id' => $user->id,
                 'outcome_at' => now(),
-                'escalated_at' => null,
+                'overdue_at' => null,
             ]);
 
-            // Whoever chose and whoever is now responsible both keep seeing it.
+            // Whoever chose and whoever is now responsible both keep seeing it
+            // (the former read-only, once it is handed off).
             $alert->people()->syncWithoutDetaching(array_unique([$user->id, $assigneeId]));
-
-            if ($outcome === AlertOutcome::HandedOff) {
-                $alert->collaborators()->detach();
-            } elseif ($actorWasCollaborator) {
-                // The co-responsible took it: the pair stays, swapped.
-                $alert->collaborators()->detach($user->id);
-                if ($previousAssigneeId !== null && $previousAssigneeId !== $user->id) {
-                    $alert->collaborators()->syncWithoutDetaching([$previousAssigneeId => ['shared_by_id' => $user->id]]);
-                }
-            }
 
             $alert->escalations()->where('resolved', false)->update([
                 'resolved' => true,
@@ -95,7 +84,7 @@ class AlertOutcomeController extends Controller
 
     /**
      * GET /api/v1/alerts/{alert}/handoff-candidates — the people the caller
-     * may hand the alert to or share it with ({@see AlertCirculation}: active
+     * may hand the alert to ({@see AlertCirculation}: active
      * colleagues who already see the student, never teacher-to-teacher), with
      * their roles so the UI can show them. Names and roles only.
      */

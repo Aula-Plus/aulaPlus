@@ -6,7 +6,6 @@ use App\Enums\Role;
 use App\Models\Alert;
 use App\Models\Group;
 use App\Models\User;
-use App\Support\AlertCirculation;
 
 /**
  * Alerts surface behavior/performance concerns about a student — sensitive
@@ -41,13 +40,13 @@ class AlertPolicy
     }
 
     /**
-     * Share the alert with a co-responsible — see {@see Alert::canBeSharedBy()}.
-     * Who it can be shared with is validated by ShareAlertRequest through
-     * {@see AlertCirculation}.
+     * Create a scheduled follow-up linked to the alert ("Crear seguimiento
+     * vinculado") — see {@see Alert::canLinkFollowUpBy()}. Whoever handed the
+     * alert off keeps reading it but cannot do this.
      */
-    public function share(User $user, Alert $alert): bool
+    public function linkFollowUp(User $user, Alert $alert): bool
     {
-        return $alert->canBeSharedBy($user);
+        return $alert->canLinkFollowUpBy($user);
     }
 
     /**
@@ -60,7 +59,7 @@ class AlertPolicy
 
     /**
      * See {@see Alert::canBeResolvedBy()}: a new alert closes only after a way
-     * out was chosen, and only by whoever is in charge of it.
+     * out was chosen, and only by whoever has it.
      */
     public function resolve(User $user, Alert $alert): bool
     {

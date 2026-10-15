@@ -16,9 +16,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * - `outcome`: someone chose a way out — "me ocupo yo", "se la paso a otro
  *   rol", "la dejo en observación" — with a responsible person (`assignee_id`),
  *   a deadline and an optional note for whoever receives it;
- * - `share`: someone shared it with a co-responsible (`assignee_id`), with an
- *   optional note;
- * - `note`: someone in charge left a note.
+ * - `note`: whoever has the alert left a note;
+ * - `overdue`: the deadline arrived with the alert still pending («Llegó a su
+ *   fecha sin salida»), recorded with who had it and the deadline missed.
+ *   Written by `alerts:overdue`, so `actor_id` is null.
  *
  * The note is operational (what was done with the case), never a diagnosis,
  * and is kept out of the audit diff (CLAUDE.md rule 11).

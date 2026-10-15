@@ -120,9 +120,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and deadline; plus who it can be handed to.
         Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
         Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
-        // Following an alert together (ClickUp 86e3jpzdp follow-up): share it
-        // with a co-responsible, and leave notes in its thread.
-        Route::post('/alerts/{alert}/share', [AlertThreadController::class, 'share']);
+        // Notes in an alert's thread, by whoever has it (ClickUp 86e3jpzdp
+        // follow-up). Working a case with several people happens on a
+        // follow-up linked to the alert, not on the alert itself.
         Route::post('/alerts/{alert}/notes', [AlertThreadController::class, 'note']);
 
         // Comment categories (replace the old comment "tone"): a school-

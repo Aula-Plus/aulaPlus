@@ -3,68 +3,24 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AlertActionKind;
-use App\Http\Requests\ShareAlertRequest;
 use App\Http\Requests\StoreAlertNoteRequest;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
- * Following an alert together (ClickUp 86e3jpzdp follow-up): sharing it with
- * a co-responsible and leaving notes in its thread.
+ * Notes in an alert's thread (ClickUp 86e3jpzdp follow-up). A note is not a
+ * way out: the person responsible, the outcome and the deadline stay as they
+ * are, and so does a «Llegó a su fecha sin salida» mark.
  *
- * Sharing is not a way out: the person responsible, the outcome and the
- * deadline stay as they are, so a pending escalation ("plazo vencido") is
- * neither cleared nor closed by it — only choosing a way out (or resolving)
- * moves the circuit. Neither is a note.
+ * Working a case together with several people is not done on the alert (the
+ * review of 14/10 removed sharing it): it is done on a follow-up linked to it
+ * — see StoreScheduledFollowUpRequest (`alert_id`).
  */
 class AlertThreadController extends Controller
 {
     /**
-     * POST /api/v1/alerts/{alert}/share — the person it is shared with is in
-     * charge from then on: they see it, may leave notes, choose a way out and
-     * close it.
-     */
-    public function share(ShareAlertRequest $request, Alert $alert): AlertResource
-    {
-        $user = $request->user();
-        $collaboratorId = (int) $request->validated('user_id');
-
-        $alert = DB::transaction(function () use ($request, $alert, $user, $collaboratorId): Alert {
-            // Lock the row (as choosing a way out does) and re-check on what
-            // it holds now: it may have just been handed off or closed, so the
-            // actor may no longer be in charge. The "two at a time" cap is
-            // re-checked under the same lock, so two simultaneous shares
-            // can't both get in.
-            $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
-            if ($alert->collaborators()->count() >= Alert::MAX_COLLABORATORS) {
-                throw ValidationException::withMessages(['user_id' => 'This alert is already shared.']);
-            }
-            if (! $alert->canBeSharedBy($user)) {
-                throw new AuthorizationException;
-            }
-
-            $alert->actions()->create([
-                'actor_id' => $user->id,
-                'kind' => AlertActionKind::Share,
-                'assignee_id' => $collaboratorId,
-                'note' => $request->validated('note'),
-            ]);
-
-            $alert->collaborators()->syncWithoutDetaching([$collaboratorId => ['shared_by_id' => $user->id]]);
-            $alert->people()->syncWithoutDetaching([$user->id, $collaboratorId]);
-
-            return $alert;
-        });
-
-        return new AlertResource($alert->fresh()->load(AlertResource::RELATIONS));
-    }
-
-    /**
-     * POST /api/v1/alerts/{alert}/notes — a note from whoever is in charge
-     * (the person responsible or a co-responsible, once a way out was chosen).
+     * POST /api/v1/alerts/{alert}/notes — a note from whoever has the alert
+     * (once a way out was chosen).
      */
     public function note(StoreAlertNoteRequest $request, Alert $alert): AlertResource
     {
