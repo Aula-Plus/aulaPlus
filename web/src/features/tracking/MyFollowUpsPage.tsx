@@ -104,7 +104,7 @@ export function MyFollowUpsPage() {
                   {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
                   <p className="whitespace-pre-wrap">{followUp.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Fecha prevista: {formatShortDate(followUp.due_date)}
+                    Plazo: {formatShortDate(followUp.due_date)}
                     {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
                   </p>
                   <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>

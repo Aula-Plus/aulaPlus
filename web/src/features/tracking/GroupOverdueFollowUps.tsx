@@ -58,7 +58,7 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
               <div>
                 <p className="whitespace-pre-wrap">{followUp.description}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Fecha prevista: {formatShortDate(followUp.due_date)}
+                  Plazo: {formatShortDate(followUp.due_date)}
                 </p>
               </div>
               <RowLink to={`/alumnos/${followUp.student_id}/seguimiento`} className="shrink-0">

@@ -327,7 +327,7 @@ function FollowUpRow({
         <div>
           <p className="whitespace-pre-wrap">{followUp.description}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Fecha prevista: {formatShortDate(followUp.due_date)}
+            Plazo: {formatShortDate(followUp.due_date)}
           </p>
           {followUp.assigned_to && (
             <p className="text-xs text-muted-foreground">
