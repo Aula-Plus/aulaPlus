@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AppLayout } from "./AppLayout"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
+import * as scheduledFollowUpsApi from "@/features/tracking/scheduledFollowUpsApi"
 
 function renderLayout() {
   const value: AuthContextValue = {
@@ -24,11 +25,16 @@ function renderLayout() {
 }
 
 describe("AppLayout", () => {
+  beforeEach(() => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(0)
+  })
+  afterEach(() => vi.restoreAllMocks())
+
   it("renders the sidebar navigation and the wrapped content", () => {
     renderLayout()
 
     // Nav links live in the sidebar (rendered by <Sidebar />).
-    expect(screen.getByRole("link", { name: "Clases" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Grupos" })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Alumnos" })).toBeInTheDocument()
     expect(screen.getByText("contenido")).toBeInTheDocument()
   })

@@ -10,11 +10,17 @@ import { formatShortDate } from "@/lib/utils"
 import { roleLabels } from "@/types"
 import type { AppNotification, ScheduledFollowUp } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import { refreshUnreadNoticeCount } from "./unreadNotices"
 
 /**
  * "Mis seguimientos": the caller's pending follow-ups (responsible for, or
  * shared with them) plus the notices of follow-ups assigned to them. A notice
  * is read and dismissed — it is not an alert and asks for nothing.
+ *
+ * Wording (PO review 14/10): "Pendientes" is every open follow-up; one past
+ * its date is still pending and only carries a "Fuera de fecha" badge —
+ * reaching the date never closes it. "Entendido" only marks the notice read
+ * (and drops the sidebar unread count); it never resolves the follow-up.
  */
 export function MyFollowUpsPage() {
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
@@ -46,6 +52,8 @@ export function MyFollowUpsPage() {
     } catch {
       setError("No pudimos marcar el aviso como leído.")
     }
+    // Re-sync the sidebar count with the server (it disappears at 0).
+    void refreshUnreadNoticeCount()
   }
 
   // Notices carry ids only; the student's name comes from the pending list.
@@ -96,14 +104,14 @@ export function MyFollowUpsPage() {
                   {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
                   <p className="whitespace-pre-wrap">{followUp.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Vence: {formatShortDate(followUp.due_date)}
+                    Plazo: {formatShortDate(followUp.due_date)}
                     {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
                   </p>
                   <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
                     Ver ficha del alumno
                   </Link>
                 </div>
-                {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
+                {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
               </li>
             ))}
           </ul>
