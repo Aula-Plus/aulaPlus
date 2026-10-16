@@ -24,7 +24,6 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
-use App\Http\Controllers\ScreeningTestDesignApprovalController;
 use App\Http\Controllers\ScreeningTestDesignController;
 use App\Http\Controllers\ScreeningTestResultController;
 use App\Http\Controllers\ScreeningTestTypeController;
@@ -182,14 +181,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Session 13: screening tests ("pruebas de sondeo", docs/prompts/
         // 11-pruebas-de-sondeo.md). School-wide, psychopedagogy-led module;
-        // teachers see nothing here. Catalog + versioned design with the same
-        // draft/approval pattern as Accommodation, then application to a group
-        // with anonymous per-application codes and score-driven color bands.
+        // teachers see nothing here. Catalog + versioned design (a saved design
+        // rules at once and Dirección can revert it, screen 08), then
+        // application to a group with anonymous per-application codes and
+        // score-driven bands.
         Route::get('/screening-test-types', [ScreeningTestTypeController::class, 'index']);
         Route::post('/screening-test-types', [ScreeningTestTypeController::class, 'store']);
+        Route::patch('/screening-test-types/{type}', [ScreeningTestTypeController::class, 'update']);
+        Route::get('/screening-test-types/{type}/designs', [ScreeningTestDesignController::class, 'index']);
         Route::post('/screening-test-types/{type}/designs', [ScreeningTestDesignController::class, 'store']);
-        Route::post('/screening-test-designs/{design}/approve', [ScreeningTestDesignApprovalController::class, 'approve']);
-        Route::post('/screening-test-designs/{design}/reject', [ScreeningTestDesignApprovalController::class, 'reject']);
+        Route::post('/screening-test-types/{type}/impact', [ScreeningTestDesignController::class, 'impact']);
+        Route::post('/screening-test-designs/{design}/revert', [ScreeningTestDesignController::class, 'revert']);
 
         Route::get('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'index']);
         Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store']);

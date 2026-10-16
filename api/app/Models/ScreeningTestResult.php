@@ -25,7 +25,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'student_id',
     'code',
     'score',
+    'screening_test_design_id',
     'color',
+    'band',
     'loaded_by_id',
     'loaded_at',
 ])]
@@ -58,6 +60,14 @@ class ScreeningTestResult extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    /**
+     * The design version this result was read with when its score was loaded.
+     */
+    public function design(): BelongsTo
+    {
+        return $this->belongsTo(ScreeningTestDesign::class, 'screening_test_design_id');
     }
 
     public function loadedBy(): BelongsTo

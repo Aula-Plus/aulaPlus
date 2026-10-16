@@ -15,10 +15,9 @@ import {
 } from "lucide-react"
 import type { User } from "@/types"
 import {
-  canApproveScreeningTestDesign,
+  canEditScreeningTestDesign,
   canManageAlertSettings,
   canManageCommentSettings,
-  canManageScreeningTests,
   canManageSubjects,
   canManageUsers,
   canViewAdoptionDashboard,
@@ -61,9 +60,9 @@ export function buildNavSections(user: User | null): NavSection[] {
         // The open alerts that reach the user, for every role (ClickUp 86e3jpzdp).
         { to: "/alertas", label: "Alertas", icon: TriangleAlert },
         { to: "/mis-seguimientos", label: "Mis seguimientos", icon: CalendarClock },
-        // The screening-test design screen is for psychopedagogy (manage) and
-        // direction (approve) — docs/prompts/12 §4.
-        ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
+        // The screening design screen is for Psicopedagogía and Dirección,
+        // who both edit designs (screen 08).
+        ...(canEditScreeningTestDesign(user)
           ? [{ to: "/pruebas-de-sondeo/tipos", label: "Screenings", icon: ClipboardList }]
           : []),
       ],

@@ -261,12 +261,18 @@ export function canManageScreeningTests(user: User | null): boolean {
 }
 
 /**
- * Approve/reject a screening-test design. Mirror of
- * `ScreeningTestDesignPolicy::approve`/`reject` (role portion): **director
- * only**. The mirror of `canApproveAccommodation`'s director half — but note
- * that helper also allows psychopedagogue, whereas design approval is stricter
- * (director alone), so this is its own predicate rather than a reuse.
+ * Edit a screening's general data and save a new design (screen 08). Mirror
+ * of `ScreeningTestTypePolicy::update` / `ScreeningTestDesignPolicy::create`
+ * (role portion): Psicopedagogía and Dirección. UX only — the server decides.
  */
-export function canApproveScreeningTestDesign(user: User | null): boolean {
-  return isDirector(user)
+export function canEditScreeningTestDesign(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
+}
+
+/**
+ * "Volver atrás" on the design in force. Mirror of
+ * `ScreeningTestDesignPolicy::revert` (role portion): Dirección only.
+ */
+export function canRevertScreeningTestDesign(user: User | null): boolean {
+  return hasAnyRole(user, ["director"])
 }
