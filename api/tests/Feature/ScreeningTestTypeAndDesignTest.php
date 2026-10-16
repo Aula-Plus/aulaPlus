@@ -2,11 +2,18 @@
 
 use App\Enums\AuditAction;
 use App\Models\AuditLog;
+use App\Models\Group;
 use App\Models\School;
+use App\Models\ScreeningTestApplication;
 use App\Models\ScreeningTestDesign;
+use App\Models\ScreeningTestResult;
 use App\Models\ScreeningTestType;
+use App\Models\Student;
 use App\Models\User;
+use App\Notifications\ScreeningDesignChangedNotification;
+use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -89,115 +96,278 @@ it('exposes the current approved design (most recent approved) on the type', fun
         ->assertJsonPath('data.0.current_design.id', $newest->id);
 });
 
-it('lets psychopedagogy author a design that lands pending', function () {
+/**
+ * @return list<array<string, mixed>>
+ */
+function threeBands(float $low = 34, float $mid = 64): array
+{
+    return [
+        ['name' => 'Descendido', 'color' => 'red', 'max' => $low, 'meaning' => 'Conviene revisarlo con el equipo.'],
+        ['name' => 'En proceso', 'color' => 'yellow', 'max' => $mid, 'meaning' => 'Se vuelve a mirar en la próxima toma.'],
+        ['name' => 'Adecuado', 'color' => 'green', 'max' => 100, 'meaning' => 'No requiere acción.'],
+    ];
+}
+
+it('lets psychopedagogy save a design that rules at once and notifies Dirección', function () {
+    Notification::fake();
     $school = School::factory()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
-    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    $director = User::factory()->forSchool($school)->director()->create();
+    $otherSchoolDirector = User::factory()->director()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id, 'name' => 'Prueba de atención']);
     Sanctum::actingAs($psychopedagogue);
 
     $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", [
-        'cutoff_low' => 40,
-        'cutoff_high' => 70,
-        'meaning_red' => 'Apoyo intensivo',
-        'meaning_yellow' => 'Seguimiento',
-        'meaning_green' => 'Esperado',
+        'bands' => threeBands(),
+        'reason' => 'Subir el corte de Adecuado.',
     ])
         ->assertCreated()
-        ->assertJsonPath('data.approved', null)
-        ->assertJsonPath('data.created_by_id', $psychopedagogue->id);
-});
-
-it('rejects a design whose high cutoff is below the low cutoff', function () {
-    $school = School::factory()->create();
-    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
-    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
-    Sanctum::actingAs($psychopedagogue);
-
-    $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", [
-        'cutoff_low' => 70,
-        'cutoff_high' => 40,
-        'meaning_red' => 'a',
-        'meaning_yellow' => 'b',
-        'meaning_green' => 'c',
-    ])->assertStatus(422);
-});
-
-it('forbids a teacher and a director from authoring a design', function () {
-    $school = School::factory()->create();
-    $teacher = User::factory()->forSchool($school)->teacher()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
-    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
-    $payload = [
-        'cutoff_low' => 40, 'cutoff_high' => 70,
-        'meaning_red' => 'a', 'meaning_yellow' => 'b', 'meaning_green' => 'c',
-    ];
-
-    Sanctum::actingAs($teacher);
-    $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", $payload)->assertForbidden();
-
-    Sanctum::actingAs($director);
-    $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", $payload)->assertForbidden();
-});
-
-it('lets a director approve a pending design and records who approved it', function () {
-    $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
-    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
-    $design = ScreeningTestDesign::factory()->for($type, 'type')->create();
-    Sanctum::actingAs($director);
-
-    $this->postJson("/api/v1/screening-test-designs/{$design->id}/approve")
-        ->assertOk()
         ->assertJsonPath('data.approved', true)
-        ->assertJsonPath('data.approved_by_id', $director->id);
+        ->assertJsonPath('data.bands.1.name', 'En proceso')
+        ->assertJsonPath('data.reason', 'Subir el corte de Adecuado.')
+        ->assertJsonPath('data.created_by_id', $psychopedagogue->id);
 
-    expect($design->fresh()->approved)->toBeTrue();
+    $this->getJson('/api/v1/screening-test-types')
+        ->assertJsonPath('data.0.current_design.bands.0.name', 'Descendido');
 
-    $log = AuditLog::where('auditable_type', ScreeningTestDesign::class)
-        ->where('auditable_id', $design->id)
-        ->where('action', AuditAction::Updated)
-        ->firstOrFail();
+    Notification::assertSentTo($director, ScreeningDesignChangedNotification::class, function ($notification) use ($director, $type) {
+        $data = $notification->toArray($director);
 
-    expect($log->changes['approved'])->toBe(['before' => null, 'after' => true])
-        ->and($log->user_id)->toBe($director->id);
+        return $data['type'] === 'screening_design_changed'
+            && $data['screening_test_type_id'] === $type->id
+            && $data['screening_test_type_name'] === 'Prueba de atención';
+    });
+    Notification::assertNotSentTo($otherSchoolDirector, ScreeningDesignChangedNotification::class);
+    Notification::assertNotSentTo($psychopedagogue, ScreeningDesignChangedNotification::class);
 });
 
-it('lets a director reject a pending design', function () {
-    $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
-    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
-    $design = ScreeningTestDesign::factory()->for($type, 'type')->create();
-    Sanctum::actingAs($director);
-
-    $this->postJson("/api/v1/screening-test-designs/{$design->id}/reject")
-        ->assertOk()
-        ->assertJsonPath('data.approved', false)
-        ->assertJsonPath('data.approved_by_id', $director->id);
-});
-
-it('forbids psychopedagogy and teacher from approving a design (director only)', function () {
+it('stores the notice for Dirección so it reaches a later session', function () {
     $school = School::factory()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
-    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
     $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
-    $design = ScreeningTestDesign::factory()->for($type, 'type')->create();
 
     Sanctum::actingAs($psychopedagogue);
-    $this->postJson("/api/v1/screening-test-designs/{$design->id}/approve")->assertForbidden();
+    $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", ['bands' => threeBands()])->assertCreated();
 
-    Sanctum::actingAs($teacher);
-    $this->postJson("/api/v1/screening-test-designs/{$design->id}/reject")->assertForbidden();
+    Sanctum::actingAs($director);
+    $this->getJson('/api/v1/notifications')
+        ->assertOk()
+        ->assertJsonPath('data.0.data.type', 'screening_design_changed')
+        ->assertJsonPath('data.0.data.screening_test_type_id', $type->id);
 });
 
-it('returns 422 when approving a design that was already decided', function () {
+it('lets Dirección save a design too, and forbids a teacher', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", ['bands' => threeBands()])->assertForbidden();
+
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", ['bands' => threeBands()])->assertCreated();
+});
+
+it('accepts 2 to 5 bands, each with a name, a colour and a mandatory meaning', function (array $bands, ?string $errorKey) {
+    $school = School::factory()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+
+    $response = $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", ['bands' => $bands]);
+
+    $errorKey === null
+        ? $response->assertCreated()
+        : $response->assertUnprocessable()->assertJsonValidationErrors($errorKey);
+})->with([
+    'two bands, open-ended last' => [[
+        ['name' => 'Bajo', 'color' => 'red', 'max' => 40, 'meaning' => 'a'],
+        ['name' => 'Alto', 'color' => 'green', 'max' => null, 'meaning' => 'b'],
+    ], null],
+    'five bands' => [[
+        ['name' => 'A', 'color' => 'red', 'max' => 10, 'meaning' => 'a'],
+        ['name' => 'B', 'color' => 'orange', 'max' => 20, 'meaning' => 'b'],
+        ['name' => 'C', 'color' => 'yellow', 'max' => 30, 'meaning' => 'c'],
+        ['name' => 'D', 'color' => 'green', 'max' => 40, 'meaning' => 'd'],
+        ['name' => 'E', 'color' => 'blue', 'max' => 50, 'meaning' => 'e'],
+    ], null],
+    'one band' => [[['name' => 'A', 'color' => 'red', 'max' => 10, 'meaning' => 'a']], 'bands'],
+    'six bands' => [array_fill(0, 6, ['name' => 'A', 'color' => 'red', 'max' => 10, 'meaning' => 'a']), 'bands'],
+    'missing meaning' => [[
+        ['name' => 'Bajo', 'color' => 'red', 'max' => 40, 'meaning' => ''],
+        ['name' => 'Alto', 'color' => 'green', 'max' => 100, 'meaning' => 'b'],
+    ], 'bands.0.meaning'],
+    'unknown colour' => [[
+        ['name' => 'Bajo', 'color' => 'purple', 'max' => 40, 'meaning' => 'a'],
+        ['name' => 'Alto', 'color' => 'green', 'max' => 100, 'meaning' => 'b'],
+    ], 'bands.0.color'],
+    'max not going up' => [[
+        ['name' => 'Bajo', 'color' => 'red', 'max' => 40, 'meaning' => 'a'],
+        ['name' => 'Medio', 'color' => 'yellow', 'max' => 40, 'meaning' => 'b'],
+        ['name' => 'Alto', 'color' => 'green', 'max' => 100, 'meaning' => 'c'],
+    ], 'bands.1.max'],
+    'max missing on a middle band' => [[
+        ['name' => 'Bajo', 'color' => 'red', 'max' => null, 'meaning' => 'a'],
+        ['name' => 'Alto', 'color' => 'green', 'max' => 100, 'meaning' => 'b'],
+    ], 'bands.0.max'],
+]);
+
+it('lets Dirección revert the design in force so the previous one rules again', function () {
+    Notification::fake();
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    $previous = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => threeBands(34, 59)]);
+    $current = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create([
+        'bands' => threeBands(34, 64),
+        'created_by_id' => $psychopedagogue->id,
+    ]);
+
+    Sanctum::actingAs($psychopedagogue);
+    $this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")->assertForbidden();
+
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")
+        ->assertOk()
+        ->assertJsonPath('data.reverted_by_id', $director->id);
+
+    $this->getJson('/api/v1/screening-test-types')
+        ->assertJsonPath('data.0.current_design.id', $previous->id)
+        ->assertJsonPath('data.0.previous_design', null);
+
+    // The reverted design stays in the history.
+    $this->getJson("/api/v1/screening-test-types/{$type->id}/designs")
+        ->assertJsonCount(2, 'data')
+        ->assertJsonPath('data.0.id', $current->id)
+        ->assertJsonPath('data.0.reverted_by_name', $director->name);
+
+    Notification::assertSentTo($psychopedagogue, ScreeningDesignRevertedNotification::class);
+});
+
+it('returns 422 when reverting a design that is not in force or has nothing before it', function () {
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
-    $design = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create();
+    $first = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create();
     Sanctum::actingAs($director);
 
-    $this->postJson("/api/v1/screening-test-designs/{$design->id}/approve")->assertStatus(422);
-    $this->postJson("/api/v1/screening-test-designs/{$design->id}/reject")->assertStatus(422);
+    $this->postJson("/api/v1/screening-test-designs/{$first->id}/revert")
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('design');
+
+    ScreeningTestDesign::factory()->for($type, 'type')->approved()->create();
+
+    $this->postJson("/api/v1/screening-test-designs/{$first->id}/revert")
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('design');
+});
+
+it('previews the impact counting the latest take of each student, without names', function () {
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => threeBands(34, 59)]);
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $older = ScreeningTestApplication::factory()->create([
+        'school_id' => $school->id, 'screening_test_type_id' => $type->id, 'group_id' => $group->id, 'application_date' => '2026-03-01',
+    ]);
+    $newer = ScreeningTestApplication::factory()->create([
+        'school_id' => $school->id, 'screening_test_type_id' => $type->id, 'group_id' => $group->id, 'application_date' => '2026-08-01',
+    ]);
+    $ana = Student::factory()->create(['school_id' => $school->id]);
+    $beto = Student::factory()->create(['school_id' => $school->id]);
+    // Ana: 20 in March, 62 in August — only the August take counts.
+    ScreeningTestResult::factory()->create(['school_id' => $school->id, 'screening_test_application_id' => $older->id, 'student_id' => $ana->id, 'code' => 'A1', 'score' => 20]);
+    ScreeningTestResult::factory()->create(['school_id' => $school->id, 'screening_test_application_id' => $newer->id, 'student_id' => $ana->id, 'code' => 'B1', 'score' => 62]);
+    ScreeningTestResult::factory()->create(['school_id' => $school->id, 'screening_test_application_id' => $newer->id, 'student_id' => $beto->id, 'code' => 'B2', 'score' => 90]);
+    // Not loaded yet: does not count.
+    ScreeningTestResult::factory()->create(['school_id' => $school->id, 'screening_test_application_id' => $newer->id, 'student_id' => Student::factory()->create(['school_id' => $school->id])->id, 'code' => 'B3', 'score' => null]);
+    Sanctum::actingAs($psychopedagogue);
+
+    $response = $this->postJson("/api/v1/screening-test-types/{$type->id}/impact", ['bands' => threeBands(34, 64)])
+        ->assertOk()
+        ->assertJsonPath('data.students', 2)
+        // With the cutoffs in force (59), Ana's 62 is "Adecuado"…
+        ->assertJsonPath('data.current.1.count', 0)
+        ->assertJsonPath('data.current.2.count', 2)
+        // …with the proposed ones (64) she moves to "En proceso".
+        ->assertJsonPath('data.proposed.1.count', 1)
+        ->assertJsonPath('data.proposed.2.count', 1);
+
+    expect($response->getContent())->not->toContain($ana->full_name)->not->toContain('B1');
+});
+
+it('forbids a teacher from previewing the impact', function () {
+    $school = School::factory()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+
+    $this->postJson("/api/v1/screening-test-types/{$type->id}/impact", ['bands' => threeBands()])->assertForbidden();
+});
+
+it('lets Psicopedagogía and Dirección edit the general data, keeping the history on rename', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id, 'name' => 'TECLE']);
+    Sanctum::actingAs($director);
+
+    $this->patchJson("/api/v1/screening-test-types/{$type->id}", [
+        'name' => 'Comprensión lectora',
+        'levels' => ['lower_secondary', 'upper_secondary'],
+        'frequency' => 'every_few_years',
+        'frequency_years' => 3,
+        'teacher_visible' => true,
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.id', $type->id)
+        ->assertJsonPath('data.name', 'Comprensión lectora')
+        ->assertJsonPath('data.levels', ['lower_secondary', 'upper_secondary'])
+        ->assertJsonPath('data.frequency', 'every_few_years')
+        ->assertJsonPath('data.frequency_years', 3)
+        ->assertJsonPath('data.teacher_visible', true);
+
+    $log = AuditLog::query()
+        ->where('auditable_type', ScreeningTestType::class)
+        ->where('auditable_id', $type->id)
+        ->where('action', AuditAction::Updated)
+        ->latest('id')
+        ->first();
+    expect($log->changes['name'])->toBe(['before' => 'TECLE', 'after' => 'Comprensión lectora']);
+
+    // Switching to a yearly frequency drops the "every N years" value.
+    $this->patchJson("/api/v1/screening-test-types/{$type->id}", ['frequency' => 'yearly'])
+        ->assertOk()
+        ->assertJsonPath('data.frequency_years', null);
+});
+
+it('validates the general data and keeps teacher access off by default', function () {
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
+
+    $this->postJson('/api/v1/screening-test-types', ['name' => 'X'])
+        ->assertCreated()
+        ->assertJsonPath('data.teacher_visible', false)
+        ->assertJsonPath('data.levels', []);
+
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    $this->patchJson("/api/v1/screening-test-types/{$type->id}", ['levels' => ['kindergarten']])
+        ->assertUnprocessable()->assertJsonValidationErrors('levels.0');
+    $this->patchJson("/api/v1/screening-test-types/{$type->id}", ['frequency' => 'every_few_years'])
+        ->assertUnprocessable()->assertJsonValidationErrors('frequency_years');
+});
+
+it('forbids a teacher and another school from editing the general data', function () {
+    $school = School::factory()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+    $this->patchJson("/api/v1/screening-test-types/{$type->id}", ['name' => 'X'])->assertForbidden();
+
+    Sanctum::actingAs(User::factory()->director()->create());
+    $this->patchJson("/api/v1/screening-test-types/{$type->id}", ['name' => 'X'])->assertNotFound();
 });
 
 // docs/prompts/11-pruebas-de-sondeo.md §1: the type listing carries each type's

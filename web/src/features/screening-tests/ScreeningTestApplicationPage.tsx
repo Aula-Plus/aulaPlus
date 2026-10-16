@@ -20,7 +20,7 @@ import { ScreeningTestRosterSheet } from "./ScreeningTestRosterSheet"
 import { ScreeningTestResultsEditor } from "./ScreeningTestResultsEditor"
 
 const applicationSchema = z.object({
-  screening_test_type_id: z.string().min(1, "Elegí un tipo"),
+  screening_test_type_id: z.string().min(1, "Elegí un screening"),
   application_date: z.string().optional(),
 })
 
@@ -70,7 +70,7 @@ export function ScreeningTestApplicationPage() {
     screeningApi
       .fetchScreeningTestTypes()
       .then(setTypes)
-      .catch(() => setError("No pudimos cargar los tipos de prueba."))
+      .catch(() => setError("No pudimos cargar los screenings."))
     loadApplications()
   }, [groupId, loadApplications])
 
@@ -91,7 +91,7 @@ export function ScreeningTestApplicationPage() {
   const applicableTypes = (types ?? []).filter((type) => type.current_design !== null)
 
   const typeName = useCallback(
-    (typeId: number) => types?.find((type) => type.id === typeId)?.name ?? `Tipo #${typeId}`,
+    (typeId: number) => types?.find((type) => type.id === typeId)?.name ?? `Screening #${typeId}`,
     [types],
   )
 
@@ -133,8 +133,8 @@ export function ScreeningTestApplicationPage() {
           <CardContent>
             {applicableTypes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No hay tipos con un diseño aprobado vigente. Aprobá un diseño antes de aplicar una
-                prueba.
+                No hay screenings con franjas vigentes. Definí las franjas en el diseño antes de
+                aplicar uno.
               </p>
             ) : (
               <form
@@ -143,7 +143,7 @@ export function ScreeningTestApplicationPage() {
                 noValidate
               >
                 <div className="grid gap-2">
-                  <Label htmlFor="screening_test_type_id">Tipo de prueba</Label>
+                  <Label htmlFor="screening_test_type_id">Screening</Label>
                   <Controller
                     name="screening_test_type_id"
                     control={control}
@@ -156,7 +156,7 @@ export function ScreeningTestApplicationPage() {
                         }))}
                         value={field.value ?? ""}
                         onChange={field.onChange}
-                        placeholder="Elegí un tipo…"
+                        placeholder="Elegí un screening…"
                       />
                     )}
                   />

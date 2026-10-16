@@ -123,3 +123,34 @@ it('does not recompute an already-loaded color when a new design is approved', f
         ->assertOk()
         ->assertJsonPath('data.color', 'red');
 });
+
+it('keeps the original reading and shows the current one when the cutoffs change', function () {
+    ['result' => $result, 'psychopedagogue' => $psychopedagogue, 'type' => $type, 'school' => $school] =
+        screeningResultReadyToLoad(40, 70);
+    Sanctum::actingAs($psychopedagogue);
+
+    $loaded = $this->patchJson("/api/v1/screening-test-results/{$result->id}", ['score' => 55])
+        ->assertOk()
+        ->assertJsonPath('data.band', 'Amarillo')
+        ->assertJsonPath('data.band_changed', false);
+    $originalDesignId = $loaded->json('data.screening_test_design_id');
+    expect($originalDesignId)->not->toBeNull();
+
+    // New cutoffs: up to 60 is "Descendido".
+    Tenancy::useSchool($school->id);
+    ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => [
+        ['name' => 'Descendido', 'color' => 'red', 'max' => 60, 'meaning' => 'a'],
+        ['name' => 'Adecuado', 'color' => 'green', 'max' => null, 'meaning' => 'b'],
+    ]]);
+
+    $this->getJson("/api/v1/screening-test-applications/{$result->screening_test_application_id}/results")
+        ->assertOk()
+        // Original score, band and design version are kept…
+        ->assertJsonPath('data.0.score', '55.00')
+        ->assertJsonPath('data.0.band', 'Amarillo')
+        ->assertJsonPath('data.0.screening_test_design_id', $originalDesignId)
+        // …and the reading with the design in force is added.
+        ->assertJsonPath('data.0.current_band', 'Descendido')
+        ->assertJsonPath('data.0.current_color', 'red')
+        ->assertJsonPath('data.0.band_changed', true);
+});

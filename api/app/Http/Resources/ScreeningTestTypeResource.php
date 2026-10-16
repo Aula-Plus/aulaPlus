@@ -16,16 +16,25 @@ class ScreeningTestTypeResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $currentDesign = $this->resource->currentApprovedDesign();
+        $ruled = $this->resource->ruledDesigns(2);
+        $currentDesign = $ruled->get(0);
+        $previousDesign = $ruled->get(1);
 
         return [
             'id' => $this->id,
             'name' => $this->name,
             'area' => $this->area,
+            'levels' => $this->levels ?? [],
+            'frequency' => $this->frequency?->value,
+            'frequency_years' => $this->frequency_years,
+            'teacher_visible' => $this->teacher_visible,
             'active' => $this->active,
             'created_by_id' => $this->created_by_id,
             'current_design' => $currentDesign
                 ? new ScreeningTestDesignResource($currentDesign)
+                : null,
+            'previous_design' => $previousDesign
+                ? new ScreeningTestDesignResource($previousDesign)
                 : null,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
