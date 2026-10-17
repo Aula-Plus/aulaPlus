@@ -249,6 +249,29 @@ it('routes new alerts to psychopedagogy too when the school changes the setting'
     $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
 });
 
+it('lets the school route an alert to direction only, saving exactly that', function () {
+    ($this->rule)();
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4]);
+
+    // Psychopedagogy can configure routing too; direction alone is allowed
+    // (the screen warns before saving, ClickUp 86e3qkyrn).
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->putJson('/api/v1/alert-routing/performance', ['recipients' => ['director']])
+        ->assertOk()
+        ->assertJsonFragment(['type' => 'performance', 'recipients' => ['director'], 'is_default' => false]);
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    Sanctum::actingAs($this->director);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(1, 'data');
+
+    Sanctum::actingAs($this->mathTeacher);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+});
+
 it('keeps legacy alerts visible to school-wide roles only', function () {
     Tenancy::forSchool($this->school, fn () => Alert::factory()->create(['student_id' => $this->student->id]));
 
