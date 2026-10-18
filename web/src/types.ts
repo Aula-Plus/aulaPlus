@@ -725,6 +725,9 @@ export interface AppNotification {
     follow_up_id: number
     student_id: number
     due_date: string
+    /** Made general responsible of the follow-up or responsible of one stage. */
+    assigned_as?: "general_responsible" | "stage_responsible"
+    stage_id?: number | null
   }
   created_at: string | null
 }
@@ -739,9 +742,14 @@ export interface ScheduledFollowUp {
   student_id: number
   /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
   student?: { id: number; full_name: string }
+  /** Required for new follow-ups; older ones were backfilled from the description. */
+  title?: string | null
   description: string
+  /** General deadline: the latest due date among the stages (server-computed). */
   due_date: string
   created_by_id: number
+  /** Active general responsibles (one or more). */
+  general_responsibles?: StaffMember[]
   /** Responsible person — the creator unless they picked someone else. */
   assigned_to_id?: number | null
   assigned_to?: StaffMember | null
@@ -757,6 +765,91 @@ export interface ScheduledFollowUp {
    */
   is_overdue: boolean
   created_at: string | null
+}
+
+// ── Follow-up stages, people and history (ClickUp 86e3qkwna) ─────────────
+
+export type FollowUpStageStatus = "pending" | "done" | "split"
+
+export const followUpStageStatusLabels: Record<FollowUpStageStatus, string> = {
+  pending: "Pendiente",
+  done: "Cerrada",
+  split: "Subdividida",
+}
+
+export interface FollowUpStageNote {
+  id: number
+  body: string
+  author: StaffMember | null
+  created_at: string | null
+}
+
+/** One stage ("etapa"). `can` flags only drive the UI; the backend re-checks. */
+export interface FollowUpStage {
+  id: number
+  parent_stage_id: number | null
+  description: string
+  responsible: StaffMember | null
+  due_date: string
+  status: FollowUpStageStatus
+  conclusion: string | null
+  closed_by: StaffMember | null
+  closed_at: string | null
+  created_by_id: number | null
+  created_at: string | null
+  notes: FollowUpStageNote[]
+  can: { update: boolean; split: boolean; close: boolean; add_note: boolean }
+}
+
+export type FollowUpMemberRole = "general_responsible" | "participant"
+
+export interface FollowUpMember {
+  user: StaffMember | null
+  role: FollowUpMemberRole
+  active: boolean
+  has_pending_stage: boolean
+  withdrawn_at: string | null
+  withdrawal_reason: string | null
+  removed_at: string | null
+  removed_by_id: number | null
+  removal_reason: string | null
+}
+
+export interface FollowUpEvent {
+  id: number
+  type: string
+  actor: StaffMember | null
+  subject_user: StaffMember | null
+  stage_id: number | null
+  data: Record<string, unknown> | null
+  note: string | null
+  created_at: string | null
+}
+
+/** Full record of a follow-up as the caller sees it (`GET /scheduled-follow-ups/{id}`). */
+export interface ScheduledFollowUpDetail extends ScheduledFollowUp {
+  participants: StaffMember[]
+  members: FollowUpMember[]
+  stages: FollowUpStage[]
+  events: FollowUpEvent[]
+  viewer: {
+    user_id: number
+    is_member: boolean
+    active: boolean
+    role: FollowUpMemberRole | null
+    left_at: string | null
+    hidden: boolean
+    is_general_responsible: boolean
+  }
+  can: {
+    add_stage: boolean
+    add_participant: boolean
+    manage_general_responsibles: boolean
+    withdraw: boolean
+    withdraw_requires_successor: boolean
+    resolve: boolean
+    hide: boolean
+  }
 }
 
 // ── Screening tests / pruebas de sondeo (Sesión 17) ─────────────────────────

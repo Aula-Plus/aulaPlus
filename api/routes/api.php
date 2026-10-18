@@ -15,6 +15,8 @@ use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\FollowUpMemberController;
+use App\Http\Controllers\FollowUpStageController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
@@ -148,6 +150,23 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
+
+        // Follow-ups with stages and several people (ClickUp 86e3qkwna),
+        // managed from "Mis seguimientos" or the student file alike.
+        Route::get('/scheduled-follow-ups/{followUp}', [ScheduledFollowUpController::class, 'show'])->whereNumber('followUp');
+        Route::post('/scheduled-follow-ups/{followUp}/stages', [FollowUpStageController::class, 'store']);
+        Route::patch('/follow-up-stages/{stage}', [FollowUpStageController::class, 'update']);
+        Route::post('/follow-up-stages/{stage}/split', [FollowUpStageController::class, 'split']);
+        Route::post('/follow-up-stages/{stage}/close', [FollowUpStageController::class, 'close']);
+        Route::post('/follow-up-stages/{stage}/notes', [FollowUpStageController::class, 'storeNote']);
+        Route::post('/scheduled-follow-ups/{followUp}/participants', [FollowUpMemberController::class, 'storeParticipant'])
+            ->name('follow-ups.participants.store');
+        Route::post('/scheduled-follow-ups/{followUp}/participants/{user}/remove', [FollowUpMemberController::class, 'removeParticipant']);
+        Route::post('/scheduled-follow-ups/{followUp}/general-responsibles', [FollowUpMemberController::class, 'storeGeneralResponsible'])
+            ->name('follow-ups.general-responsibles.store');
+        Route::post('/scheduled-follow-ups/{followUp}/general-responsibles/{user}/remove', [FollowUpMemberController::class, 'removeGeneralResponsible']);
+        Route::post('/scheduled-follow-ups/{followUp}/withdraw', [FollowUpMemberController::class, 'withdraw']);
+        Route::post('/scheduled-follow-ups/{followUp}/hide', [FollowUpMemberController::class, 'hide']);
 
         // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-
         // grupo.md). All read-only and strictly aggregate — accommodations

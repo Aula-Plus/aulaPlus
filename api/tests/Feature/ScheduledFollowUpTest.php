@@ -30,6 +30,7 @@ it('lets a teacher who teaches the student schedule a follow-up', function () {
     Sanctum::actingAs($teacher);
 
     $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'Revisar si el ajuste de lectura sigue haciendo falta',
         'due_date' => now()->addWeek()->toDateString(),
     ])
@@ -49,6 +50,7 @@ it('forbids a teacher who does not teach the student from scheduling a follow-up
     Sanctum::actingAs($teacher);
 
     $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'x',
         'due_date' => now()->addWeek()->toDateString(),
     ])->assertForbidden();
@@ -65,6 +67,7 @@ it('lets a psychopedagogue and a director schedule a follow-up on any student in
         Sanctum::actingAs($user);
 
         $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+            'title' => 'Revisión',
             'description' => 'Confirmar con la familia el resultado de la reunión',
             'due_date' => now()->addDays(3)->toDateString(),
         ])->assertCreated()->assertJsonPath('data.created_by_id', $user->id);
@@ -118,12 +121,13 @@ it('forbids a teacher who does not teach the student from listing follow-ups', f
 
 // --- resolve -----------------------------------------------------------------
 
-it('lets a teacher who teaches the student resolve a follow-up with a note', function () {
+it('lets the general responsible resolve a follow-up with a conclusion', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
     teachStudent($teacher, $student);
-    $followUp = ScheduledFollowUp::factory()->for($student)->create();
+    $followUp = ScheduledFollowUp::factory()->for($student)->create(['created_by_id' => $teacher->id]);
+    $followUp->stages()->update(['status' => 'done', 'conclusion' => 'Hecho', 'closed_at' => now()]);
     Sanctum::actingAs($teacher);
 
     $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve", [
@@ -141,6 +145,19 @@ it('lets a teacher who teaches the student resolve a follow-up with a note', fun
         ->and($fresh->resolution_note)->toBe('Ya no hace falta el ajuste');
 });
 
+it('forbids someone who sees the student but is not a general responsible from resolving', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    teachStudent($teacher, $student);
+    $followUp = ScheduledFollowUp::factory()->for($student)->create();
+    $followUp->stages()->update(['status' => 'done']);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve", ['resolution_note' => 'x'])->assertForbidden();
+    expect($followUp->fresh()->resolved)->toBeFalse();
+});
+
 it('forbids a teacher who does not teach the student from resolving a follow-up', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
@@ -148,7 +165,7 @@ it('forbids a teacher who does not teach the student from resolving a follow-up'
     $followUp = ScheduledFollowUp::factory()->for($student)->create();
     Sanctum::actingAs($teacher);
 
-    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve")->assertForbidden();
+    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve", ['resolution_note' => 'x'])->assertForbidden();
     expect($followUp->fresh()->resolved)->toBeFalse();
 });
 
@@ -202,6 +219,7 @@ it('never exposes or mutates a follow-up from another school', function () {
     // The cross-tenant student is invisible to the SchoolScope -> 404.
     $this->getJson("/api/v1/students/{$studentB->id}/scheduled-follow-ups")->assertNotFound();
     $this->postJson("/api/v1/students/{$studentB->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'x',
         'due_date' => now()->toDateString(),
     ])->assertNotFound();
@@ -221,6 +239,7 @@ it('excludes description and resolution_note from the audit diff', function () {
     $followUp = ScheduledFollowUp::create([
         'student_id' => $student->id,
         'created_by_id' => $director->id,
+        'title' => 'Revisión',
         'description' => 'Observación sensible sobre el menor',
         'due_date' => now()->addWeek()->toDateString(),
     ]);
@@ -261,6 +280,7 @@ it('makes the creator the responsible person by default', function () {
     Sanctum::actingAs($teacher);
 
     $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'x',
         'due_date' => now()->addWeek()->toDateString(),
     ])
@@ -283,6 +303,7 @@ it('lets a teacher assign a follow-up to a psychopedagogue and share it, notifyi
     Sanctum::actingAs($teacher);
 
     $response = $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'Revisar si el tiempo extendido le sirve',
         'due_date' => now()->addWeek()->toDateString(),
         'assigned_to_id' => $psico->id,
@@ -290,8 +311,12 @@ it('lets a teacher assign a follow-up to a psychopedagogue and share it, notifyi
     ])->assertCreated()
         ->assertJsonPath('data.assigned_to_id', $psico->id)
         ->assertJsonPath('data.assigned_to.role', 'psychopedagogue')
-        ->assertJsonCount(1, 'data.shared_with')
-        ->assertJsonPath('data.shared_with.0.id', $otherTeacher->id);
+        // The creator, not being the responsible, takes part as a participant.
+        ->assertJsonCount(2, 'data.shared_with')
+        ->assertJsonPath('data.general_responsibles.0.id', $psico->id);
+
+    expect(collect($response->json('data.shared_with'))->pluck('id')->all())
+        ->toEqualCanonicalizing([$teacher->id, $otherTeacher->id]);
 
     $followUpId = $response->json('data.id');
 
@@ -322,7 +347,8 @@ it('rejects assigning to or sharing with someone who cannot see the student', fu
     teachStudent($teacher, $student);
     Sanctum::actingAs($teacher);
     $url = "/api/v1/students/{$student->id}/scheduled-follow-ups";
-    $base = ['description' => 'x', 'due_date' => now()->addWeek()->toDateString()];
+    $base = ['title' => 'Revisión',
+        'description' => 'x', 'due_date' => now()->addWeek()->toDateString()];
 
     $this->postJson($url, $base + ['assigned_to_id' => $strangerTeacher->id])->assertJsonValidationErrors('assigned_to_id');
     $this->postJson($url, $base + ['assigned_to_id' => $outsider->id])->assertJsonValidationErrors('assigned_to_id');
@@ -349,6 +375,7 @@ it('drops a shared follow-up from the pending list once the person loses access 
     leadGroup($group, $otherTeacher);
     Sanctum::actingAs($teacher);
     $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'x',
         'due_date' => now()->addWeek()->toDateString(),
         'shared_with_ids' => [$otherTeacher->id],
@@ -404,6 +431,7 @@ it('serves and marks read only the caller\'s own notifications', function () {
     teachStudent($teacher, $student);
     Sanctum::actingAs($teacher);
     $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'title' => 'Revisión',
         'description' => 'x',
         'due_date' => now()->addWeek()->toDateString(),
         'assigned_to_id' => $psico->id,

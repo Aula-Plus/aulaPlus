@@ -2,7 +2,9 @@ import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
+import { MemoryRouter } from "react-router-dom"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import * as detailApi from "./followUpDetailApi"
 import type { ScheduledFollowUp } from "@/types"
 
 function followUp(overrides: Partial<ScheduledFollowUp> = {}): ScheduledFollowUp {
@@ -31,21 +33,23 @@ describe("ScheduledFollowUpsPanel", () => {
     vi.restoreAllMocks()
   })
 
-  it("creates a follow-up sending { description, due_date } and adds the returned row without a refetch", async () => {
+  it("creates a follow-up sending { title, description, due_date } and adds the returned row without a refetch", async () => {
     const fetchSpy = scheduledFollowUpsApi.fetchScheduledFollowUps as ReturnType<typeof vi.fn>
     const create = vi
       .spyOn(scheduledFollowUpsApi, "createScheduledFollowUp")
-      .mockResolvedValue(followUp({ id: 42, description: "Revisar tarea", due_date: "2026-10-01" }))
+      .mockResolvedValue(followUp({ id: 42, title: "Tarea", description: "Revisar tarea", due_date: "2026-10-01" }))
 
     render(<ScheduledFollowUpsPanel studentId={3} />)
 
     await screen.findByText(/no hay seguimientos pendientes/i)
 
-    await userEvent.type(screen.getByLabelText(/nuevo seguimiento/i), "Revisar tarea")
+    await userEvent.type(screen.getByLabelText(/título/i), "Tarea")
+    await userEvent.type(screen.getByLabelText(/qué hay que hacer/i), "Revisar tarea")
     await userEvent.type(screen.getByLabelText(/fecha límite/i), "2026-10-01")
     await userEvent.click(screen.getByRole("button", { name: /programar seguimiento/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
+      title: "Tarea",
       description: "Revisar tarea",
       due_date: "2026-10-01",
     })
@@ -54,12 +58,16 @@ describe("ScheduledFollowUpsPanel", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
-  it("does not submit and shows an error when the description is empty", async () => {
+  it("does not submit without a title, nor without a description", async () => {
     const create = vi.spyOn(scheduledFollowUpsApi, "createScheduledFollowUp")
 
     render(<ScheduledFollowUpsPanel studentId={3} />)
     await screen.findByText(/no hay seguimientos pendientes/i)
 
+    await userEvent.click(screen.getByRole("button", { name: /programar seguimiento/i }))
+    expect(await screen.findByText(/escribí un título/i)).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText(/título/i), "Tarea")
     await userEvent.click(screen.getByRole("button", { name: /programar seguimiento/i }))
 
     expect(await screen.findByText(/escribí una descripción/i)).toBeInTheDocument()
@@ -96,37 +104,23 @@ describe("ScheduledFollowUpsPanel", () => {
     expect(within(onTime).queryByText("Vencido")).not.toBeInTheDocument()
   })
 
-  it("resolves with resolution_note when the field is filled", async () => {
+  it("opens the follow-up detail from 'Ver detalle'", async () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([
-      followUp({ id: 7 }),
+      followUp({ id: 7, title: "Lectura" }),
     ])
-    const resolve = vi
-      .spyOn(scheduledFollowUpsApi, "resolveScheduledFollowUp")
-      .mockResolvedValue(followUp({ id: 7, resolved: true }))
+    const fetchDetail = vi.spyOn(detailApi, "fetchFollowUpDetail").mockReturnValue(new Promise(() => {}))
 
-    render(<ScheduledFollowUpsPanel studentId={3} />)
+    render(
+      <MemoryRouter>
+        <ScheduledFollowUpsPanel studentId={3} />
+      </MemoryRouter>,
+    )
 
-    await userEvent.click(await screen.findByRole("button", { name: /resolver/i }))
-    await userEvent.type(screen.getByLabelText(/nota de resolución/i), "Hablé con la madre")
-    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }))
+    expect(await screen.findByText("Lectura")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: /ver detalle/i }))
 
-    expect(resolve).toHaveBeenCalledWith(7, "Hablé con la madre")
-  })
-
-  it("resolves WITHOUT resolution_note when the field is left empty (never sends an empty string)", async () => {
-    vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([
-      followUp({ id: 7 }),
-    ])
-    const resolve = vi
-      .spyOn(scheduledFollowUpsApi, "resolveScheduledFollowUp")
-      .mockResolvedValue(followUp({ id: 7, resolved: true }))
-
-    render(<ScheduledFollowUpsPanel studentId={3} />)
-
-    await userEvent.click(await screen.findByRole("button", { name: /resolver/i }))
-    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }))
-
-    expect(resolve).toHaveBeenCalledWith(7, undefined)
+    expect(fetchDetail).toHaveBeenCalledWith(7)
+    expect(await screen.findByRole("dialog")).toBeInTheDocument()
   })
 
   it("does not show a 'Resolver' button on an already-resolved follow-up", async () => {
@@ -168,7 +162,8 @@ describe("ScheduledFollowUpsPanel", () => {
     render(<ScheduledFollowUpsPanel studentId={3} />)
     await screen.findByText(/no hay seguimientos pendientes/i)
 
-    await userEvent.type(screen.getByLabelText(/nuevo seguimiento/i), "Revisar ajuste")
+    await userEvent.type(screen.getByLabelText(/título/i), "Ajuste")
+    await userEvent.type(screen.getByLabelText(/qué hay que hacer/i), "Revisar ajuste")
     await userEvent.type(screen.getByLabelText(/fecha límite/i), "2026-10-30")
     await userEvent.click(screen.getByRole("button", { name: /asignar a otra persona/i }))
 
@@ -182,6 +177,7 @@ describe("ScheduledFollowUpsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /programar seguimiento/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
+      title: "Ajuste",
       description: "Revisar ajuste",
       due_date: "2026-10-30",
       assigned_to_id: 7,

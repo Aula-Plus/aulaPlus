@@ -13,6 +13,7 @@ import { SingleSelect } from "@/components/ui/single-select"
 import { roleLabels } from "@/types"
 import type { Role, ScheduledFollowUp, StaffMember } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
 
 interface ScheduledFollowUpsPanelProps {
   studentId: number
@@ -26,16 +27,16 @@ interface ScheduledFollowUpsPanelProps {
  * the new/resolve forms.
  *
  * Authorization is entirely the backend's: ScheduledFollowUpPolicy grants
- * create/view/resolve to any of the three roles related to the student, so
- * there is no client-side helper that would discriminate anything useful (spec
- * §3). The form and the "Resolver" button show whenever the section is visible;
- * a teacher who does not teach the student is rejected with 403 by the
- * Controller.
+ * create/view to any of the three roles related to the student (spec §3).
+ * Managing and resolving happen in FollowUpDetailDialog ("Ver detalle"),
+ * whose buttons follow the server's per-viewer `can` flags (ClickUp
+ * 86e3qkwna); a teacher who does not teach the student gets 403.
  */
 export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelProps) {
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
   const [showResolved, setShowResolved] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<number | null>(null)
 
   // Default: only pending (?resolved=false). When "Mostrar resueltos" is on we
   // drop the query param entirely so the backend returns every follow-up
@@ -66,17 +67,6 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
     setFollowUps((prev) => [created, ...(prev ?? [])])
   }
 
-  function handleResolved(updated: ScheduledFollowUp) {
-    setFollowUps((prev) => {
-      if (!prev) return prev
-      // When only pending are shown, drop the now-resolved row; otherwise
-      // update it in place with the server's response.
-      if (!showResolved) {
-        return prev.filter((followUp) => followUp.id !== updated.id)
-      }
-      return prev.map((followUp) => (followUp.id === updated.id ? updated : followUp))
-    })
-  }
 
   return (
     <SectionCard
@@ -111,11 +101,13 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
       ) : (
         <ul className="grid gap-3">
           {followUps.map((followUp) => (
-            <FollowUpRow key={followUp.id} followUp={followUp} onResolved={handleResolved} />
+            <FollowUpRow key={followUp.id} followUp={followUp} onOpen={() => setOpenId(followUp.id)} />
           ))}
         </ul>
       )}
       </div>
+      {/* Any change in the dialog (stages, resolving, reopening) refetches. */}
+      <FollowUpDetailDialog followUpId={openId} onClose={() => setOpenId(null)} onChanged={() => loadFollowUps()} />
     </SectionCard>
   )
 }
@@ -127,6 +119,7 @@ function NewFollowUpForm({
   studentId: number
   onCreated: (created: ScheduledFollowUp) => void
 }) {
+  const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -174,6 +167,11 @@ function NewFollowUpForm({
     event.preventDefault()
     setError(null)
 
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) {
+      setError("Escribí un título.")
+      return
+    }
     const trimmed = description.trim()
     if (!trimmed) {
       setError("Escribí una descripción.")
@@ -188,12 +186,14 @@ function NewFollowUpForm({
     try {
       const shared = sharedIds.filter((id) => String(id) !== assigneeId)
       const created = await scheduledFollowUpsApi.createScheduledFollowUp(studentId, {
+        title: trimmedTitle,
         description: trimmed,
         due_date: dueDate,
         ...(assigneeId ? { assigned_to_id: Number(assigneeId) } : {}),
         ...(shared.length > 0 ? { shared_with_ids: shared } : {}),
       })
       onCreated(created)
+      setTitle("")
       setDescription("")
       setDueDate("")
       stopAssigning()
@@ -206,8 +206,18 @@ function NewFollowUpForm({
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border p-4">
+      <p className="font-medium">Nuevo seguimiento</p>
       <div className="grid gap-1.5">
-        <Label htmlFor="follow-up-description">Nuevo seguimiento</Label>
+        <Label htmlFor="follow-up-title">Título</Label>
+        <Input
+          id="follow-up-title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          maxLength={150}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="follow-up-description">Qué hay que hacer y por qué</Label>
         <Textarea
           id="follow-up-description"
           value={description}
@@ -291,41 +301,13 @@ function NewFollowUpForm({
   )
 }
 
-function FollowUpRow({
-  followUp,
-  onResolved,
-}: {
-  followUp: ScheduledFollowUp
-  onResolved: (updated: ScheduledFollowUp) => void
-}) {
-  const [resolving, setResolving] = useState(false)
-  const [note, setNote] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-
-  async function handleConfirm() {
-    setError(null)
-    setSubmitting(true)
-    try {
-      const trimmed = note.trim()
-      // Never send resolution_note: "" — pass undefined so the field is omitted
-      // when the user leaves it empty (spec §6).
-      const updated = await scheduledFollowUpsApi.resolveScheduledFollowUp(
-        followUp.id,
-        trimmed ? trimmed : undefined,
-      )
-      onResolved(updated)
-    } catch {
-      setError("No pudimos resolver el seguimiento.")
-      setSubmitting(false)
-    }
-  }
-
+function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen: () => void }) {
   return (
     <li className="grid gap-2 rounded-md border p-3 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="whitespace-pre-wrap">{followUp.description}</p>
+          {followUp.title && <p className="text-base font-semibold">{followUp.title}</p>}
+          <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Vence: {formatShortDate(followUp.due_date)}
           </p>
@@ -346,7 +328,7 @@ function FollowUpRow({
         {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
       </div>
 
-      {followUp.resolved ? (
+      {followUp.resolved && (
         <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
           <p>
             Resuelto el {formatShortDate(followUp.resolved_at)}
@@ -356,44 +338,13 @@ function FollowUpRow({
             <p className="mt-1 whitespace-pre-wrap">Nota: {followUp.resolution_note}</p>
           )}
         </div>
-      ) : resolving ? (
-        <div className="grid gap-2 border-t pt-2">
-          <Label htmlFor={`resolution-note-${followUp.id}`} className="text-xs">
-            Nota de resolución (opcional)
-          </Label>
-          <Textarea
-            id={`resolution-note-${followUp.id}`}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Qué se hizo (opcional)…"
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="button" size="sm" disabled={submitting} onClick={handleConfirm}>
-              {submitting ? "Resolviendo…" : "Confirmar"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => {
-                setResolving(false)
-                setNote("")
-                setError(null)
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <Button type="button" size="sm" variant="outline" onClick={() => setResolving(true)}>
-            Resolver
-          </Button>
-        </div>
       )}
+
+      <div>
+        <Button type="button" size="sm" variant="outline" onClick={onOpen}>
+          Ver detalle
+        </Button>
+      </div>
     </li>
   )
 }

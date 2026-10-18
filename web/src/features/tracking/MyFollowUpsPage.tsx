@@ -10,16 +10,20 @@ import { formatShortDate } from "@/lib/utils"
 import { roleLabels } from "@/types"
 import type { AppNotification, ScheduledFollowUp } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
 
 /**
  * "Mis seguimientos": the caller's pending follow-ups (responsible for, or
  * shared with them) plus the notices of follow-ups assigned to them. A notice
  * is read and dismissed — it is not an alert and asks for nothing.
+ * "Ver detalle" opens FollowUpDetailDialog to manage the follow-up right here
+ * (stages, notes, people, withdrawing, resolving).
  */
 export function MyFollowUpsPage() {
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -93,15 +97,21 @@ export function MyFollowUpsPage() {
             {followUps.map((followUp) => (
               <li key={followUp.id} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
                 <div>
+                  {followUp.title && <p className="text-base font-semibold">{followUp.title}</p>}
                   {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
-                  <p className="whitespace-pre-wrap">{followUp.description}</p>
+                  <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Vence: {formatShortDate(followUp.due_date)}
                     {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
                   </p>
-                  <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
-                    Ver ficha del alumno
-                  </Link>
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setOpenId(followUp.id)}>
+                      Ver detalle
+                    </Button>
+                    <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </div>
                 </div>
                 {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
               </li>
@@ -109,6 +119,9 @@ export function MyFollowUpsPage() {
           </ul>
         )}
       </SectionCard>
+
+      {/* Reload the list on every change: a resolved/hidden follow-up leaves it. */}
+      <FollowUpDetailDialog followUpId={openId} onClose={() => setOpenId(null)} onChanged={() => load()} />
     </div>
   )
 }
