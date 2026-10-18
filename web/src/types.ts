@@ -616,11 +616,13 @@ export interface WeeklySeriesPoint {
 /**
  * Director-only pilot-adoption dashboard
  * (`GET /api/v1/schools/{id}/adoption-dashboard`). Rates are percentages 0–100.
+ * The login indicators were removed (ClickUp 86e3qkxtc): `null` means the
+ * school has no record of the step yet («dato no disponible»), never 0.
  */
 export interface AdoptionDashboard {
-  teacher_login_rate_30d: number
+  teacher_started_rate_30d: number | null
   teacher_planning_rate_30d: number
-  weekly_login_series: WeeklySeriesPoint[]
+  data_since: JourneyDataSince
   weekly_content_series: WeeklySeriesPoint[]
   weekly_content_by_type: WeeklyContentByTypePoint[]
 }
@@ -633,19 +635,111 @@ export interface WeeklyContentByTypePoint {
   assessments: number
 }
 
+/** Per-type counts: programs, classes, assessments (no projects yet). */
+export interface ContentCounts<T = number> {
+  annual_plans: T
+  class_sessions: T
+  assessments: T
+}
+
 /**
  * One row of the director-only "Por docente" tab. Plain counts for the
  * current month — deliberately no totals, scores or login timestamps.
+ * `month_counts` are confirmed creations; `month_attempts` are AI generation
+ * attempts (one per journey), `null` while there is no record of them.
  */
 export interface AdoptionTeacherRow {
   id: number
   name: string
   subjects: string[]
-  month_counts: { annual_plans: number; class_sessions: number; assessments: number }
+  month_counts: ContentCounts
+  month_attempts: ContentCounts<number | null>
 }
 
 /** Coarse last-login range shown by "Ver detalles de uso" (never day/time). */
 export type LastLoginRange = "this_week" | "within_10_days" | "over_10_days" | "never"
+
+/** A recorded step of a creation journey (backend `App\Enums\JourneyStep`). */
+export type JourneyStep =
+  | "form_opened"
+  | "filling_started"
+  | "generation_requested"
+  | "regeneration_requested"
+  | "generation_succeeded"
+  | "generation_failed"
+  | "creation_confirmed"
+  | "draft_discarded"
+
+/** The kind of content a journey is about (no projects until that entity exists). */
+export type JourneyContentType = "annual_plan" | "unit" | "class_session" | "assessment"
+
+/** Since when the school has data for each step (ISO), or `null` if never. */
+export type JourneyDataSince = Record<JourneyStep, string | null>
+
+/** Fixed failure categories of a generation (never the technical error). */
+export type JourneyFailureReason =
+  | "not_configured"
+  | "provider_unreachable"
+  | "provider_error"
+  | "invalid_response"
+
+export interface JourneyStepRecord {
+  step: JourneyStep
+  /** ISO date-time of the step. */
+  at: string
+  failure_reason?: JourneyFailureReason
+}
+
+/**
+ * One creation journey behind a teacher's counts
+ * (`GET …/adoption-dashboard/teachers/{id}/journeys`). `flow` is `ai`
+ * (assistant), `manual` (form + Guardar) or `null` when no earlier step was
+ * recorded. `content` is present only if Dirección may open it.
+ */
+export interface CreationJourney {
+  id: string
+  content_type: JourneyContentType
+  flow: "ai" | "manual" | null
+  started_at: string
+  confirmed: boolean
+  last_step: JourneyStepRecord
+  steps: JourneyStepRecord[]
+  title: string | null
+  group_name: string | null
+  subject_name: string | null
+  content: { type: JourneyContentType; id: number; group_id: number | null } | null
+}
+
+/**
+ * Shown wherever a step or figure has no record. Never «no intentó»: missing
+ * data is not evidence the teacher didn't do something.
+ */
+export const NOT_AVAILABLE_LABEL = "dato no disponible"
+
+export const journeyStepLabels: Record<JourneyStep, string> = {
+  form_opened: "Abrió el formulario",
+  filling_started: "Empezó a completar",
+  generation_requested: "Pidió generar con el asistente",
+  regeneration_requested: "Pidió un cambio o reintentó",
+  generation_succeeded: "Recibió la propuesta (pendiente de confirmar)",
+  generation_failed: "La generación falló",
+  creation_confirmed: "Guardó / confirmó la creación",
+  draft_discarded: "Descartó el borrador",
+}
+
+export const journeyContentTypeLabels: Record<JourneyContentType, string> = {
+  annual_plan: "Programa",
+  unit: "Unidad",
+  class_session: "Clase",
+  assessment: "Evaluación",
+}
+
+export const journeyFailureReasonLabels: Record<JourneyFailureReason, string> = {
+  not_configured: "El asistente no estaba disponible en ese momento.",
+  provider_unreachable: "No se pudo conectar con el asistente.",
+  provider_error: "El asistente tuvo un problema y no pudo responder.",
+  invalid_response: "El asistente respondió en un formato que no se pudo usar.",
+}
 
 // ── Approval flows & traceability (Sesión 9) ────────────────────────────────
 // Mirrors the backend Session 3 API (docs/prompts/03-flujos-aprobacion-

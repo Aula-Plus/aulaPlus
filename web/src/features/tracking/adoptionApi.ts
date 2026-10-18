@@ -1,5 +1,11 @@
 import { api } from "@/lib/api"
-import type { AdoptionDashboard, AdoptionTeacherRow, LastLoginRange } from "@/types"
+import type {
+  AdoptionDashboard,
+  AdoptionTeacherRow,
+  CreationJourney,
+  JourneyDataSince,
+  LastLoginRange,
+} from "@/types"
 
 /**
  * Director-only pilot-adoption dashboard (docs/prompts/04-seguimiento-
@@ -14,10 +20,30 @@ export async function fetchAdoptionDashboard(schoolId: number): Promise<Adoption
   return data.data
 }
 
+export interface AdoptionTeachers {
+  rows: AdoptionTeacherRow[]
+  dataSince: JourneyDataSince
+}
+
 /** Director-only "Por docente" tab: alphabetical per-teacher counts. */
-export async function fetchAdoptionTeachers(schoolId: number): Promise<AdoptionTeacherRow[]> {
-  const { data } = await api.get<{ data: AdoptionTeacherRow[] }>(
-    `/api/v1/schools/${schoolId}/adoption-dashboard/teachers`,
+export async function fetchAdoptionTeachers(schoolId: number): Promise<AdoptionTeachers> {
+  const { data } = await api.get<{
+    data: AdoptionTeacherRow[]
+    meta: { data_since: JourneyDataSince }
+  }>(`/api/v1/schools/${schoolId}/adoption-dashboard/teachers`)
+  return { rows: data.data, dataSince: data.meta.data_since }
+}
+
+/**
+ * Director-only "Ver recorridos": the creation journeys behind one teacher's
+ * counts for the current month, each step with its date and time.
+ */
+export async function fetchTeacherJourneys(
+  schoolId: number,
+  teacherId: number,
+): Promise<CreationJourney[]> {
+  const { data } = await api.get<{ data: CreationJourney[] }>(
+    `/api/v1/schools/${schoolId}/adoption-dashboard/teachers/${teacherId}/journeys`,
   )
   return data.data
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { LogIn, PenLine } from "lucide-react"
+import { CheckCircle2, PenLine } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -13,11 +13,13 @@ import {
 import { useAuth } from "@/features/auth/AuthContext"
 import { canViewAdoptionDashboard } from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
+import { Card, CardContent } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
-import type { AdoptionDashboard, WeeklyContentByTypePoint, WeeklySeriesPoint } from "@/types"
+import { NOT_AVAILABLE_LABEL, journeyStepLabels } from "@/types"
+import type { AdoptionDashboard, JourneyDataSince, JourneyStep, WeeklyContentByTypePoint } from "@/types"
 import { fetchAdoptionDashboard } from "./adoptionApi"
 import { AdoptionTeachersTab } from "./AdoptionTeachersTab"
 
@@ -80,28 +82,78 @@ export function AdoptionDashboardPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
+            {dashboard.teacher_started_rate_30d === null ? (
+              <NotAvailableStat label="Docentes que empezaron a crear" />
+            ) : (
+              <StatCard
+                label="Docentes que empezaron a crear"
+                value={dashboard.teacher_started_rate_30d}
+                suffix="%"
+                icon={PenLine}
+              />
+            )}
             <StatCard
-              label="Docentes con login"
-              value={dashboard.teacher_login_rate_30d}
-              suffix="%"
-              icon={LogIn}
-            />
-            <StatCard
-              label="Docentes con planificación"
+              label="Docentes con creaciones confirmadas"
               value={dashboard.teacher_planning_rate_30d}
               suffix="%"
-              icon={PenLine}
+              icon={CheckCircle2}
             />
           </div>
 
-          <WeeklySeries title="Logins por semana" series={dashboard.weekly_login_series} />
           <ContentByTypeSeries
             title="Contenido creado por semana"
             series={dashboard.weekly_content_by_type}
           />
+
+          <DataSinceList dataSince={dashboard.data_since} />
         </>
       )}
     </div>
+  )
+}
+
+/** A headline metric whose step has no record yet: never shown as 0. */
+function NotAvailableStat({ label }: { label: string }) {
+  return (
+    <Card>
+      <CardContent className="grid gap-0.5">
+        <p className="text-base font-medium text-muted-foreground">{NOT_AVAILABLE_LABEL}</p>
+        <p className="text-sm text-muted-foreground">{label}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Steps listed in "Desde cuándo hay datos", in journey order.
+const DATA_SINCE_STEPS: JourneyStep[] = [
+  "form_opened",
+  "filling_started",
+  "generation_requested",
+  "generation_succeeded",
+  "generation_failed",
+  "creation_confirmed",
+  "draft_discarded",
+]
+
+/**
+ * Since when each recorded step has data in this school — the earliest
+ * record of it — so a missing figure reads as "not recorded yet", never as
+ * "the teacher didn't do it".
+ */
+function DataSinceList({ dataSince }: { dataSince: JourneyDataSince }) {
+  return (
+    <SectionCard title="Desde cuándo hay datos">
+      <dl className="grid gap-2 text-sm sm:grid-cols-2">
+        {DATA_SINCE_STEPS.map((step) => (
+          <div key={step} className="flex flex-wrap justify-between gap-x-4">
+            <dt className="text-muted-foreground">{journeyStepLabels[step]}</dt>
+            <dd>
+              {dataSince[step] ? `desde ${formatShortDate(dataSince[step])}` : NOT_AVAILABLE_LABEL}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </SectionCard>
   )
 }
 
@@ -140,8 +192,10 @@ const CONTENT_TYPES = [
 
 /**
  * Content created per week, stacked by type (programs, classes, assessments —
- * the only kinds recorded as usage today). Same accessible-table convention as
- * WeeklySeries.
+ * the only kinds recorded as usage today). A visually-hidden data table is the
+ * accessible/table view of the same numbers (dataviz skill), wrapped in a
+ * sr-only *div*: `sr-only` on a `display: table` element is ignored and would
+ * add phantom page scroll.
  */
 function ContentByTypeSeries({
   title,
@@ -221,98 +275,6 @@ function ContentByTypeSeries({
                     {CONTENT_TYPES.map((type) => (
                       <td key={type.key}>{point[type.key]}</td>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-    </SectionCard>
-  )
-}
-
-interface WeeklyDatum {
-  label: string
-  count: number
-}
-
-/**
- * Weekly counts as a single-series bar chart — magnitude over time, so bars,
- * one brand hue, no legend (the title names the series). A visually-hidden
- * data table is the accessible/table view of the same numbers (dataviz skill:
- * a table view always exists), and is what non-visual readers get.
- */
-function WeeklySeries({ title, series }: { title: string; series: WeeklySeriesPoint[] }) {
-  const data: WeeklyDatum[] = series.map((point) => ({
-    label: formatShortDate(point.week_start),
-    count: point.count,
-  }))
-
-  return (
-    <SectionCard title={title}>
-      {data.length === 0 ? (
-        <EmptyState message="Sin datos en este período." />
-      ) : (
-        <>
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-                <CartesianGrid vertical={false} stroke="var(--color-border)" />
-                <XAxis
-                  dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tickLine={false}
-                  axisLine={false}
-                  width={40}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--color-muted)" }}
-                  contentStyle={{
-                    borderRadius: 8,
-                    border: "1px solid var(--color-border)",
-                    background: "var(--color-popover)",
-                    color: "var(--color-popover-foreground)",
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "var(--color-muted-foreground)" }}
-                />
-                <Bar
-                  dataKey="count"
-                  name="Eventos"
-                  fill="var(--color-primary)"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={48}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Accessible/table view of the same series (dataviz skill). Named via
-              aria-label (not a visible caption) so it doesn't duplicate the
-              section title. Wrapped in a sr-only *div* — `sr-only` on a
-              `display: table` element is ignored (its 1px width/height act only
-              as minimums), leaving a 200px+ off-screen box that adds phantom
-              page scroll; a block wrapper collapses correctly. */}
-          <div className="sr-only">
-            <table aria-label={title}>
-              <thead>
-                <tr>
-                  <th>Semana</th>
-                  <th>Eventos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((point) => (
-                  <tr key={point.label}>
-                    <td>{point.label}</td>
-                    <td>{point.count}</td>
                   </tr>
                 ))}
               </tbody>

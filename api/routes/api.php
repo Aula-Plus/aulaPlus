@@ -38,6 +38,7 @@ use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\UsageJourneyStepController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -136,6 +137,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
         Route::get('/schools/{school}/adoption-dashboard/teachers', [AdoptionDashboardController::class, 'teachers']);
         Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/usage', [AdoptionDashboardController::class, 'teacherUsage']);
+        // Creation journeys (ClickUp 86e3qkxtc): the browser reports the steps
+        // only it observes; Dirección reads each teacher's journeys.
+        Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/journeys', [AdoptionDashboardController::class, 'teacherJourneys']);
+        Route::post('/usage/journey-steps', [UsageJourneyStepController::class, 'store'])
+            ->middleware('throttle:usage-journey-steps');
 
         // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
         // programado.md). A person schedules a follow-up on a student for a
