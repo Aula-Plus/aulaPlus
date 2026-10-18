@@ -148,8 +148,17 @@ it('does not flag a trend below the threshold, outside the window, or counting c
     Sanctum::actingAs($psico);
     $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');
 
-    // A third recent one, but private to its author (the psico): the director cannot count it.
+    // A third recent one, but "solo quien escribe" (the psico's own): since
+    // ClickUp 86e3qkwnv it counts for nobody's common trend, not even its author's.
     Comment::factory()->forSubject($student)->authorOnly()->create(['author_id' => $psico->id, 'created_at' => now()->subDay()])
+        ->categories()->attach($social);
+    Sanctum::actingAs($director);
+    $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');
+    Sanctum::actingAs($psico);
+    $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');
+
+    // A third shared one, «Solo Psicopedagogía»: the psico counts it, the director cannot.
+    Comment::factory()->forSubject($student)->visibleTo(['psychopedagogue'])->create(['author_id' => $teacher->id, 'created_at' => now()->subDay()])
         ->categories()->attach($social);
     Sanctum::actingAs($director);
     $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');

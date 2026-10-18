@@ -4,10 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { CommentsPanel } from "./CommentsPanel"
 import type { Comment } from "@/types"
 
-/** Opens a SingleSelect (found by its label) and clicks the option by its text. */
-async function choose(label: RegExp, optionName: string | RegExp) {
-  await userEvent.click(screen.getByLabelText(label))
-  await userEvent.click(await screen.findByRole("button", { name: optionName }))
+/** The "Visible para" radio whose label starts with `label` (the explanation follows it). */
+function scopeRadio(label: string) {
+  return screen.getByRole("radio", { name: new RegExp(`^${label}`) })
+}
+
+async function chooseScope(label: string) {
+  await userEvent.click(scopeRadio(label))
 }
 
 const sampleComment: Comment = {
@@ -70,11 +73,27 @@ describe("CommentsPanel", () => {
     expect(onCreate).not.toHaveBeenCalled()
   })
 
-  it("defaults the scope selector to 'Todos los que ven este registro'", () => {
+  it("defaults the scope selector to 'Todos los que ven al alumno'", () => {
     render(<CommentsPanel comments={[]} onCreate={vi.fn()} />)
 
-    const trigger = screen.getByLabelText(/visible para/i)
-    expect(within(trigger).getByText("Todos los que ven este registro")).toBeInTheDocument()
+    expect(scopeRadio("Todos los que ven al alumno")).toBeChecked()
+  })
+
+  it("offers exactly the four scopes, each with its explanation under it", () => {
+    render(<CommentsPanel comments={[]} onCreate={vi.fn()} />)
+
+    const group = screen.getByRole("group", { name: /visible para/i })
+    expect(within(group).getAllByRole("radio")).toHaveLength(4)
+    expect(scopeRadio("Todos los que ven al alumno")).toHaveAccessibleDescription(
+      "Docentes con acceso al alumno, Psicopedagogía y Dirección.",
+    )
+    expect(scopeRadio("Dirección y Psicopedagogía")).toBeInTheDocument()
+    expect(scopeRadio("Solo Psicopedagogía")).toBeInTheDocument()
+    expect(scopeRadio("Solo quien escribe")).toHaveAccessibleDescription(
+      "Nadie más la lee ni suma a la tendencia de otros.",
+    )
+    // The old option is gone.
+    expect(screen.queryByText("Solo dirección")).not.toBeInTheDocument()
   })
 
   it("scope 'everyone' OMITS both visible_to and author_only", async () => {
@@ -94,7 +113,7 @@ describe("CommentsPanel", () => {
     expect(payload).toEqual({ content: "Observación general" })
   })
 
-  it("scope 'director' sends visible_to: ['director'] and the chosen categories", async () => {
+  it("scope 'Dirección y Psicopedagogía' sends both roles and the chosen categories", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
     render(
       <CommentsPanel
@@ -107,18 +126,18 @@ describe("CommentsPanel", () => {
       />,
     )
 
-    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Solo dirección")
+    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Dirección y psico")
     await userEvent.click(screen.getByLabelText(/de qué trata/i))
     await userEvent.click(await screen.findByRole("button", { name: "Emocional" }))
     await userEvent.click(await screen.findByRole("button", { name: "Académico" }))
     await userEvent.keyboard("{Escape}")
-    await choose(/visible para/i, "Solo dirección")
+    await chooseScope("Dirección y Psicopedagogía")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(onCreate).toHaveBeenCalledWith({
-      content: "Solo dirección",
+      content: "Dirección y psico",
       category_ids: [1, 2],
-      visible_to: ["director"],
+      visible_to: ["director", "psychopedagogue"],
     })
     expect(onCreate.mock.calls[0][0]).not.toHaveProperty("author_only")
   })
@@ -128,7 +147,7 @@ describe("CommentsPanel", () => {
     render(<CommentsPanel comments={[]} onCreate={onCreate} />)
 
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Solo psico")
-    await choose(/visible para/i, "Solo psicopedagogía")
+    await chooseScope("Solo Psicopedagogía")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     const payload = onCreate.mock.calls[0][0]
@@ -144,7 +163,7 @@ describe("CommentsPanel", () => {
     render(<CommentsPanel comments={[]} onCreate={onCreate} />)
 
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Nota personal")
-    await choose(/visible para/i, "Solo quien escribe")
+    await chooseScope("Solo quien escribe")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     const payload = onCreate.mock.calls[0][0]
@@ -162,16 +181,27 @@ describe("CommentsPanel", () => {
 
     const textarea = screen.getByLabelText<HTMLTextAreaElement>(/nuevo comentario/i)
     await userEvent.type(textarea, "Algo")
-    await choose(/visible para/i, "Solo quien escribe")
+    await chooseScope("Solo quien escribe")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(textarea.value).toBe("")
     // Scope resets to the default, not the last-used option.
-    expect(
-      within(screen.getByLabelText(/visible para/i)).getByText(
-        "Todos los que ven este registro"
-      )
-    ).toBeInTheDocument()
+    expect(scopeRadio("Todos los que ven al alumno")).toBeChecked()
+  })
+
+  it("renders per-comment actions and content before the list when given", () => {
+    render(
+      <CommentsPanel
+        comments={[sampleComment]}
+        onCreate={vi.fn()}
+        canComment={false}
+        beforeList={<p>Antes de la lista</p>}
+        renderCommentActions={(comment) => <button type="button">Acción {comment.id}</button>}
+      />,
+    )
+
+    expect(screen.getByText("Antes de la lista")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Acción 1" })).toBeInTheDocument()
   })
 
   it("hides the form when canComment is false", () => {

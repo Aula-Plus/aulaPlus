@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { MessageSquare } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -6,34 +6,11 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
 import { roleLabels, type Comment, type CommentCategory } from "@/types"
 import type { CommentInput } from "./trackingApi"
-
-/**
- * The four preset scopes the product thinks a comment's visibility in
- * (docs/prompts/19-comentarios-alcance.md §3). Purely a UI state — never sent
- * to the backend as-is; {@link buildScopeFields} translates it at submit time.
- * The backend's fourth scope, `author_only`, is orthogonal to `visible_to` and
- * mutually exclusive with it, so free role combinations are not offered.
- */
-type CommentScopeOption = "everyone" | "director" | "psychopedagogue" | "author_only"
-
-const COMMENT_SCOPE_OPTIONS: CommentScopeOption[] = [
-  "everyone",
-  "director",
-  "psychopedagogue",
-  "author_only",
-]
-
-const COMMENT_SCOPE_LABELS: Record<CommentScopeOption, string> = {
-  everyone: "Todos los que ven este registro",
-  director: "Solo dirección",
-  psychopedagogue: "Solo psicopedagogía",
-  author_only: "Solo quien escribe",
-}
+import { CommentScopeSelector, type CommentScopeOption } from "./CommentScopeSelector"
 
 /**
  * Translate the UI-only scope choice into the real payload fields. `everyone`
@@ -47,8 +24,8 @@ function buildScopeFields(
   switch (option) {
     case "everyone":
       return {}
-    case "director":
-      return { visible_to: ["director"] }
+    case "direction_and_psychopedagogy":
+      return { visible_to: ["director", "psychopedagogue"] }
     case "psychopedagogue":
       return { visible_to: ["psychopedagogue"] }
     case "author_only":
@@ -70,6 +47,10 @@ export interface CommentsPanelProps {
   title?: string
   /** The school's categories for the optional "De qué trata" picker. */
   categories?: CommentCategory[]
+  /** Per-comment actions, e.g. psychopedagogy's «Compartir con» button. */
+  renderCommentActions?: (comment: Comment) => ReactNode
+  /** Rendered above the comment list, e.g. the extracts shared with the viewer. */
+  beforeList?: ReactNode
 }
 
 export function CommentsPanel({
@@ -78,6 +59,8 @@ export function CommentsPanel({
   canComment = true,
   title = "Comentarios",
   categories = [],
+  renderCommentActions,
+  beforeList,
 }: CommentsPanelProps) {
   const [content, setContent] = useState("")
   const [categoryIds, setCategoryIds] = useState<number[]>([])
@@ -146,18 +129,7 @@ export function CommentsPanel({
             </div>
           )}
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="comment-scope">Visible para</Label>
-            <SingleSelect
-              id="comment-scope"
-              value={scope}
-              onChange={(value) => setScope(value as CommentScopeOption)}
-              options={COMMENT_SCOPE_OPTIONS.map((option) => ({
-                value: option,
-                label: COMMENT_SCOPE_LABELS[option],
-              }))}
-            />
-          </div>
+          <CommentScopeSelector value={scope} onChange={setScope} />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -168,6 +140,8 @@ export function CommentsPanel({
           </div>
         </form>
       )}
+
+      {beforeList}
 
       {comments.length === 0 ? (
         <EmptyState icon={MessageSquare} message="Todavía no hay comentarios." />
@@ -197,6 +171,7 @@ export function CommentsPanel({
                   Visible para: {comment.visible_to.map((role) => roleLabels[role]).join(", ")}
                 </p>
               )}
+              {renderCommentActions?.(comment)}
             </li>
           ))}
         </ul>

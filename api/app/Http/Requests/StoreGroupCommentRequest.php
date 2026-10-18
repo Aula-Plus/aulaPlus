@@ -3,8 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Enums\Role;
+use App\Models\Comment;
 use App\Models\Group;
 use App\Support\Tenancy;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -45,6 +47,16 @@ class StoreGroupCommentRequest extends FormRequest
         // the two and break the invariant their docblocks promise.
         if ($this->input('visible_to') === []) {
             $this->merge(['visible_to' => null]);
+
+            return;
+        }
+
+        // The selector's presets (ClickUp 86e3qkwnv): canonicalize before the
+        // preset check below, so an older client still sending "solo
+        // dirección" (`["director"]`) stores "Dirección y Psicopedagogía".
+        $visibleTo = $this->input('visible_to');
+        if (is_array($visibleTo) && array_is_list($visibleTo) && collect($visibleTo)->every(fn ($role) => is_string($role))) {
+            $this->merge(['visible_to' => Comment::normalizeVisibleTo($visibleTo)]);
         }
     }
 
@@ -62,7 +74,13 @@ class StoreGroupCommentRequest extends FormRequest
                 Rule::exists('comment_categories', 'id')->where('school_id', Tenancy::schoolId()),
             ],
             'author_only' => ['sometimes', 'boolean'],
-            'visible_to' => ['nullable', 'array'],
+            'visible_to' => ['nullable', 'array', function (string $attribute, mixed $value, Closure $fail): void {
+                // Only the four selector presets are storable; free role
+                // combinations are not (null and author_only are the others).
+                if (is_array($value) && ! in_array($value, Comment::visibleToPresets(), true)) {
+                    $fail('The selected visibility is not one of the allowed scopes.');
+                }
+            }],
             'visible_to.*' => [Rule::in(Role::values())],
         ];
     }

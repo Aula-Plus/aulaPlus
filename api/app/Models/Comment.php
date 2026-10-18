@@ -34,6 +34,13 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * store FormRequests). It is a per-*person* restriction, not a role, so it
  * cannot be expressed through `visible_to` — that is why it lives in its own
  * column and is handled explicitly by both visibility methods below.
+ *
+ * Psychopedagogy reads every comment except "solo quien escribe" (ClickUp
+ * 86e3qkwnv): `visible_to` narrows what the *other* roles read, never what a
+ * psychopedagogue reads. The scope selector offers exactly four presets —
+ * everyone (`null`), {@see self::SCOPE_DIRECTION_AND_PSYCHOPEDAGOGY},
+ * {@see self::SCOPE_PSYCHOPEDAGOGY_ONLY} and `author_only` — normalized by
+ * {@see self::normalizeVisibleTo()}.
  */
 #[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'visible_to', 'author_only'])]
 class Comment extends Model
@@ -42,6 +49,55 @@ class Comment extends Model
     use Auditable, BelongsToSchool, HasFactory;
 
     public static array $auditableExcludeFromDiff = ['content'];
+
+    /** «Dirección y Psicopedagogía» (replaces the old "solo dirección"). */
+    public const SCOPE_DIRECTION_AND_PSYCHOPEDAGOGY = ['director', 'psychopedagogue'];
+
+    /** «Solo Psicopedagogía». */
+    public const SCOPE_PSYCHOPEDAGOGY_ONLY = ['psychopedagogue'];
+
+    /**
+     * The `visible_to` values a new comment may be stored with (besides `null`,
+     * "everyone who sees the record"). Kept sorted so they compare with `===`
+     * against {@see self::normalizeVisibleTo()}'s output.
+     *
+     * @return list<list<string>>
+     */
+    public static function visibleToPresets(): array
+    {
+        return [self::SCOPE_DIRECTION_AND_PSYCHOPEDAGOGY, self::SCOPE_PSYCHOPEDAGOGY_ONLY];
+    }
+
+    /**
+     * Canonical form of a `visible_to` role list: `null` for "everyone"
+     * (empty, or every role listed), deduplicated and sorted otherwise. The
+     * old "solo dirección" (`["director"]`) maps to "Dirección y
+     * Psicopedagogía" — psychopedagogy reads it anyway, so this only makes
+     * the stored value say what the rule already does. Shared by the store
+     * FormRequests and the data migration that rewrote existing rows.
+     *
+     * @param  array<int, string>|null  $roles
+     * @return list<string>|null
+     */
+    public static function normalizeVisibleTo(?array $roles): ?array
+    {
+        if ($roles === null || $roles === []) {
+            return null;
+        }
+
+        $roles = array_values(array_unique($roles));
+        sort($roles);
+
+        if (array_diff(Role::values(), $roles) === []) {
+            return null;
+        }
+
+        if ($roles === [Role::Director->value]) {
+            return self::SCOPE_DIRECTION_AND_PSYCHOPEDAGOGY;
+        }
+
+        return $roles;
+    }
 
     protected function casts(): array
     {
@@ -81,27 +137,28 @@ class Comment extends Model
      * {@see self::isVisibleTo()}):
      * - `author_only` comments: visible only to their author, and to no one
      *   else regardless of role — this is stricter than any `visible_to` rule.
-     * - every other comment (`author_only = false`): the role-based rule —
-     *   visible when it has no `visible_to` restriction or lists one of the
-     *   user's roles.
+     * - every other comment (`author_only = false`): always visible to a
+     *   psychopedagogue; for any other role, visible when it has no
+     *   `visible_to` restriction or lists one of the user's roles.
      */
     public function scopeVisibleToRole(Builder $query, User $user): Builder
     {
         $roles = $user->getRoleNames()->all();
+        $readsAllShared = in_array(Role::Psychopedagogue->value, $roles, true);
 
-        return $query->where(function (Builder $outer) use ($roles, $user): void {
+        return $query->where(function (Builder $outer) use ($roles, $user, $readsAllShared): void {
             $outer->where(function (Builder $q) use ($user): void {
                 $q->where('author_only', true)
                     ->where('author_id', $user->id);
-            })->orWhere(function (Builder $q) use ($roles): void {
+            })->orWhere(function (Builder $q) use ($roles, $readsAllShared): void {
                 $q->where('author_only', false)
-                    ->where(function (Builder $inner) use ($roles): void {
+                    ->when(! $readsAllShared, fn (Builder $q) => $q->where(function (Builder $inner) use ($roles): void {
                         $inner->whereNull('visible_to');
 
                         foreach ($roles as $role) {
                             $inner->orWhereJsonContains('visible_to', $role);
                         }
-                    });
+                    }));
             });
         });
     }
@@ -121,6 +178,10 @@ class Comment extends Model
     {
         if ($this->author_only) {
             return $this->author_id === $user->id;
+        }
+
+        if ($user->hasRole(Role::Psychopedagogue->value)) {
+            return true;
         }
 
         if (empty($this->visible_to)) {

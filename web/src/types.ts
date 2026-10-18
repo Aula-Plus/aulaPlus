@@ -569,6 +569,12 @@ export interface StudentTracking {
   recent_comments: Comment[]
   /** Absent for a teacher: only psychopedagogy/direction get the recurrence mark. */
   comment_trends?: CommentTrend[]
+  /**
+   * The viewer's OWN "solo quien escribe" notes on this student reached the
+   * school's trend threshold. Computed per viewer server-side, so it is only
+   * ever `true` for that author. Optional for older cached responses.
+   */
+  private_notes_signal?: boolean
   alerts?: Alert[]
   open_alerts_count: number
 }
@@ -715,6 +721,21 @@ export interface StaffMember {
   id: number
   name: string
   role: Role | null
+}
+
+/**
+ * An extract of an observation that psychopedagogy shared («Compartir con»,
+ * `CommentShareResource`). A recipient gets only the extract text: the link to
+ * the original (`comment_id`) and the recipient list reach its author only.
+ */
+export interface CommentShare {
+  id: number
+  student_id: number
+  author_id: number
+  content: string
+  comment_id?: number
+  recipients?: StaffMember[]
+  created_at: string | null
 }
 
 /** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */

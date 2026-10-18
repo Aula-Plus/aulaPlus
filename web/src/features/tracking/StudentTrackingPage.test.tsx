@@ -87,6 +87,7 @@ describe("StudentTrackingPage", () => {
     // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchStudentCommentShares").mockResolvedValue([])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -550,6 +551,58 @@ describe("StudentTrackingPage", () => {
     expect(
       await screen.findByText(/tendencia: 4 comentarios de «social» de 3 personas en 21 días/i),
     ).toBeInTheDocument()
+  })
+
+  it("shows the private-notes signal only when the server sends it for this viewer", async () => {
+    const tracking = baseTracking()
+    tracking.private_notes_signal = true
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    const { unmount } = renderPage("teacher")
+    expect(
+      await screen.findByText(/tenés varias notas privadas sobre este alumno en este período/i),
+    ).toBeInTheDocument()
+    unmount()
+
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue({
+      ...baseTracking(),
+      private_notes_signal: false,
+    })
+    renderPage("teacher")
+    await screen.findByText("Perfil del alumno — Juan Pérez")
+    expect(screen.queryByText(/notas privadas/i)).not.toBeInTheDocument()
+  })
+
+  it("offers «Compartir con» on each observation to psychopedagogy only, and lists shared extracts", async () => {
+    const comment = {
+      id: 9,
+      author_id: 2,
+      commentable_type: "Student",
+      commentable_id: 3,
+      content: "Observación reservada",
+      categories: [],
+      visible_to: ["psychopedagogue" as const],
+      author_only: false,
+      created_at: "2026-08-20T10:00:00+00:00",
+    }
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([comment])
+
+    const { unmount } = renderPage("psychopedagogue")
+    await openTab("Observaciones")
+    expect(await screen.findByRole("button", { name: "Compartir con" })).toBeInTheDocument()
+    unmount()
+
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([{ ...comment, visible_to: null }])
+    vi.spyOn(trackingApi, "fetchStudentCommentShares").mockResolvedValue([
+      { id: 1, student_id: 3, author_id: 2, content: "Extracto para vos", created_at: "2026-08-21T10:00:00+00:00" },
+    ])
+    renderPage("teacher")
+    await openTab("Observaciones")
+    expect(await screen.findByText("Extracto para vos")).toBeInTheDocument()
+    expect(screen.getByText("Extracto compartido por Psicopedagogía")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Compartir con" })).not.toBeInTheDocument()
   })
 
   it("does not show a trend mark to a teacher (the field is absent)", async () => {

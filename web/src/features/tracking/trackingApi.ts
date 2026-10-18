@@ -7,6 +7,7 @@ import type {
   BarrierAccommodationLink,
   Comment,
   CommentCategory,
+  CommentShare,
   GroupAccommodationSummaryEntry,
   GroupTracking,
   Paginated,
@@ -101,6 +102,34 @@ export async function createStudentComment(
 ): Promise<Comment> {
   const { data } = await api.post<{ data: Comment }>(
     `/api/v1/students/${studentId}/comments`,
+    input,
+  )
+  return data.data
+}
+
+// ── «Compartir con» extracts (psychopedagogy only shares; server-enforced) ──
+
+export interface CommentShareInput {
+  /** The extract: new text, never the original observation. */
+  content: string
+  /** Direction and/or teachers who already see the student. */
+  recipient_ids: number[]
+}
+
+/** Extracts on this student the caller wrote or received. */
+export async function fetchStudentCommentShares(studentId: number): Promise<CommentShare[]> {
+  const { data } = await api.get<{ data: CommentShare[] }>(
+    `/api/v1/students/${studentId}/comment-shares`,
+  )
+  return data.data
+}
+
+export async function shareComment(
+  commentId: number,
+  input: CommentShareInput,
+): Promise<CommentShare> {
+  const { data } = await api.post<{ data: CommentShare }>(
+    `/api/v1/comments/${commentId}/shares`,
     input,
   )
   return data.data
