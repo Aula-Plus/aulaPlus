@@ -74,9 +74,10 @@ class CommentTrendDetector
      * The private signal on a student file (ClickUp 86e3qkwnv): whether the
      * user's OWN "solo quien escribe" notes on this student reached the
      * school's trend threshold (same `comment_trend_min_count` within
-     * `comment_trend_days`). Any role gets it; all of the author's private
-     * notes count together, regardless of category, and nobody else's do — so
-     * only the author can ever receive `true`. A mark, never a notification.
+     * `comment_trend_days`) in one same category. Any role gets it; nobody
+     * else's notes count — so only the author can ever receive `true` — and a
+     * note without a category counts nowhere. The mark never says which
+     * category it was. A mark, never a notification.
      */
     public function hasPrivateNotesSignal(Student $student, User $user): bool
     {
@@ -85,12 +86,20 @@ class CommentTrendDetector
             return false;
         }
 
-        $count = $student->comments()
+        $comments = $student->comments()
+            ->with('categories:id')
             ->where('author_only', true)
             ->where('author_id', $user->id)
             ->where('created_at', '>=', now()->subDays($school->comment_trend_days))
-            ->count();
+            ->get();
 
-        return $count >= $school->comment_trend_min_count;
+        $byCategory = [];
+        foreach ($comments as $comment) {
+            foreach ($comment->categories as $category) {
+                $byCategory[$category->id] = ($byCategory[$category->id] ?? 0) + 1;
+            }
+        }
+
+        return $byCategory !== [] && max($byCategory) >= $school->comment_trend_min_count;
     }
 }

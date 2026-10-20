@@ -12,7 +12,8 @@ interface AccommodationInstanceOverrideFormProps {
   accommodationId: number
   /**
    * Assessment options, taken straight from `tracking.recent_assessments`
-   * already loaded by StudentTrackingPage — no extra fetch (docs/prompts/24 §5).
+   * already loaded by StudentTrackingPage — no extra fetch (docs/prompts/24 §5)
+   * — narrowed by the caller to the ones the accommodation applies to.
    */
   assessments: AssessmentSummary[]
 }
@@ -74,12 +75,12 @@ export function AccommodationInstanceOverrideForm({
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 403) {
         setError(
-          "Solo el docente responsable de esa evaluación puede desactivar la adaptación para ella.",
+          "Solo el docente responsable de esa evaluación puede desactivar el ajuste para ella.",
         )
       } else if (isAxiosError(err) && err.response?.status === 422) {
-        setError("Esa evaluación no es válida para esta adaptación.")
+        setError("Esa evaluación no es válida para este ajuste.")
       } else {
-        setError("No pudimos desactivar la adaptación para esa evaluación.")
+        setError("No pudimos desactivar el ajuste para esa evaluación.")
       }
     } finally {
       setSubmitting(false)
@@ -91,7 +92,7 @@ export function AccommodationInstanceOverrideForm({
       <div className="mt-2">
         {done && (
           <p className="mb-2 text-xs text-muted-foreground">
-            Adaptación desactivada para la evaluación elegida.
+            Ajuste desactivado para la evaluación elegida.
           </p>
         )}
         <Button
@@ -160,7 +161,7 @@ export function AccommodationInstanceOverrideForm({
       </div>
       {assessments.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          No hay evaluaciones recientes para desactivar.
+          No hay evaluaciones recientes en las que aplique esta adaptación.
         </p>
       )}
     </form>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { RowLink } from "@/components/ui/row-link"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
@@ -15,8 +16,9 @@ interface GroupOpenAlertsProps {
 
 /**
  * Perfil de grupo — "Alertas del grupo" card. Lists the group's open alerts
- * (student, alert type, since when) with a link to each student, at most five
- * with a "Ver todas" toggle for the rest.
+ * (student, alert type, since when) with a link to each student, at most five;
+ * past that, "Ver todas" leads to «Alertas y seguimientos» (`/alertas`), where
+ * every open alert that reaches the viewer is listed with its ways out.
  *
  * Permissions are exactly the alerts endpoint's (`AlertPolicy::viewForGroup`):
  * a viewer who cannot read them gets a 403, and the card simply does not
@@ -25,7 +27,6 @@ interface GroupOpenAlertsProps {
  */
 export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps) {
   const [alerts, setAlerts] = useState<Alert[]>([])
-  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -43,7 +44,7 @@ export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps)
 
   if (alerts.length === 0) return null
 
-  const visible = showAll ? alerts : alerts.slice(0, VISIBLE_LIMIT)
+  const visible = alerts.slice(0, VISIBLE_LIMIT)
 
   return (
     <SectionCard title="Alertas del grupo">
@@ -68,14 +69,10 @@ export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps)
           </li>
         ))}
       </ul>
-      {alerts.length > VISIBLE_LIMIT && !showAll && (
-        <button
-          type="button"
-          className="mt-3 text-sm font-medium text-primary hover:underline"
-          onClick={() => setShowAll(true)}
-        >
+      {alerts.length > VISIBLE_LIMIT && (
+        <Link to="/alertas" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
           Ver todas ({alerts.length})
-        </button>
+        </Link>
       )}
     </SectionCard>
   )

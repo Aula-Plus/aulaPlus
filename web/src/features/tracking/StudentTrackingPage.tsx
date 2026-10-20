@@ -9,6 +9,7 @@ import {
   canResolveAlert,
   canViewStudentHistory,
   isPsychopedagogue,
+  isSchoolWideStaff,
 } from "@/lib/permissions"
 import { cn, formatShortDate } from "@/lib/utils"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
@@ -28,9 +29,11 @@ import {
   type Comment,
   type CommentCategory,
   type CommentShare,
+  type GradeAccommodation,
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
+import { accommodationAppliesToAssessment, describeAccommodationScope } from "./accommodationScope"
 import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
@@ -262,7 +265,7 @@ export function StudentTrackingPage() {
                 value={student.has_therapeutic_companion ? "Sí" : "No"}
               />
               <Row
-                label="Clases"
+                label="Grupos"
                 value={student.groups.map((group) => group.name).join(", ") || "—"}
               />
             </div>
@@ -338,13 +341,13 @@ export function StudentTrackingPage() {
           <>
           {tracking.accommodations && (
             <SectionCard
-              title="Adaptaciones vigentes"
+              title="Ajustes vigentes"
               action={
                 // When the list is empty the CTA lives in the empty state instead,
-                // so there is exactly one "Nueva adaptación" affordance per state.
+                // so there is exactly one "Nuevo ajuste" affordance per state.
                 showManageAccommodations && tracking.accommodations.length > 0 ? (
                   <Button type="button" size="sm" onClick={handleNewAccommodation}>
-                    Nueva adaptación
+                    Nuevo ajuste
                   </Button>
                 ) : undefined
               }
@@ -352,11 +355,11 @@ export function StudentTrackingPage() {
               {tracking.accommodations.length === 0 ? (
                 <EmptyState
                   icon={HeartHandshake}
-                  message="Sin adaptaciones vigentes."
+                  message="Sin ajustes vigentes."
                   action={
                     showManageAccommodations && (
                       <Button type="button" size="sm" variant="outline" onClick={handleNewAccommodation}>
-                        Nueva adaptación
+                        Nuevo ajuste
                       </Button>
                     )
                   }
@@ -382,6 +385,9 @@ export function StudentTrackingPage() {
                             {accommodation.description && (
                               <p className="text-muted-foreground">{accommodation.description}</p>
                             )}
+                            <p className="text-muted-foreground">
+                              {capitalize(describeAccommodationScope(accommodation))}
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <AccommodationStatusBadge accommodation={accommodation} />
@@ -419,7 +425,11 @@ export function StudentTrackingPage() {
                         {accommodation.is_effective && (
                           <AccommodationInstanceOverrideForm
                             accommodationId={accommodation.id}
-                            assessments={tracking.recent_assessments}
+                            // Only the assessments it applies to (subject +
+                            // type): the server 422s any other one.
+                            assessments={tracking.recent_assessments.filter((assessment) =>
+                              accommodationAppliesToAssessment(accommodation, assessment),
+                            )}
                           />
                         )}
                       </li>
@@ -483,6 +493,9 @@ export function StudentTrackingPage() {
                   )
                 : undefined
             }
+            showAuthors
+            currentUserId={user?.id}
+            showCount={isSchoolWideStaff(user)}
           />
         )}
 
@@ -513,9 +526,25 @@ export function StudentTrackingPage() {
             )}
           </SectionCard>
 
+          {tracking.grades_view.restricted && (
+            <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {tracking.grades_view.mode === "all_periodic" && tracking.grades_view.cutoff_at
+                ? `Notas de otras materias cargadas antes del corte del ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
+                : tracking.grades_view.mode === "all_periodic"
+                  ? "Todavía no hay un corte: por ahora ves solo las notas de tu materia."
+                  : "Ves solo las notas de las materias que dictás."}
+            </p>
+          )}
+
           <SectionCard
             title="Desempeño por materia"
-            action={<OverallAverageBadge value={tracking.overall_average} />}
+            action={
+              // A teacher limited to their own subjects gets no general
+              // average (the server sends null): only their subjects' ones.
+              tracking.grades_view.restricted && tracking.grades_view.mode === "own_subject" ? undefined : (
+                <OverallAverageBadge value={tracking.overall_average} />
+              )
+            }
           >
             {tracking.by_subject.length === 0 ? (
               <p className="text-muted-foreground">Sin evaluaciones por materia.</p>
@@ -536,6 +565,42 @@ export function StudentTrackingPage() {
                   </li>
                 ))}
               </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Notas" bare={tracking.grades.length > 0}>
+            {tracking.grades.length === 0 ? (
+              <EmptyState icon={FileText} message="Sin notas para mostrar." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Materia</TableHead>
+                    <TableHead>Instancia</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Nota</TableHead>
+                    <TableHead className="pr-6">Ajustes activos ese día</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tracking.grades.map((grade) => (
+                    <TableRow key={grade.id}>
+                      <TableCell className="pl-6">{grade.subject_name}</TableCell>
+                      <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
+                      <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
+                      <TableCell className="tabular-nums">{grade.score ?? "—"}</TableCell>
+                      <TableCell className="pr-6">
+                        <GradeAccommodations accommodations={grade.accommodations} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {tracking.grades_truncated && (
+              <p className="px-6 py-3 text-xs text-muted-foreground">
+                Se muestran las {tracking.grades.length} notas más recientes. Los promedios incluyen todas.
+              </p>
             )}
           </SectionCard>
 
@@ -592,6 +657,26 @@ export function StudentTrackingPage() {
  *   - Otherwise: fall back to the vigency flag `is_effective` — no approval
  *     badge is added when approval does not apply (docs/prompts/09 §3).
  */
+/**
+ * The accommodations that were in force for one grade (name only), as neutral
+ * chips; «Ninguno» when there were none. Server-filtered: the list only holds
+ * what this viewer may see.
+ */
+function GradeAccommodations({ accommodations }: { accommodations: GradeAccommodation[] }) {
+  if (accommodations.length === 0) {
+    return <span className="text-muted-foreground">Ninguno</span>
+  }
+  return (
+    <ul className="flex flex-wrap gap-1" aria-label="Ajustes activos ese día">
+      {accommodations.map((accommodation) => (
+        <li key={accommodation.id}>
+          <Badge tone="neutral">{accommodation.label}</Badge>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
   if (accommodation.requires_external_approval) {
     if (accommodation.approved === true) {
@@ -629,6 +714,10 @@ function OverallAverageBadge({ value }: { value: number | null }) {
   )
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between border-b py-1 last:border-b-0">
@@ -639,8 +728,11 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * What a viewer without clinical-profile access sees in "Ajustes": the names of
- * the supports to apply, nothing else (the server sends no detail).
+ * What a viewer without clinical-profile access sees in "Ajustes": each support
+ * to apply with since when and where it applies — «Ortografía no puntúa — desde
+ * el 02/04 — en Idioma Español y Literatura». The server only sends a teacher
+ * the general accommodations and those scoped to a subject they teach the
+ * student, and never their origin, validator or review date.
  */
 function SupportsReadOnly({ chips }: { chips: StudentTracking["support_chips"] }) {
   return (
@@ -652,7 +744,8 @@ function SupportsReadOnly({ chips }: { chips: StudentTracking["support_chips"] }
           <ul className="grid gap-2">
             {chips.accommodations.map((chip) => (
               <li key={chip.id} className="rounded-md border p-3 text-sm">
-                {chip.label}
+                <span className="font-medium">{chip.label}</span>
+                <span className="text-muted-foreground"> — {describeAccommodationScope(chip)}</span>
               </li>
             ))}
           </ul>

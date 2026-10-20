@@ -135,22 +135,27 @@ it('maps stored visibility values to the new scopes without widening anything bu
         ->and($stored($everyone))->toBeNull();
 });
 
-it('shows a teacher their private signal once their own private notes reach the threshold, and nobody else', function () {
+it('shows a teacher their private signal once their own private notes reach the threshold in one category, and nobody else', function () {
     ['school' => $school, 'student' => $student, 'teacher' => $teacher, 'psico' => $psico, 'director' => $director] = scopeFixture();
     $colleague = User::factory()->forSchool($school)->teacher()->create();
     leadGroup($student->groups()->first(), $colleague);
+    [$social, $academic] = CommentCategory::withoutGlobalScopes()->where('school_id', $school->id)->limit(2)->pluck('id')->all();
+    $private = fn (int $daysAgo, array $categories) => Comment::factory()->forSubject($student)->authorOnly()
+        ->create(['author_id' => $teacher->id, 'created_at' => now()->subDays($daysAgo)])
+        ->categories()->attach($categories);
 
-    // Two recent + one outside the 10-day window: below the threshold.
-    foreach ([1, 2, 30] as $daysAgo) {
-        Comment::factory()->forSubject($student)->authorOnly()
-            ->create(['author_id' => $teacher->id, 'created_at' => now()->subDays($daysAgo)]);
-    }
+    // Two recent Social + one outside the 10-day window, one in another
+    // category and one without category: no single category reaches 3.
+    $private(1, [$social]);
+    $private(2, [$social]);
+    $private(30, [$social]);
+    $private(2, [$academic]);
+    $private(2, []);
     Sanctum::actingAs($teacher);
     expect(trackingFor($student)['private_notes_signal'])->toBeFalse();
 
-    // A third recent one reaches it — no category needed, all private notes count together.
-    Comment::factory()->forSubject($student)->authorOnly()
-        ->create(['author_id' => $teacher->id, 'created_at' => now()->subDays(3)]);
+    // A third recent Social one (also tagged Académico) reaches it.
+    $private(3, [$social, $academic]);
     expect(trackingFor($student)['private_notes_signal'])->toBeTrue();
 
     foreach ([$colleague, $psico, $director] as $other) {

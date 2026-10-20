@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { accommodationCategoryLabels, type GroupAccommodationSummaryEntry } from "@/types"
+import { GroupAccommodationNarrative } from "./GroupAccommodationNarrative"
 import { fetchGroupAccommodationsSummary } from "./trackingApi"
 
 interface GroupAccommodationsSummaryProps {
@@ -17,7 +18,7 @@ interface GroupAccommodationsSummaryProps {
  *
  * Deliberately NO role gate: the endpoint is aggregate-only and never names a
  * student, so it is safe for any role that can already see the group — unlike
- * the clinical "Adaptaciones vigentes" section of StudentTrackingPage. Adding a
+ * the clinical "Ajustes vigentes" section of StudentTrackingPage. Adding a
  * `canAccessClinicalProfile` gate here would be more restrictive than necessary
  * (spec §6). Authorization stays the backend's job anyway (CLAUDE.md).
  */
@@ -41,12 +42,13 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
 
   return (
     <SectionCard title="Ajustes activos">
+      <GroupAccommodationNarrative groupId={groupId} canSummarise={(entries?.length ?? 0) > 0} />
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : entries === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : entries.length === 0 ? (
-        <EmptyState icon={HeartHandshake} message="La clase no tiene ajustes activos." />
+        <EmptyState icon={HeartHandshake} message="El grupo no tiene ajustes activos." />
       ) : (
         <Table>
           <TableHeader>

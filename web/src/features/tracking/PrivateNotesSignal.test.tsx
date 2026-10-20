@@ -7,8 +7,9 @@ describe("PrivateNotesSignal", () => {
     render(<PrivateNotesSignal active />)
 
     const note = screen.getByRole("note", { name: "Señal privada" })
-    expect(note).toHaveTextContent("Tenés varias notas privadas sobre este alumno en este período.")
-    expect(note).toHaveTextContent("Solo vos ves esta marca.")
+    expect(note).toHaveTextContent(
+      "Tenés varias notas privadas sobre este alumno en una categoría en este período.",
+    )
     expect(note.textContent).not.toMatch(/\d/)
   })
 
