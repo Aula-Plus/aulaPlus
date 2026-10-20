@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\GroupTrackingResource;
+use App\Models\Accommodation;
 use App\Models\Alert;
 use App\Models\Assessment;
 use App\Models\Comment;
@@ -13,8 +14,9 @@ use Illuminate\Http\Request;
  * GET /api/v1/groups/{group}/tracking — read-only aggregator view
  * (docs/prompts/04-seguimiento-institucional.md §3), not cached (unlike the
  * student tracking view — see StudentTrackingController): its per-student
- * summaries are counts/booleans only for every viewer, so there is no
- * role-based filtering to protect from a shared cache in the first place.
+ * summaries are counts/booleans only for every viewer — though still filtered
+ * per viewer (alerts by recipient, accommodations by
+ * Accommodation::scopeVisibleTo), which is one more reason not to share a cache.
  */
 class GroupTrackingController extends Controller
 {
@@ -29,6 +31,8 @@ class GroupTrackingController extends Controller
     {
         $this->authorize('view', $group);
 
+        $user = $request->user();
+
         // The Evaluaciones screen reads `group.teachers` to decide whether the
         // authed teacher leads the group (canManageAssessments). GroupResource
         // only emits `teachers` when the relation is loaded, so load it here —
@@ -41,7 +45,21 @@ class GroupTrackingController extends Controller
         // accommodations): the group profile lists students, it does not rank
         // them (docs/prompts/21-perfil-de-grupo.md §3). Qualify the column —
         // the relation resolves through a join over the group_student pivot.
-        $students = $group->students()->orderBy('students.full_name')->get()->map(fn ($student) => [
+        $students = $group->students()->orderBy('students.full_name')->get();
+
+        // One query for the whole group, through the single visibility rule
+        // (Accommodation::scopeVisibleTo): a teacher of another subject must
+        // not learn that a subject-specific accommodation exists. "Active"
+        // keeps the isEffective() semantics (active + approved when required).
+        $withActiveAccommodations = Accommodation::query()
+            ->visibleTo($user)
+            ->effective()
+            ->whereIn('accommodations.student_id', $students->modelKeys())
+            ->distinct()
+            ->pluck('accommodations.student_id')
+            ->flip();
+
+        $students = $students->map(fn ($student) => [
             'id' => $student->id,
             'full_name' => $student->full_name,
             // Alert::scopeCountableFor: a role that isn't a recipient of a new
@@ -49,9 +67,9 @@ class GroupTrackingController extends Controller
             'open_alerts_count' => Alert::query()
                 ->where('student_id', $student->id)
                 ->where('resolved', false)
-                ->countableFor($request->user())
+                ->countableFor($user)
                 ->count(),
-            'has_active_accommodations' => $student->accommodations()->get()->contains->isEffective(),
+            'has_active_accommodations' => $withActiveAccommodations->has($student->id),
         ]);
 
         return new GroupTrackingResource([

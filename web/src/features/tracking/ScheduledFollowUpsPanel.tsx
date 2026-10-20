@@ -350,7 +350,7 @@ function FollowUpRow({
         <div>
           <p className="whitespace-pre-wrap">{followUp.description}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Vence: {formatShortDate(followUp.due_date)}
+            Plazo: {formatShortDate(followUp.due_date)}
           </p>
           {followUp.alert_id != null && (
             // The alert keeps its own state and deadline: this only says
@@ -371,7 +371,7 @@ function FollowUpRow({
         </div>
         {/* Painted straight from the server boolean — the component never does
             date arithmetic (spec §4). */}
-        {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
+        {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
       </div>
 
       {followUp.resolved ? (

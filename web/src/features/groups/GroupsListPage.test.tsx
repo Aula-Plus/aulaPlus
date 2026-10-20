@@ -42,7 +42,7 @@ describe("GroupsListPage", () => {
 
     expect(await screen.findByText("3° A")).toBeInTheDocument()
     expect(screen.getByText("Ana Ruiz")).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: /nueva clase/i })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /nuevo grupo/i })).toBeInTheDocument()
   })
 
   it("shows a dash when a group has no teachers assigned", async () => {
@@ -118,8 +118,8 @@ describe("GroupsListPage", () => {
 
     renderList("teacher")
 
-    expect(await screen.findByText(/todavía no hay clases/i)).toBeInTheDocument()
-    expect(screen.queryByRole("link", { name: /nueva clase/i })).not.toBeInTheDocument()
+    expect(await screen.findByText(/todavía no hay grupos/i)).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /nuevo grupo/i })).not.toBeInTheDocument()
   })
 
   it("shows the screening link only to psychopedagogy (not a teacher)", async () => {

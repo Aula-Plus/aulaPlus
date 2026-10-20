@@ -17,6 +17,12 @@ use Illuminate\Validation\ValidationException;
  * psychopedagogue proposes that an accommodation addresses a barrier, and a
  * director/psychopedagogue later validates it — never the same person for
  * both (four-eyes rule).
+ *
+ * The listing goes through the single accommodation visibility rule
+ * (Accommodation::scopeVisibleTo): a teacher of the student only gets the
+ * linked accommodations that are general or scoped to a subject they teach,
+ * and BarrierAccommodationResource drops their clinical detail for anyone
+ * without view-clinical-profile (CLAUDE.md security rule 11).
  */
 class BarrierAccommodationController extends Controller
 {
@@ -24,7 +30,9 @@ class BarrierAccommodationController extends Controller
     {
         $this->authorize('view', $barrier);
 
-        return BarrierAccommodationResource::collection($barrier->accommodations()->get());
+        return BarrierAccommodationResource::collection(
+            $barrier->accommodations()->visibleTo(auth()->user())->with('student')->get()
+        );
     }
 
     public function store(AttachBarrierAccommodationRequest $request, Barrier $barrier): JsonResponse

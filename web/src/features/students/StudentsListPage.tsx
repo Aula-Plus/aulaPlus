@@ -110,10 +110,10 @@ export function StudentsListPage() {
           </div>
           <div className="w-48">
             <SingleSelect
-              options={[{ value: ALL_GROUPS, label: "Todas las clases" }, ...groupOptions]}
+              options={[{ value: ALL_GROUPS, label: "Todos los grupos" }, ...groupOptions]}
               value={groupFilter}
               onChange={setGroupFilter}
-              placeholder="Filtrar por clase"
+              placeholder="Filtrar por grupo"
             />
           </div>
         </div>
@@ -141,7 +141,7 @@ export function StudentsListPage() {
                   className="pl-6"
                 />
                 <SortableHead
-                  label="Clase"
+                  label="Grupo"
                   active={sort.key === "group"}
                   direction={sort.direction}
                   onSort={() => toggle("group")}

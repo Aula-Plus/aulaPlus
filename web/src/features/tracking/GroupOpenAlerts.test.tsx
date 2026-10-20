@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { GroupOpenAlerts } from "./GroupOpenAlerts"
@@ -47,15 +46,22 @@ describe("GroupOpenAlerts", () => {
     )
   })
 
-  it("shows five alerts and reveals the rest on 'Ver todas'", async () => {
+  it("shows five alerts and links 'Ver todas' to «Alertas y seguimientos»", async () => {
     vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue(
       [1, 2, 3, 4, 5, 6, 7].map((id) => alert(id)),
     )
     renderCard()
 
     expect(await screen.findAllByText("Juan Pérez")).toHaveLength(5)
-    await userEvent.click(screen.getByRole("button", { name: /ver todas \(7\)/i }))
-    expect(screen.getAllByText("Juan Pérez")).toHaveLength(7)
+    expect(screen.getByRole("link", { name: /ver todas \(7\)/i })).toHaveAttribute("href", "/alertas")
+  })
+
+  it("offers no 'Ver todas' when every alert fits", async () => {
+    vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([1, 2, 3, 4, 5].map((id) => alert(id)))
+    renderCard()
+
+    expect(await screen.findAllByText("Juan Pérez")).toHaveLength(5)
+    expect(screen.queryByText(/ver todas/i)).not.toBeInTheDocument()
   })
 
   it("shows who has an alert and since when, once someone chose a way out", async () => {
