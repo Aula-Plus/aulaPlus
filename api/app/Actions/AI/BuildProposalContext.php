@@ -2,6 +2,8 @@
 
 namespace App\Actions\AI;
 
+use App\Enums\AssessmentType;
+use App\Models\Accommodation;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
 use App\Models\CurricularItem;
@@ -9,6 +11,8 @@ use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
+use Closure;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 
 /**
@@ -32,6 +36,7 @@ class BuildProposalContext
     {
         $group = $proposal->group;
         $parameters = $proposal->input_parameters ?? [];
+        $inScope = $this->accommodationsInScope($parameters);
 
         return [
             'group' => [
@@ -42,8 +47,8 @@ class BuildProposalContext
             ],
             'curricular_framework' => $this->curricularContext($group, $parameters),
             'subject_program' => $this->subjectProgram($proposal, $parameters),
-            'student_cohort_summary' => $this->cohortSummary($group),
-            'target_student' => $this->targetStudent($parameters),
+            'student_cohort_summary' => $this->cohortSummary($group, $inScope),
+            'target_student' => $this->targetStudent($parameters, $inScope),
             'reference_example' => $this->referenceExample($proposal),
         ];
     }
@@ -104,6 +109,62 @@ class BuildProposalContext
             'frameworks' => $frameworks->pluck('name')->all(),
             'relevant_items' => $items,
         ];
+    }
+
+    /**
+     * Which accommodations may shape this proposal: the ones in force today
+     * (Accommodation::scopeEffective — active, and approved when approval is
+     * required — and already started), and, when the request is about one
+     * subject, only the general ones plus those scoped to that subject; when
+     * it drafts an assessment of a given type, only those covering that type.
+     * Same scope rule the teacher sees in the student profile (ClickUp
+     * 86e3dpbwy follow-up) — an accommodation for another subject would steer
+     * the draft wrongly.
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return Closure(HasMany<Accommodation, Student>): void
+     */
+    protected function accommodationsInScope(array $parameters): Closure
+    {
+        $subjectId = $this->subjectId($parameters);
+        $assessmentType = AssessmentType::tryFrom((string) ($parameters['assessment_type'] ?? ''));
+
+        return function (HasMany $query) use ($subjectId, $assessmentType): void {
+            $query->effective()->started();
+
+            if ($subjectId !== null) {
+                $query->appliesToSubject($subjectId);
+            }
+
+            if ($assessmentType !== null) {
+                $query->appliesToAssessmentType($assessmentType);
+            }
+        };
+    }
+
+    /**
+     * The subject the request is about: given directly (annual plan,
+     * assessment) or inherited from the annual plan a unit/class session
+     * belongs to. Null when the request isn't tied to one subject.
+     *
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function subjectId(array $parameters): ?int
+    {
+        if (isset($parameters['subject_id'])) {
+            return (int) $parameters['subject_id'];
+        }
+
+        $annualPlanId = $parameters['annual_plan_id']
+            ?? (isset($parameters['unit_id']) ? Unit::query()->whereKey($parameters['unit_id'])->value('annual_plan_id') : null);
+
+        if ($annualPlanId === null) {
+            return null;
+        }
+
+        $subjectId = AnnualPlan::query()->whereKey($annualPlanId)->value('subject_id');
+
+        return $subjectId === null ? null : (int) $subjectId;
     }
 
     /**
@@ -211,11 +272,12 @@ class BuildProposalContext
      * Aggregated, anonymised summary of the group's learners — counts only,
      * never names (CLAUDE.md security rule 11).
      *
+     * @param  Closure(HasMany<Accommodation, Student>): void  $inScope
      * @return array<string, mixed>
      */
-    protected function cohortSummary(Group $group): array
+    protected function cohortSummary(Group $group, Closure $inScope): array
     {
-        $students = $group->students()->with(['accommodations' => fn ($q) => $q->where('active', true)])->get();
+        $students = $group->students()->with(['accommodations' => $inScope])->get();
 
         $accommodationsByFocusArea = $students
             ->flatMap(fn (Student $student) => $student->accommodations)
@@ -241,9 +303,10 @@ class BuildProposalContext
      * the application side when showing the result.
      *
      * @param  array<string, mixed>  $parameters
+     * @param  Closure(HasMany<Accommodation, Student>): void  $inScope
      * @return array<string, mixed>|null
      */
-    protected function targetStudent(array $parameters): ?array
+    protected function targetStudent(array $parameters, Closure $inScope): ?array
     {
         $studentId = $parameters['student_id'] ?? null;
 
@@ -252,7 +315,7 @@ class BuildProposalContext
         }
 
         $student = Student::query()
-            ->with(['accommodations' => fn ($q) => $q->where('active', true)])
+            ->with(['accommodations' => $inScope])
             ->find($studentId);
 
         if ($student === null) {

@@ -99,6 +99,9 @@ it('records an audit_logs entry for the approval', function () {
         'student_id' => $student->id,
         'requires_external_approval' => true,
         'approved' => null,
+        // A future start is kept on approval, so the diff is the approval only
+        // (an earlier one would move up to the approval day — AccommodationDatesInForceTest).
+        'starts_on' => now()->addMonth()->toDateString(),
     ]);
     Sanctum::actingAs($director);
 
