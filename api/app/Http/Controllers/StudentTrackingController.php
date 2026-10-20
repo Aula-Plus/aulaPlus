@@ -56,9 +56,9 @@ class StudentTrackingController extends Controller
         $this->authorize('view', $student);
         $user = request()->user();
 
-        // The Resource renders the student's classes, so the relation must be
+        // The Resource renders the student's groups, so the relation must be
         // eager-loaded here — StudentResource exposes `groups` only whenLoaded,
-        // and the SPA's "Clases" row expects it present.
+        // and the SPA's "Grupos" row expects it present.
         $student->load('groups');
 
         // Resolved once and applied to every grade query below (school setting,

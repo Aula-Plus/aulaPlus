@@ -114,7 +114,7 @@ export function AssessmentResultsEditor({
   }
 
   if (students.length === 0) {
-    return <p className="text-sm text-muted-foreground">La clase no tiene alumnos para calificar.</p>
+    return <p className="text-sm text-muted-foreground">El grupo no tiene alumnos para calificar.</p>
   }
 
   if (loading) {

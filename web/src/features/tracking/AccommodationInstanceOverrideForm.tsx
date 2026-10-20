@@ -75,12 +75,12 @@ export function AccommodationInstanceOverrideForm({
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 403) {
         setError(
-          "Solo el docente responsable de esa evaluación puede desactivar la adaptación para ella.",
+          "Solo el docente responsable de esa evaluación puede desactivar el ajuste para ella.",
         )
       } else if (isAxiosError(err) && err.response?.status === 422) {
-        setError("Esa evaluación no es válida para esta adaptación.")
+        setError("Esa evaluación no es válida para este ajuste.")
       } else {
-        setError("No pudimos desactivar la adaptación para esa evaluación.")
+        setError("No pudimos desactivar el ajuste para esa evaluación.")
       }
     } finally {
       setSubmitting(false)
@@ -92,7 +92,7 @@ export function AccommodationInstanceOverrideForm({
       <div className="mt-2">
         {done && (
           <p className="mb-2 text-xs text-muted-foreground">
-            Adaptación desactivada para la evaluación elegida.
+            Ajuste desactivado para la evaluación elegida.
           </p>
         )}
         <Button

@@ -55,6 +55,16 @@ class GroupPolicy
             && $user->hasRole(Role::Director->value);
     }
 
+    /**
+     * Generate and publish the AI text summary of the group's accommodations:
+     * psychopedagogy of the group's school only.
+     */
+    public function generateAccommodationNarrative(User $user, Group $group): bool
+    {
+        return $this->sharesSchool($user, $group)
+            && $user->hasRole(Role::Psychopedagogue->value);
+    }
+
     protected function sharesSchool(User $user, Group $group): bool
     {
         return $user->school_id === $group->school_id;

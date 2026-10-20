@@ -107,6 +107,8 @@ export interface CommentTrend {
 export interface Comment {
   id: number
   author_id: number
+  /** Present on the student comment list only. */
+  author?: { id: number; name: string; role: Role | null } | null
   /** Polymorphic base name, e.g. "Student" or "Group". */
   commentable_type: string
   commentable_id: number
@@ -285,6 +287,26 @@ export interface Subject {
   name: string
   short_code: string | null
   color: string | null
+  /** Whether the Aula+ team already loaded it into the curricular catalog (ClickUp 86e3dt6ag). */
+  in_catalog?: boolean
+  /** Curricular program PDF metadata; the file itself is reached via a temporary URL. */
+  syllabus?: SubjectSyllabus | null
+}
+
+export type SyllabusTextStatus = "pending" | "ready" | "failed"
+
+export interface SubjectSyllabus {
+  name: string
+  size: number | null
+  uploaded_at: string | null
+  /**
+   * Text extraction for the AI assistant (queued after each upload): `pending`
+   * until it runs, then `ready` (the AI uses it) or `failed` (scanned,
+   * encrypted or unreadable PDF — stored, but the AI doesn't use it).
+   */
+  text_status: SyllabusTextStatus
+  /** Decided by `SubjectPolicy::viewSyllabus` for the current user. */
+  can_view: boolean
 }
 
 /**
@@ -323,9 +345,9 @@ export type PerformanceMarkType =
   | "calendar_event"
 
 export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
-  accommodation_activated: "Adaptación activada",
-  accommodation_deactivated: "Adaptación desactivada",
-  accommodation_instance_override: "Adaptación desactivada para esta evaluación",
+  accommodation_activated: "Ajuste activado",
+  accommodation_deactivated: "Ajuste desactivado",
+  accommodation_instance_override: "Ajuste desactivado para esta evaluación",
   barrier_registered: "Barrera registrada",
   calendar_event: "Evento de calendario",
 }
@@ -405,6 +427,37 @@ export interface GroupAccommodationSummaryEntry {
 }
 
 /**
+ * AI text summary of the group's accommodations. `published` is what teachers
+ * read; `draft` (psychopedagogy only) is the latest generation awaiting review.
+ * `outdated` means the accommodations changed after the text was generated.
+ */
+export interface AccommodationNarrativeView {
+  can_generate: boolean
+  /** False while the environment has no AI provider configured: generating is disabled. */
+  ai_available: boolean
+  published: {
+    id: number
+    content: string
+    published_at: string | null
+    published_by: string | null
+    outdated: boolean
+  } | null
+  draft: {
+    id: number
+    status: "pending" | "draft" | "error"
+    content: string | null
+    error_message: string | null
+    /** The accommodation data itself names a student: nothing was sent to the AI. */
+    name_in_data?: boolean
+    /** Accommodation types that name a student, with the name redacted ("…"). */
+    flagged_types?: string[]
+    /** A generation that never finished (reported as `error`): it can be retried. */
+    stale?: boolean
+    outdated: boolean
+  } | null
+}
+
+/**
  * One point of the group performance line: one per Assessment of the group (not
  * per time window). `average_score` is the mean of its results; `results_count`
  * is how many students have a score loaded (may be less than the group size).
@@ -430,8 +483,8 @@ export type GroupPerformanceMarkType =
   | "calendar_event"
 
 export const groupPerformanceMarkTypeLabels: Record<GroupPerformanceMarkType, string> = {
-  accommodation_activated: "Adaptaciones activadas",
-  accommodation_deactivated: "Adaptaciones desactivadas",
+  accommodation_activated: "Ajustes activados",
+  accommodation_deactivated: "Ajustes desactivados",
   barrier_registered: "Barreras registradas",
   calendar_event: "Evento de calendario",
 }
@@ -657,7 +710,10 @@ export type SupportMessageKind = "issue" | "improvement"
 export interface SupportMessageInput {
   kind: SupportMessageKind
   message: string
+  /** Route path of the originating screen, e.g. "/alumnos/3/seguimiento". */
   screen?: string | null
+  /** Generic name of that screen for the email, e.g. "Perfil del alumno". Never PII. */
+  screen_name?: string | null
 }
 
 /** One weekly bucket of the adoption dashboard time series (Monday-start). */

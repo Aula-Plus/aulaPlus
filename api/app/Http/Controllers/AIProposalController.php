@@ -9,6 +9,7 @@ use App\Http\Resources\AIProposalResource;
 use App\Jobs\GenerateAIProposalJob;
 use App\Models\AIProposal;
 use App\Models\Group;
+use App\Support\AiProvider;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -23,10 +24,13 @@ class AIProposalController extends Controller
     /**
      * POST /groups/{group}/assistant/generate — authorization + per-type
      * validation live in the Form Request. Creates a pending proposal, queues
-     * generation, and returns 202 Accepted.
+     * generation, and returns 202 Accepted — or 503 when this environment has
+     * no AI provider configured (nothing is created or queued).
      */
     public function generate(GenerateAIProposalRequest $request, Group $group): JsonResponse
     {
+        abort_unless(AiProvider::isConfigured(), Response::HTTP_SERVICE_UNAVAILABLE, AiProvider::UNAVAILABLE);
+
         $proposal = AIProposal::create([
             'group_id' => $group->id,
             'requested_by_id' => $request->user()->id,
