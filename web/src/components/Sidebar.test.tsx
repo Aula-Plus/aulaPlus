@@ -55,34 +55,34 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("heading", { name: /seguimiento/i })).not.toBeInTheDocument()
   })
 
-  it("shows the unread notice count next to 'Mis seguimientos'", async () => {
+  it("shows the unread follow-up notice count next to 'Alertas y seguimientos'", async () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(2)
     renderSidebar("psychopedagogue")
 
     expect(
-      await screen.findByRole("link", { name: "Mis seguimientos, 2 avisos sin leer" }),
-    ).toHaveAttribute("href", "/mis-seguimientos")
+      await screen.findByRole("link", { name: "Alertas y seguimientos, 2 avisos de seguimiento sin leer" }),
+    ).toHaveAttribute("href", "/alertas")
   })
 
-  it("shows no count next to 'Mis seguimientos' when every notice is read", async () => {
+  it("shows no count next to 'Alertas y seguimientos' when every notice is read", async () => {
     const fetchCount = vi
       .spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount")
       .mockResolvedValue(0)
     renderSidebar("psychopedagogue")
 
     await waitFor(() => expect(fetchCount).toHaveBeenCalled())
-    expect(screen.getByRole("link", { name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Alertas y seguimientos" })).toHaveAttribute("href", "/alertas")
     expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
   })
 
-  it("keeps 'Mis seguimientos' in the link name when collapsed with a count", async () => {
+  it("keeps 'Alertas y seguimientos' in the link name when collapsed with a count", async () => {
     localStorage.setItem("aulaplus:sidebar-collapsed", "1")
     vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(2)
     renderSidebar("psychopedagogue")
 
     expect(
-      await screen.findByRole("link", { name: "Mis seguimientos, 2 avisos sin leer" }),
-    ).toHaveAttribute("href", "/mis-seguimientos")
+      await screen.findByRole("link", { name: "Alertas y seguimientos, 2 avisos de seguimiento sin leer" }),
+    ).toHaveAttribute("href", "/alertas")
   })
 
   it("shows '50+' past the number of notices the page lists", async () => {
@@ -90,7 +90,7 @@ describe("Sidebar", () => {
     renderSidebar("psychopedagogue")
 
     expect(
-      await screen.findByRole("link", { name: "Mis seguimientos, más de 50 avisos sin leer" }),
+      await screen.findByRole("link", { name: "Alertas y seguimientos, más de 50 avisos de seguimiento sin leer" }),
     ).toBeInTheDocument()
     expect(screen.getByText("50+")).toBeInTheDocument()
   })
@@ -118,13 +118,13 @@ describe("Sidebar", () => {
     const userB = { id: 2, name: "Bruno", email: "bruno@escuela.test", roles: ["teacher" as Role] }
 
     const { rerender } = render(tree(auth(userA)))
-    expect(await screen.findByRole("link", { name: "Mis seguimientos, 3 avisos sin leer" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 3 avisos de seguimiento sin leer" })).toBeInTheDocument()
 
     // A navigates (a refresh starts and hangs), logs out, then B logs in.
     await userEvent.click(screen.getByRole("link", { name: "Alumnos" }))
     rerender(tree(auth(null)))
     rerender(tree(auth(userB)))
-    expect(screen.getByRole("link", { name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Alertas y seguimientos" })).toBeInTheDocument()
 
     // A's late answer must not show up for B.
     await act(async () => releaseA(7))

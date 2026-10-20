@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react"
 import {
   BellRing,
   BookOpen,
-  CalendarClock,
   ClipboardList,
   GraduationCap,
   MessageSquare,
@@ -33,8 +32,8 @@ export interface NavItem {
   /** Passes the originating screen to the target (e.g. the support form). */
   passFrom?: boolean
   /**
-   * A count shown next to the label (e.g. unread notices on "Mis
-   * seguimientos"). Omitted or 0 means no count is rendered.
+   * A count shown next to the label (e.g. unread follow-up notices on
+   * "Alertas y seguimientos"). Omitted or 0 means no count is rendered.
    */
   badge?: number
 }
@@ -68,10 +67,10 @@ export function buildNavSections(
       items: [
         { to: "/clases", label: "Grupos", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
-        // The open alerts that reach the user, for every role (ClickUp 86e3jpzdp).
-        { to: "/alertas", label: "Alertas", icon: TriangleAlert },
-        // Unread follow-up notices show as a count; it goes away once read.
-        { to: "/mis-seguimientos", label: "Mis seguimientos", icon: CalendarClock, badge: unreadNotices },
+        // One screen for the alerts that reach the user and their own scheduled
+        // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
+        // is unread follow-up notices only (not alerts); it goes away once read.
+        { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
         // The screening-test design screen is for psychopedagogy (manage) and
         // direction (approve) — docs/prompts/12 §4.
         ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)

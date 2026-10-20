@@ -40,7 +40,7 @@ export function Sidebar() {
   const userId = user?.id
 
   // Keep the unread-notice count fresh: on login and on every navigation (no
-  // polling). Reading a notice refreshes it too (see MyFollowUpsPage). The
+  // polling). Reading a notice refreshes it too (see FollowUpsSection). The
   // store is keyed by user and drops stale responses, so after a logout/login
   // in the same tab the new user never sees the previous user's count.
   useEffect(() => {
@@ -184,19 +184,21 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
             {section.items.map((item) => {
               const Icon = item.icon
               const badge = item.badge && item.badge > 0 ? item.badge : null
-              // "Mis seguimientos" lists at most NOTIFICATIONS_LIST_LIMIT notices,
-              // so past that the count reads "50+" instead of a number the page
-              // cannot show in full.
+              // The count is unread follow-up notices only (never alerts), and
+              // the screen-reader text says so: it sits next to "Alertas".
+              // The «Mis seguimientos» part of «Alertas y seguimientos» lists at
+              // most NOTIFICATIONS_LIST_LIMIT notices, so past that the count
+              // reads "50+" instead of a number the page cannot show in full.
               const overLimit = badge !== null && badge > NOTIFICATIONS_LIST_LIMIT
               const badgeLabel = overLimit ? `${NOTIFICATIONS_LIST_LIMIT}+` : String(badge)
               const badgeText =
                 badge === null
                   ? ""
                   : overLimit
-                    ? `más de ${NOTIFICATIONS_LIST_LIMIT} avisos sin leer`
+                    ? `más de ${NOTIFICATIONS_LIST_LIMIT} avisos de seguimiento sin leer`
                     : badge === 1
-                      ? "1 aviso sin leer"
-                      : `${badge} avisos sin leer`
+                      ? "1 aviso de seguimiento sin leer"
+                      : `${badge} avisos de seguimiento sin leer`
               return (
                 <NavLink
                   key={item.to}

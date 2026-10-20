@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Sidebar } from "@/components/Sidebar"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import type { ScheduledFollowUp } from "@/types"
-import { MyFollowUpsPage } from "./MyFollowUpsPage"
+import { FollowUpsSection } from "./FollowUpsSection"
 import * as api from "./scheduledFollowUpsApi"
 import { resetUnreadNoticeCount } from "./unreadNotices"
 
@@ -30,12 +30,43 @@ function pendingFollowUp(overrides: Partial<ScheduledFollowUp> = {}): ScheduledF
   }
 }
 
-describe("MyFollowUpsPage", () => {
+describe("FollowUpsSection", () => {
   beforeEach(() => {
     resetUnreadNoticeCount()
     vi.spyOn(api, "fetchUnreadNotificationCount").mockResolvedValue(0)
   })
   afterEach(() => vi.restoreAllMocks())
+
+  it("is a section: an h2 heading with h3 subsections, shown while loading", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockReturnValue(new Promise<ScheduledFollowUp[]>(() => {}))
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole("heading", { level: 2, name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { level: 3, name: "Pendientes" })).toBeInTheDocument()
+    expect(screen.getByText("Cargando…")).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument()
+  })
+
+  it("says the follow-ups could not be loaded instead of claiming there are none", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockRejectedValue(new Error("network"))
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText("No pudimos cargar tus seguimientos.")).toBeInTheDocument()
+    expect(screen.queryByText(/no tenés seguimientos pendientes/i)).not.toBeInTheDocument()
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument()
+  })
 
   it("keeps an out-of-date follow-up under 'Pendientes', marked 'Fuera de fecha'", async () => {
     vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([
@@ -46,7 +77,7 @@ describe("MyFollowUpsPage", () => {
 
     render(
       <MemoryRouter>
-        <MyFollowUpsPage />
+        <FollowUpsSection />
       </MemoryRouter>,
     )
 
@@ -72,7 +103,7 @@ describe("MyFollowUpsPage", () => {
 
     render(
       <MemoryRouter>
-        <MyFollowUpsPage />
+        <FollowUpsSection />
       </MemoryRouter>,
     )
 
@@ -106,16 +137,16 @@ describe("MyFollowUpsPage", () => {
       <AuthContext value={auth}>
         <MemoryRouter>
           <Sidebar />
-          <MyFollowUpsPage />
+          <FollowUpsSection />
         </MemoryRouter>
       </AuthContext>,
     )
 
-    expect(await screen.findByRole("link", { name: "Mis seguimientos, 1 aviso sin leer" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 1 aviso de seguimiento sin leer" })).toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole("button", { name: /entendido/i }))
 
-    expect(await screen.findByRole("link", { name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Alertas y seguimientos" })).toBeInTheDocument()
     expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
   })
 
@@ -150,7 +181,7 @@ describe("MyFollowUpsPage", () => {
 
     render(
       <MemoryRouter>
-        <MyFollowUpsPage />
+        <FollowUpsSection />
       </MemoryRouter>,
     )
 
