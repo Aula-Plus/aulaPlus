@@ -660,6 +660,14 @@ export interface StudentTracking {
   overall_average: number | null
   /** Per-subject averages (backend Sesión 4); empty when no scores exist. */
   by_subject: SubjectStat[]
+  /** Scored instances the viewer may see (already filtered by the server), newest first. */
+  grades: StudentGrade[]
+  /**
+   * True when `grades` was cut to the most recent ones (server limit: 100);
+   * `by_subject`/`overall_average` always cover every visible grade.
+   */
+  grades_truncated: boolean
+  grades_view: GradesView
   accommodations?: Accommodation[]
   accommodations_count: number
   barriers?: Barrier[]
@@ -1017,6 +1025,48 @@ export interface Paginated<T> {
     last_page: number
     total: number
   }
+}
+
+/**
+ * An accommodation in force for one grade (name only — never clinical detail).
+ */
+export interface GradeAccommodation {
+  id: number
+  label: string
+}
+
+export interface StudentGrade {
+  id: number
+  assessment_id: number
+  subject_id: number
+  subject_name: string
+  type: AssessmentType
+  administered_at: string | null
+  score: number | null
+  /**
+   * The accommodations that were in force on the instance's date for its
+   * subject and type, minus any deactivated for that instance — only the ones
+   * the viewer may see (server-side rule; PO ClickUp 86e3d1bwa).
+   */
+  accommodations: GradeAccommodation[]
+}
+
+export type GradesVisibilityMode = "own_subject" | "all_live" | "all_periodic"
+
+/** Why a teacher sees fewer grades than exist (never any grade data). */
+export interface GradesView {
+  mode: GradesVisibilityMode
+  restricted: boolean
+  own_subject_ids: number[]
+  /** Periodic mode: other subjects show grades loaded before this day. */
+  cutoff_at: string | null
+}
+
+export interface GradesVisibilitySettings {
+  mode: GradesVisibilityMode
+  cutoff_months: number | null
+  cutoff_anchor: string | null
+  last_cutoff_at: string | null
 }
 
 // ── Alert settings (ClickUp 86e3jpzcv) ──────────────────────────────────────

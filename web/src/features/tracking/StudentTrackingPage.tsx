@@ -27,6 +27,7 @@ import {
   type Alert,
   type Comment,
   type CommentCategory,
+  type GradeAccommodation,
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
@@ -489,9 +490,25 @@ export function StudentTrackingPage() {
             )}
           </SectionCard>
 
+          {tracking.grades_view.restricted && (
+            <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {tracking.grades_view.mode === "all_periodic" && tracking.grades_view.cutoff_at
+                ? `Notas de otras materias cargadas antes del corte del ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
+                : tracking.grades_view.mode === "all_periodic"
+                  ? "Todavía no hay un corte: por ahora ves solo las notas de tu materia."
+                  : "Ves solo las notas de las materias que dictás."}
+            </p>
+          )}
+
           <SectionCard
             title="Desempeño por materia"
-            action={<OverallAverageBadge value={tracking.overall_average} />}
+            action={
+              // A teacher limited to their own subjects gets no general
+              // average (the server sends null): only their subjects' ones.
+              tracking.grades_view.restricted && tracking.grades_view.mode === "own_subject" ? undefined : (
+                <OverallAverageBadge value={tracking.overall_average} />
+              )
+            }
           >
             {tracking.by_subject.length === 0 ? (
               <p className="text-muted-foreground">Sin evaluaciones por materia.</p>
@@ -512,6 +529,42 @@ export function StudentTrackingPage() {
                   </li>
                 ))}
               </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Notas" bare={tracking.grades.length > 0}>
+            {tracking.grades.length === 0 ? (
+              <EmptyState icon={FileText} message="Sin notas para mostrar." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-6">Materia</TableHead>
+                    <TableHead>Instancia</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Nota</TableHead>
+                    <TableHead className="pr-6">Ajustes activos ese día</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tracking.grades.map((grade) => (
+                    <TableRow key={grade.id}>
+                      <TableCell className="pl-6">{grade.subject_name}</TableCell>
+                      <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
+                      <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
+                      <TableCell className="tabular-nums">{grade.score ?? "—"}</TableCell>
+                      <TableCell className="pr-6">
+                        <GradeAccommodations accommodations={grade.accommodations} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {tracking.grades_truncated && (
+              <p className="px-6 py-3 text-xs text-muted-foreground">
+                Se muestran las {tracking.grades.length} notas más recientes. Los promedios incluyen todas.
+              </p>
             )}
           </SectionCard>
 
@@ -557,6 +610,26 @@ export function StudentTrackingPage() {
  *   - Otherwise: fall back to the vigency flag `is_effective` — no approval
  *     badge is added when approval does not apply (docs/prompts/09 §3).
  */
+/**
+ * The accommodations that were in force for one grade (name only), as neutral
+ * chips; «Ninguno» when there were none. Server-filtered: the list only holds
+ * what this viewer may see.
+ */
+function GradeAccommodations({ accommodations }: { accommodations: GradeAccommodation[] }) {
+  if (accommodations.length === 0) {
+    return <span className="text-muted-foreground">Ninguno</span>
+  }
+  return (
+    <ul className="flex flex-wrap gap-1" aria-label="Ajustes activos ese día">
+      {accommodations.map((accommodation) => (
+        <li key={accommodation.id}>
+          <Badge tone="neutral">{accommodation.label}</Badge>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
   if (accommodation.requires_external_approval) {
     if (accommodation.approved === true) {

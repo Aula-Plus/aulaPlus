@@ -51,6 +51,9 @@ use Illuminate\Support\Facades\Gate;
  *     comment_trends: array<int, array<string, mixed>>,
  *     by_subject: array<int, array<string, mixed>>,
  *     overall_average: float|null,
+ *     grades: array<int, array<string, mixed>>,
+ *     grades_truncated: bool,
+ *     grades_view: array<string, mixed>,
  * }
  */
 class StudentTrackingResource extends JsonResource
@@ -120,10 +123,19 @@ class StudentTrackingResource extends JsonResource
                 fn () => AlertResource::collection($alerts)
             ),
             'open_alerts_count' => $openAlertsCount,
-            // Academic aggregates — not clinical, so no gating: returned to any
-            // viewer of the student (decision D1/E).
+            // Role-filtered upstream (StudentGradeAccess): a teacher only gets the
+            // subjects they teach unless direction opened more, and no general
+            // average at all while limited to their own subjects.
             'overall_average' => $this->resource['overall_average'],
             'by_subject' => $this->resource['by_subject'],
+            // The most recent visible grades only (StudentTrackingController::
+            // GRADES_LIMIT); `grades_truncated` says when older ones were left
+            // out. The aggregates above always cover every visible grade. Each
+            // grade carries `accommodations` ({id, label} only): the ones in
+            // force that day for that instance that this viewer may see.
+            'grades' => $this->resource['grades'],
+            'grades_truncated' => $this->resource['grades_truncated'],
+            'grades_view' => $this->resource['grades_view'],
         ];
     }
 

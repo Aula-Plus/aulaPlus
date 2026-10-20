@@ -260,11 +260,25 @@ class Accommodation extends Model
      */
     public function appliesToAssessment(Assessment $assessment): bool
     {
-        $subjectIds = $this->subjects()->pluck('subjects.id');
+        return $this->appliesIn($assessment->subject_id, $assessment->type);
+    }
 
-        $subjectApplies = $subjectIds->isEmpty() || $subjectIds->contains($assessment->subject_id);
+    /**
+     * Whether it applies in the given subject and assessment type. Uses the
+     * `subjects` relation when it is already loaded (no query per call when
+     * matching a list in memory), else queries the subject ids.
+     */
+    public function appliesIn(?int $subjectId, AssessmentType|string|null $type): bool
+    {
+        $subjectIds = $this->relationLoaded('subjects')
+            ? $this->subjects->modelKeys()
+            : $this->subjects()->pluck('subjects.id')->all();
+        $type = $type instanceof AssessmentType ? $type->value : $type;
+
+        $subjectApplies = $subjectIds === []
+            || ($subjectId !== null && in_array((int) $subjectId, array_map('intval', $subjectIds), true));
         $typeApplies = empty($this->assessment_types)
-            || in_array($assessment->type?->value, $this->assessment_types, true);
+            || in_array($type, $this->assessment_types, true);
 
         return $subjectApplies && $typeApplies;
     }

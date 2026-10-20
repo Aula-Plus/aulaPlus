@@ -12,6 +12,8 @@ use App\Models\Barrier;
 use App\Models\CalendarEvent;
 use App\Models\Group;
 use App\Models\Student;
+use App\Services\GradeAccessRule;
+use App\Services\StudentGradeAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -25,6 +27,8 @@ use Illuminate\Support\Facades\Gate;
  */
 class GroupProfileController extends Controller
 {
+    public function __construct(protected StudentGradeAccess $gradeAccess) {}
+
     /**
      * GET /api/v1/groups/{group}/accommodations-summary — active accommodations
      * of the group's students, aggregated by `type` (§1).
@@ -59,7 +63,7 @@ class GroupProfileController extends Controller
         $studentIds = $students->pluck('id');
 
         return response()->json([
-            'results' => $this->timelineResults($group, $from, $to),
+            'results' => $this->timelineResults($group, $this->gradeAccess->forGroup($user, $group), $from, $to),
             'marks' => $this->timelineMarks($group, $students, $studentIds, $user, $from, $to),
         ]);
     }
@@ -70,16 +74,22 @@ class GroupProfileController extends Controller
      * how many students have a score loaded. An assessment with no results
      * loaded yet produces no point.
      *
+     * The results counted are those the viewer may see (StudentGradeAccess): a
+     * teacher limited to their own subject gets no point for another subject's
+     * assessment — in a small group its average is nearly an individual grade.
+     *
      * @return list<array<string, mixed>>
      */
-    protected function timelineResults(Group $group, $from, $to): array
+    protected function timelineResults(Group $group, GradeAccessRule $gradeRule, $from, $to): array
     {
+        $visible = fn ($query) => $gradeRule->apply($query);
+
         return Assessment::query()
             ->where('group_id', $group->id)
             ->when($from, fn ($query) => $query->whereDate('administered_at', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('administered_at', '<=', $to))
-            ->withCount('results')
-            ->withAvg('results', 'score')
+            ->withCount(['results' => $visible])
+            ->withAvg(['results' => $visible], 'score')
             ->orderBy('administered_at')
             ->orderBy('id')
             ->get()

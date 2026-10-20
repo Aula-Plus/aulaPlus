@@ -15,6 +15,7 @@ use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\GradesVisibilitySettingsController;
 use App\Http\Controllers\GroupAccommodationNarrativeController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
@@ -98,6 +99,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
 
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
+        Route::get('/grades-visibility', [GradesVisibilitySettingsController::class, 'show']);
+        Route::put('/grades-visibility', [GradesVisibilitySettingsController::class, 'update']);
         Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
