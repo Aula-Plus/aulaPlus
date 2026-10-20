@@ -9,6 +9,7 @@ import type {
   Comment,
   CommentCategory,
   CommentShare,
+  CommentSignal,
   GroupAccommodationSummaryEntry,
   GroupTracking,
   Paginated,
@@ -30,6 +31,11 @@ export interface CommentInput {
   content: string
   /** Optional; several allowed; only this school's categories. */
   category_ids?: number[]
+  /**
+   * The signal for EACH category in `category_ids`, keyed by category id
+   * (ClickUp 86e3qkwpn) — mandatory per category, sent only with categories.
+   */
+  category_signals?: Record<number, CommentSignal>
   /**
    * Roles allowed to see the comment.
    *

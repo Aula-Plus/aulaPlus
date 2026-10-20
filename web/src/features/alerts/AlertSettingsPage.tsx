@@ -38,6 +38,7 @@ const routingTypeLabels: Partial<Record<AlertType, string>> = {
 const routingTypeHints: Partial<Record<AlertType, string>> = {
   escalated_overdue:
     "Siempre le llega a quien pasó la alerta y a quien la tenía que resolver. Acá podés sumar roles.",
+  difficulty_signal: "Nunca le llega a docentes: se arma con observaciones que quizás no pueden leer.",
 }
 
 const ruleSchema = z
@@ -58,8 +59,8 @@ type RuleDraft = Pick<AlertRule, "condition" | "threshold" | "consecutive_count"
 
 function toFormValues(rule: RuleDraft): RuleFormInput {
   return {
-    condition: rule.condition,
-    threshold: rule.threshold,
+    condition: rule.condition === "average_below" ? "average_below" : "consecutive_below",
+    threshold: rule.threshold ?? undefined,
     consecutive_count: rule.consecutive_count ?? 3,
     period_days: rule.period_days ?? 90,
     subject_id: rule.subject_id ? String(rule.subject_id) : "",
@@ -175,6 +176,101 @@ function toInput(values: RuleValues) {
   }
 }
 
+/**
+ * «Señal de dificultad» (ClickUp 86e3qkwpn): "N señales de dificultad en una
+ * misma categoría en D días". Both fields start EMPTY — Aula+ suggests no
+ * value (product will define one later) — and both are required.
+ */
+const difficultyRuleSchema = z.object({
+  signal_count: z
+    .string()
+    .trim()
+    .min(1, "Completá la cantidad")
+    .pipe(z.coerce.number<string>().int("Tiene que ser un número entero").min(2, "Mínimo 2").max(50, "Máximo 50")),
+  period_days: z
+    .string()
+    .trim()
+    .min(1, "Completá el período")
+    .pipe(z.coerce.number<string>().int("Tiene que ser un número entero").min(1, "Mínimo 1 día").max(365, "Máximo 365 días")),
+})
+
+type DifficultyRuleFormInput = z.input<typeof difficultyRuleSchema>
+type DifficultyRuleValues = z.output<typeof difficultyRuleSchema>
+
+function DifficultyRuleForm({
+  initial,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  initial?: Pick<AlertRule, "signal_count" | "period_days">
+  submitLabel: string
+  onSubmit: (values: DifficultyRuleValues) => Promise<void>
+  onCancel: () => void
+}) {
+  const [formError, setFormError] = useState<string | null>(null)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<DifficultyRuleFormInput, unknown, DifficultyRuleValues>({
+    resolver: zodResolver(difficultyRuleSchema),
+    defaultValues: {
+      signal_count: initial?.signal_count != null ? String(initial.signal_count) : "",
+      period_days: initial?.period_days != null ? String(initial.period_days) : "",
+    },
+  })
+
+  async function submit(values: DifficultyRuleValues) {
+    setFormError(null)
+    try {
+      await onSubmit(values)
+    } catch {
+      setFormError("No pudimos guardar la condición. Revisá los valores.")
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit(submit)} className="grid gap-4 sm:grid-cols-2" noValidate>
+      <div className="grid gap-2">
+        <Label htmlFor="difficulty-rule-count">Cantidad de señales de dificultad</Label>
+        <Input id="difficulty-rule-count" type="number" min={2} max={50} {...register("signal_count")} />
+        {errors.signal_count && <p className="text-sm text-destructive">{errors.signal_count.message}</p>}
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="difficulty-rule-period">En cuántos días</Label>
+        <Input id="difficulty-rule-period" type="number" min={1} max={365} {...register("period_days")} />
+        {errors.period_days && <p className="text-sm text-destructive">{errors.period_days.message}</p>}
+      </div>
+      <p className="text-sm text-muted-foreground sm:col-span-2">
+        Cuenta las señales de dificultad de un mismo alumno en una misma categoría, también las de
+        observaciones reservadas. La alerta solo muestra cuántas son y en qué categoría.
+      </p>
+      {formError && (
+        <p role="alert" className="text-sm text-destructive sm:col-span-2">
+          {formError}
+        </p>
+      )}
+      <div className="flex gap-2 sm:col-span-2">
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Guardando…" : submitLabel}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function toDifficultyInput(values: DifficultyRuleValues) {
+  return {
+    condition: "difficulty_signals" as const,
+    signal_count: values.signal_count,
+    period_days: values.period_days,
+  }
+}
+
 function RoutingRow({
   entry,
   onSave,
@@ -188,6 +284,11 @@ function RoutingRow({
 
   useEffect(() => setSelected(entry.recipients), [entry.recipients])
 
+  // Teachers are never offered for «Señal de dificultad» (enforced server-side too).
+  const options = RECIPIENTS.filter(
+    (recipient) => !entry.allowed_recipients || entry.allowed_recipients.includes(recipient),
+  )
+
   const changed =
     selected.length !== entry.recipients.length ||
     selected.some((recipient) => !entry.recipients.includes(recipient))
@@ -196,7 +297,7 @@ function RoutingRow({
     setSelected((current) =>
       current.includes(recipient)
         ? current.filter((value) => value !== recipient)
-        : RECIPIENTS.filter((value) => value === recipient || current.includes(value)),
+        : options.filter((value) => value === recipient || current.includes(value)),
     )
   }
 
@@ -222,7 +323,7 @@ function RoutingRow({
         {label} {entry.is_default && <span className="text-muted-foreground">(por defecto)</span>}
       </legend>
       <div className="flex flex-wrap gap-4">
-        {RECIPIENTS.map((recipient) => {
+        {options.map((recipient) => {
           const id = `routing-${entry.type}-${recipient}`
           return (
             <div key={recipient} className="flex items-center gap-2">
@@ -282,6 +383,7 @@ export function AlertSettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<RuleDraft | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [addingDifficulty, setAddingDifficulty] = useState(false)
 
   function load() {
     return alertSettingsApi
@@ -307,6 +409,32 @@ export function AlertSettingsPage() {
   if (error) return <p className="text-sm text-destructive">{error}</p>
   if (!rules) return <p className="text-muted-foreground">Cargando…</p>
 
+  const performanceRules = rules.filter((rule) => rule.condition !== "difficulty_signals")
+  const difficultyRules = rules.filter((rule) => rule.condition === "difficulty_signals")
+
+  const ruleActions = (rule: AlertRule) => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge tone={rule.active ? "success" : "neutral"}>{rule.active ? "Activa" : "Pausada"}</Badge>
+      <Button type="button" variant="outline" size="sm" onClick={() => setEditingId(rule.id)}>
+        Editar
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={() => onToggle(rule)}>
+        {rule.active ? "Pausar" : "Activar"}
+      </Button>
+      <ConfirmDialog
+        trigger={
+          <Button type="button" variant="destructive" size="sm">
+            Eliminar
+          </Button>
+        }
+        title="Eliminar condición"
+        description="Las alertas que ya se generaron se mantienen."
+        confirmLabel="Eliminar"
+        onConfirm={() => onDelete(rule.id)}
+      />
+    </div>
+  )
+
   const subjectName = (id: number | null) =>
     id === null ? "Todas las materias" : (subjects.find((subject) => subject.id === id)?.name ?? "Materia")
 
@@ -318,6 +446,18 @@ export function AlertSettingsPage() {
 
   async function onUpdate(id: number, values: RuleValues) {
     await alertSettingsApi.updateAlertRule(id, toInput(values))
+    setEditingId(null)
+    await load()
+  }
+
+  async function onCreateDifficulty(values: DifficultyRuleValues) {
+    await alertSettingsApi.createAlertRule(toDifficultyInput(values))
+    setAddingDifficulty(false)
+    await load()
+  }
+
+  async function onUpdateDifficulty(id: number, values: DifficultyRuleValues) {
+    await alertSettingsApi.updateAlertRule(id, toDifficultyInput(values))
     setEditingId(null)
     await load()
   }
@@ -349,7 +489,7 @@ export function AlertSettingsPage() {
     <div className="grid gap-6">
       <PageHeader
         title="Alertas"
-        description="Qué condición dispara una alerta de desempeño bajo sostenido y a quién le llega primero. La decide el colegio, no Aula+."
+        description="Qué condición dispara una alerta de desempeño bajo sostenido o de señal de dificultad y a quién le llega primero. La decide el colegio, no Aula+."
       />
 
       <Card>
@@ -357,14 +497,14 @@ export function AlertSettingsPage() {
           <CardTitle>Desempeño bajo sostenido</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
-          {rules.length === 0 ? (
+          {performanceRules.length === 0 ? (
             <EmptyState
               icon={BellRing}
               message="Todavía no hay ninguna condición: Aula+ no genera esta alerta hasta que el colegio elija una."
             />
           ) : (
             <ul className="grid gap-3">
-              {rules.map((rule) => (
+              {performanceRules.map((rule) => (
                 <li key={rule.id} className="rounded-md border p-4">
                   {editingId === rule.id ? (
                     <RuleForm
@@ -380,28 +520,7 @@ export function AlertSettingsPage() {
                         <p className="font-medium">{describeAlertRule(rule)}</p>
                         <p className="text-sm text-muted-foreground">{subjectName(rule.subject_id)}</p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone={rule.active ? "success" : "neutral"}>
-                          {rule.active ? "Activa" : "Pausada"}
-                        </Badge>
-                        <Button type="button" variant="outline" size="sm" onClick={() => setEditingId(rule.id)}>
-                          Editar
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => onToggle(rule)}>
-                          {rule.active ? "Pausar" : "Activar"}
-                        </Button>
-                        <ConfirmDialog
-                          trigger={
-                            <Button type="button" variant="destructive" size="sm">
-                              Eliminar
-                            </Button>
-                          }
-                          title="Eliminar condición"
-                          description="Las alertas que ya se generaron se mantienen."
-                          confirmLabel="Eliminar"
-                          onConfirm={() => onDelete(rule.id)}
-                        />
-                      </div>
+                      {ruleActions(rule)}
                     </div>
                   )}
                 </li>
@@ -437,6 +556,59 @@ export function AlertSettingsPage() {
                   </Button>
                 ))}
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Señal de dificultad</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <p className="text-sm text-muted-foreground">
+            Se genera cuando un alumno junta cierta cantidad de señales de dificultad en una misma
+            categoría de observaciones, dentro de un período.
+          </p>
+          {difficultyRules.length === 0 ? (
+            <EmptyState
+              icon={BellRing}
+              message="Todavía no hay ninguna condición: Aula+ no genera alertas de señal de dificultad hasta que el colegio la configure."
+            />
+          ) : (
+            <ul className="grid gap-3">
+              {difficultyRules.map((rule) => (
+                <li key={rule.id} className="rounded-md border p-4">
+                  {editingId === rule.id ? (
+                    <DifficultyRuleForm
+                      initial={rule}
+                      submitLabel="Guardar cambios"
+                      onSubmit={(values) => onUpdateDifficulty(rule.id, values)}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-medium">{describeAlertRule(rule)}</p>
+                      {ruleActions(rule)}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {addingDifficulty ? (
+            <div className="rounded-md border p-4">
+              <DifficultyRuleForm
+                submitLabel="Guardar condición"
+                onSubmit={onCreateDifficulty}
+                onCancel={() => setAddingDifficulty(false)}
+              />
+            </div>
+          ) : (
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setAddingDifficulty(true)}>
+                Nueva condición de señal de dificultad
+              </Button>
             </div>
           )}
         </CardContent>

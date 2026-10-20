@@ -16,7 +16,8 @@ use Illuminate\Http\Response;
 /**
  * The school's alert settings (ClickUp 86e3jpzcv; documento vivo screen 11):
  * the sustained-low-performance conditions ("el umbral es una perilla, no un
- * cálculo nuestro") and who each alert type reaches first. Direction and
+ * cálculo nuestro"), the «Señal de dificultad» conditions (ClickUp 86e3qkwpn)
+ * and who each alert type reaches first. Direction and
  * psychopedagogy only — see AlertRulePolicy.
  */
 class AlertSettingsController extends Controller
@@ -65,9 +66,9 @@ class AlertSettingsController extends Controller
     }
 
     /**
-     * Clear the parameter the chosen condition doesn't use, so a rule never
+     * Clear the parameters the chosen condition doesn't use, so a rule never
      * carries a stale `period_days` on a "consecutive" condition (or vice
-     * versa).
+     * versa), nor a threshold/subject on a «Señal de dificultad» one.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
@@ -76,10 +77,14 @@ class AlertSettingsController extends Controller
     {
         $condition = AlertCondition::from($data['condition'] ?? $existing->condition->value);
 
-        if ($condition === AlertCondition::ConsecutiveBelow) {
-            $data['period_days'] = null;
-        } else {
-            $data['consecutive_count'] = null;
+        $unused = match ($condition) {
+            AlertCondition::ConsecutiveBelow => ['period_days', 'signal_count'],
+            AlertCondition::AverageBelow => ['consecutive_count', 'signal_count'],
+            AlertCondition::DifficultySignals => ['threshold', 'consecutive_count', 'subject_id'],
+        };
+
+        foreach ($unused as $field) {
+            $data[$field] = null;
         }
 
         return $data;

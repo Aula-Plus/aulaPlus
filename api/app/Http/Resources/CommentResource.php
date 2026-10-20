@@ -29,9 +29,12 @@ class CommentResource extends JsonResource
                 'name' => $this->author->name,
                 'role' => $this->author->getRoleNames()->first(),
             ]),
+            // With the author's signal per category (ClickUp 86e3qkwpn); null
+            // on observations written before signals existed.
             'categories' => $this->whenLoaded('categories', fn () => $this->categories->map(fn ($category) => [
                 'id' => $category->id,
                 'name' => $category->name,
+                'signal' => $category->pivot?->signal,
             ])->values()->all()),
             'visible_to' => $this->visible_to,
             // «Elegir personas»: ids only, for the author to see who they picked.

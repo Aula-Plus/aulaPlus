@@ -71,6 +71,10 @@ it('tags a comment with several optional categories of its own school only', fun
     $response = $this->postJson($url, [
         'content' => 'Se puso a llorar cuando le devolví el escrito',
         'category_ids' => [categoryId($school, 'Emocional'), categoryId($school, 'Académico')],
+        'category_signals' => [
+            categoryId($school, 'Emocional') => 'difficulty',
+            categoryId($school, 'Académico') => 'no_change',
+        ],
     ])->assertCreated();
     expect(collect($response->json('data.categories'))->pluck('name')->all())->toEqualCanonicalizing(['Emocional', 'Académico']);
 
@@ -93,14 +97,14 @@ it('does not accept the old tone field any more', function () {
         ->assertJsonMissingPath('data.tone');
 });
 
-it('never opens an alert from comments', function () {
+it('never opens an alert from comments while no «Señal de dificultad» rule is configured', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $student = studentWithTeacher($school, $teacher);
     $social = categoryId($school, 'Social');
 
     Comment::factory()->count(6)->forSubject($student)->create(['author_id' => $teacher->id])
-        ->each(fn (Comment $comment) => $comment->categories()->attach($social));
+        ->each(fn (Comment $comment) => $comment->categories()->attach($social, ['signal' => 'difficulty']));
 
     expect(Alert::withoutGlobalScopes()->count())->toBe(0);
 });
@@ -116,7 +120,7 @@ it('flags a trend only to psychopedagogy and direction, from the school\'s own t
 
     foreach ([$teacher, ...$otherTeachers] as $i => $author) {
         Comment::factory()->forSubject($student)->create(['author_id' => $author->id, 'created_at' => now()->subDays($i * 5)])
-            ->categories()->attach($social);
+            ->categories()->attach($social, ['signal' => 'difficulty']);
     }
 
     Sanctum::actingAs($psico);
@@ -143,7 +147,7 @@ it('does not flag a trend below the threshold, outside the window, or counting c
     // Two recent + one too old = below threshold.
     foreach ([1, 2, 30] as $daysAgo) {
         Comment::factory()->forSubject($student)->create(['author_id' => $teacher->id, 'created_at' => now()->subDays($daysAgo)])
-            ->categories()->attach($social);
+            ->categories()->attach($social, ['signal' => 'difficulty']);
     }
     Sanctum::actingAs($psico);
     $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');
@@ -151,7 +155,7 @@ it('does not flag a trend below the threshold, outside the window, or counting c
     // A third recent one, but "solo quien escribe" (the psico's own): since
     // ClickUp 86e3qkwnv it counts for nobody's common trend, not even its author's.
     Comment::factory()->forSubject($student)->authorOnly()->create(['author_id' => $psico->id, 'created_at' => now()->subDay()])
-        ->categories()->attach($social);
+        ->categories()->attach($social, ['signal' => 'difficulty']);
     Sanctum::actingAs($director);
     $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');
     Sanctum::actingAs($psico);
@@ -159,7 +163,7 @@ it('does not flag a trend below the threshold, outside the window, or counting c
 
     // A third shared one, «Solo Psicopedagogía»: the psico counts it, the director cannot.
     Comment::factory()->forSubject($student)->visibleTo(['psychopedagogue'])->create(['author_id' => $teacher->id, 'created_at' => now()->subDay()])
-        ->categories()->attach($social);
+        ->categories()->attach($social, ['signal' => 'difficulty']);
     Sanctum::actingAs($director);
     $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk()->assertJsonCount(0, 'data.comment_trends');
 
@@ -211,7 +215,11 @@ it('tags a group comment only with its own school\'s categories', function () {
     $this->postJson($url, ['content' => 'x', 'category_ids' => [categoryId($other, 'Social')]])
         ->assertJsonValidationErrors('category_ids.0');
 
-    $this->postJson($url, ['content' => 'x', 'category_ids' => [categoryId($school, 'Social')]])
+    $this->postJson($url, [
+        'content' => 'x',
+        'category_ids' => [categoryId($school, 'Social')],
+        'category_signals' => [categoryId($school, 'Social') => 'improvement'],
+    ])
         ->assertCreated()
         ->assertJsonPath('data.categories.0.name', 'Social');
 });

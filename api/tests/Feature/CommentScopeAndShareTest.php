@@ -142,7 +142,7 @@ it('shows a teacher their private signal once their own private notes reach the 
     [$social, $academic] = CommentCategory::withoutGlobalScopes()->where('school_id', $school->id)->limit(2)->pluck('id')->all();
     $private = fn (int $daysAgo, array $categories) => Comment::factory()->forSubject($student)->authorOnly()
         ->create(['author_id' => $teacher->id, 'created_at' => now()->subDays($daysAgo)])
-        ->categories()->attach($categories);
+        ->categories()->attach($categories, ['signal' => 'difficulty']);
 
     // Two recent Social + one outside the 10-day window, one in another
     // category and one without category: no single category reaches 3.
@@ -172,7 +172,7 @@ it('does not count psychopedagogy\'s or direction\'s own private notes in their 
         foreach ([1, 2, 3] as $daysAgo) {
             Comment::factory()->forSubject($student)->authorOnly()
                 ->create(['author_id' => $author->id, 'created_at' => now()->subDays($daysAgo)])
-                ->categories()->attach($category);
+                ->categories()->attach($category, ['signal' => 'difficulty']);
         }
     }
 
@@ -279,7 +279,7 @@ it('does not count extracts toward the recipient\'s trend', function () {
     $category = CommentCategory::withoutGlobalScopes()->where('school_id', $school->id)->value('id');
     $original = Comment::factory()->forSubject($student)->visibleTo(Comment::SCOPE_PSYCHOPEDAGOGY_ONLY)
         ->create(['author_id' => $psico->id]);
-    $original->categories()->attach($category);
+    $original->categories()->attach($category, ['signal' => 'difficulty']);
 
     Sanctum::actingAs($psico);
     foreach ([1, 2, 3] as $i) {

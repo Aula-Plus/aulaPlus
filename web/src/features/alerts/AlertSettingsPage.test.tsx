@@ -114,4 +114,85 @@ describe("AlertSettingsPage", () => {
     expect(screen.getByText("No tenés permiso para ver esta pantalla.")).toBeInTheDocument()
     expect(alertSettingsApi.fetchAlertSettings).not.toHaveBeenCalled()
   })
+
+  describe("«Señal de dificultad» (ClickUp 86e3qkwpn)", () => {
+    it("starts both fields empty, with no suggested value, and requires them", async () => {
+      render(<AlertSettingsPage />)
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Nueva condición de señal de dificultad" }),
+      )
+
+      const count = screen.getByLabelText("Cantidad de señales de dificultad")
+      const days = screen.getByLabelText("En cuántos días")
+      expect(count).toHaveValue(null)
+      expect(days).toHaveValue(null)
+      expect(count).not.toHaveAttribute("placeholder")
+
+      await userEvent.click(screen.getByRole("button", { name: "Guardar condición" }))
+      expect(await screen.findByText("Completá la cantidad")).toBeInTheDocument()
+      expect(screen.getByText("Completá el período")).toBeInTheDocument()
+      expect(alertSettingsApi.createAlertRule).not.toHaveBeenCalled()
+
+      await userEvent.type(count, "3")
+      await userEvent.type(days, "21")
+      await userEvent.click(screen.getByRole("button", { name: "Guardar condición" }))
+      await waitFor(() =>
+        expect(alertSettingsApi.createAlertRule).toHaveBeenCalledWith({
+          condition: "difficulty_signals",
+          signal_count: 3,
+          period_days: 21,
+        }),
+      )
+    })
+
+    it("lists difficulty conditions in their own card, apart from the performance ones", async () => {
+      vi.mocked(alertSettingsApi.fetchAlertSettings).mockResolvedValue({
+        rules: [
+          {
+            id: 9,
+            condition: "difficulty_signals",
+            threshold: null,
+            consecutive_count: null,
+            signal_count: 3,
+            period_days: 21,
+            subject_id: null,
+            active: true,
+            created_at: null,
+          },
+        ],
+        routing,
+      })
+      render(<AlertSettingsPage />)
+
+      expect(
+        await screen.findByText("3 señales de dificultad en una misma categoría en 21 días"),
+      ).toBeInTheDocument()
+      // The performance card still says nothing is configured there.
+      expect(screen.getByText(/Aula\+ no genera esta alerta hasta que el colegio elija una/)).toBeInTheDocument()
+    })
+
+    it("never offers teachers as recipients of the difficulty alert", async () => {
+      vi.mocked(alertSettingsApi.fetchAlertSettings).mockResolvedValue({
+        rules: [],
+        routing: [
+          ...routing,
+          {
+            type: "difficulty_signal" as const,
+            recipients: ["psychopedagogue" as const],
+            allowed_recipients: ["psychopedagogue" as const, "director" as const],
+            is_default: true,
+          },
+        ],
+      })
+      render(<AlertSettingsPage />)
+
+      const legend = await screen.findByText("Señal de dificultad", { selector: "legend" })
+      const fieldset = legend.closest("fieldset") as HTMLElement
+      expect(within(fieldset).queryByRole("checkbox", { name: "Docente de la materia" })).not.toBeInTheDocument()
+      expect(within(fieldset).getByRole("checkbox", { name: "Psicopedagogía" })).toBeChecked()
+      // Dirección is not marked by default.
+      expect(within(fieldset).getByRole("checkbox", { name: "Dirección" })).not.toBeChecked()
+    })
+  })
 })
+

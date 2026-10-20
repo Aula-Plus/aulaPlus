@@ -9,7 +9,14 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
-import { roleLabels, type Comment, type CommentCategory, type StaffMember } from "@/types"
+import {
+  commentSignalLabels,
+  roleLabels,
+  type Comment,
+  type CommentCategory,
+  type CommentSignal,
+  type StaffMember,
+} from "@/types"
 import type { CommentInput } from "./trackingApi"
 import { CommentScopeSelector, type CommentScopeOption, type PickedPeople } from "./CommentScopeSelector"
 
@@ -42,6 +49,56 @@ function buildPeopleField(
   if (option === "author_only") return {}
   const entries = Object.entries(picked).filter(([, ids]) => ids && ids.length > 0)
   return entries.length > 0 ? { visible_to_users: Object.fromEntries(entries) } : {}
+}
+
+const SIGNALS: CommentSignal[] = ["improvement", "difficulty", "no_change"]
+
+/**
+ * One signal per marked category (ClickUp 86e3qkwpn): «Señal de mejora»,
+ * «Señal de dificultad» or «Sin cambio observado», each counting only in its
+ * category. «Sin cambio observado» never adds to a trend, so the form says
+ * so. Required — also enforced by the backend (422).
+ */
+function CategorySignalPicker({
+  category,
+  value,
+  onChange,
+}: {
+  category: CommentCategory
+  value: CommentSignal | undefined
+  onChange: (signal: CommentSignal) => void
+}) {
+  const legendId = `comment-signal-${category.id}`
+  return (
+    <fieldset className="grid gap-1.5" aria-labelledby={legendId}>
+      <legend id={legendId} className="text-sm font-medium">
+        Señal en {category.name}
+      </legend>
+      <div className="flex flex-wrap gap-4">
+        {SIGNALS.map((signal) => {
+          const id = `comment-signal-${category.id}-${signal}`
+          return (
+            <div key={signal} className="flex items-center gap-2">
+              <input
+                id={id}
+                type="radio"
+                name={legendId}
+                className="size-4"
+                checked={value === signal}
+                onChange={() => onChange(signal)}
+              />
+              <Label htmlFor={id}>{commentSignalLabels[signal]}</Label>
+            </div>
+          )
+        })}
+      </div>
+      {value === "no_change" && (
+        <p className="text-sm text-muted-foreground">
+          Esta observación no va a contar para posibles tendencias en {category.name}.
+        </p>
+      )}
+    </fieldset>
+  )
 }
 
 export interface CommentsPanelProps {
@@ -97,6 +154,7 @@ export function CommentsPanel({
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [content, setContent] = useState("")
   const [categoryIds, setCategoryIds] = useState<number[]>([])
+  const [signals, setSignals] = useState<Record<number, CommentSignal>>({})
   const [scope, setScope] = useState<CommentScopeOption>("everyone")
   const [pickedPeople, setPickedPeople] = useState<PickedPeople>({})
   const [error, setError] = useState<string | null>(null)
@@ -112,13 +170,27 @@ export function CommentsPanel({
       return
     }
 
+    // Only the categories still marked; every one needs its signal.
+    const selectedCategories = categories.filter((category) => categoryIds.includes(category.id))
+    if (selectedCategories.some((category) => !signals[category.id])) {
+      setError("Elegí una señal para cada categoría.")
+      return
+    }
+
     // The scope selector maps to the payload here — `visible_to` and
     // `author_only` are never sent together, and "everyone" omits both
     // (docs/prompts/19-comentarios-alcance.md §3, keeping the Session 8 rule
     // that "nothing selected" means visible to everyone, never `[]`).
     const input: CommentInput = {
       content: trimmed,
-      ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
+      ...(selectedCategories.length > 0
+        ? {
+            category_ids: selectedCategories.map((category) => category.id),
+            category_signals: Object.fromEntries(
+              selectedCategories.map((category) => [category.id, signals[category.id]]),
+            ),
+          }
+        : {}),
       ...buildScopeFields(scope),
       ...buildPeopleField(scope, pickedPeople),
     }
@@ -128,6 +200,7 @@ export function CommentsPanel({
       await onCreate(input)
       setContent("")
       setCategoryIds([])
+      setSignals({})
       setScope("everyone")
       setPickedPeople({})
     } catch {
@@ -186,6 +259,17 @@ export function CommentsPanel({
               />
             </div>
           )}
+
+          {categories
+            .filter((category) => categoryIds.includes(category.id))
+            .map((category) => (
+              <CategorySignalPicker
+                key={category.id}
+                category={category}
+                value={signals[category.id]}
+                onChange={(signal) => setSignals((current) => ({ ...current, [category.id]: signal }))}
+              />
+            ))}
 
           <CommentScopeSelector
             value={scope}
@@ -259,6 +343,7 @@ export function CommentsPanel({
                 {(comment.categories ?? []).map((category) => (
                   <Badge key={category.id} tone="neutral">
                     {category.name}
+                    {category.signal && ` · ${commentSignalLabels[category.signal]}`}
                   </Badge>
                 ))}
                 {comment.author_only && <Badge tone="neutral">Privado</Badge>}

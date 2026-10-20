@@ -113,8 +113,12 @@ export interface Comment {
   commentable_type: string
   commentable_id: number
   content: string
-  /** Optional, several allowed; empty = "Sin categoría". */
-  categories?: { id: number; name: string }[]
+  /**
+   * Optional, several allowed; empty = "Sin categoría". Each carries the
+   * author's signal for it (ClickUp 86e3qkwpn); `null` on observations written
+   * before signals existed.
+   */
+  categories?: { id: number; name: string; signal?: CommentSignal | null }[]
   /**
    * Roles allowed to see the comment, or null when visible to everyone who
    * can see the parent record. Never an empty array from the API.
@@ -136,13 +140,26 @@ export interface Comment {
   created_at: string | null
 }
 
+/**
+ * Mirror of `App\Enums\CommentSignal` — the signal an author picks for each
+ * category of an observation (ClickUp 86e3qkwpn). Mandatory per category.
+ */
+export type CommentSignal = "improvement" | "difficulty" | "no_change"
+
+export const commentSignalLabels: Record<CommentSignal, string> = {
+  improvement: "Señal de mejora",
+  difficulty: "Señal de dificultad",
+  no_change: "Sin cambio observado",
+}
+
 /** Mirror of `App\Enums\AlertType`. */
-export type AlertType = "performance" | "planning_attendance" | "escalated_overdue"
+export type AlertType = "performance" | "planning_attendance" | "escalated_overdue" | "difficulty_signal"
 
 export const alertTypeLabels: Record<AlertType, string> = {
   performance: "Rendimiento",
   planning_attendance: "Planificación / asistencia",
   escalated_overdue: "Alerta escalada con plazo vencido",
+  difficulty_signal: "Señal de dificultad",
 }
 
 /** Mirror of `App\Enums\AlertOutcome` — the three ways out of an alert (ClickUp 86e3jpzdp). */
@@ -195,6 +212,9 @@ export interface Alert {
   /** The subject a sustained-low-performance alert was met in (ClickUp 86e3jpzcv). */
   subject_id?: number | null
   subject_name?: string | null
+  /** «Señal de dificultad» alerts: the category the signals were counted in (ClickUp 86e3qkwpn). */
+  comment_category_id?: number | null
+  comment_category_name?: string | null
   type: AlertType
   severity: AlertSeverity
   description: string
@@ -1105,7 +1125,7 @@ export interface GradesVisibilitySettings {
 // ── Alert settings (ClickUp 86e3jpzcv) ──────────────────────────────────────
 
 /** Mirror of `App\Enums\AlertCondition`. */
-export type AlertCondition = "consecutive_below" | "average_below"
+export type AlertCondition = "consecutive_below" | "average_below" | "difficulty_signals"
 
 /** Mirror of `App\Enums\AlertRecipient` — who an alert type reaches first. */
 export type AlertRecipient = "teacher" | "psychopedagogue" | "director"
@@ -1116,12 +1136,19 @@ export const alertRecipientLabels: Record<AlertRecipient, string> = {
   director: "Dirección",
 }
 
-/** A school-configured sustained-low-performance condition (`AlertRuleResource`). */
+/**
+ * A school-configured alert condition (`AlertRuleResource`): sustained low
+ * performance, or «Señal de dificultad» (ClickUp 86e3qkwpn), which uses only
+ * `signal_count` and `period_days`.
+ */
 export interface AlertRule {
   id: number
   condition: AlertCondition
-  threshold: number
+  /** `null` on a «Señal de dificultad» condition. */
+  threshold: number | null
   consecutive_count: number | null
+  /** «Señal de dificultad»: how many signals in one category. */
+  signal_count?: number | null
   period_days: number | null
   /** `null` = applies to every subject. */
   subject_id: number | null
@@ -1132,6 +1159,8 @@ export interface AlertRule {
 export interface AlertRoutingEntry {
   type: AlertType
   recipients: AlertRecipient[]
+  /** The recipients the school may choose; teachers never get «Señal de dificultad». */
+  allowed_recipients?: AlertRecipient[]
   /** `true` while the school hasn't changed the product default. */
   is_default: boolean
 }

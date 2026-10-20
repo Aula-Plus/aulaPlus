@@ -3,8 +3,12 @@
 namespace App\Http\Requests;
 
 use App\Enums\AlertOutcome;
+use App\Enums\Role;
 use App\Models\Alert;
+use App\Models\User;
+use App\Support\AlertRouting;
 use App\Support\Tenancy;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,6 +18,10 @@ use Illuminate\Validation\Rule;
  * becomes responsible (same school, active, not the actor). The note is
  * optional and bounded: it is an operational note for whoever receives the
  * case, not a place for clinical detail.
+ *
+ * An alert type that never reaches teachers (the «Señal de dificultad» alert,
+ * ClickUp 86e3qkwpn) cannot be handed to a teacher either: the assignee must
+ * hold a school-wide role.
  */
 class ChooseAlertOutcomeRequest extends FormRequest
 {
@@ -45,5 +53,27 @@ class ChooseAlertOutcomeRequest extends FormRequest
             ],
             'note' => ['nullable', 'string', 'max:2000'],
         ];
+    }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            /** @var Alert $alert */
+            $alert = $this->route('alert');
+            $assigneeId = $this->input('assignee_id');
+
+            if ($validator->errors()->has('assignee_id') || $assigneeId === null || AlertRouting::allowsTeachers($alert->type)) {
+                return;
+            }
+
+            $assignee = User::query()->where('school_id', Tenancy::schoolId())->find((int) $assigneeId);
+
+            if ($assignee === null || ! $assignee->hasAnyRole(Role::schoolWideValues())) {
+                $validator->errors()->add('assignee_id', 'This alert can only be handed to psychopedagogy or direction.');
+            }
+        }];
     }
 }

@@ -56,7 +56,12 @@ export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps)
           >
             <div>
               <p className="font-medium">{studentNames[alert.student_id] ?? "Alumno"}</p>
-              <p>{alertTypeLabels[alert.type]}</p>
+              <p>
+                {alertTypeLabels[alert.type]}
+                {alert.type === "difficulty_signal" && alert.comment_category_name
+                  ? ` — ${alert.comment_category_name}`
+                  : ""}
+              </p>
               {alert.created_at && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Desde el {formatShortDate(alert.created_at)}

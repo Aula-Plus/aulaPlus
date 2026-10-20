@@ -18,6 +18,7 @@ class AlertResource extends JsonResource
      */
     public const RELATIONS = [
         'subject:id,name',
+        'commentCategory:id,name',
         'assignee:id,name',
         'outcomeBy:id,name',
         'actions.actor:id,name',
@@ -37,6 +38,9 @@ class AlertResource extends JsonResource
             'student_name' => $this->whenLoaded('student', fn () => $this->student?->full_name),
             'subject_id' => $this->subject_id,
             'subject_name' => $this->whenLoaded('subject', fn () => $this->subject?->name),
+            // «Señal de dificultad» alerts (ClickUp 86e3qkwpn): the category only.
+            'comment_category_id' => $this->comment_category_id,
+            'comment_category_name' => $this->whenLoaded('commentCategory', fn () => $this->commentCategory?->name),
             'source_alert_id' => $this->source_alert_id,
             'type' => $this->type->value,
             'severity' => $this->severity->value,

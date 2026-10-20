@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AlertOutcome;
+use App\Enums\Role;
 use App\Http\Requests\ChooseAlertOutcomeRequest;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\User;
+use App\Support\AlertRouting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,7 +64,9 @@ class AlertOutcomeController extends Controller
     /**
      * GET /api/v1/alerts/{alert}/handoff-candidates — the active staff members
      * of the school the alert can be handed to (everyone but the caller), with
-     * their roles so the UI can group them by role.
+     * their roles so the UI can group them by role. For an alert type that
+     * never reaches teachers («Señal de dificultad»), only psychopedagogy and
+     * direction are offered (ChooseAlertOutcomeRequest enforces it too).
      */
     public function candidates(Request $request, Alert $alert): JsonResponse
     {
@@ -73,6 +77,7 @@ class AlertOutcomeController extends Controller
             ->whereKeyNot($request->user()->id)
             ->whereNull('disabled_at')
             ->whereNotNull('password')
+            ->when(! AlertRouting::allowsTeachers($alert->type), fn ($query) => $query->role(Role::schoolWideValues()))
             ->with('roles:id,name')
             ->orderBy('name')
             ->get(['id', 'name'])

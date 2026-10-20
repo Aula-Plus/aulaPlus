@@ -145,4 +145,25 @@ describe("AlertsSection", () => {
     expect(screen.getByRole("region", { name: "Alertas" })).toBeInTheDocument()
     expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument()
   })
+
+  it("renders a «Señal de dificultad» alert with its category and only the count", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      {
+        ...newAlert,
+        id: 11,
+        type: "difficulty_signal",
+        subject_id: null,
+        subject_name: null,
+        comment_category_id: 4,
+        comment_category_name: "Social",
+        description: "3 señales de dificultad en Social",
+        recipients: ["psychopedagogue"],
+      },
+    ])
+    renderPage()
+
+    expect(await screen.findByText(/Señal de dificultad — Social/)).toBeInTheDocument()
+    expect(screen.getByText("3 señales de dificultad en Social")).toBeInTheDocument()
+  })
 })
+
