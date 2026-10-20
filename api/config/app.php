@@ -71,6 +71,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | School Timezone
+    |--------------------------------------------------------------------------
+    |
+    | The wall-clock timezone of the schools this deployment serves. Timestamps
+    | stay stored in the app timezone (UTC); this is only used where a rule is
+    | defined by a local calendar day (e.g. the periodic grades cutoff), so
+    | "today" and day boundaries don't shift by the UTC offset. Read it through
+    | App\Support\SchoolTime.
+    |
+    */
+
+    'school_timezone' => env('SCHOOL_TIMEZONE', 'America/Montevideo'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

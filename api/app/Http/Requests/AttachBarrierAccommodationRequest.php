@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Accommodation;
 use App\Models\Barrier;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -11,17 +12,27 @@ use Illuminate\Validation\Rule;
  * a separate step, see BarrierAccommodationController::validateLink()).
  * Not specified as its own ability in docs/prompts/03-flujos-aprobacion-
  * trazabilidad.md §4, so this reuses the same authorization as editing the
- * barrier (BarrierPolicy::update — teacher/psychopedagogue), consistent with
- * "proposing a link" being a form of editing the barrier's accommodations.
+ * barrier (BarrierPolicy::update — psychopedagogue, or a teacher of the
+ * student), consistent with "proposing a link" being a form of editing the
+ * barrier's accommodations.
+ *
+ * On top of that the user must be allowed to see the accommodation itself
+ * (AccommodationPolicy::view → Accommodation::scopeVisibleTo): a teacher can't
+ * link — and so probe — one scoped to a subject they don't teach. When the id
+ * can't be resolved we defer to the `exists` rule (422, not a misleading 403).
+ * The accommodation must also belong to the barrier's own student.
  */
 class AttachBarrierAccommodationRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        /** @var Barrier $barrier */
-        $barrier = $this->route('barrier');
+        if (! $this->user()->can('update', $this->barrier())) {
+            return false;
+        }
 
-        return $this->user()->can('update', $barrier);
+        $accommodation = Accommodation::find($this->input('accommodation_id'));
+
+        return $accommodation === null || $this->user()->can('view', $accommodation);
     }
 
     /**
@@ -33,10 +44,17 @@ class AttachBarrierAccommodationRequest extends FormRequest
             'accommodation_id' => [
                 'required',
                 'integer',
-                Rule::exists('accommodations', 'id')->where(
-                    fn ($query) => $query->where('school_id', $this->user()->school_id)
-                ),
+                Rule::exists('accommodations', 'id')
+                    ->where('school_id', $this->user()->school_id)
+                    ->where('student_id', $this->barrier()->student_id)
+                    ->whereNull('deleted_at'),
             ],
         ];
+    }
+
+    protected function barrier(): Barrier
+    {
+        /** @var Barrier */
+        return $this->route('barrier');
     }
 }

@@ -66,7 +66,7 @@ export function ScreeningTestApplicationPage() {
     groupsApi
       .fetchGroup(groupId)
       .then(setGroup)
-      .catch(() => setError("No pudimos cargar la clase."))
+      .catch(() => setError("No pudimos cargar el grupo."))
     screeningApi
       .fetchScreeningTestTypes()
       .then(setTypes)
@@ -187,7 +187,7 @@ export function ScreeningTestApplicationPage() {
       )}
 
       {applications.length === 0 ? (
-        <EmptyState icon={ClipboardList} message="Todavía no hay aplicaciones en esta clase." />
+        <EmptyState icon={ClipboardList} message="Todavía no hay aplicaciones en este grupo." />
       ) : (
         <section className="grid gap-4">
           <h2 className="text-lg font-semibold">Aplicaciones</h2>

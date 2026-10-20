@@ -7,7 +7,7 @@ import * as supportApi from "./supportApi"
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[{ pathname: "/ayuda", state: { from: "/alumnos/3" } }]}>
+    <MemoryRouter initialEntries={[{ pathname: "/ayuda", state: { from: "/alumnos/3/seguimiento" } }]}>
       <SupportPage />
     </MemoryRouter>,
   )
@@ -37,7 +37,8 @@ describe("SupportPage", () => {
       expect(send).toHaveBeenCalledWith({
         kind: "improvement",
         message: "Poder imprimir la ficha",
-        screen: "/alumnos/3",
+        screen: "/alumnos/3/seguimiento",
+        screen_name: "Perfil del alumno",
       }),
     )
     expect(await screen.findByText(/recibimos tu mensaje/i)).toBeInTheDocument()

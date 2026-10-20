@@ -31,7 +31,7 @@ class SupportMessageController extends Controller
 
         if ($recipients !== []) {
             Notification::route('mail', $recipients)
-                ->notify(new SupportMessageNotification($message));
+                ->notify(new SupportMessageNotification($message, $request->validated('screen_name')));
         }
 
         return response()->json(['data' => ['id' => $message->id]], 201);

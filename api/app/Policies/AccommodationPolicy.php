@@ -9,6 +9,16 @@ use App\Models\User;
 /**
  * Holds sensitive data about a minor's learning profile — see CLAUDE.md
  * security rule 11.
+ *
+ * - view: tenant check, then the visibility rule of
+ *   Accommodation::scopeVisibleTo — school-wide roles see every accommodation;
+ *   a teacher only the general ones and those scoped to a subject they teach
+ *   the student (ClickUp 86e3dpbwy follow-up).
+ * - create: any staff role — a teacher may propose one (living document,
+ *   screen 06); approval is a separate step.
+ * - update/delete: psychopedagogy and direction only. A teacher never edits an
+ *   accommodation: the response would carry the full record (origin, scope,
+ *   description), including ones scoped to subjects the teacher can't see.
  */
 class AccommodationPolicy
 {
@@ -19,7 +29,8 @@ class AccommodationPolicy
 
     public function view(User $user, Accommodation $accommodation): bool
     {
-        return $this->sharesSchool($user, $accommodation);
+        return $this->sharesSchool($user, $accommodation)
+            && $accommodation->isVisibleTo($user);
     }
 
     public function create(User $user): bool
@@ -29,12 +40,13 @@ class AccommodationPolicy
 
     public function update(User $user, Accommodation $accommodation): bool
     {
-        return $this->sharesSchool($user, $accommodation);
+        return $this->sharesSchool($user, $accommodation)
+            && $user->hasAnyRole(Role::schoolWideValues());
     }
 
     public function delete(User $user, Accommodation $accommodation): bool
     {
-        return $this->sharesSchool($user, $accommodation);
+        return $this->update($user, $accommodation);
     }
 
     /**

@@ -72,7 +72,7 @@ export function GroupTrackingPage() {
     <div className="grid gap-6">
       <PageHeader
         backTo="/clases"
-        backLabel="Volver a clases"
+        backLabel="Volver a grupos"
         title={`Perfil del grupo — ${group.name}`}
         description={`Tendencia de los últimos ${trend.period_days} días`}
       >
@@ -93,7 +93,7 @@ export function GroupTrackingPage() {
 
       <SectionCard title="Alumnos" bare={tracking.students.length > 0}>
         {tracking.students.length === 0 ? (
-          <EmptyState icon={Users} message="La clase no tiene alumnos." />
+          <EmptyState icon={Users} message="El grupo no tiene alumnos." />
         ) : (
           <Table>
             <TableHeader>
@@ -135,7 +135,7 @@ export function GroupTrackingPage() {
       <CommentsPanel
         comments={comments ?? []}
         onCreate={handleCreateComment}
-        title="Comentarios de la clase"
+        title="Comentarios del grupo"
         categories={categories}
       />
     </div>

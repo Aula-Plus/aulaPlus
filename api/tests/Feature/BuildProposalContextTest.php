@@ -4,9 +4,11 @@ use App\Actions\AI\BuildProposalContext;
 use App\Enums\AIProposalType;
 use App\Models\Accommodation;
 use App\Models\AIProposal;
+use App\Models\AnnualPlan;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
 
@@ -105,4 +107,111 @@ it('references a personalised target student by an opaque id, never by name', fu
     expect($context['target_student']['ref'])->toBe('Student #1')
         ->and($context['target_student']['learning_profile'])->toBe(['reading' => 'needs support'])
         ->and(json_encode($context))->not->toContain('Target Secret Name');
+});
+
+/**
+ * A group with one student and accommodations that differ in one thing each,
+ * labelled by focus_area so the assertions read what reached the model.
+ */
+function contextScopeScenario(): array
+{
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $math = Subject::factory()->create(['school_id' => $school->id]);
+    $science = Subject::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher, $math);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $group->students()->attach($student, ['school_year' => now()->year]);
+
+    $make = fn (string $focusArea, array $attributes = []) => Accommodation::factory()->create([
+        'student_id' => $student->id,
+        'focus_area' => $focusArea,
+        'starts_on' => now()->subMonth()->toDateString(),
+        ...$attributes,
+    ]);
+
+    $make('general');
+    $make('pending', ['requires_external_approval' => true, 'approved' => null]);
+    $make('rejected', ['requires_external_approval' => true, 'approved' => false]);
+    $make('approved', ['requires_external_approval' => true, 'approved' => true]);
+    $make('inactive', ['active' => false]);
+    $make('future', ['starts_on' => now()->addWeek()->toDateString()]);
+    $make('math')->subjects()->attach($math);
+    $make('science')->subjects()->attach($science);
+    $make('written', ['assessment_types' => ['written']]);
+
+    return compact('school', 'teacher', 'group', 'math', 'science', 'student');
+}
+
+function contextFor(array $scenario, AIProposalType $type, array $parameters): array
+{
+    $proposal = AIProposal::factory()->create([
+        'group_id' => $scenario['group']->id,
+        'requested_by_id' => $scenario['teacher']->id,
+        'type' => $type,
+        'input_parameters' => $parameters,
+    ]);
+
+    return Tenancy::forSchool($scenario['school'], fn () => (new BuildProposalContext)($proposal));
+}
+
+function focusAreas(array $context): array
+{
+    return collect($context['student_cohort_summary']['active_accommodations_by_focus_area'])
+        ->keys()->sort()->values()->all();
+}
+
+it('only sends accommodations in force: active, approved when required and already started', function () {
+    $scenario = contextScopeScenario();
+
+    $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
+
+    // No subject in the request: every subject's accommodations count.
+    expect(focusAreas($context))->toBe(['approved', 'general', 'math', 'science', 'written']);
+});
+
+it('only sends the general accommodations and those of the requested subject', function () {
+    $scenario = contextScopeScenario();
+
+    $context = contextFor($scenario, AIProposalType::AnnualPlan, [
+        'subject_id' => $scenario['math']->id,
+        'student_id' => $scenario['student']->id,
+    ]);
+
+    expect(focusAreas($context))->toBe(['approved', 'general', 'math', 'written'])
+        ->and(collect($context['target_student']['active_accommodations'])->pluck('focus_area')->sort()->values()->all())
+        ->toBe(['approved', 'general', 'math', 'written']);
+});
+
+it('takes the subject of the annual plan a unit belongs to', function () {
+    $scenario = contextScopeScenario();
+    $plan = AnnualPlan::factory()->create([
+        'school_id' => $scenario['school']->id,
+        'group_id' => $scenario['group']->id,
+        'subject_id' => $scenario['science']->id,
+        'teacher_id' => $scenario['teacher']->id,
+    ]);
+
+    $context = contextFor($scenario, AIProposalType::Unit, ['annual_plan_id' => $plan->id, 'focus' => 'x']);
+
+    expect(focusAreas($context))->toBe(['approved', 'general', 'science', 'written']);
+});
+
+it('only sends the accommodations that cover the requested assessment type', function () {
+    $scenario = contextScopeScenario();
+
+    $oral = contextFor($scenario, AIProposalType::Assessment, [
+        'subject_id' => $scenario['math']->id,
+        'assessment_type' => 'oral',
+        'focus' => 'x',
+    ]);
+    $written = contextFor($scenario, AIProposalType::Assessment, [
+        'subject_id' => $scenario['math']->id,
+        'assessment_type' => 'written',
+        'focus' => 'x',
+    ]);
+
+    expect(focusAreas($oral))->toBe(['approved', 'general', 'math'])
+        ->and(focusAreas($written))->toBe(['approved', 'general', 'math', 'written']);
 });
