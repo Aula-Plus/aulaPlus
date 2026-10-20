@@ -83,9 +83,9 @@ describe("StudentPerformanceChart", () => {
         date: "2026-03-03T10:00:00+00:00",
         accommodation_id: 1,
         assessment_id: 2,
-        reason: "Evaluación diagnóstica sin adaptación",
+        reason: "Evaluación diagnóstica sin ajuste",
       },
-      detail: "Evaluación diagnóstica sin adaptación",
+      detail: "Evaluación diagnóstica sin ajuste",
     },
     { mark: { type: "barrier_registered", date: "2026-03-04T10:00:00+00:00", barrier_id: 5 } },
     {

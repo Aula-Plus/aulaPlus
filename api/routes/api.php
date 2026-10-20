@@ -15,6 +15,7 @@ use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\GroupAccommodationNarrativeController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupProfileController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\StudentResultController;
 use App\Http\Controllers\StudentTeamSummaryController;
 use App\Http\Controllers\StudentTrackingController;
 use App\Http\Controllers\SubjectController;
+use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\UserController;
@@ -146,6 +148,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/follow-up-candidates', [ScheduledFollowUpController::class, 'candidates']);
         Route::get('/scheduled-follow-ups/mine', [ScheduledFollowUpController::class, 'mine']);
         Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
         Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
@@ -155,6 +158,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // count-by-(type,date) marks (never a student identifier), and the
         // group's scheduled follow-ups filtered per-student by policy.
         Route::get('/groups/{group}/accommodations-summary', [GroupProfileController::class, 'accommodationsSummary']);
+        Route::get('/groups/{group}/accommodation-narrative', [GroupAccommodationNarrativeController::class, 'show']);
+        Route::post('/groups/{group}/accommodation-narrative/generate', [GroupAccommodationNarrativeController::class, 'generate'])
+            ->middleware('throttle:5,1');
+        Route::post('/groups/{group}/accommodation-narrative/{narrative}/publish', [GroupAccommodationNarrativeController::class, 'publish']);
         Route::get('/groups/{group}/performance-timeline', [GroupProfileController::class, 'performanceTimeline']);
         Route::get('/groups/{group}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'indexForGroup']);
 
@@ -217,6 +224,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Subjects ("materias") catalog — director-managed, read by all staff.
         Route::apiResource('subjects', SubjectController::class);
+
+        // A subject's curricular program PDF (ClickUp 86e3dt6ag): private
+        // file, temporary URL only. Direction manages it; direction,
+        // psychopedagogy and the subject's teachers can open it.
+        Route::post('/subjects/{subject}/syllabus', [SubjectSyllabusController::class, 'store']);
+        Route::get('/subjects/{subject}/syllabus', [SubjectSyllabusController::class, 'show']);
+        Route::delete('/subjects/{subject}/syllabus', [SubjectSyllabusController::class, 'destroy']);
 
         // Director-managed teacher-subject assignments per group.
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);

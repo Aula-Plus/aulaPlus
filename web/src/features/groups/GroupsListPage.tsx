@@ -35,7 +35,7 @@ export function GroupsListPage() {
     return groupsApi
       .fetchGroups()
       .then((data) => setGroups(data))
-      .catch(() => setError("No pudimos cargar las clases."))
+      .catch(() => setError("No pudimos cargar los grupos."))
   }, [])
 
   useEffect(() => {
@@ -87,10 +87,10 @@ export function GroupsListPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Clases">
+      <PageHeader title="Grupos">
         {canManage && (
           <Button asChild>
-            <Link to="/clases/nueva">Nueva clase</Link>
+            <Link to="/clases/nueva">Nuevo grupo</Link>
           </Button>
         )}
       </PageHeader>
@@ -107,7 +107,7 @@ export function GroupsListPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar por nombre…"
-              aria-label="Buscar clases por nombre"
+              aria-label="Buscar grupos por nombre"
               className="pl-9"
             />
           </div>
@@ -133,10 +133,10 @@ export function GroupsListPage() {
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!groups && !error && <p className="text-muted-foreground">Cargando…</p>}
       {groups && groups.length === 0 && (
-        <EmptyState icon={Users} message="Todavía no hay clases." />
+        <EmptyState icon={Users} message="Todavía no hay grupos." />
       )}
       {hasGroups && filtered && filtered.length === 0 && (
-        <EmptyState icon={Search} message="Ninguna clase coincide con los filtros." />
+        <EmptyState icon={Search} message="Ningún grupo coincide con los filtros." />
       )}
 
       {filtered && filtered.length > 0 && (
