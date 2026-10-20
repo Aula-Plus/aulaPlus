@@ -278,3 +278,19 @@ export function canManageScreeningTests(user: User | null): boolean {
 export function canApproveScreeningTestDesign(user: User | null): boolean {
   return isDirector(user)
 }
+
+/**
+ * Upload and review student reports (and their AI proposals): psychopedagogy
+ * only. Mirror of `ReportDocumentPolicy::create` / `::manage`.
+ */
+export function canManageReports(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}
+
+/**
+ * Direction's switch for the AI reading of reports. Mirror of
+ * `UpdateAiReportSettingRequest::authorize`.
+ */
+export function canManageAiReportSetting(user: User | null): boolean {
+  return isDirector(user)
+}

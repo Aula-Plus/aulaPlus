@@ -1107,3 +1107,80 @@ export interface AlertSettings {
   rules: AlertRule[]
   routing: AlertRoutingEntry[]
 }
+
+/**
+ * Student reports uploaded by psychopedagogy and read by the AI
+ * (`App\Enums\ReportDocumentStatus`, ClickUp 86e3jujgx).
+ */
+export type ReportStatus =
+  | "processing"
+  | "extraction_failed"
+  | "ready"
+  | "awaiting_review"
+  | "interpreting"
+  | "proposed"
+  | "error"
+
+export type ReportVisibility = "clinical" | "teachers"
+
+export const reportVisibilityLabels: Record<ReportVisibility, string> = {
+  clinical: "Solo Psicopedagogía y Dirección",
+  teachers: "También los docentes del alumno",
+}
+
+export const reportStatusLabels: Record<ReportStatus, string> = {
+  processing: "Procesando",
+  extraction_failed: "No se pudo leer el texto",
+  ready: "Texto leído",
+  awaiting_review: "Falta revisar el texto anonimizado",
+  interpreting: "La IA está leyendo",
+  proposed: "Propuestas para revisar",
+  error: "La lectura con IA falló",
+}
+
+/** Teachers only receive the first six fields; the rest is psychopedagogy/direction. */
+export interface ReportDocument {
+  id: number
+  student_id: number
+  name: string
+  format: "pdf" | "docx"
+  size: number
+  visibility: ReportVisibility
+  uploaded_at: string
+  status?: ReportStatus
+  use_ai?: boolean
+  send_confirmed_at?: string | null
+  error_message?: string | null
+}
+
+export type ProposalStatus = "pending" | "approved" | "modified" | "rejected"
+export type ProposalBasis = "explicit" | "inferred" | "manual"
+
+export interface AccommodationProposal {
+  id: number
+  report_document_id: number
+  type: string
+  category: AccommodationCategory
+  description: string
+  focus_area: string | null
+  basis: ProposalBasis
+  source_page: number | null
+  source_fragment: string | null
+  status: ProposalStatus
+  accommodation_id: number | null
+  reviewed_at: string | null
+}
+
+export interface ReportDocumentDetail extends ReportDocument {
+  anonymized_pages: string[] | null
+  /** Whether the AI may read this report right now (all three switches on). */
+  ai_available: boolean
+  proposals: AccommodationProposal[]
+}
+
+export interface AiReportSetting {
+  /** The school's own switch. */
+  enabled: boolean
+  /** False when Aula+ has the feature off for every school or the provider is not configured. */
+  available: boolean
+}
