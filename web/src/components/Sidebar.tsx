@@ -235,7 +235,14 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
                       {badgeLabel}
                     </span>
                   )}
-                  {badge !== null && <span className="sr-only">{`, ${badgeText}`}</span>}
+                  {badge !== null && (
+                    // Collapsed, the label is not rendered and this text would
+                    // replace the `title` as the link's name, so it carries the
+                    // label too.
+                    <span className="sr-only">
+                      {collapsed ? `${item.label}, ${badgeText}` : `, ${badgeText}`}
+                    </span>
+                  )}
                 </NavLink>
               )
             })}

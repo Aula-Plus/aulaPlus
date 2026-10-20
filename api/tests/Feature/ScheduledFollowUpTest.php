@@ -532,3 +532,57 @@ it('counts every unread follow-up notice even past the list cap', function () {
     $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(50, 'data');
     $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 52);
 });
+
+it('keeps an out-of-date follow-up in the pending list until someone resolves it', function () {
+    // "Pendientes" is every open follow-up; "Fuera de fecha" is a pending one
+    // past its date. Reaching the date never closes it on its own.
+    $school = School::factory()->create();
+    $psico = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $overdue = ScheduledFollowUp::factory()->overdue()->create([
+        'school_id' => $school->id,
+        'student_id' => $student->id,
+        'created_by_id' => $psico->id,
+        'assigned_to_id' => $psico->id,
+    ]);
+    $onTime = ScheduledFollowUp::factory()->create([
+        'school_id' => $school->id,
+        'student_id' => $student->id,
+        'created_by_id' => $psico->id,
+        'assigned_to_id' => $psico->id,
+        'due_date' => now()->addWeek()->toDateString(),
+    ]);
+
+    Sanctum::actingAs($psico);
+    $byId = collect($this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->json('data'))->keyBy('id');
+
+    expect($byId->keys()->all())->toEqualCanonicalizing([$overdue->id, $onTime->id])
+        ->and($byId[$overdue->id]['resolved'])->toBeFalse()
+        ->and($byId[$overdue->id]['is_overdue'])->toBeTrue()
+        ->and($byId[$onTime->id]['is_overdue'])->toBeFalse()
+        ->and($overdue->fresh()->resolved)->toBeFalse();
+});
+
+it('only marks the notice read when it is acknowledged; the follow-up stays pending', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $psico = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    teachStudent($teacher, $student);
+    Sanctum::actingAs($teacher);
+    $followUpId = $this->postJson("/api/v1/students/{$student->id}/scheduled-follow-ups", [
+        'description' => 'x',
+        'due_date' => now()->addWeek()->toDateString(),
+        'assigned_to_id' => $psico->id,
+    ])->assertCreated()->json('data.id');
+
+    Sanctum::actingAs($psico);
+    $notificationId = $psico->unreadNotifications()->first()->id;
+    $this->postJson("/api/v1/notifications/{$notificationId}/read")->assertOk();
+
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 0);
+    expect(ScheduledFollowUp::find($followUpId)->resolved)->toBeFalse();
+    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $followUpId);
+});
