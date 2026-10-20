@@ -2,12 +2,16 @@
 
 namespace App\Actions\AI;
 
+use App\Enums\AccommodationNarrativeStatus;
+use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
 use App\Models\Accommodation;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
+use App\Models\Assessment;
 use App\Models\CurricularItem;
 use App\Models\Group;
+use App\Models\GroupAccommodationNarrative;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
@@ -49,8 +53,89 @@ class BuildProposalContext
             'subject_program' => $this->subjectProgram($proposal, $parameters),
             'student_cohort_summary' => $this->cohortSummary($group, $inScope),
             'target_student' => $this->targetStudent($parameters, $inScope),
+            'group_accommodation_summary' => $this->groupAccommodationSummary($proposal),
+            'recent_performance' => $this->recentPerformance($proposal, $parameters),
             'reference_example' => $this->referenceExample($proposal),
         ];
+    }
+
+    /**
+     * The last accommodation summary psychopedagogy published for the group
+     * (ClickUp 86e3jpzdr), for class and assessment drafts only. It never
+     * names a student — GenerateGroupAccommodationNarrativeJob discards any
+     * text that does — so it can be sent as is. Drafts are not sent: only
+     * what psychopedagogy released to the group's teachers. Null when there
+     * is none; the proposal is generated anyway.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function groupAccommodationSummary(AIProposal $proposal): ?array
+    {
+        if (! in_array($proposal->type, [AIProposalType::ClassSession, AIProposalType::Assessment], true)) {
+            return null;
+        }
+
+        $published = GroupAccommodationNarrative::query()
+            ->where('group_id', $proposal->group_id)
+            ->where('status', AccommodationNarrativeStatus::Published)
+            ->latest('published_at')
+            ->first();
+
+        if ($published === null || blank($published->content)) {
+            return null;
+        }
+
+        return [
+            'published_at' => $published->published_at?->toDateString(),
+            'text' => $published->content,
+        ];
+    }
+
+    /**
+     * The group's latest administered assessments in the requested subject,
+     * as aggregates only (results count, average, lowest, highest) — never a
+     * student or a single score tied to one (CLAUDE.md security rule 11). Lets
+     * the model explain its proposal from how the group has been doing.
+     * Class and assessment drafts only; empty when nothing was graded yet.
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return array<int, array<string, mixed>>
+     */
+    protected function recentPerformance(AIProposal $proposal, array $parameters): array
+    {
+        if (! in_array($proposal->type, [AIProposalType::ClassSession, AIProposalType::Assessment], true)) {
+            return [];
+        }
+
+        $subjectId = $this->subjectId($parameters);
+
+        if ($subjectId === null) {
+            return [];
+        }
+
+        return Assessment::query()
+            ->where('group_id', $proposal->group_id)
+            ->where('subject_id', $subjectId)
+            ->whereNotNull('administered_at')
+            ->whereHas('results', fn ($query) => $query->whereNotNull('score'))
+            ->withCount(['results' => fn ($query) => $query->whereNotNull('score')])
+            ->withAvg('results', 'score')
+            ->withMin('results', 'score')
+            ->withMax('results', 'score')
+            ->latest('administered_at')
+            ->limit(self::MAX_RECENT_ASSESSMENTS)
+            ->get()
+            ->map(fn (Assessment $assessment): array => [
+                'type' => $assessment->type->value,
+                'purpose' => $assessment->purpose,
+                'administered_at' => $assessment->administered_at?->toDateString(),
+                'results_count' => (int) $assessment->results_count,
+                'average_score' => round((float) $assessment->results_avg_score, 2),
+                'lowest_score' => (float) $assessment->results_min_score,
+                'highest_score' => (float) $assessment->results_max_score,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -367,6 +452,9 @@ class BuildProposalContext
 
     /** v1 cap so a large catalog can't blow up the prompt. Tune with real data. */
     protected const MAX_CURRICULAR_ITEMS = 50;
+
+    /** How many past assessments of the subject feed `recent_performance`. */
+    protected const MAX_RECENT_ASSESSMENTS = 3;
 
     /** Cap on the program PDF text sent to the model (≈ 3–4k tokens). */
     protected const MAX_PROGRAM_TEXT_LENGTH = 15_000;
