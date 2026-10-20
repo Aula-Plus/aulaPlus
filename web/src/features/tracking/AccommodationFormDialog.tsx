@@ -120,7 +120,7 @@ export function AccommodationFormDialog({
       onSaved()
       onOpenChange(false)
     } catch {
-      setFormError("No pudimos guardar la adaptación.")
+      setFormError("No pudimos guardar el ajuste.")
     }
   }
 
@@ -128,7 +128,7 @@ export function AccommodationFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar adaptación" : "Nueva adaptación"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar ajuste" : "Nuevo ajuste"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">

@@ -1,12 +1,123 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { Sidebar } from "@/components/Sidebar"
+import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
+import type { ScheduledFollowUp } from "@/types"
 import { MyFollowUpsPage } from "./MyFollowUpsPage"
 import * as api from "./scheduledFollowUpsApi"
+import { resetUnreadNoticeCount } from "./unreadNotices"
+
+function pendingFollowUp(overrides: Partial<ScheduledFollowUp> = {}): ScheduledFollowUp {
+  return {
+    id: 1,
+    student_id: 3,
+    student: { id: 3, full_name: "Juan Pérez" },
+    description: "Revisar tiempo extendido",
+    due_date: "2026-10-30",
+    created_by_id: 5,
+    assigned_to_id: 7,
+    assigned_to: { id: 7, name: "Paula Psico", role: "psychopedagogue" },
+    shared_with: [],
+    resolved: false,
+    resolved_by_id: null,
+    resolved_at: null,
+    resolution_note: null,
+    is_overdue: false,
+    created_at: null,
+    ...overrides,
+  }
+}
 
 describe("MyFollowUpsPage", () => {
+  beforeEach(() => {
+    resetUnreadNoticeCount()
+    vi.spyOn(api, "fetchUnreadNotificationCount").mockResolvedValue(0)
+  })
   afterEach(() => vi.restoreAllMocks())
+
+  it("keeps an out-of-date follow-up under 'Pendientes', marked 'Fuera de fecha'", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([
+      pendingFollowUp({ id: 1, description: "Revisar tiempo extendido", is_overdue: true }),
+      pendingFollowUp({ id: 2, description: "Coordinar con familia", is_overdue: false }),
+    ])
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <MyFollowUpsPage />
+      </MemoryRouter>,
+    )
+
+    const pending = (await screen.findByRole("heading", { name: "Pendientes" })).closest<HTMLElement>("[data-slot=\"card\"]")!
+    const overdueRow = within(pending).getByText("Revisar tiempo extendido").closest("li")!
+    const onTimeRow = within(pending).getByText("Coordinar con familia").closest("li")!
+    expect(within(overdueRow).getByText("Fuera de fecha")).toBeInTheDocument()
+    expect(within(onTimeRow).queryByText("Fuera de fecha")).not.toBeInTheDocument()
+    expect(screen.queryByText(/vencid|sin resolver|llegó a su fecha/i)).not.toBeInTheDocument()
+  })
+
+  it("'Entendido' only marks the notice read; the follow-up stays pending", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([pendingFollowUp()])
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([
+      {
+        id: "n1",
+        data: { type: "follow_up_assigned", follow_up_id: 1, student_id: 3, due_date: "2026-10-30" },
+        created_at: null,
+      },
+    ])
+    const markRead = vi.spyOn(api, "markNotificationRead").mockResolvedValue()
+    const resolve = vi.spyOn(api, "resolveScheduledFollowUp")
+
+    render(
+      <MemoryRouter>
+        <MyFollowUpsPage />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole("button", { name: /entendido/i }))
+
+    expect(markRead).toHaveBeenCalledWith("n1")
+    expect(resolve).not.toHaveBeenCalled()
+    expect(screen.getByText("Revisar tiempo extendido")).toBeInTheDocument()
+  })
+
+  it("drops the sidebar count once the notice is read", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([pendingFollowUp()])
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([
+      {
+        id: "n1",
+        data: { type: "follow_up_assigned", follow_up_id: 1, student_id: 3, due_date: "2026-10-30" },
+        created_at: null,
+      },
+    ])
+    vi.spyOn(api, "markNotificationRead").mockResolvedValue()
+    // Server truth: one unread notice until it is marked read, then none.
+    vi.spyOn(api, "fetchUnreadNotificationCount").mockResolvedValueOnce(1).mockResolvedValue(0)
+    const auth: AuthContextValue = {
+      user: { id: 7, name: "Paula", email: "paula@escuela.test", roles: ["psychopedagogue"] },
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+    }
+
+    render(
+      <AuthContext value={auth}>
+        <MemoryRouter>
+          <Sidebar />
+          <MyFollowUpsPage />
+        </MemoryRouter>
+      </AuthContext>,
+    )
+
+    expect(await screen.findByRole("link", { name: "Mis seguimientos, 1 aviso sin leer" })).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole("button", { name: /entendido/i }))
+
+    expect(await screen.findByRole("link", { name: "Mis seguimientos" })).toBeInTheDocument()
+    expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
+  })
 
   it("lists pending follow-ups and lets the user dismiss an assignment notice", async () => {
     vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([

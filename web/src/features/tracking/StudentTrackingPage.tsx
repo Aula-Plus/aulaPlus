@@ -244,7 +244,7 @@ export function StudentTrackingPage() {
                 value={student.has_therapeutic_companion ? "Sí" : "No"}
               />
               <Row
-                label="Clases"
+                label="Grupos"
                 value={student.groups.map((group) => group.name).join(", ") || "—"}
               />
             </div>
@@ -320,13 +320,13 @@ export function StudentTrackingPage() {
           <>
           {tracking.accommodations && (
             <SectionCard
-              title="Adaptaciones vigentes"
+              title="Ajustes vigentes"
               action={
                 // When the list is empty the CTA lives in the empty state instead,
-                // so there is exactly one "Nueva adaptación" affordance per state.
+                // so there is exactly one "Nuevo ajuste" affordance per state.
                 showManageAccommodations && tracking.accommodations.length > 0 ? (
                   <Button type="button" size="sm" onClick={handleNewAccommodation}>
-                    Nueva adaptación
+                    Nuevo ajuste
                   </Button>
                 ) : undefined
               }
@@ -334,11 +334,11 @@ export function StudentTrackingPage() {
               {tracking.accommodations.length === 0 ? (
                 <EmptyState
                   icon={HeartHandshake}
-                  message="Sin adaptaciones vigentes."
+                  message="Sin ajustes vigentes."
                   action={
                     showManageAccommodations && (
                       <Button type="button" size="sm" variant="outline" onClick={handleNewAccommodation}>
-                        Nueva adaptación
+                        Nuevo ajuste
                       </Button>
                     )
                   }
