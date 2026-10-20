@@ -22,6 +22,13 @@ class CommentResource extends JsonResource
             'commentable_type' => class_basename($this->commentable_type),
             'commentable_id' => $this->commentable_id,
             'content' => $this->content,
+            // Only the student list loads the author; name + role are shown so the
+            // team can tell who wrote each observation. No email or other PII.
+            'author' => $this->whenLoaded('author', fn () => $this->author === null ? null : [
+                'id' => $this->author->id,
+                'name' => $this->author->name,
+                'role' => $this->author->getRoleNames()->first(),
+            ]),
             'categories' => $this->whenLoaded('categories', fn () => $this->categories->map(fn ($category) => [
                 'id' => $category->id,
                 'name' => $category->name,

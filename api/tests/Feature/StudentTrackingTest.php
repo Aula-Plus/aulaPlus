@@ -135,3 +135,18 @@ it('caches the raw student tracking aggregation for 60 seconds', function () {
     $response = $this->getJson("/api/v1/students/{$student->id}/tracking")->assertOk();
     expect($response->json('data.recent_comments'))->toBeEmpty();
 });
+
+// The author block is only part of the student comment list (Observaciones);
+// the tracking summary's recent comments keep their previous shape.
+it('does not include the author in the tracking recent comments', function () {
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    Comment::factory()->forSubject($student)->create(['author_id' => $psychopedagogue->id]);
+    Sanctum::actingAs($psychopedagogue);
+
+    $this->getJson("/api/v1/students/{$student->id}/tracking")
+        ->assertOk()
+        ->assertJsonCount(1, 'data.recent_comments')
+        ->assertJsonMissingPath('data.recent_comments.0.author');
+});

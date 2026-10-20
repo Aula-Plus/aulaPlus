@@ -8,6 +8,7 @@ import {
   canResolveAlert,
   canViewStudentHistory,
   isPsychopedagogue,
+  isSchoolWideStaff,
 } from "@/lib/permissions"
 import { cn, formatShortDate } from "@/lib/utils"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
@@ -447,6 +448,9 @@ export function StudentTrackingPage() {
             onCreate={handleCreateComment}
             title="Observaciones"
             categories={categories}
+            showAuthors
+            currentUserId={user?.id}
+            showCount={isSchoolWideStaff(user)}
           />
         )}
 
