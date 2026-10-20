@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { FollowUpStage, ScheduledFollowUpDetail } from "@/types"
 import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
-import { MyFollowUpsPage } from "./MyFollowUpsPage"
+import { FollowUpsSection } from "./FollowUpsSection"
 import * as detailApi from "./followUpDetailApi"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 
@@ -86,14 +86,14 @@ describe("FollowUpDetailDialog", () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it("opens from Mis seguimientos with the title first and the stages", async () => {
+  it("opens from the Mis seguimientos section with the title first and the stages", async () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchMyFollowUps").mockResolvedValue([detail()])
     vi.spyOn(scheduledFollowUpsApi, "fetchNotifications").mockResolvedValue([])
     const fetchDetail = vi.spyOn(detailApi, "fetchFollowUpDetail").mockResolvedValue(detail())
 
     render(
       <MemoryRouter>
-        <MyFollowUpsPage />
+        <FollowUpsSection />
       </MemoryRouter>,
     )
 

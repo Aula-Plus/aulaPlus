@@ -95,7 +95,7 @@ export function FollowUpDetailDialog({ followUpId, onClose, onChanged }: FollowU
                 {detail.resolved ? (
                   <Badge tone="success">Resuelto</Badge>
                 ) : detail.is_overdue ? (
-                  <Badge tone="danger">Vencido</Badge>
+                  <Badge tone="danger">Fuera de fecha</Badge>
                 ) : (
                   <Badge tone="warning">Abierto</Badge>
                 )}

@@ -309,7 +309,7 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
           {followUp.title && <p className="text-base font-semibold">{followUp.title}</p>}
           <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Vence: {formatShortDate(followUp.due_date)}
+            Plazo: {formatShortDate(followUp.due_date)}
           </p>
           {followUp.assigned_to && (
             <p className="text-xs text-muted-foreground">
@@ -325,7 +325,7 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
         </div>
         {/* Painted straight from the server boolean — the component never does
             date arithmetic (spec §4). */}
-        {followUp.is_overdue && <Badge tone="danger">Vencido</Badge>}
+        {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
       </div>
 
       {followUp.resolved && (

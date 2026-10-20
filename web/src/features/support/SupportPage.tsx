@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
 import { Textarea } from "@/components/ui/textarea"
+import { screenTitleFor } from "@/lib/screenTitles"
 import type { SupportMessageKind } from "@/types"
 import { sendSupportMessage } from "./supportApi"
 
@@ -32,7 +33,8 @@ const kindOptions: { value: SupportMessageKind; label: string; hint: string }[] 
 /**
  * "Ayuda y sugerencias" — one form for everyone, two paths (support vs.
  * improvement). The screen the user came from is passed through the sidebar
- * link's router state and sent along; role and school are resolved server-side.
+ * link's router state and sent along with its generic name (never a student's
+ * name — see `screenTitleFor`); role and school are resolved server-side.
  */
 export function SupportPage() {
   const location = useLocation()
@@ -54,7 +56,12 @@ export function SupportPage() {
     setError(null)
     setSent(false)
     try {
-      await sendSupportMessage({ kind: values.kind, message: values.message, screen: from })
+      await sendSupportMessage({
+        kind: values.kind,
+        message: values.message,
+        screen: from,
+        screen_name: screenTitleFor(from),
+      })
       reset({ kind: values.kind, message: "" })
       setSent(true)
     } catch {

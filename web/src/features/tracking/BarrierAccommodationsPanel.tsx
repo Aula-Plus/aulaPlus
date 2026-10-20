@@ -15,7 +15,7 @@ interface BarrierAccommodationsPanelProps {
   /**
    * Accommodations of the SAME student — the only ones known to the SPA (there
    * is no general-purpose "list accommodations" endpoint). Reused as the
-   * options of the "vincular adaptación existente" `<select>`.
+   * options of the "vincular ajuste existente" `<select>`.
    */
   studentAccommodations: Accommodation[]
 }
@@ -50,7 +50,7 @@ export function BarrierAccommodationsPanel({
       const data = await trackingApi.fetchBarrierAccommodations(barrierId)
       setLinks(data)
     } catch {
-      setError("No pudimos cargar las adaptaciones vinculadas.")
+      setError("No pudimos cargar los ajustes vinculados.")
     } finally {
       setLoading(false)
     }
@@ -69,7 +69,7 @@ export function BarrierAccommodationsPanel({
     setError(null)
     const id = Number(selectedAccommodationId)
     if (!id) {
-      setError("Elegí una adaptación.")
+      setError("Elegí un ajuste.")
       return
     }
     setSubmitting(true)
@@ -85,7 +85,7 @@ export function BarrierAccommodationsPanel({
       })
       setSelectedAccommodationId("")
     } catch {
-      setError("No pudimos vincular la adaptación.")
+      setError("No pudimos vincular el ajuste.")
     } finally {
       setSubmitting(false)
     }
@@ -119,7 +119,7 @@ export function BarrierAccommodationsPanel({
         onClick={handleToggle}
         aria-expanded={expanded}
       >
-        {expanded ? "Ocultar adaptaciones" : "Ver adaptaciones vinculadas"}
+        {expanded ? "Ocultar ajustes" : "Ver ajustes vinculados"}
       </Button>
 
       {expanded && (
@@ -130,7 +130,7 @@ export function BarrierAccommodationsPanel({
           {!loading && links !== null && (
             links.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                Todavía no hay adaptaciones vinculadas a esta barrera.
+                Todavía no hay ajustes vinculados a esta barrera.
               </p>
             ) : (
               <ul className="grid gap-2">
@@ -179,7 +179,7 @@ export function BarrierAccommodationsPanel({
           {canPropose && (
             <form onSubmit={handleLink} className="grid gap-2 border-t pt-3">
               <Label htmlFor={`link-accommodation-${barrierId}`} className="text-xs">
-                Vincular adaptación existente
+                Vincular ajuste existente
               </Label>
               <div className="flex flex-wrap items-center gap-2">
                 <SingleSelect
@@ -187,7 +187,7 @@ export function BarrierAccommodationsPanel({
                   value={selectedAccommodationId}
                   onChange={(value) => setSelectedAccommodationId(value)}
                   className="min-w-56 flex-1"
-                  placeholder="Elegí una adaptación…"
+                  placeholder="Elegí un ajuste…"
                   options={linkOptions.map((accommodation) => ({
                     value: String(accommodation.id),
                     label: accommodation.description
@@ -201,7 +201,7 @@ export function BarrierAccommodationsPanel({
               </div>
               {linkOptions.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Todas las adaptaciones conocidas del alumno ya están vinculadas.
+                  Todos los ajustes conocidos del alumno ya están vinculados.
                 </p>
               )}
             </form>

@@ -90,7 +90,7 @@ export function AssessmentsPage() {
         setGroup(tracking.group)
         setStudents(tracking.students)
       })
-      .catch(() => setError("No pudimos cargar la clase."))
+      .catch(() => setError("No pudimos cargar el grupo."))
     loadAssessments()
     // Offer only the subjects THIS teacher is assigned in the group (backend
     // Sesión 3 validates the same rule). Only the leading teacher sees the
@@ -229,7 +229,7 @@ export function AssessmentsPage() {
       )}
 
       {assessments.length === 0 ? (
-        <EmptyState icon={ClipboardList} message="Todavía no hay evaluaciones en esta clase." />
+        <EmptyState icon={ClipboardList} message="Todavía no hay evaluaciones en este grupo." />
       ) : (
         <section className="grid gap-4">
           <h2 className="text-lg font-semibold">Evaluaciones cargadas</h2>

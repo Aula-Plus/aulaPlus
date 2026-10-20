@@ -12,7 +12,7 @@ interface GroupOverdueFollowUpsProps {
 }
 
 /**
- * Perfil de grupo — "Seguimientos vencidos" section (docs/prompts/27-frontend-
+ * Perfil de grupo — "Seguimientos fuera de fecha" section (docs/prompts/27-frontend-
  * perfil-de-grupo.md §6). An operational list (not an aggregate) of the group's
  * overdue scheduled follow-ups: description, due date and a link to the student.
  *
@@ -31,7 +31,7 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
     try {
       setFollowUps(await fetchGroupScheduledFollowUps(groupId, true))
     } catch {
-      setError("No pudimos cargar los seguimientos vencidos.")
+      setError("No pudimos cargar los seguimientos fuera de fecha.")
       setFollowUps([])
     }
   }, [groupId])
@@ -41,13 +41,13 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
   }, [load])
 
   return (
-    <SectionCard title="Seguimientos vencidos">
+    <SectionCard title="Seguimientos fuera de fecha">
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : followUps === null ? (
         <p className="text-muted-foreground">Cargando…</p>
       ) : followUps.length === 0 ? (
-        <EmptyState icon={CalendarClock} message="No hay seguimientos vencidos." />
+        <EmptyState icon={CalendarClock} message="No hay seguimientos fuera de fecha." />
       ) : (
         <ul className="grid gap-3">
           {followUps.map((followUp) => (
@@ -58,7 +58,7 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
               <div>
                 <p className="whitespace-pre-wrap">{followUp.description}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Vence: {formatShortDate(followUp.due_date)}
+                  Plazo: {formatShortDate(followUp.due_date)}
                 </p>
               </div>
               <RowLink to={`/alumnos/${followUp.student_id}/seguimiento`} className="shrink-0">

@@ -107,6 +107,8 @@ export interface CommentTrend {
 export interface Comment {
   id: number
   author_id: number
+  /** Present on the student comment list only. */
+  author?: { id: number; name: string; role: Role | null } | null
   /** Polymorphic base name, e.g. "Student" or "Group". */
   commentable_type: string
   commentable_id: number
@@ -285,6 +287,26 @@ export interface Subject {
   name: string
   short_code: string | null
   color: string | null
+  /** Whether the Aula+ team already loaded it into the curricular catalog (ClickUp 86e3dt6ag). */
+  in_catalog?: boolean
+  /** Curricular program PDF metadata; the file itself is reached via a temporary URL. */
+  syllabus?: SubjectSyllabus | null
+}
+
+export type SyllabusTextStatus = "pending" | "ready" | "failed"
+
+export interface SubjectSyllabus {
+  name: string
+  size: number | null
+  uploaded_at: string | null
+  /**
+   * Text extraction for the AI assistant (queued after each upload): `pending`
+   * until it runs, then `ready` (the AI uses it) or `failed` (scanned,
+   * encrypted or unreadable PDF — stored, but the AI doesn't use it).
+   */
+  text_status: SyllabusTextStatus
+  /** Decided by `SubjectPolicy::viewSyllabus` for the current user. */
+  can_view: boolean
 }
 
 /**
@@ -323,9 +345,9 @@ export type PerformanceMarkType =
   | "calendar_event"
 
 export const performanceMarkTypeLabels: Record<PerformanceMarkType, string> = {
-  accommodation_activated: "Adaptación activada",
-  accommodation_deactivated: "Adaptación desactivada",
-  accommodation_instance_override: "Adaptación desactivada para esta evaluación",
+  accommodation_activated: "Ajuste activado",
+  accommodation_deactivated: "Ajuste desactivado",
+  accommodation_instance_override: "Ajuste desactivado para esta evaluación",
   barrier_registered: "Barrera registrada",
   calendar_event: "Evento de calendario",
 }
@@ -405,6 +427,37 @@ export interface GroupAccommodationSummaryEntry {
 }
 
 /**
+ * AI text summary of the group's accommodations. `published` is what teachers
+ * read; `draft` (psychopedagogy only) is the latest generation awaiting review.
+ * `outdated` means the accommodations changed after the text was generated.
+ */
+export interface AccommodationNarrativeView {
+  can_generate: boolean
+  /** False while the environment has no AI provider configured: generating is disabled. */
+  ai_available: boolean
+  published: {
+    id: number
+    content: string
+    published_at: string | null
+    published_by: string | null
+    outdated: boolean
+  } | null
+  draft: {
+    id: number
+    status: "pending" | "draft" | "error"
+    content: string | null
+    error_message: string | null
+    /** The accommodation data itself names a student: nothing was sent to the AI. */
+    name_in_data?: boolean
+    /** Accommodation types that name a student, with the name redacted ("…"). */
+    flagged_types?: string[]
+    /** A generation that never finished (reported as `error`): it can be retried. */
+    stale?: boolean
+    outdated: boolean
+  } | null
+}
+
+/**
  * One point of the group performance line: one per Assessment of the group (not
  * per time window). `average_score` is the mean of its results; `results_count`
  * is how many students have a score loaded (may be less than the group size).
@@ -430,8 +483,8 @@ export type GroupPerformanceMarkType =
   | "calendar_event"
 
 export const groupPerformanceMarkTypeLabels: Record<GroupPerformanceMarkType, string> = {
-  accommodation_activated: "Adaptaciones activadas",
-  accommodation_deactivated: "Adaptaciones desactivadas",
+  accommodation_activated: "Ajustes activados",
+  accommodation_deactivated: "Ajustes desactivados",
   barrier_registered: "Barreras registradas",
   calendar_event: "Evento de calendario",
 }
@@ -469,7 +522,30 @@ export interface GroupPerformanceTimeline {
   marks: GroupPerformanceMark[]
 }
 
-export interface Accommodation {
+/** A subject an accommodation is restricted to (`AccommodationSubjectResource`). */
+export interface AccommodationSubjectRef {
+  id: number
+  name: string
+  /**
+   * Soft-deleted since it was attached. The accommodation stays scoped to it
+   * (it never turns general); the edit form shows it as «(eliminada)».
+   */
+  deleted: boolean
+}
+
+/**
+ * Where and since when an accommodation applies (ClickUp 86e3dpbwy follow-up):
+ *   - `starts_on`: ISO date (`YYYY-MM-DD`) it is in force from.
+ *   - `subjects`: the subjects it is restricted to; empty = every subject.
+ *   - `assessment_types`: the assessment types it is restricted to; null = every type.
+ */
+export interface AccommodationScope {
+  starts_on: string | null
+  subjects: AccommodationSubjectRef[]
+  assessment_types: AssessmentType[] | null
+}
+
+export interface Accommodation extends AccommodationScope {
   id: number
   student_id: number
   type: string
@@ -481,6 +557,11 @@ export interface Accommodation {
    */
   category: AccommodationCategory | null
   active: boolean
+  /**
+   * ISO date the accommodation was switched off, recorded by the server (PO,
+   * ClickUp 86e3d1bwa: no user-entered end date). `null` while it is in force.
+   */
+  deactivated_on: string | null
   description: string | null
   focus_area: string | null
   requires_external_approval: boolean
@@ -512,6 +593,15 @@ export interface AccommodationInput {
   category: AccommodationCategory
   requires_external_approval: boolean
   active: boolean
+  /**
+   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form always sends it (today
+   * by default); the backend also defaults it to today when absent.
+   */
+  starts_on: string
+  /** Empty = a general accommodation (every subject). */
+  subject_ids: number[]
+  /** Empty = every assessment type (stored as null). */
+  assessment_types: AssessmentType[]
 }
 
 export interface Barrier {
@@ -552,16 +642,32 @@ export interface SupportChip {
   label: string
 }
 
+/**
+ * An accommodation chip: the name plus since when and where it applies, so a
+ * teacher knows whether it applies in their class. The server only sends a
+ * teacher the general ones and those scoped to a subject they teach the
+ * student — never origin, validator or review date.
+ */
+export interface AccommodationChip extends SupportChip, AccommodationScope {}
+
 export interface StudentTracking {
   student: Student
   /** `null` until psychopedagogy writes and confirms it. */
   team_summary: TeamSummary | null
-  support_chips: { accommodations: SupportChip[]; barriers: SupportChip[] }
+  support_chips: { accommodations: AccommodationChip[]; barriers: SupportChip[] }
   recent_assessments: AssessmentSummary[]
   /** Mean of every scored assessment, across subjects; null when there are none. */
   overall_average: number | null
   /** Per-subject averages (backend Sesión 4); empty when no scores exist. */
   by_subject: SubjectStat[]
+  /** Scored instances the viewer may see (already filtered by the server), newest first. */
+  grades: StudentGrade[]
+  /**
+   * True when `grades` was cut to the most recent ones (server limit: 100);
+   * `by_subject`/`overall_average` always cover every visible grade.
+   */
+  grades_truncated: boolean
+  grades_view: GradesView
   accommodations?: Accommodation[]
   accommodations_count: number
   barriers?: Barrier[]
@@ -604,7 +710,10 @@ export type SupportMessageKind = "issue" | "improvement"
 export interface SupportMessageInput {
   kind: SupportMessageKind
   message: string
+  /** Route path of the originating screen, e.g. "/alumnos/3/seguimiento". */
   screen?: string | null
+  /** Generic name of that screen for the email, e.g. "Perfil del alumno". Never PII. */
+  screen_name?: string | null
 }
 
 /** One weekly bucket of the adoption dashboard time series (Monday-start). */
@@ -663,8 +772,13 @@ export interface BarrierAccommodationLink {
   /** The Accommodation's id — the link is uniquely keyed by (barrier, accommodation). */
   id: number
   type: string
-  description: string | null
-  focus_area: string | null
+  /**
+   * Clinical detail: only sent to a viewer with clinical access
+   * (psychopedagogy/direction); absent for a teacher. A teacher also only gets
+   * the linked accommodations they may see (general or of a subject they teach).
+   */
+  description?: string | null
+  focus_area?: string | null
   proposed_by_id: number
   validated: boolean
   validated_by_id: number | null
@@ -1004,6 +1118,48 @@ export interface Paginated<T> {
     last_page: number
     total: number
   }
+}
+
+/**
+ * An accommodation in force for one grade (name only — never clinical detail).
+ */
+export interface GradeAccommodation {
+  id: number
+  label: string
+}
+
+export interface StudentGrade {
+  id: number
+  assessment_id: number
+  subject_id: number
+  subject_name: string
+  type: AssessmentType
+  administered_at: string | null
+  score: number | null
+  /**
+   * The accommodations that were in force on the instance's date for its
+   * subject and type, minus any deactivated for that instance — only the ones
+   * the viewer may see (server-side rule; PO ClickUp 86e3d1bwa).
+   */
+  accommodations: GradeAccommodation[]
+}
+
+export type GradesVisibilityMode = "own_subject" | "all_live" | "all_periodic"
+
+/** Why a teacher sees fewer grades than exist (never any grade data). */
+export interface GradesView {
+  mode: GradesVisibilityMode
+  restricted: boolean
+  own_subject_ids: number[]
+  /** Periodic mode: other subjects show grades loaded before this day. */
+  cutoff_at: string | null
+}
+
+export interface GradesVisibilitySettings {
+  mode: GradesVisibilityMode
+  cutoff_months: number | null
+  cutoff_anchor: string | null
+  last_cutoff_at: string | null
 }
 
 // ── Alert settings (ClickUp 86e3jpzcv) ──────────────────────────────────────
