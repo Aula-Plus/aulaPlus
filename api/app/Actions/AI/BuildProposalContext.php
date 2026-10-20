@@ -3,10 +3,13 @@
 namespace App\Actions\AI;
 
 use App\Models\AIProposal;
+use App\Models\AnnualPlan;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Unit;
+use Illuminate\Support\Collection;
 
 /**
  * Assembles the (dynamic) context that gets sent to the model for one
@@ -38,6 +41,7 @@ class BuildProposalContext
                 'profile' => $group->group_profile,
             ],
             'curricular_framework' => $this->curricularContext($group, $parameters),
+            'subject_program' => $this->subjectProgram($proposal, $parameters),
             'student_cohort_summary' => $this->cohortSummary($group),
             'target_student' => $this->targetStudent($parameters),
             'reference_example' => $this->referenceExample($proposal),
@@ -100,6 +104,107 @@ class BuildProposalContext
             'frameworks' => $frameworks->pluck('name')->all(),
             'relevant_items' => $items,
         ];
+    }
+
+    /**
+     * The program of the requested subject (ClickUp 86e3dt6ag). Once the
+     * subject is linked to the curricular catalog, the catalog is the source
+     * (its units/objectives subtree) and the school's PDF is no longer used;
+     * until then, the text extracted from the program PDF the school uploaded
+     * is sent as provisional context, so a teacher never plans without a
+     * program. A curriculum document — no student data. The PDF text is only
+     * sent when the requesting user may open that PDF themselves
+     * (SubjectPolicy::viewSyllabus), so the assistant can't be used to read a
+     * program they have no access to.
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return array<string, mixed>|null
+     */
+    protected function subjectProgram(AIProposal $proposal, array $parameters): ?array
+    {
+        $subject = $this->plannedSubject($parameters);
+
+        if ($subject === null) {
+            return null;
+        }
+
+        if ($subject->curricularItem !== null) {
+            $item = $subject->curricularItem;
+
+            return [
+                'source' => 'curricular_catalog',
+                'subject' => $subject->name,
+                'items' => $this->boundedSubtree($item)
+                    ->map(fn (CurricularItem $node): array => [
+                        'code' => $node->code,
+                        'name' => $node->name,
+                        'type' => $node->type->value,
+                        'description' => $node->description,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        $requester = $proposal->requestedBy;
+
+        if ($subject->syllabus_text === null || $requester === null || ! $requester->can('viewSyllabus', $subject)) {
+            return null;
+        }
+
+        return [
+            'source' => 'school_program_pdf',
+            'subject' => $subject->name,
+            'text' => mb_substr($subject->syllabus_text, 0, self::MAX_PROGRAM_TEXT_LENGTH),
+        ];
+    }
+
+    /**
+     * The subject being planned. Annual-plan and assessment requests carry
+     * `subject_id`; unit and class-session requests don't — they plan inside
+     * an annual plan (`annual_plan_id`, or `unit_id` → its plan), so the
+     * subject is that plan's. AnnualPlan is tenant-scoped, so a plan (or a
+     * unit's plan) from another school resolves to no subject.
+     *
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function plannedSubject(array $parameters): ?Subject
+    {
+        if (isset($parameters['subject_id'])) {
+            return Subject::find($parameters['subject_id']);
+        }
+
+        $plan = match (true) {
+            isset($parameters['annual_plan_id']) => AnnualPlan::find($parameters['annual_plan_id']),
+            isset($parameters['unit_id']) => Unit::find($parameters['unit_id'])?->annualPlan,
+            default => null,
+        };
+
+        return $plan?->subject;
+    }
+
+    /**
+     * $root and its descendants, level by level (units before their
+     * objectives), stopping at MAX_CURRICULAR_ITEMS — one query per level,
+     * never walking the rest of a large subtree.
+     *
+     * @return Collection<int, CurricularItem>
+     */
+    protected function boundedSubtree(CurricularItem $root): Collection
+    {
+        $items = collect([$root]);
+        $level = collect([$root]);
+
+        while ($level->isNotEmpty() && $items->count() < self::MAX_CURRICULAR_ITEMS) {
+            $level = CurricularItem::query()
+                ->whereIn('parent_id', $level->pluck('id'))
+                ->orderBy('id')
+                ->limit(self::MAX_CURRICULAR_ITEMS - $items->count())
+                ->get();
+            $items = $items->concat($level);
+        }
+
+        return $items->values();
     }
 
     /**
@@ -199,4 +304,7 @@ class BuildProposalContext
 
     /** v1 cap so a large catalog can't blow up the prompt. Tune with real data. */
     protected const MAX_CURRICULAR_ITEMS = 50;
+
+    /** Cap on the program PDF text sent to the model (≈ 3–4k tokens). */
+    protected const MAX_PROGRAM_TEXT_LENGTH = 15_000;
 }
