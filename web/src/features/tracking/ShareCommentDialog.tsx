@@ -28,8 +28,8 @@ export interface ShareCommentDialogProps {
  * reuses the follow-up candidates endpoint (people who already see the
  * student); the server re-checks every recipient and who may share.
  *
- * Not built here on purpose (open at product level): how recipients are
- * notified, and sharing the full text in one step.
+ * Each recipient gets a notice (server side). «Usar el texto completo» copies
+ * the original into the extract, still editable before sending.
  */
 export function ShareCommentDialog({ studentId, comment, onOpenChange, onShared }: ShareCommentDialogProps) {
   const open = comment !== null
@@ -135,7 +135,18 @@ export function ShareCommentDialog({ studentId, comment, onOpenChange, onShared 
           </fieldset>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="share-extract">Extracto</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="share-extract">Extracto</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="link"
+                className="h-auto p-0"
+                onClick={() => setContent(comment?.content ?? "")}
+              >
+                Usar el texto completo
+              </Button>
+            </div>
             <Textarea
               id="share-extract"
               value={content}

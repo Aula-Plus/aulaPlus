@@ -9,9 +9,9 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
-import { roleLabels, type Comment, type CommentCategory } from "@/types"
+import { roleLabels, type Comment, type CommentCategory, type StaffMember } from "@/types"
 import type { CommentInput } from "./trackingApi"
-import { CommentScopeSelector, type CommentScopeOption } from "./CommentScopeSelector"
+import { CommentScopeSelector, type CommentScopeOption, type PickedPeople } from "./CommentScopeSelector"
 
 /**
  * Translate the UI-only scope choice into the real payload fields. `everyone`
@@ -32,6 +32,16 @@ function buildScopeFields(
     case "author_only":
       return { author_only: true }
   }
+}
+
+/** Only the roles where someone was picked; nothing at all for «Solo quien escribe». */
+function buildPeopleField(
+  option: CommentScopeOption,
+  picked: PickedPeople,
+): Pick<CommentInput, "visible_to_users"> {
+  if (option === "author_only") return {}
+  const entries = Object.entries(picked).filter(([, ids]) => ids && ids.length > 0)
+  return entries.length > 0 ? { visible_to_users: Object.fromEntries(entries) } : {}
 }
 
 export interface CommentsPanelProps {
@@ -61,6 +71,11 @@ export interface CommentsPanelProps {
   currentUserId?: number
   /** Only psychopedagogy/direction see the total; teachers never do. */
   showCount?: boolean
+  /**
+   * People who see the student: enables «Elegir personas» in the scope
+   * selector (student observations only).
+   */
+  scopeCandidates?: StaffMember[]
 }
 
 const ALL = "all"
@@ -76,12 +91,14 @@ export function CommentsPanel({
   showAuthors = false,
   currentUserId,
   showCount = false,
+  scopeCandidates,
 }: CommentsPanelProps) {
   const [authorFilter, setAuthorFilter] = useState<string>(ALL)
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [content, setContent] = useState("")
   const [categoryIds, setCategoryIds] = useState<number[]>([])
   const [scope, setScope] = useState<CommentScopeOption>("everyone")
+  const [pickedPeople, setPickedPeople] = useState<PickedPeople>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -103,6 +120,7 @@ export function CommentsPanel({
       content: trimmed,
       ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
       ...buildScopeFields(scope),
+      ...buildPeopleField(scope, pickedPeople),
     }
 
     setSubmitting(true)
@@ -111,6 +129,7 @@ export function CommentsPanel({
       setContent("")
       setCategoryIds([])
       setScope("everyone")
+      setPickedPeople({})
     } catch {
       setError("No pudimos guardar el comentario.")
     } finally {
@@ -168,7 +187,13 @@ export function CommentsPanel({
             </div>
           )}
 
-          <CommentScopeSelector value={scope} onChange={setScope} />
+          <CommentScopeSelector
+            value={scope}
+            onChange={setScope}
+            people={scopeCandidates?.filter((person) => person.id !== currentUserId)}
+            pickedPeople={pickedPeople}
+            onPickedPeopleChange={setPickedPeople}
+          />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

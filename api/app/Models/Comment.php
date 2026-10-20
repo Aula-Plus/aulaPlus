@@ -42,7 +42,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * {@see self::SCOPE_PSYCHOPEDAGOGY_ONLY} and `author_only` — normalized by
  * {@see self::normalizeVisibleTo()}.
  */
-#[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'visible_to', 'author_only'])]
+#[Fillable(['author_id', 'commentable_type', 'commentable_id', 'content', 'visible_to', 'visible_to_users', 'author_only'])]
 class Comment extends Model
 {
     /** @use HasFactory<CommentFactory> */
@@ -103,6 +103,7 @@ class Comment extends Model
     {
         return [
             'visible_to' => 'array',
+            'visible_to_users' => 'array',
             'author_only' => 'boolean',
         ];
     }
@@ -133,33 +134,41 @@ class Comment extends Model
      * the dedicated comment list endpoints, where filtering in the DB query is
      * cheap and avoids fetching rows the user can never see.
      *
-     * Two independent cases, OR-ed together (must stay in sync with
-     * {@see self::isVisibleTo()}):
+     * Cases, OR-ed together (must stay in sync with {@see self::isVisibleTo()}):
+     * - the user's own comments, whatever their scope;
      * - `author_only` comments: visible only to their author, and to no one
-     *   else regardless of role — this is stricter than any `visible_to` rule.
-     * - every other comment (`author_only = false`): always visible to a
-     *   psychopedagogue; for any other role, visible when it has no
-     *   `visible_to` restriction or lists one of the user's roles.
+     *   else regardless of role — this is stricter than any `visible_to` rule;
+     * - every other comment (`author_only = false`), per role of the user:
+     *   always visible to a psychopedagogue; for any other role, visible when
+     *   it has no `visible_to` restriction or lists that role — and, when the
+     *   author picked specific people of that role (`visible_to_users`,
+     *   «Elegir personas», ClickUp 86e3qkwnv), only to those people.
      */
     public function scopeVisibleToRole(Builder $query, User $user): Builder
     {
         $roles = $user->getRoleNames()->all();
-        $readsAllShared = in_array(Role::Psychopedagogue->value, $roles, true);
 
-        return $query->where(function (Builder $outer) use ($roles, $user, $readsAllShared): void {
-            $outer->where(function (Builder $q) use ($user): void {
-                $q->where('author_only', true)
-                    ->where('author_id', $user->id);
-            })->orWhere(function (Builder $q) use ($roles, $readsAllShared): void {
-                $q->where('author_only', false)
-                    ->when(! $readsAllShared, fn (Builder $q) => $q->where(function (Builder $inner) use ($roles): void {
-                        $inner->whereNull('visible_to');
+        return $query->where(function (Builder $outer) use ($roles, $user): void {
+            $outer->where('author_id', $user->id)
+                ->orWhere(function (Builder $q) use ($roles, $user): void {
+                    $q->where('author_only', false)->where(function (Builder $byRole) use ($roles, $user): void {
+                        // No role → no grant (an always-false group).
+                        $byRole->whereRaw('1 = 0');
 
                         foreach ($roles as $role) {
-                            $inner->orWhereJsonContains('visible_to', $role);
+                            $byRole->orWhere(function (Builder $grant) use ($role, $user): void {
+                                if ($role !== Role::Psychopedagogue->value) {
+                                    $grant->where(fn (Builder $r) => $r->whereNull('visible_to')
+                                        ->orWhereJsonContains('visible_to', $role));
+                                }
+
+                                $grant->where(fn (Builder $p) => $p->whereNull('visible_to_users')
+                                    ->orWhereNull("visible_to_users->{$role}")
+                                    ->orWhereJsonContains("visible_to_users->{$role}", $user->id));
+                            });
                         }
-                    }));
-            });
+                    });
+                });
         });
     }
 
@@ -171,24 +180,32 @@ class Comment extends Model
      * who shouldn't see it.
      *
      * Takes the whole `User` (not just their roles) because `author_only`
-     * needs to know *who* is asking, not only their roles: "only the author"
-     * isolates a person, and two users can share the `teacher` role.
+     * and «Elegir personas» need to know *who* is asking, not only their
+     * roles: two users can share the `teacher` role.
      */
     public function isVisibleTo(User $user): bool
     {
+        if ($this->author_id === $user->id) {
+            return true;
+        }
+
         if ($this->author_only) {
-            return $this->author_id === $user->id;
+            return false;
         }
 
-        if ($user->hasRole(Role::Psychopedagogue->value)) {
-            return true;
+        foreach ($user->getRoleNames()->all() as $role) {
+            $roleAllowed = $role === Role::Psychopedagogue->value
+                || empty($this->visible_to)
+                || in_array($role, $this->visible_to, true);
+
+            $people = $this->visible_to_users[$role] ?? null;
+
+            if ($roleAllowed && ($people === null || in_array($user->id, array_map('intval', $people), true))) {
+                return true;
+            }
         }
 
-        if (empty($this->visible_to)) {
-            return true;
-        }
-
-        return count(array_intersect($this->visible_to, $user->getRoleNames()->all())) > 0;
+        return false;
     }
 
     /**

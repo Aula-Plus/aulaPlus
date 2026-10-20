@@ -96,6 +96,7 @@ describe("StudentTrackingPage", () => {
     // self-fetch on mount; stub them so these tests (about alerts/
     // accommodations/comments) don't hit the network.
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([])
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchStudentCommentShares").mockResolvedValue([])
     vi.spyOn(subjectsApi, "fetchSubjects").mockResolvedValue([

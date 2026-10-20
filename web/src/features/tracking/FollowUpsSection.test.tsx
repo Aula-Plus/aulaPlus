@@ -194,4 +194,29 @@ describe("FollowUpsSection", () => {
     expect(markRead).toHaveBeenCalledWith("n1")
     expect(screen.queryByText(/te asignaron un seguimiento/i)).not.toBeInTheDocument()
   })
+
+  it("shows a shared-extract notice naming the student, with a link to the file", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([])
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([
+      {
+        id: "n2",
+        data: { type: "comment_shared", comment_share_id: 8, student_id: 3, student_name: "Juan Pérez" },
+        created_at: null,
+      },
+    ])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(/psicopedagogía te compartió un extracto sobre juan pérez/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /ver ficha del alumno/i })).toHaveAttribute(
+      "href",
+      "/alumnos/3/seguimiento",
+    )
+  })
 })

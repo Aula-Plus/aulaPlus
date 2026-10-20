@@ -5,8 +5,11 @@ namespace App\Http\Requests;
 use App\Enums\Role;
 use App\Models\Comment;
 use App\Models\Student;
+use App\Models\User;
+use App\Policies\ScheduledFollowUpPolicy;
 use App\Support\Tenancy;
 use Closure;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,8 +40,19 @@ class StoreStudentCommentRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        // «Elegir personas» (ClickUp 86e3qkwnv): an empty pick for a role
+        // means "the whole role", so empty lists are dropped and an empty map
+        // is stored as null. Never alongside `author_only`.
+        $people = $this->input('visible_to_users');
+        if (is_array($people) && ! array_is_list($people)) {
+            $people = array_filter($people, fn ($ids) => $ids !== [] && $ids !== null);
+            $this->merge(['visible_to_users' => $people === [] ? null : $people]);
+        } elseif ($people === []) {
+            $this->merge(['visible_to_users' => null]);
+        }
+
         if ($this->boolean('author_only')) {
-            $this->merge(['visible_to' => null]);
+            $this->merge(['visible_to' => null, 'visible_to_users' => null]);
 
             return;
         }
@@ -85,6 +99,70 @@ class StoreStudentCommentRequest extends FormRequest
                 }
             }],
             'visible_to.*' => [Rule::in(Role::values())],
+            // { role: [user ids] } — checked against the chosen option and
+            // the student in after().
+            'visible_to_users' => ['nullable', 'array'],
+            'visible_to_users.*' => ['array', 'min:1', 'max:20'],
+            'visible_to_users.*.*' => ['integer', 'distinct'],
         ];
+    }
+
+    /**
+     * Every role picked in «Elegir personas» must be one the chosen option
+     * reaches, and every person must hold that role, be active and already
+     * see the student (same rule as follow-up responsibles) — never trusted
+     * from the client.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $people = $this->input('visible_to_users');
+            if ($validator->errors()->isNotEmpty() || ! is_array($people)) {
+                return;
+            }
+
+            /** @var Student $student */
+            $student = $this->route('student');
+            $optionRoles = $this->input('visible_to') ?: Role::values();
+            $followUps = app(ScheduledFollowUpPolicy::class);
+
+            foreach ($people as $role => $ids) {
+                if (! in_array($role, $optionRoles, true)) {
+                    $validator->errors()->add('visible_to_users', 'People can only be picked within the roles of the chosen scope.');
+
+                    return;
+                }
+
+                foreach ($ids as $id) {
+                    $person = User::query()->find((int) $id);
+
+                    if ($person === null
+                        || $person->disabled_at !== null
+                        || ! $person->hasRole($role)
+                        || ! $followUps->canFollow($person, $student)) {
+                        $validator->errors()->add('visible_to_users', 'One of the selected people cannot see this student.');
+
+                        return;
+                    }
+                }
+            }
+        }];
+    }
+
+    /**
+     * The validated «Elegir personas» map with integer ids, or null.
+     *
+     * @return array<string, list<int>>|null
+     */
+    public function visibleToUsers(): ?array
+    {
+        $people = $this->validated('visible_to_users');
+
+        return $people === null ? null : array_map(
+            fn (array $ids) => array_values(array_map('intval', $ids)),
+            $people,
+        );
     }
 }

@@ -290,3 +290,98 @@ it('does not count extracts toward the recipient\'s trend', function () {
     Sanctum::actingAs($director);
     expect(trackingFor($student)['comment_trends'])->toBe([]);
 });
+
+it('notifies each recipient of a shared extract and names the student only at read time', function () {
+    ['student' => $student, 'teacher' => $teacher, 'psico' => $psico, 'director' => $director] = scopeFixture();
+    $original = Comment::factory()->forSubject($student)->visibleTo(Comment::SCOPE_PSYCHOPEDAGOGY_ONLY)
+        ->create(['author_id' => $psico->id, 'content' => 'Original reservado']);
+
+    Sanctum::actingAs($psico);
+    $this->postJson("/api/v1/comments/{$original->id}/shares", [
+        'content' => 'Extracto secreto',
+        'recipient_ids' => [$teacher->id, $director->id],
+    ])->assertCreated();
+
+    foreach ([$teacher, $director] as $recipient) {
+        $stored = $recipient->unreadNotifications()->sole();
+        // The stored payload carries ids only: no extract, no student name.
+        expect(json_encode($stored->data))->not->toContain('Extracto secreto')->not->toContain($student->full_name);
+
+        Sanctum::actingAs($recipient);
+        $this->getJson('/api/v1/notifications')->assertOk()
+            ->assertJsonPath('data.0.data.type', 'comment_shared')
+            ->assertJsonPath('data.0.data.student_id', $student->id)
+            ->assertJsonPath('data.0.data.student_name', $student->full_name);
+        $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+    }
+
+    // The author gets no notice of their own share.
+    expect($psico->unreadNotifications()->count())->toBe(0);
+});
+
+it('lets the author narrow each role of the scope to specific people («Elegir personas»)', function () {
+    ['school' => $school, 'student' => $student, 'teacher' => $teacher, 'psico' => $psico, 'director' => $director] = scopeFixture();
+    $colleague = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($student->groups()->first(), $colleague);
+    $otherDirector = User::factory()->forSchool($school)->director()->create();
+
+    // «Todos» but, among teachers, only $colleague; directors and psico untouched.
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/students/{$student->id}/comments", [
+        'content' => 'Solo para un colega',
+        'visible_to_users' => ['teacher' => [$colleague->id]],
+    ])->assertCreated()->assertJsonPath('data.visible_to_users', ['teacher' => [$colleague->id]]);
+
+    // «Dirección y Psicopedagogía» narrowed to one director; psico untouched.
+    Sanctum::actingAs($psico);
+    $this->postJson("/api/v1/students/{$student->id}/comments", [
+        'content' => 'Para un director',
+        'visible_to' => Comment::SCOPE_DIRECTION_AND_PSYCHOPEDAGOGY,
+        'visible_to_users' => ['director' => [$director->id], 'psychopedagogue' => []],
+    ])->assertCreated();
+
+    $seen = function (User $viewer) use ($student): array {
+        Sanctum::actingAs($viewer);
+
+        return listedCommentContents($student);
+    };
+
+    expect($seen($teacher))->toContain('Solo para un colega')->not->toContain('Para un director')
+        ->and($seen($colleague))->toContain('Solo para un colega')
+        ->and($seen($director))->toContain('Solo para un colega', 'Para un director')
+        ->and($seen($otherDirector))->toContain('Solo para un colega')->not->toContain('Para un director')
+        ->and($seen($psico))->toContain('Solo para un colega', 'Para un director');
+
+    // The cached tracking view applies the same rule (Comment::isVisibleTo).
+    $outsider = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($student->groups()->first(), $outsider);
+    Sanctum::actingAs($outsider);
+    expect(collect(trackingFor($student)['comments'] ?? [])->pluck('content')->all())->not->toContain('Solo para un colega');
+    expect(listedCommentContents($student))->not->toContain('Solo para un colega');
+});
+
+it('rejects people outside the roles of the scope or who cannot see the student (422)', function () {
+    ['school' => $school, 'student' => $student, 'teacher' => $teacher, 'psico' => $psico, 'director' => $director] = scopeFixture();
+    $outsiderTeacher = User::factory()->forSchool($school)->teacher()->create();
+    $foreignDirector = User::factory()->forSchool(School::factory()->create())->director()->create();
+
+    Sanctum::actingAs($psico);
+    foreach ([
+        // A teacher can't be picked under «Dirección y Psicopedagogía».
+        ['visible_to' => Comment::SCOPE_DIRECTION_AND_PSYCHOPEDAGOGY, 'visible_to_users' => ['teacher' => [$teacher->id]]],
+        // Someone listed under a role they don't hold.
+        ['visible_to_users' => ['director' => [$teacher->id]]],
+        // A teacher who doesn't teach the student, a director from another school.
+        ['visible_to_users' => ['teacher' => [$outsiderTeacher->id]]],
+        ['visible_to_users' => ['director' => [$foreignDirector->id]]],
+    ] as $payload) {
+        $this->postJson("/api/v1/students/{$student->id}/comments", ['content' => 'x', ...$payload])
+            ->assertJsonValidationErrors('visible_to_users');
+    }
+
+    // «Solo quien escribe» never stores people.
+    $this->postJson("/api/v1/students/{$student->id}/comments", [
+        'content' => 'Privada', 'author_only' => true, 'visible_to_users' => ['director' => [$director->id]],
+    ])->assertCreated();
+    expect(Comment::withoutGlobalScopes()->where('content', 'Privada')->value('visible_to_users'))->toBeNull();
+});

@@ -84,16 +84,26 @@ export function FollowUpsSection() {
           <ul className="grid gap-2">
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                <span>
-                  Te asignaron un seguimiento
-                  {studentNameByFollowUp.get(notice.data.follow_up_id)
-                    ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
-                    : ""}{" "}
-                  con fecha {formatShortDate(notice.data.due_date)}.{" "}
-                  <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                    Ver ficha del alumno
-                  </Link>
-                </span>
+                {notice.data.type === "comment_shared" ? (
+                  <span>
+                    Psicopedagogía te compartió un extracto
+                    {notice.data.student_name ? ` sobre ${notice.data.student_name}` : ""}.{" "}
+                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </span>
+                ) : (
+                  <span>
+                    Te asignaron un seguimiento
+                    {notice.data.follow_up_id !== undefined && studentNameByFollowUp.get(notice.data.follow_up_id)
+                      ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
+                      : ""}{" "}
+                    {notice.data.due_date ? `con fecha ${formatShortDate(notice.data.due_date)}. ` : ""}
+                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </span>
+                )}
                 <Button type="button" size="sm" variant="outline" onClick={() => dismiss(notice.id)}>
                   Entendido
                 </Button>

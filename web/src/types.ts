@@ -128,6 +128,11 @@ export interface Comment {
    * comment reaches the client only when the viewer is its own author.
    */
   author_only: boolean
+  /**
+   * «Elegir personas» (ClickUp 86e3qkwnv): per role, the specific people the
+   * author picked. Only sent back to the author.
+   */
+  visible_to_users?: Partial<Record<Role, number[]>> | null
   created_at: string | null
 }
 
@@ -852,14 +857,21 @@ export interface CommentShare {
   created_at: string | null
 }
 
-/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+/**
+ * Unread notice; the stored payload holds ids only. `follow_up_assigned`
+ * carries the follow-up and its date; `comment_shared` («Psicopedagogía te
+ * compartió un extracto», ClickUp 86e3qkwnv) carries the share, and the server
+ * adds `student_name` at read time when the caller may see the student.
+ */
 export interface AppNotification {
   id: string
   data: {
     type: string
-    follow_up_id: number
     student_id: number
-    due_date: string
+    follow_up_id?: number
+    due_date?: string
+    comment_share_id?: number
+    student_name?: string | null
   }
   created_at: string | null
 }

@@ -38,6 +38,7 @@ class StudentCommentController extends Controller
             'commentable_id' => $student->id,
             'content' => $request->validated('content'),
             'visible_to' => $request->validated('visible_to'),
+            'visible_to_users' => $request->visibleToUsers(),
             'author_only' => $request->boolean('author_only'),
         ]);
 

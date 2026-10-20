@@ -29,6 +29,7 @@ import {
   type Comment,
   type CommentCategory,
   type CommentShare,
+  type StaffMember,
   type GradeAccommodation,
   type StudentTracking,
 } from "@/types"
@@ -43,6 +44,7 @@ import { SharedExtractsList } from "./SharedExtractsList"
 import { TeamSummaryCard } from "./TeamSummaryCard"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import { StudentPerformanceChart } from "./StudentPerformanceChart"
+import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput, TeamSummaryInput } from "./trackingApi"
 
@@ -79,6 +81,8 @@ export function StudentTrackingPage() {
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [categories, setCategories] = useState<CommentCategory[]>([])
   const [commentShares, setCommentShares] = useState<CommentShare[]>([])
+  // People who see the student, for «Elegir personas» in «Visible para».
+  const [scopeCandidates, setScopeCandidates] = useState<StaffMember[] | undefined>(undefined)
   const [sharingComment, setSharingComment] = useState<Comment | null>(null)
   const showShareComment = canShareComment(user)
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +118,11 @@ export function StudentTrackingPage() {
       .fetchCommentCategories()
       .then(setCategories)
       .catch(() => setCategories([]))
-  }, [loadTracking, loadComments, loadCommentShares])
+    scheduledFollowUpsApi
+      .fetchFollowUpCandidates(studentId)
+      .then(setScopeCandidates)
+      .catch(() => setScopeCandidates(undefined))
+  }, [loadTracking, loadComments, loadCommentShares, studentId])
 
   async function handleCreateComment(input: CommentInput) {
     await trackingApi.createStudentComment(studentId, input)
@@ -496,6 +504,7 @@ export function StudentTrackingPage() {
             showAuthors
             currentUserId={user?.id}
             showCount={isSchoolWideStaff(user)}
+            scopeCandidates={scopeCandidates}
           />
         )}
 

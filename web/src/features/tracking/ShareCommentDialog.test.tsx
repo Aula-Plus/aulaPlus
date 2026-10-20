@@ -108,4 +108,31 @@ describe("ShareCommentDialog", () => {
     expect(screen.queryByText("Compartir con")).not.toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it("copies the original into the extract with «Usar el texto completo», still editable", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([
+      { id: 4, name: "Dora Directora", role: "director" },
+    ])
+    const share = vi.spyOn(trackingApi, "shareComment").mockResolvedValue({
+      id: 1,
+      student_id: 3,
+      author_id: 2,
+      content: "Observación original reservada. Editado",
+      created_at: null,
+    } as never)
+    renderDialog()
+    await userEvent.click(await screen.findByRole("checkbox", { name: /dora directora/i }))
+
+    await userEvent.click(screen.getByRole("button", { name: /usar el texto completo/i }))
+    const textarea = screen.getByLabelText<HTMLTextAreaElement>("Extracto")
+    expect(textarea.value).toBe("Observación original reservada")
+
+    await userEvent.type(textarea, ". Editado")
+    await userEvent.click(screen.getByRole("button", { name: /compartir extracto/i }))
+
+    expect(share).toHaveBeenCalledWith(9, {
+      content: "Observación original reservada. Editado",
+      recipient_ids: [4],
+    })
+  })
 })

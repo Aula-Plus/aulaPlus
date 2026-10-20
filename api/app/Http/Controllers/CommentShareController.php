@@ -7,6 +7,7 @@ use App\Http\Resources\CommentShareResource;
 use App\Models\Comment;
 use App\Models\CommentShare;
 use App\Models\Student;
+use App\Notifications\CommentSharedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -43,7 +44,7 @@ class CommentShareController extends Controller
 
     /**
      * POST /api/v1/comments/{comment}/shares — authorization and recipient
-     * checks live in StoreCommentShareRequest.
+     * checks live in StoreCommentShareRequest. Each recipient gets a notice.
      */
     public function store(StoreCommentShareRequest $request, Comment $comment): JsonResponse
     {
@@ -56,6 +57,11 @@ class CommentShareController extends Controller
 
         $share->recipients()->sync($request->validated('recipient_ids'));
         $share->load('recipients.roles');
+
+        // Recipients only see the extract, so they are told it is there.
+        foreach ($share->recipients as $recipient) {
+            $recipient->notify(new CommentSharedNotification($share));
+        }
 
         return (new CommentShareResource($share))->response()->setStatusCode(201);
     }

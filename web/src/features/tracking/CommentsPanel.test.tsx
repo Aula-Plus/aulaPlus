@@ -325,4 +325,59 @@ describe("CommentsPanel observations bank", () => {
     )
     expect(screen.getByText(/observaciones \(2\)/i)).toBeInTheDocument()
   })
+
+  it("narrows a role to specific people with «Elegir personas» and sends only the picked roles", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <CommentsPanel
+        comments={[]}
+        onCreate={onCreate}
+        currentUserId={1}
+        scopeCandidates={[
+          { id: 1, name: "Yo Misma", role: "teacher" },
+          { id: 4, name: "Dora Directora", role: "director" },
+          { id: 5, name: "Tomás Docente", role: "teacher" },
+          { id: 6, name: "Paula Psico", role: "psychopedagogue" },
+        ]}
+      />,
+    )
+
+    await chooseScope("Dirección y Psicopedagogía")
+    await userEvent.click(screen.getByRole("button", { name: /elegir personas/i }))
+    const picker = screen.getByRole("group", { name: /elegir personas/i })
+    // Only the roles of the chosen option, and never the author.
+    expect(within(picker).queryByRole("checkbox", { name: /tomás docente/i })).not.toBeInTheDocument()
+    expect(within(picker).queryByRole("checkbox", { name: /yo misma/i })).not.toBeInTheDocument()
+    await userEvent.click(within(picker).getByRole("checkbox", { name: /dora directora/i }))
+
+    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Para Dora")
+    await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+
+    expect(onCreate).toHaveBeenCalledWith({
+      content: "Para Dora",
+      visible_to: ["director", "psychopedagogue"],
+      visible_to_users: { director: [4] },
+    })
+  })
+
+  it("offers no «Elegir personas» for «Solo quien escribe» and clears picks when the option changes", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <CommentsPanel
+        comments={[]}
+        onCreate={onCreate}
+        scopeCandidates={[{ id: 5, name: "Tomás Docente", role: "teacher" }]}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: /elegir personas/i }))
+    await userEvent.click(screen.getByRole("checkbox", { name: /tomás docente/i }))
+    await chooseScope("Solo quien escribe")
+    expect(screen.queryByRole("button", { name: /elegir personas/i })).not.toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Privada")
+    await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+
+    expect(onCreate).toHaveBeenCalledWith({ content: "Privada", author_only: true })
+  })
 })

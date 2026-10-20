@@ -49,6 +49,12 @@ export interface CommentInput {
    * not send them as if independent).
    */
   author_only?: boolean
+  /**
+   * «Elegir personas» (ClickUp 86e3qkwnv): per role of the chosen scope, the
+   * specific people who may read it; a role left out keeps its whole
+   * audience. Student observations only; never sent with `author_only`.
+   */
+  visible_to_users?: Partial<Record<Role, number[]>>
 }
 
 export async function fetchStudentTracking(studentId: number): Promise<StudentTracking> {
