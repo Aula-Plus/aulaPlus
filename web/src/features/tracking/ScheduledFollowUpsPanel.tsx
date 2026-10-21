@@ -13,6 +13,7 @@ import { SingleSelect } from "@/components/ui/single-select"
 import { roleLabels } from "@/types"
 import type { Role, ScheduledFollowUp, StaffMember } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import { followUpTitle } from "./followUpTitle"
 
 interface ScheduledFollowUpsPanelProps {
   studentId: number
@@ -325,7 +326,7 @@ function FollowUpRow({
     <li className="grid gap-2 rounded-md border p-3 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="whitespace-pre-wrap">{followUp.description}</p>
+          <p className="whitespace-pre-wrap">{followUpTitle(followUp)}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Plazo: {formatShortDate(followUp.due_date)}
           </p>
@@ -387,6 +388,11 @@ function FollowUpRow({
             </Button>
           </div>
         </div>
+      ) : followUp.accommodation_id ? (
+        // Closed by the proposal itself (confirm, withdraw or reject), never by hand.
+        <p className="text-xs text-muted-foreground">
+          Se cierra cuando Psicopedagogía confirma o rechaza la propuesta, o Dirección la retira.
+        </p>
       ) : (
         <div>
           <Button type="button" size="sm" variant="outline" onClick={() => setResolving(true)}>

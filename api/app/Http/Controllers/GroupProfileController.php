@@ -150,6 +150,8 @@ class GroupProfileController extends Controller
     {
         $accommodations = Accommodation::query()
             ->whereIn('student_id', $studentIds)
+            // An unconfirmed direction proposal was never activated.
+            ->confirmed()
             ->when($from, fn ($query) => $query->whereDate('created_at', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('created_at', '<=', $to))
             ->get();

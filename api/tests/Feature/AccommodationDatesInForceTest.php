@@ -135,26 +135,24 @@ it('restarts «Vigente desde» on re-activation unless the same edit sets it', f
         ->assertJsonPath('data.deactivated_on', null);
 });
 
-it('starts an externally approved accommodation on the approval day, keeping a future start', function () {
+// ClickUp 86e3qkwkk: a direction proposal becomes effective the day
+// psychopedagogy confirms it (the external-approval flow was removed).
+it('starts a confirmed proposal on the confirmation day, keeping a future start', function () {
     ['student' => $student, 'psychopedagogue' => $psychopedagogue] = datesScenario();
-    $pending = Accommodation::factory()->create([
+    $pending = Accommodation::factory()->proposal()->create([
         'student_id' => $student->id,
         'starts_on' => '2026-04-20',
-        'requires_external_approval' => true,
-        'approved' => null,
     ]);
-    $planned = Accommodation::factory()->create([
+    $planned = Accommodation::factory()->proposal()->create([
         'student_id' => $student->id,
         'starts_on' => '2026-06-15',
-        'requires_external_approval' => true,
-        'approved' => null,
     ]);
     Sanctum::actingAs($psychopedagogue);
 
-    $this->postJson("/api/v1/accommodations/{$pending->id}/approve")
+    $this->postJson("/api/v1/accommodations/{$pending->id}/proposal/confirm")
         ->assertOk()
         ->assertJsonPath('data.starts_on', '2026-05-03');
-    $this->postJson("/api/v1/accommodations/{$planned->id}/approve")
+    $this->postJson("/api/v1/accommodations/{$planned->id}/proposal/confirm")
         ->assertOk()
         ->assertJsonPath('data.starts_on', '2026-06-15');
 });

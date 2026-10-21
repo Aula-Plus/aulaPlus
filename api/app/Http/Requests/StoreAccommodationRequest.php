@@ -21,7 +21,9 @@ use Illuminate\Validation\Rule;
  * another tenant 404s before this runs. `starts_on` is optional (the model
  * defaults it to today, school time); subjects and
  * assessment types are optional (absent = general) — see
- * ValidatesAccommodationScope.
+ * ValidatesAccommodationScope. What direction creates is a proposal
+ * psychopedagogy must confirm (ClickUp 86e3qkwkk; the controller decides,
+ * never the payload). `requires_external_approval` is no longer accepted.
  */
 class StoreAccommodationRequest extends FormRequest
 {
@@ -43,7 +45,6 @@ class StoreAccommodationRequest extends FormRequest
             'description' => ['required', 'string'],
             'focus_area' => ['required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
-            'requires_external_approval' => ['sometimes', 'boolean'],
             'llm_rule' => ['nullable', 'array'],
             ...$this->accommodationScopeRules(),
         ];

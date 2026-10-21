@@ -31,6 +31,12 @@ class ScheduledFollowUpController extends Controller
 
         $query = $student->scheduledFollowUps()->with(['assignedTo.roles', 'sharedWith.roles'])->latest();
 
+        // Review tasks of accommodation proposals are school-wide only
+        // (ScheduledFollowUpPolicy::view).
+        if (! $request->user()->hasAnyRole(Role::schoolWideValues())) {
+            $query->whereNull('accommodation_id');
+        }
+
         // The endpoint returns every follow-up unless the caller narrows it
         // with ?resolved=true|false — the default filter is a client concern,
         // not decided here (spec §3).
@@ -64,6 +70,9 @@ class ScheduledFollowUpController extends Controller
         $followUps = ScheduledFollowUp::query()
             ->with(['assignedTo.roles', 'sharedWith.roles'])
             ->whereIn('student_id', $studentIds)
+            // Review tasks of accommodation proposals are school-wide only
+            // (ScheduledFollowUpPolicy::view).
+            ->when(! $request->user()->hasAnyRole(Role::schoolWideValues()), fn ($query) => $query->whereNull('accommodation_id'))
             ->latest()
             ->get();
 

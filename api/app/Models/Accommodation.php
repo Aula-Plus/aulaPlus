@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AccommodationCategory;
+use App\Enums\AccommodationReviewStatus;
 use App\Enums\AssessmentType;
 use App\Enums\Role;
 use App\Models\Concerns\Auditable;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
@@ -40,6 +42,15 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * effective (switched off), the system records that day in `deactivated_on` —
  * never fillable, never in a Form Request. See {@see self::booted()} and
  * {@see self::isInForceOn()}.
+ *
+ * Direction proposals (ClickUp 86e3qkwkk): an accommodation direction creates
+ * is a proposal (`review_status`, see AccommodationReviewStatus) until
+ * psychopedagogy confirms it. Until then it is never effective, never reaches
+ * a teacher and counts nowhere — {@see self::scopeConfirmed()}. The review
+ * fields are set by App\Services\Accommodations\AccommodationProposalWorkflow
+ * only, never from a Form Request. `requires_external_approval`/`approved`
+ * are no longer part of the API (decision in the same task); stored values are
+ * kept and keep their effect on {@see self::isEffective()}.
  */
 #[Fillable([
     'student_id',
@@ -53,6 +64,10 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
     'llm_rule',
     'requires_external_approval',
     'approved',
+    'review_status',
+    'proposed_by_id',
+    'reviewed_by_id',
+    'reviewed_at',
     'created_by_id',
     'deleted_by_id',
 ])]
@@ -74,6 +89,8 @@ class Accommodation extends Model
             'llm_rule' => 'array',
             'requires_external_approval' => 'boolean',
             'approved' => 'boolean',
+            'review_status' => AccommodationReviewStatus::class,
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -97,9 +114,11 @@ class Accommodation extends Model
         });
 
         static::updating(function (self $accommodation): void {
+            $originalReview = $accommodation->getOriginal('review_status');
             $wasEffective = (bool) $accommodation->getOriginal('active')
                 && (! $accommodation->getOriginal('requires_external_approval')
-                    || $accommodation->getOriginal('approved') === true);
+                    || $accommodation->getOriginal('approved') === true)
+                && ($originalReview === null || $originalReview === AccommodationReviewStatus::Confirmed);
             $isEffective = $accommodation->isEffective();
 
             if ($wasEffective === $isEffective) {
@@ -127,12 +146,46 @@ class Accommodation extends Model
      * Whether this accommodation actually applies in practice: it must be
      * active, and if it requires external approval, that approval must have
      * been granted (approved === true — pending `null` or rejected `false`
-     * are not effective). Use this everywhere "does this accommodation apply
-     * right now" matters, rather than reading `active` alone.
+     * are not effective), and if it is a direction proposal, psychopedagogy
+     * must have confirmed it. Use this everywhere "does this accommodation
+     * apply right now" matters, rather than reading `active` alone.
      */
     public function isEffective(): bool
     {
-        return $this->active && (! $this->requires_external_approval || $this->approved === true);
+        return $this->active
+            && (! $this->requires_external_approval || $this->approved === true)
+            && $this->isConfirmed();
+    }
+
+    /**
+     * Not an unconfirmed direction proposal: created directly by
+     * psychopedagogy, or a proposal psychopedagogy confirmed. In-memory twin of
+     * {@see self::scopeConfirmed()}.
+     */
+    public function isConfirmed(): bool
+    {
+        return $this->review_status === null || $this->review_status === AccommodationReviewStatus::Confirmed;
+    }
+
+    /**
+     * A direction proposal still under review (pending or returned).
+     */
+    public function isOpenProposal(): bool
+    {
+        return $this->review_status?->isOpen() ?? false;
+    }
+
+    /**
+     * Excludes direction proposals psychopedagogy has not confirmed (pending,
+     * returned, withdrawn, rejected): they never reach a teacher and never
+     * count as an accommodation. Part of {@see self::scopeEffective()} and of
+     * the teacher branch of {@see self::scopeVisibleTo()}.
+     */
+    public function scopeConfirmed(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $review) => $review
+            ->whereNull('accommodations.review_status')
+            ->orWhere('accommodations.review_status', AccommodationReviewStatus::Confirmed->value));
     }
 
     /**
@@ -144,7 +197,8 @@ class Accommodation extends Model
             ->where('accommodations.active', true)
             ->where(fn (Builder $approval) => $approval
                 ->where('accommodations.requires_external_approval', false)
-                ->orWhere('accommodations.approved', true));
+                ->orWhere('accommodations.approved', true))
+            ->confirmed();
     }
 
     /**
@@ -234,6 +288,32 @@ class Accommodation extends Model
         return $this->belongsTo(User::class, 'deleted_by_id');
     }
 
+    public function proposedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'proposed_by_id');
+    }
+
+    public function reviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by_id');
+    }
+
+    /**
+     * The history of a direction proposal, oldest first.
+     */
+    public function reviewEvents(): HasMany
+    {
+        return $this->hasMany(AccommodationReviewEvent::class)->orderBy('id');
+    }
+
+    /**
+     * The review task psychopedagogy got for this proposal.
+     */
+    public function reviewFollowUp(): HasOne
+    {
+        return $this->hasOne(ScheduledFollowUp::class);
+    }
+
     public function instanceOverrides(): HasMany
     {
         return $this->hasMany(AccommodationInstanceOverride::class);
@@ -303,6 +383,7 @@ class Accommodation extends Model
         }
 
         return $query
+            ->confirmed()
             ->whereExists(fn (QueryBuilder $teaches) => $teaches
                 ->selectRaw('1')
                 ->from('group_teacher')

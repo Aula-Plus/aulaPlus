@@ -13,12 +13,25 @@ use App\Models\User;
  * - view: tenant check, then the visibility rule of
  *   Accommodation::scopeVisibleTo — school-wide roles see every accommodation;
  *   a teacher only the general ones and those scoped to a subject they teach
- *   the student (ClickUp 86e3dpbwy follow-up).
+ *   the student (ClickUp 86e3dpbwy follow-up), never an unconfirmed direction
+ *   proposal (ClickUp 86e3qkwkk).
  * - create: any staff role — a teacher may propose one (living document,
- *   screen 06); approval is a separate step.
- * - update/delete: psychopedagogy and direction only. A teacher never edits an
- *   accommodation: the response would carry the full record (origin, scope,
- *   description), including ones scoped to subjects the teacher can't see.
+ *   screen 06). What direction creates is a proposal psychopedagogy must
+ *   confirm (AccommodationProposalWorkflow).
+ * - update: psychopedagogy, on any accommodation of its school (including an
+ *   open proposal: it may edit before confirming). Direction only on a
+ *   proposal still under review — it never edits or switches off a confirmed
+ *   accommodation (screens 04/06: direction reads, psychopedagogy manages).
+ *   A teacher never edits one: the response would carry the full record
+ *   (origin, scope, description), including ones scoped to subjects the
+ *   teacher can't see.
+ * - confirm/return/reject a proposal: psychopedagogy only.
+ * - resubmit/withdraw a proposal: direction only.
+ * - viewProposals (a student's proposals list) / viewReviewHistory:
+ *   school-wide roles.
+ *
+ * Whether a proposal is in a state that allows a step is a business-state
+ * precondition checked by the workflow (422), not here (403).
  */
 class AccommodationPolicy
 {
@@ -40,40 +53,70 @@ class AccommodationPolicy
 
     public function update(User $user, Accommodation $accommodation): bool
     {
-        return $this->sharesSchool($user, $accommodation)
-            && $user->hasAnyRole(Role::schoolWideValues());
+        if (! $this->sharesSchool($user, $accommodation)) {
+            return false;
+        }
+
+        if ($this->isPsychopedagogue($user)) {
+            return true;
+        }
+
+        return $this->isDirector($user) && $accommodation->isOpenProposal();
     }
 
     public function delete(User $user, Accommodation $accommodation): bool
     {
-        return $this->update($user, $accommodation);
+        return $this->sharesSchool($user, $accommodation) && $this->isPsychopedagogue($user);
     }
 
-    /**
-     * Role/tenant authorization only — deliberately does NOT check
-     * `requires_external_approval`/`approved` here. Whether approving makes
-     * sense *right now* is a business-state precondition, not an
-     * authorization decision: the controller checks it separately and
-     * responds 422 (not 403) when it fails, per
-     * docs/prompts/03-flujos-aprobacion-trazabilidad.md §3.
-     */
-    public function approve(User $user, Accommodation $accommodation): bool
+    public function confirm(User $user, Accommodation $accommodation): bool
+    {
+        return $this->sharesSchool($user, $accommodation) && $this->isPsychopedagogue($user);
+    }
+
+    public function returnProposal(User $user, Accommodation $accommodation): bool
+    {
+        return $this->confirm($user, $accommodation);
+    }
+
+    public function reject(User $user, Accommodation $accommodation): bool
+    {
+        return $this->confirm($user, $accommodation);
+    }
+
+    public function resubmit(User $user, Accommodation $accommodation): bool
+    {
+        return $this->sharesSchool($user, $accommodation) && $this->isDirector($user);
+    }
+
+    public function withdraw(User $user, Accommodation $accommodation): bool
+    {
+        return $this->resubmit($user, $accommodation);
+    }
+
+    public function viewProposals(User $user): bool
+    {
+        return $user->hasAnyRole(Role::schoolWideValues());
+    }
+
+    public function viewReviewHistory(User $user, Accommodation $accommodation): bool
     {
         return $this->sharesSchool($user, $accommodation)
             && $user->hasAnyRole(Role::schoolWideValues());
-    }
-
-    /**
-     * Same authorization as {@see self::approve()} — rejecting is the other
-     * outcome of the same director/psychopedagogue-only workflow.
-     */
-    public function reject(User $user, Accommodation $accommodation): bool
-    {
-        return $this->approve($user, $accommodation);
     }
 
     protected function sharesSchool(User $user, Accommodation $accommodation): bool
     {
         return $user->school_id === $accommodation->school_id;
+    }
+
+    protected function isPsychopedagogue(User $user): bool
+    {
+        return $user->hasRole(Role::Psychopedagogue->value);
+    }
+
+    protected function isDirector(User $user): bool
+    {
+        return $user->hasRole(Role::Director->value);
     }
 }

@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AccommodationReviewStatus;
 use App\Http\Requests\StoreAccommodationRequest;
 use App\Http\Requests\UpdateAccommodationRequest;
 use App\Http\Resources\AccommodationResource;
 use App\Models\Accommodation;
 use App\Models\Student;
+use App\Services\Accommodations\AccommodationProposalWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Create/edit endpoints for accommodations (docs/prompts/18-ajustes-categoria-
@@ -25,19 +28,38 @@ use Illuminate\Support\Facades\DB;
  * `subject_ids` is not a column: it is synced into accommodation_subject in
  * the same transaction (an empty list = general). An empty `assessment_types`
  * list is stored as null — "every type" has one representation only.
+ *
+ * Direction proposals (ClickUp 86e3qkwkk): what direction creates is a
+ * pending proposal (always active, never effective until psychopedagogy
+ * confirms it) and opens psychopedagogy's review task; editing an open
+ * proposal is recorded in its history and never publishes it. A closed
+ * proposal (withdrawn/rejected) is kept for the record and can't be edited.
  */
 class AccommodationController extends Controller
 {
+    public function __construct(protected AccommodationProposalWorkflow $workflow) {}
+
     public function store(StoreAccommodationRequest $request, Student $student): JsonResponse
     {
         $validated = $request->validated();
+        $user = $request->user();
+        $proposes = AccommodationProposalWorkflow::createsProposals($user);
 
-        $accommodation = DB::transaction(function () use ($validated, $student): Accommodation {
+        $accommodation = DB::transaction(function () use ($validated, $student, $user, $proposes): Accommodation {
             $accommodation = Accommodation::create([
                 ...$this->attributes($validated),
                 'student_id' => $student->id,
+                ...($proposes ? [
+                    'active' => true,
+                    'review_status' => AccommodationReviewStatus::Pending,
+                    'proposed_by_id' => $user->id,
+                ] : []),
             ]);
             $accommodation->subjects()->sync($validated['subject_ids'] ?? []);
+
+            if ($proposes) {
+                $this->workflow->submitted($accommodation, $user);
+            }
 
             return $accommodation;
         });
@@ -51,11 +73,21 @@ class AccommodationController extends Controller
     {
         $validated = $request->validated();
 
-        DB::transaction(function () use ($validated, $accommodation): void {
+        if ($accommodation->review_status?->isClosedUnconfirmed()) {
+            throw ValidationException::withMessages([
+                'accommodation' => 'A withdrawn or rejected proposal can no longer be edited.',
+            ]);
+        }
+
+        DB::transaction(function () use ($validated, $accommodation, $request): void {
             $accommodation->update($this->attributes($validated));
 
             if (array_key_exists('subject_ids', $validated)) {
                 $accommodation->subjects()->sync($validated['subject_ids']);
+            }
+
+            if ($accommodation->isOpenProposal()) {
+                $this->workflow->edited($accommodation, $request->user());
             }
         });
 

@@ -37,7 +37,7 @@ function todayIso(): string {
 }
 
 const accommodationSchema = z.object({
-  type: z.string().min(1, "Ingresá un tipo"),
+  type: z.string().min(1, "Ingresá el nombre del ajuste"),
   description: z.string().min(1, "Ingresá una descripción"),
   focus_area: z.string().min(1, "Ingresá un área de enfoque"),
   // Free string in the form so the empty "elegí…" option is a valid default;
@@ -46,9 +46,8 @@ const accommodationSchema = z.object({
     .string()
     .refine(
       (value) => (CATEGORY_VALUES as readonly string[]).includes(value),
-      "Elegí una categoría",
+      "Elegí el tipo de ajuste",
     ),
-  requires_external_approval: z.boolean(),
   active: z.boolean(),
   starts_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Elegí desde cuándo rige"),
   // Empty = a general accommodation (every subject).
@@ -67,6 +66,12 @@ interface AccommodationFormDialogProps {
   accommodation?: Accommodation | null
   /** Called after a successful save so the parent can refetch the tracking. */
   onSaved: () => void
+  /**
+   * Direction proposes instead of creating (ClickUp 86e3qkwkk): the form says
+   * it goes to psychopedagogy's review, and never offers switching it on/off.
+   * UX only — the server decides from the caller's role.
+   */
+  proposal?: boolean
 }
 
 /**
@@ -83,6 +88,10 @@ interface AccommodationFormDialogProps {
  * shows it to every teacher of the student; otherwise only to the teachers of
  * those subjects) and the assessment types (none = every type).
  *
+ * Field names (ClickUp 86e3qkwkk): «Nombre del ajuste» (`type`), «Tipo de
+ * ajuste» (`category`: Acceso/Contenido/Criterio), «Materias donde aplica».
+ * «Requiere aprobación externa» was removed from the form and the API.
+ *
  * On save it calls `onSaved()` and closes — the parent refetches the whole
  * tracking aggregate, which is enough here: unlike the approve/reject of
  * Sesión 9, this writes a field that no other path changes, so it does not race
@@ -94,8 +103,14 @@ export function AccommodationFormDialog({
   studentId,
   accommodation,
   onSaved,
+  proposal = false,
 }: AccommodationFormDialogProps) {
   const isEdit = Boolean(accommodation)
+  // A proposal under review is always active; only a confirmed (or directly
+  // created) accommodation can be switched off, and only by psychopedagogy.
+  const isOpenProposal =
+    accommodation?.review_status === "pending" || accommodation?.review_status === "returned"
+  const offersActive = isEdit && !proposal && !isOpenProposal
   const [formError, setFormError] = useState<string | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
 
@@ -112,7 +127,6 @@ export function AccommodationFormDialog({
       description: "",
       focus_area: "",
       category: "",
-      requires_external_approval: false,
       active: true,
       starts_on: todayIso(),
       subject_ids: [],
@@ -161,7 +175,6 @@ export function AccommodationFormDialog({
       description: accommodation?.description ?? "",
       focus_area: accommodation?.focus_area ?? "",
       category: accommodation?.category ?? "",
-      requires_external_approval: accommodation?.requires_external_approval ?? false,
       active: accommodation?.active ?? true,
       starts_on: accommodation?.starts_on ?? todayIso(),
       subject_ids: accommodation?.subjects.map((subject) => subject.id) ?? [],
@@ -176,10 +189,10 @@ export function AccommodationFormDialog({
       description: values.description,
       focus_area: values.focus_area,
       category: values.category as AccommodationCategory,
-      requires_external_approval: values.requires_external_approval,
-      // On create the checkbox isn't shown; a new accommodation is always active.
-      active: isEdit ? values.active : true,
-      starts_on: values.starts_on,
+      // On create the checkbox isn't shown; a new accommodation is always
+      // active. Direction never sends it (the server rejects it on edit).
+      ...(offersActive ? { active: values.active } : isEdit ? {} : { active: true }),
+      ...(proposal ? {} : { starts_on: values.starts_on }),
       subject_ids: values.subject_ids,
       assessment_types: values.assessment_types,
     }
@@ -192,7 +205,7 @@ export function AccommodationFormDialog({
       onSaved()
       onOpenChange(false)
     } catch {
-      setFormError("No pudimos guardar el ajuste.")
+      setFormError(proposal ? "No pudimos enviar la propuesta." : "No pudimos guardar el ajuste.")
     }
   }
 
@@ -200,11 +213,25 @@ export function AccommodationFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar ajuste" : "Nuevo ajuste"}</DialogTitle>
+          <DialogTitle>
+            {proposal
+              ? isEdit
+                ? "Editar propuesta de ajuste"
+                : "Proponer ajuste"
+              : isEdit
+                ? "Editar ajuste"
+                : "Nuevo ajuste"}
+          </DialogTitle>
         </DialogHeader>
+        {proposal && (
+          <p className="text-sm text-muted-foreground">
+            La propuesta se envía a revisión de Psicopedagogía. No llega al docente ni cuenta como
+            ajuste vigente hasta que Psicopedagogía la confirme.
+          </p>
+        )}
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">
-            <Label htmlFor="accommodation-type">Tipo</Label>
+            <Label htmlFor="accommodation-type">Nombre del ajuste</Label>
             <Input id="accommodation-type" {...register("type")} />
             {errors.type && <p className="text-sm text-destructive">{errors.type.message}</p>}
           </div>
@@ -223,7 +250,7 @@ export function AccommodationFormDialog({
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="accommodation-category">Categoría</Label>
+            <Label htmlFor="accommodation-category">Tipo de ajuste</Label>
             <Controller
               name="category"
               control={control}
@@ -236,7 +263,7 @@ export function AccommodationFormDialog({
                   }))}
                   value={field.value ?? ""}
                   onChange={field.onChange}
-                  placeholder="Elegí una categoría…"
+                  placeholder="Elegí el tipo de ajuste…"
                 />
               )}
             />
@@ -244,6 +271,8 @@ export function AccommodationFormDialog({
               <p className="text-sm text-destructive">{errors.category.message}</p>
             )}
           </div>
+          {/* «Vigente desde» is set by psychopedagogy when it confirms a proposal. */}
+          {!proposal && (
           <div className="grid gap-2">
             <Label htmlFor="accommodation-starts-on">Vigente desde</Label>
             <Input id="accommodation-starts-on" type="date" {...register("starts_on")} />
@@ -255,8 +284,9 @@ export function AccommodationFormDialog({
               vencimiento: rige hasta que alguien lo desactive.
             </p>
           </div>
+          )}
           <div className="grid gap-2">
-            <Label htmlFor="accommodation-subjects">Materias</Label>
+            <Label htmlFor="accommodation-subjects">Materias donde aplica</Label>
             <Controller
               name="subject_ids"
               control={control}
@@ -306,16 +336,7 @@ export function AccommodationFormDialog({
               Sin tipos marcados, aplica en todas las evaluaciones.
             </p>
           </fieldset>
-          <div className="flex items-center gap-2">
-            <input
-              id="accommodation-requires-approval"
-              type="checkbox"
-              className="size-4"
-              {...register("requires_external_approval")}
-            />
-            <Label htmlFor="accommodation-requires-approval">Requiere aprobación externa</Label>
-          </div>
-          {isEdit && (
+          {offersActive && (
             <div className="grid gap-1">
               <div className="flex items-center gap-2">
                 <input
@@ -338,7 +359,15 @@ export function AccommodationFormDialog({
           )}
           <div className="flex gap-2">
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando…" : "Guardar"}
+              {proposal
+                ? isSubmitting
+                  ? "Enviando…"
+                  : isEdit
+                    ? "Guardar cambios de la propuesta"
+                    : "Enviar a revisión de Psicopedagogía"
+                : isSubmitting
+                  ? "Guardando…"
+                  : "Guardar"}
             </Button>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar

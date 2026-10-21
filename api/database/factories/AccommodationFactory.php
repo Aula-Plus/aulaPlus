@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\AccommodationCategory;
+use App\Enums\AccommodationReviewStatus;
 use App\Models\Accommodation;
 use App\Models\Student;
 use App\Models\User;
@@ -37,5 +38,16 @@ class AccommodationFactory extends Factory
             'created_by_id' => User::factory(),
             'deleted_by_id' => null,
         ];
+    }
+
+    /**
+     * A direction proposal in the given review state (ClickUp 86e3qkwkk).
+     */
+    public function proposal(AccommodationReviewStatus $status = AccommodationReviewStatus::Pending): static
+    {
+        return $this->state(fn (): array => [
+            'review_status' => $status,
+            'proposed_by_id' => User::factory(),
+        ]);
     }
 }

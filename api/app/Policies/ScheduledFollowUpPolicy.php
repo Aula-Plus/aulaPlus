@@ -23,9 +23,15 @@ use App\Models\User;
  */
 class ScheduledFollowUpPolicy
 {
+    /**
+     * The review task of an accommodation proposal (ClickUp 86e3qkwkk) is
+     * school-wide only: a proposal psychopedagogy has not confirmed never
+     * reaches a teacher, not even as a task.
+     */
     public function view(User $user, ScheduledFollowUp $followUp): bool
     {
-        return $this->canAccessStudent($user, $followUp->student);
+        return $this->canAccessStudent($user, $followUp->student)
+            && (! $followUp->isAccommodationReview() || $user->hasAnyRole(Role::schoolWideValues()));
     }
 
     /**
@@ -43,9 +49,14 @@ class ScheduledFollowUpPolicy
         return $this->canAccessStudent($user, $student);
     }
 
+    /**
+     * The review task of an accommodation proposal is closed by the proposal
+     * circuit (confirm, withdraw, reject), never by hand.
+     */
     public function resolve(User $user, ScheduledFollowUp $followUp): bool
     {
-        return $this->canAccessStudent($user, $followUp->student);
+        return $this->canAccessStudent($user, $followUp->student)
+            && ! $followUp->isAccommodationReview();
     }
 
     /**

@@ -3,10 +3,11 @@ import { Link, useParams } from "react-router-dom"
 import { Ban, CircleCheck, FileText, GraduationCap, HeartHandshake } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
 import {
-  canApproveAccommodation,
+  canEditConfirmedAccommodations,
   canManageAccommodations,
   canResolveAlert,
   canViewStudentHistory,
+  createsAccommodationProposals,
   isPsychopedagogue,
   isSchoolWideStaff,
 } from "@/lib/permissions"
@@ -33,6 +34,7 @@ import {
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
 import { accommodationAppliesToAssessment, describeAccommodationScope } from "./accommodationScope"
 import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
+import { AccommodationProposalsSection } from "./AccommodationProposalsSection"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
 import { TeamSummaryCard } from "./TeamSummaryCard"
@@ -64,8 +66,12 @@ export function StudentTrackingPage() {
   const studentId = Number(id)
   const { user } = useAuth()
   const showResolve = canResolveAlert(user)
-  const showApprove = canApproveAccommodation(user)
   const showManageAccommodations = canManageAccommodations(user)
+  // Direction proposes (psychopedagogy confirms) and never edits an
+  // accommodation in force (ClickUp 86e3qkwkk).
+  const proposesAccommodations = createsAccommodationProposals(user)
+  const showEditAccommodations = canEditConfirmedAccommodations(user)
+  const newAccommodationLabel = proposesAccommodations ? "Proponer ajuste" : "Nuevo ajuste"
   const showHistoryLink = canViewStudentHistory(user)
 
   const showEditTeamSummary = isPsychopedagogue(user)
@@ -76,6 +82,7 @@ export function StudentTrackingPage() {
   const [error, setError] = useState<string | null>(null)
   const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
+  const [proposalsRefreshKey, setProposalsRefreshKey] = useState(0)
 
   const loadTracking = useCallback(() => {
     return trackingApi
@@ -115,35 +122,6 @@ export function StudentTrackingPage() {
     await loadTracking()
   }
 
-  /**
-   * Approve/reject a single accommodation IN PLACE using the response payload,
-   * not a full `loadTracking()` refetch (docs/prompts/09 §3). The tracking
-   * aggregate is cached ~60s on the server, so a refetch right after the write
-   * may still return the old value; splicing the returned Accommodation into
-   * local state avoids that stale window entirely.
-   */
-  function replaceAccommodation(next: Accommodation) {
-    setTracking((current) => {
-      if (!current || !current.accommodations) return current
-      return {
-        ...current,
-        accommodations: current.accommodations.map((accommodation) =>
-          accommodation.id === next.id ? next : accommodation,
-        ),
-      }
-    })
-  }
-
-  async function handleApprove(accommodationId: number) {
-    const updated = await trackingApi.approveAccommodation(accommodationId)
-    replaceAccommodation(updated)
-  }
-
-  async function handleReject(accommodationId: number) {
-    const updated = await trackingApi.rejectAccommodation(accommodationId)
-    replaceAccommodation(updated)
-  }
-
   function handleNewAccommodation() {
     setEditingAccommodation(null)
     setAccommodationDialogOpen(true)
@@ -155,12 +133,12 @@ export function StudentTrackingPage() {
   }
 
   /**
-   * After creating/editing an accommodation, a full refetch is enough (§4):
-   * unlike approve/reject this writes a field no other path changes, so it does
-   * not race the ~60s server cache the way the in-place splice avoids.
+   * After creating/editing an accommodation, a full refetch is enough (§4).
+   * Proposals live in their own (uncached) list, refetched too.
    */
   function handleAccommodationSaved() {
     loadTracking()
+    setProposalsRefreshKey((key) => key + 1)
   }
 
   if (error) {
@@ -328,7 +306,7 @@ export function StudentTrackingPage() {
                 // so there is exactly one "Nuevo ajuste" affordance per state.
                 showManageAccommodations && tracking.accommodations.length > 0 ? (
                   <Button type="button" size="sm" onClick={handleNewAccommodation}>
-                    Nuevo ajuste
+                    {newAccommodationLabel}
                   </Button>
                 ) : undefined
               }
@@ -340,7 +318,7 @@ export function StudentTrackingPage() {
                   action={
                     showManageAccommodations && (
                       <Button type="button" size="sm" variant="outline" onClick={handleNewAccommodation}>
-                        Nuevo ajuste
+                        {newAccommodationLabel}
                       </Button>
                     )
                   }
@@ -348,8 +326,6 @@ export function StudentTrackingPage() {
               ) : (
                 <ul className="grid gap-2">
                   {tracking.accommodations.map((accommodation) => {
-                    const pendingApproval =
-                      accommodation.requires_external_approval && accommodation.approved === null
                     return (
                       <li
                         key={accommodation.id}
@@ -372,7 +348,7 @@ export function StudentTrackingPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <AccommodationStatusBadge accommodation={accommodation} />
-                            {showManageAccommodations && (
+                            {showEditAccommodations && (
                               <Button
                                 type="button"
                                 size="sm"
@@ -384,25 +360,6 @@ export function StudentTrackingPage() {
                             )}
                           </div>
                         </div>
-                        {pendingApproval && showApprove && (
-                          <div className="mt-2 flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => handleApprove(accommodation.id)}
-                            >
-                              Aprobar
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleReject(accommodation.id)}
-                            >
-                              Rechazar
-                            </Button>
-                          </div>
-                        )}
                         {accommodation.is_effective && (
                           <AccommodationInstanceOverrideForm
                             accommodationId={accommodation.id}
@@ -421,6 +378,15 @@ export function StudentTrackingPage() {
             </SectionCard>
           )}
 
+
+          {showManageAccommodations && (
+            <AccommodationProposalsSection
+              studentId={studentId}
+              refreshKey={proposalsRefreshKey}
+              onEdit={handleEditAccommodation}
+              onConfirmed={loadTracking}
+            />
+          )}
 
           {tracking.barriers && (
             <SectionCard title="Barreras activas">
@@ -596,20 +562,13 @@ export function StudentTrackingPage() {
           studentId={studentId}
           accommodation={editingAccommodation}
           onSaved={handleAccommodationSaved}
+          proposal={proposesAccommodations}
         />
       )}
     </div>
   )
 }
 
-/**
- * Status pill for an accommodation. Two independent axes:
- *   - When `requires_external_approval`: show the approval decision
- *     ("Aprobada" / "Rechazada") or, if still `null`, "Pendiente de
- *     aprobación".
- *   - Otherwise: fall back to the vigency flag `is_effective` — no approval
- *     badge is added when approval does not apply (docs/prompts/09 §3).
- */
 /**
  * The accommodations that were in force for one grade (name only), as neutral
  * chips; «Ninguno» when there were none. Server-filtered: the list only holds
@@ -630,17 +589,12 @@ function GradeAccommodations({ accommodations }: { accommodations: GradeAccommod
   )
 }
 
+/**
+ * Status pill for an accommodation in the «Ajustes vigentes» list: the vigency
+ * flag `is_effective`. Direction proposals not confirmed yet never land here —
+ * they have their own section (AccommodationProposalsSection).
+ */
 function AccommodationStatusBadge({ accommodation }: { accommodation: Accommodation }) {
-  if (accommodation.requires_external_approval) {
-    if (accommodation.approved === true) {
-      return <Badge tone="success">Aprobada</Badge>
-    }
-    if (accommodation.approved === false) {
-      return <Badge tone="danger">Rechazada</Badge>
-    }
-    return <Badge tone="warning">Pendiente de aprobación</Badge>
-  }
-
   return accommodation.is_effective ? (
     <Badge tone="neutral">Vigente</Badge>
   ) : (

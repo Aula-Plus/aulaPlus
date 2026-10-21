@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\FollowUpAssignedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
@@ -58,14 +59,18 @@ class NotificationController extends Controller
     }
 
     /**
-     * The caller's unread follow-up notices: the only kind "Mis seguimientos"
-     * renders. Both `index` and `unreadCount` read from here so the list and
+     * The caller's unread follow-up notices: the kinds "Mis seguimientos"
+     * renders (a follow-up assigned to you; an accommodation proposal returned
+     * to you for corrections, ClickUp 86e3qkwkk). Both `index` and `unreadCount` read from here so the list and
      * the sidebar count share one definition — a future database notification
      * type will not inflate the count with notices the page cannot show.
      */
     private function unreadFollowUpNotices(Request $request): MorphMany
     {
         return $request->user()->unreadNotifications()
-            ->where('type', FollowUpAssignedNotification::class);
+            ->whereIn('type', [
+                FollowUpAssignedNotification::class,
+                AccommodationProposalReturnedNotification::class,
+            ]);
     }
 }

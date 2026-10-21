@@ -25,6 +25,9 @@ class ScheduledFollowUpResource extends JsonResource
                 'id' => $this->student->id,
                 'full_name' => $this->student->full_name,
             ]),
+            // Set only on the review task of a direction accommodation proposal
+            // (ClickUp 86e3qkwkk); the client renders its title from it.
+            'accommodation_id' => $this->accommodation_id,
             'description' => $this->description,
             'due_date' => $this->due_date?->toDateString(),
             // Computed server-side (app timezone) so no client re-derives the

@@ -124,9 +124,10 @@ class PerformanceTimelineBuilder
         $accommodations = $student->accommodations()->withTrashed()->get();
         $accommodationIds = $accommodations->pluck('id');
 
-        // accommodation_activated — the accommodation's own created_at.
+        // accommodation_activated — the accommodation's own created_at. An
+        // unconfirmed direction proposal was never activated.
         foreach ($accommodations as $accommodation) {
-            if ($this->inRange($accommodation->created_at, $from, $to)) {
+            if ($accommodation->isConfirmed() && $this->inRange($accommodation->created_at, $from, $to)) {
                 $entries->push([
                     'date' => $accommodation->created_at,
                     'mark' => [

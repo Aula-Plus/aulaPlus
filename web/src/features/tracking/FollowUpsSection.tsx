@@ -10,6 +10,7 @@ import { roleLabels } from "@/types"
 import type { AppNotification, ScheduledFollowUp } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import { refreshUnreadNoticeCount } from "./unreadNotices"
+import { followUpTitle } from "./followUpTitle"
 
 /**
  * The «Mis seguimientos» section of «Alertas y seguimientos» (`/alertas`): the
@@ -85,11 +86,17 @@ export function FollowUpsSection() {
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
                 <span>
-                  Te asignaron un seguimiento
-                  {studentNameByFollowUp.get(notice.data.follow_up_id)
-                    ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
-                    : ""}{" "}
-                  con fecha {formatShortDate(notice.data.due_date)}.{" "}
+                  {notice.data.type === "accommodation_proposal_returned" ? (
+                    <>Psicopedagogía te devolvió una propuesta de ajuste para corregir. </>
+                  ) : (
+                    <>
+                      Te asignaron un seguimiento
+                      {studentNameByFollowUp.get(notice.data.follow_up_id)
+                        ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
+                        : ""}{" "}
+                      con fecha {formatShortDate(notice.data.due_date)}.{" "}
+                    </>
+                  )}
                   <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
                     Ver ficha del alumno
                   </Link>
@@ -115,7 +122,7 @@ export function FollowUpsSection() {
                 <li key={followUp.id} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
                   <div>
                     {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
-                    <p className="whitespace-pre-wrap">{followUp.description}</p>
+                    <p className="whitespace-pre-wrap">{followUpTitle(followUp)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Plazo: {formatShortDate(followUp.due_date)}
                       {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}

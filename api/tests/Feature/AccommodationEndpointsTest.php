@@ -69,12 +69,12 @@ it('rejects an invalid category value (422)', function () {
 
 it('lets a staff member edit an accommodation category', function () {
     $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $accommodation = Accommodation::factory()->create([
         'school_id' => $school->id,
         'category' => 'access',
     ]);
-    Sanctum::actingAs($director);
+    Sanctum::actingAs($psychopedagogue);
 
     $this->patchJson("/api/v1/accommodations/{$accommodation->id}", [
         'category' => 'content',
@@ -88,9 +88,9 @@ it('lets a staff member edit an accommodation category', function () {
 
 it('rejects editing an accommodation without a category (422)', function () {
     $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $accommodation = Accommodation::factory()->create(['school_id' => $school->id]);
-    Sanctum::actingAs($director);
+    Sanctum::actingAs($psychopedagogue);
 
     $this->patchJson("/api/v1/accommodations/{$accommodation->id}", [
         'description' => 'Descripción actualizada.',

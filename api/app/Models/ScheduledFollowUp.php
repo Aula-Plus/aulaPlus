@@ -22,9 +22,16 @@ use Illuminate\Support\Carbon;
  * `description` and `resolution_note` may hold sensitive observations about a
  * minor, so they are excluded from the audit diff (CLAUDE.md security rule
  * 11), same pattern as Comment/Accommodation/Alert.
+ *
+ * `accommodation_id` (ClickUp 86e3qkwkk): set only on the review task
+ * psychopedagogy gets for a direction accommodation proposal. Such a
+ * follow-up is seen by school-wide roles only (a pending proposal never
+ * reaches a teacher) and is closed by the proposal circuit, never by hand —
+ * see ScheduledFollowUpPolicy and AccommodationProposalWorkflow.
  */
 #[Fillable([
     'student_id',
+    'accommodation_id',
     'description',
     'due_date',
     'created_by_id',
@@ -64,6 +71,19 @@ class ScheduledFollowUp extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    /**
+     * The direction proposal this review task belongs to, if any.
+     */
+    public function accommodation(): BelongsTo
+    {
+        return $this->belongsTo(Accommodation::class);
+    }
+
+    public function isAccommodationReview(): bool
+    {
+        return $this->accommodation_id !== null;
     }
 
     public function createdBy(): BelongsTo
