@@ -38,7 +38,9 @@ class ComputeScreeningImpact
      */
     protected function latestScores(ScreeningTestType $type): array
     {
+        // toBase(): plain rows, no model hydration/casts for every take.
         $rows = ScreeningTestResult::query()
+            ->toBase()
             ->join('screening_test_applications', 'screening_test_applications.id', '=', 'screening_test_results.screening_test_application_id')
             ->where('screening_test_applications.screening_test_type_id', $type->id)
             ->whereNotNull('screening_test_results.score')
