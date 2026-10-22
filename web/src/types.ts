@@ -982,13 +982,23 @@ export interface StaffMember {
 /** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
 export interface AppNotification {
   id: string
-  data: {
-    type: string
-    follow_up_id: number
-    student_id: number
-    due_date: string
-  }
+  data: FollowUpAssignedNotice | ScreeningDesignNotice
   created_at: string | null
+}
+
+export interface FollowUpAssignedNotice {
+  type: "follow_up_assigned"
+  follow_up_id: number
+  student_id: number
+  due_date: string
+}
+
+/** A screening's design changed (to Dirección) or was reverted (to its author). */
+export interface ScreeningDesignNotice {
+  type: "screening_design_changed" | "screening_design_reverted"
+  screening_test_type_id: number
+  screening_test_type_name: string | null
+  design_id: number
 }
 
 /**
@@ -1024,64 +1034,123 @@ export interface ScheduledFollowUp {
 // ── Screening tests / pruebas de sondeo (Sesión 17) ─────────────────────────
 // Mirrors the backend Session 13 API (docs/prompts/11-pruebas-de-sondeo.md;
 // frontend docs/prompts/12-frontend-pruebas-de-sondeo.md) under /api/v1. This
-// is a school-wide, psychopedagogy-led module; teachers never see any of it.
-// The design/approval pair follows the same tri-state `approved` pattern as
-// Accommodation; results are anonymised BY CODE and never carry a student name
+// is a school-wide, psychopedagogy-led module; teachers never see the catalog
+// or the designs. A saved design rules at once (screen 08) and Dirección can
+// revert it; results are anonymised BY CODE and never carry a student name
 // (that mapping lives only in the roster endpoint).
 
 /**
- * The traffic-light band a screening score falls into (mirror of
- * `App\Enums\ScreeningColor`). English identifiers in code; the Spanish labels
- * below are the only user-facing text, per CLAUDE.md. The colour is always the
- * one the backend confirms on a loaded result — never recomputed on the client.
+ * The colour of a screening band (mirror of `App\Enums\ScreeningColor`). The
+ * school picks one per band; the band's name and meaning are its own text.
+ * English identifiers in code; the Spanish labels below are the only
+ * user-facing text, per CLAUDE.md.
  */
-export type ScreeningColor = "red" | "yellow" | "green"
+export type ScreeningColor = "red" | "orange" | "yellow" | "green" | "blue"
+
+export const screeningColors: ScreeningColor[] = ["red", "orange", "yellow", "green", "blue"]
 
 export const screeningColorLabels: Record<ScreeningColor, string> = {
   red: "Rojo",
+  orange: "Naranja",
   yellow: "Amarillo",
   green: "Verde",
+  blue: "Azul",
+}
+
+/** Levels a screening's population can cover (mirror of `App\Enums\SchoolLevel`). */
+export type SchoolLevel = "primary" | "lower_secondary" | "upper_secondary"
+
+export const schoolLevels: SchoolLevel[] = ["primary", "lower_secondary", "upper_secondary"]
+
+export const schoolLevelLabels: Record<SchoolLevel, string> = {
+  primary: "Primaria",
+  lower_secondary: "Ciclo Básico",
+  upper_secondary: "Bachillerato",
+}
+
+/** How often a screening is taken (mirror of `App\Enums\ScreeningFrequency`). */
+export type ScreeningFrequency = "yearly" | "twice_yearly" | "every_few_years" | "on_demand"
+
+export const screeningFrequencies: ScreeningFrequency[] = [
+  "yearly",
+  "twice_yearly",
+  "every_few_years",
+  "on_demand",
+]
+
+export const screeningFrequencyLabels: Record<ScreeningFrequency, string> = {
+  yearly: "Una vez por año",
+  twice_yearly: "Dos veces por año",
+  every_few_years: "Cada varios años",
+  on_demand: "Cuando el colegio quiera",
 }
 
 /**
- * One version of a screening test's design (mirror of
- * `ScreeningTestDesignResource`). "Editing" a design creates a new version left
- * `approved === null` (pending director approval); `true`/`false` once decided.
- * The version used to compute new colours is the most recent approved one.
+ * One band of a design: name, colour, the score it goes up to (inclusive;
+ * `null` only on an open-ended last band) and its mandatory meaning, written
+ * by the school (never by the AI).
+ */
+export interface ScreeningBand {
+  name: string
+  color: ScreeningColor
+  max: number | null
+  meaning: string | null
+}
+
+/**
+ * One version of a screening's design (mirror of `ScreeningTestDesignResource`).
+ * A saved design rules right away; Dirección can revert the one in force
+ * (`reverted_at`) and the previous one rules again.
  */
 export interface ScreeningTestDesign {
   id: number
   screening_test_type_id: number
-  cutoff_low: number
-  cutoff_high: number
-  meaning_red: string
-  meaning_yellow: string
-  meaning_green: string
-  /** `null` pending, `true` approved, `false` rejected. */
+  bands: ScreeningBand[]
+  reason: string | null
   approved: boolean | null
-  approved_by_id: number | null
   created_by_id: number | null
+  created_by_name?: string | null
+  reverted_at: string | null
+  reverted_by_id: number | null
+  reverted_by_name?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
 
 /**
- * A kind of screening test offered by the school (mirror of
- * `ScreeningTestTypeResource`). `current_design` is the in-force APPROVED design
- * only (the resource resolves `currentApprovedDesign()`); a pending or rejected
- * design is not carried here — the API exposes no listing of non-approved
- * designs, so a freshly created pending design is known to the client only as
- * the POST response that created it.
+ * A screening the school takes (mirror of `ScreeningTestTypeResource`).
+ * `current_design` is the design in force and `previous_design` the one that
+ * ruled right before it ("Volver atrás" goes back to it).
  */
 export interface ScreeningTestType {
   id: number
   name: string
   area: string | null
+  levels: SchoolLevel[]
+  frequency: ScreeningFrequency | null
+  frequency_years: number | null
+  teacher_visible: boolean
   active: boolean
   created_by_id: number | null
   current_design: ScreeningTestDesign | null
+  previous_design: ScreeningTestDesign | null
   created_at?: string | null
   updated_at?: string | null
+}
+
+/** One band's count in the impact preview (counts only, never names). */
+export interface ScreeningImpactBand {
+  name: string
+  color: ScreeningColor
+  max: number | null
+  count: number
+}
+
+/** `POST /screening-test-types/{type}/impact`. */
+export interface ScreeningImpact {
+  students: number
+  current: ScreeningImpactBand[] | null
+  proposed: ScreeningImpactBand[]
 }
 
 /**
@@ -1105,15 +1174,22 @@ export interface ScreeningTestApplication {
  * One result of an application, the ANONYMISED by-code view (mirror of
  * `ScreeningTestResultResource`). It deliberately never carries `student_id` or
  * a name — the code→student mapping is exposed solely by the roster endpoint.
- * `score`/`color` are `null` until a score is loaded; `color` is whatever the
- * backend computed against the in-force design, never derived on the client.
+ * `band`/`color` are the reading when the score was loaded (design version
+ * `screening_test_design_id`); `current_band`/`current_color` are the reading
+ * with the design in force, and `band_changed` says whether they differ.
  */
 export interface ScreeningTestResult {
   id: number
   screening_test_application_id: number
   code: string
-  score: number | null
+  score: number | string | null
+  screening_test_design_id: number | null
+  band: string | null
   color: ScreeningColor | null
+  current_design_id: number | null
+  current_band: string | null
+  current_color: ScreeningColor | null
+  band_changed: boolean
   loaded_by_id: number | null
   loaded_at: string | null
 }
@@ -1130,24 +1206,28 @@ export interface ScreeningTestRosterEntry {
   full_name: string | null
 }
 
-/** Body for `POST /screening-test-types` (`StoreScreeningTestTypeRequest`). */
+/**
+ * Body for `POST /screening-test-types` and `PATCH /screening-test-types/{id}`.
+ * `frequency_years` is required only for `every_few_years`.
+ */
 export interface ScreeningTestTypeInput {
-  name: string
+  name?: string
   area?: string | null
   active?: boolean
+  levels?: SchoolLevel[]
+  frequency?: ScreeningFrequency | null
+  frequency_years?: number | null
+  teacher_visible?: boolean
 }
 
 /**
- * Body for `POST /screening-test-types/{type}/designs`
- * (`StoreScreeningTestDesignRequest`). All five fields are required; the backend
- * additionally enforces `cutoff_high >= cutoff_low`.
+ * Body for `POST /screening-test-types/{type}/designs`: 2 to 5 bands with a
+ * strictly increasing `max` (all but the last required) and a mandatory
+ * meaning; `reason` is the optional "Motivo".
  */
 export interface ScreeningTestDesignInput {
-  cutoff_low: number
-  cutoff_high: number
-  meaning_red: string
-  meaning_yellow: string
-  meaning_green: string
+  bands: ScreeningBand[]
+  reason?: string | null
 }
 
 /**

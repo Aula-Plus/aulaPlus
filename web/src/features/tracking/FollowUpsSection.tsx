@@ -84,16 +84,34 @@ export function FollowUpsSection() {
           <ul className="grid gap-2">
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                <span>
-                  Te asignaron un seguimiento
-                  {studentNameByFollowUp.get(notice.data.follow_up_id)
-                    ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
-                    : ""}{" "}
-                  con fecha {formatShortDate(notice.data.due_date)}.{" "}
-                  <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                    Ver ficha del alumno
-                  </Link>
-                </span>
+                {notice.data.type === "follow_up_assigned" ? (
+                  <span>
+                    Te asignaron un seguimiento
+                    {studentNameByFollowUp.get(notice.data.follow_up_id)
+                      ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
+                      : ""}{" "}
+                    con fecha {formatShortDate(notice.data.due_date)}.{" "}
+                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </span>
+                ) : (
+                  <span>
+                    {notice.data.type === "screening_design_changed"
+                      ? "Cambiaron las franjas"
+                      : "Dirección volvió atrás tu cambio en las franjas"}
+                    {notice.data.screening_test_type_name
+                      ? ` del screening «${notice.data.screening_test_type_name}»`
+                      : " de un screening"}
+                    .{" "}
+                    <Link
+                      className="underline"
+                      to={`/pruebas-de-sondeo/tipos?abrir=${notice.data.screening_test_type_id}`}
+                    >
+                      Ver diseño
+                    </Link>
+                  </span>
+                )}
                 <Button type="button" size="sm" variant="outline" onClick={() => dismiss(notice.id)}>
                   Entendido
                 </Button>
