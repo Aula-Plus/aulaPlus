@@ -22,8 +22,9 @@ it('returns a student results ordered by administered_at, not created_at', funct
 
     // The LATER-created result was administered EARLIER — so ordering by
     // administered_at must put it first, proving we don't sort by created_at.
-    $may = Assessment::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id, 'type' => 'written', 'administered_at' => '2026-05-01']);
-    $march = Assessment::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id, 'type' => 'oral', 'administered_at' => '2026-03-01']);
+    $subjectId = $teacher->subjects()->first()->id; // a teacher sees the subjects they teach
+    $may = Assessment::factory()->create(['group_id' => $group->id, 'subject_id' => $subjectId, 'teacher_id' => $teacher->id, 'type' => 'written', 'administered_at' => '2026-05-01']);
+    $march = Assessment::factory()->create(['group_id' => $group->id, 'subject_id' => $subjectId, 'teacher_id' => $teacher->id, 'type' => 'oral', 'administered_at' => '2026-03-01']);
 
     AssessmentResult::factory()->create(['assessment_id' => $may->id, 'student_id' => $student->id, 'created_by_id' => $teacher->id, 'score' => 90]);
     AssessmentResult::factory()->create(['assessment_id' => $march->id, 'student_id' => $student->id, 'created_by_id' => $teacher->id, 'score' => 60]);

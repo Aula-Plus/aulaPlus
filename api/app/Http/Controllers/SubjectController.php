@@ -8,6 +8,7 @@ use App\Http\Resources\SubjectResource;
 use App\Models\AnnualPlan;
 use App\Models\Subject;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +22,14 @@ use Illuminate\Validation\ValidationException;
  */
 class SubjectController extends Controller
 {
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Subject::class);
 
+        // withTaughtBy: SubjectResource's `can_view` asks SubjectPolicy::
+        // viewSyllabus per row; precomputing it here avoids an N+1.
         return SubjectResource::collection(
-            Subject::query()->orderBy('name')->get()
+            Subject::query()->withTaughtBy($request->user())->orderBy('name')->get()
         );
     }
 
