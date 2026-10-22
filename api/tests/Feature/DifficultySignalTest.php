@@ -10,7 +10,9 @@ use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\SchoolTime;
 use App\Support\Tenancy;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\Sanctum;
 
@@ -275,6 +277,35 @@ it('does not let a difficulty alert be handed to a teacher', function () {
         ->assertOk();
 });
 
+it('never escalates a handed-off difficulty alert to teachers, even when escalations reach them', function () {
+    ($this->rule)(2, 30);
+    ($this->observe)(['Social' => 'difficulty'], 2);
+    ($this->observe)(['Social' => 'difficulty'], 1);
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    $alert = ($this->alerts)()->sole();
+
+    // The school routes overdue escalations to teachers too.
+    Sanctum::actingAs($this->director);
+    $this->putJson('/api/v1/alert-routing/escalated_overdue', ['recipients' => ['teacher', 'director']])->assertOk();
+
+    Sanctum::actingAs($this->psico);
+    $this->postJson("/api/v1/alerts/{$alert->id}/outcome", [
+        'outcome' => 'handed_off', 'assignee_id' => $this->director->id, 'due_on' => now()->addDay()->toDateString(),
+    ])->assertOk();
+
+    $this->travel(3)->days();
+    $this->artisan('alerts:escalate')->assertSuccessful();
+
+    $escalation = Alert::query()->withoutGlobalScopes()->where('type', AlertType::EscalatedOverdue->value)->sole();
+    expect($escalation->source_alert_id)->toBe($alert->id)
+        ->and($escalation->recipients)->toBe(['director']);
+
+    // The teacher who teaches the student learns nothing about the case.
+    Sanctum::actingAs($this->teacher);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+    $this->getJson("/api/v1/students/{$this->student->id}/alerts")->assertOk()->assertJsonCount(0, 'data');
+});
+
 // ── Generation ──────────────────────────────────────────────────────────────
 
 it('generates nothing while the school has no difficulty rule', function () {
@@ -312,7 +343,7 @@ it('raises the alert per category once N difficulty signals fall within D days',
         ->and($alert->student_id)->toBe($this->student->id)
         ->and($alert->subject_id)->toBeNull()
         ->and($alert->description)->toBe('3 señales de dificultad en Social')
-        ->and($alert->condition_met_on->toDateString())->toBe(now()->subDay()->toDateString())
+        ->and($alert->condition_met_on->toDateString())->toBe(now()->subDay()->setTimezone(SchoolTime::timezone())->toDateString())
         ->and($alert->recipients)->toBe(['psychopedagogue']);
 
     // Performance rules are not evaluated by this command, nor this rule by
@@ -430,4 +461,25 @@ it('ignores group comments, deleted students and paused rules', function () {
     Tenancy::forSchool($this->school, fn () => $this->student->delete());
     $this->artisan('alerts:difficulty-signals')->assertSuccessful();
     expect(($this->alerts)())->toHaveCount(0);
+});
+
+it('counts signals on the school\'s calendar days, not UTC ones', function () {
+    // 09:00 in Montevideo (UTC-3) on 22/10.
+    $this->travelTo(CarbonImmutable::parse('2026-10-22 12:00:00', 'UTC'));
+    ($this->rule)(2, 1); // 2 signals since yesterday (21/10, local).
+
+    // 02:00 UTC on 21/10 is still 20/10 at 23:00 in Montevideo: outside.
+    ($this->observe)(['Social' => 'difficulty'], 0, null, ['created_at' => CarbonImmutable::parse('2026-10-21 02:00:00', 'UTC')]);
+    ($this->observe)(['Social' => 'difficulty'], 0, null, ['created_at' => CarbonImmutable::parse('2026-10-22 10:00:00', 'UTC')]);
+
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)())->toHaveCount(0);
+
+    // 02:00 UTC on 23/10 would be "tomorrow" in UTC terms, but it is 22/10 at
+    // 23:00 in Montevideo — the day the condition is met.
+    $this->travelTo(CarbonImmutable::parse('2026-10-23 02:30:00', 'UTC'));
+    ($this->observe)(['Social' => 'difficulty'], 0, null, ['created_at' => CarbonImmutable::parse('2026-10-23 02:00:00', 'UTC')]);
+
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)()->sole()->condition_met_on->toDateString())->toBe('2026-10-22');
 });

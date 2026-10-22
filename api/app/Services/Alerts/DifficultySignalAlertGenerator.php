@@ -13,6 +13,7 @@ use App\Models\Comment;
 use App\Models\CommentCategory;
 use App\Models\Student;
 use App\Support\AlertRouting;
+use App\Support\SchoolTime;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,9 @@ use Illuminate\Support\Facades\DB;
  * the latest counted signal) than the last alert for that student and
  * category. Soft-deleted students are skipped.
  *
+ * Days are the school's calendar days ({@see SchoolTime}): an observation
+ * written at 22:00 in Montevideo counts on that day, not on the next UTC one.
+ *
  * The caller must have set the tenant (Tenancy::forSchool) — this runs from a
  * console command with no authenticated user.
  */
@@ -55,7 +59,9 @@ class DifficultySignalAlertGenerator
 
     public function generate(?CarbonInterface $today = null): int
     {
-        $today = CarbonImmutable::parse($today ?? now())->startOfDay();
+        $today = $today === null
+            ? SchoolTime::today()
+            : CarbonImmutable::parse($today->format('Y-m-d'), SchoolTime::timezone())->startOfDay();
 
         $rules = AlertRule::query()
             ->where('active', true)
@@ -167,8 +173,9 @@ class DifficultySignalAlertGenerator
     }
 
     /**
-     * The dates (`Y-m-d`, chronological) of every difficulty signal on a
-     * student observation since `$since`, grouped by student and category.
+     * The school-local dates (`Y-m-d`, chronological) of every difficulty
+     * signal on a student observation since the local day `$since`, grouped
+     * by student and category.
      * Reads only the pivot and the comment's date — never its content.
      *
      * @return array<int, array<int, list<string>>>
@@ -185,7 +192,7 @@ class DifficultySignalAlertGenerator
             ->where('comment_comment_category.signal', CommentSignal::Difficulty->value)
             // «Solo quien escribe» never adds to anyone else's alert.
             ->where('comments.author_only', false)
-            ->where('comments.created_at', '>=', $since)
+            ->where('comments.created_at', '>=', SchoolTime::startOfDay($since))
             ->orderBy('comments.created_at')
             ->orderBy('comments.id')
             ->select([
@@ -196,7 +203,11 @@ class DifficultySignalAlertGenerator
             ->toBase()
             ->cursor()
             ->each(function (object $row) use (&$series): void {
-                $series[(int) $row->student_id][(int) $row->comment_category_id][] = substr((string) $row->signaled_at, 0, 10);
+                // Stored in the app timezone (UTC); counted on the school's day.
+                $series[(int) $row->student_id][(int) $row->comment_category_id][] = CarbonImmutable::parse(
+                    (string) $row->signaled_at,
+                    (string) config('app.timezone'),
+                )->setTimezone(SchoolTime::timezone())->toDateString();
             });
 
         return $series;

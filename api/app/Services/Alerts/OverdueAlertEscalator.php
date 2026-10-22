@@ -4,6 +4,7 @@ namespace App\Services\Alerts;
 
 use App\Contracts\StatusChangeNotifier;
 use App\Enums\AlertOutcome;
+use App\Enums\AlertRecipient;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertType;
 use App\Models\Alert;
@@ -19,6 +20,10 @@ use Illuminate\Support\Facades\DB;
  * person who handed it off and the person who had to resolve it (plus any
  * role the school added in the alert settings), and it speaks about the
  * circuit — who received what and when — never about the student.
+ *
+ * The escalation of an alert type that never reaches teachers («Señal de
+ * dificultad», ClickUp 86e3qkwpn) never reaches them either, whatever the
+ * escalated-alert routing says: it is still about that same case.
  *
  * Each hand-off escalates at most once (`alerts.escalated_at`); choosing a
  * new way out clears that mark and closes the escalated alert.
@@ -46,6 +51,10 @@ class OverdueAlertEscalator
 
         foreach ($overdue as $alert) {
             DB::transaction(function () use ($alert, $recipients, $today): void {
+                $recipients = AlertRouting::allowsTeachers($alert->type)
+                    ? $recipients
+                    : array_values(array_diff($recipients, [AlertRecipient::Teacher->value]));
+
                 $escalation = Alert::create([
                     'student_id' => $alert->student_id,
                     'subject_id' => $alert->subject_id,
