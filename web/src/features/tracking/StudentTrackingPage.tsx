@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import {
   canApproveAccommodation,
   canManageAccommodations,
+  canManageReports,
   canResolveAlert,
   canViewStudentHistory,
   isPsychopedagogue,
@@ -35,6 +36,7 @@ import { accommodationAppliesToAssessment, describeAccommodationScope } from "./
 import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverrideForm"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
+import { StudentReportsSection } from "@/features/reports/StudentReportsSection"
 import { TeamSummaryCard } from "./TeamSummaryCard"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import { StudentPerformanceChart } from "./StudentPerformanceChart"
@@ -573,10 +575,15 @@ export function StudentTrackingPage() {
         )}
 
         {tab === "documents" && (
-          <SectionCard title="Documentos">
-            <EmptyState icon={FileText} message="Todavía no hay documentos para mostrar." />
+          <>
+            <StudentReportsSection
+              studentId={studentId}
+              canManage={canManageReports(user)}
+              canSeeContent={canManageReports(user)}
+              onAccommodationCreated={loadTracking}
+            />
             {showHistoryLink && (
-              <p className="mt-3 text-sm">
+              <p className="text-sm">
                 <Link
                   className="text-primary underline-offset-4 hover:underline"
                   to={`/alumnos/${studentId}/historial`}
@@ -585,7 +592,7 @@ export function StudentTrackingPage() {
                 </Link>
               </p>
             )}
-          </SectionCard>
+          </>
         )}
       </div>
 

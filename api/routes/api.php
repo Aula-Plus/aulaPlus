@@ -3,8 +3,10 @@
 use App\Http\Controllers\AccommodationApprovalController;
 use App\Http\Controllers\AccommodationController;
 use App\Http\Controllers\AccommodationInstanceOverrideController;
+use App\Http\Controllers\AccommodationProposalController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
+use App\Http\Controllers\AiReportSettingsController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AlertOutcomeController;
 use App\Http\Controllers\AlertSettingsController;
@@ -24,6 +26,7 @@ use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignController;
@@ -102,6 +105,23 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/grades-visibility', [GradesVisibilitySettingsController::class, 'show']);
         Route::put('/grades-visibility', [GradesVisibilitySettingsController::class, 'update']);
         Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
+
+        // Student reports (ClickUp 86e3jujgx): upload, anonymized-text review,
+        // AI proposals reviewed one by one, and direction's school switch.
+        Route::get('/students/{student}/reports', [ReportDocumentController::class, 'index']);
+        Route::post('/students/{student}/reports', [ReportDocumentController::class, 'store']);
+        Route::get('/reports/{report}', [ReportDocumentController::class, 'show']);
+        Route::get('/reports/{report}/download', [ReportDocumentController::class, 'download']);
+        Route::patch('/reports/{report}', [ReportDocumentController::class, 'update']);
+        Route::delete('/reports/{report}', [ReportDocumentController::class, 'destroy']);
+        Route::put('/reports/{report}/anonymized-text', [ReportDocumentController::class, 'updateText']);
+        // Each confirmation is a paid AI call (cost control, like the other AI endpoints).
+        Route::post('/reports/{report}/confirm-send', [ReportDocumentController::class, 'confirmSend'])
+            ->middleware('throttle:5,1');
+        Route::post('/reports/{report}/proposals', [AccommodationProposalController::class, 'store']);
+        Route::post('/accommodation-proposals/{proposal}/review', [AccommodationProposalController::class, 'review']);
+        Route::get('/ai-report-setting', [AiReportSettingsController::class, 'show']);
+        Route::put('/ai-report-setting', [AiReportSettingsController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
