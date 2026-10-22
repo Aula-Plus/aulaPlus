@@ -78,7 +78,7 @@ export function GroupFormPage() {
       outletContext?.onSaved()
       navigate("/clases", { replace: true })
     } catch {
-      setFormError("No pudimos guardar la clase.")
+      setFormError("No pudimos guardar el grupo.")
     }
   }
 
@@ -91,7 +91,7 @@ export function GroupFormPage() {
       outletContext?.onSaved()
       navigate("/clases", { replace: true })
     } catch {
-      setFormError("No pudimos eliminar la clase.")
+      setFormError("No pudimos eliminar el grupo.")
       setIsDeleting(false)
     }
   }
@@ -104,7 +104,7 @@ export function GroupFormPage() {
     <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar clase" : "Nueva clase"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Editar grupo" : "Nuevo grupo"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">
@@ -136,10 +136,10 @@ export function GroupFormPage() {
               <ConfirmDialog
                 trigger={
                   <Button type="button" variant="destructive" disabled={isDeleting}>
-                    {isDeleting ? "Eliminando…" : "Eliminar clase"}
+                    {isDeleting ? "Eliminando…" : "Eliminar grupo"}
                   </Button>
                 }
-                title="Eliminar clase"
+                title="Eliminar grupo"
                 description="Esta acción no se puede deshacer."
                 confirmLabel="Eliminar"
                 isConfirming={isDeleting}

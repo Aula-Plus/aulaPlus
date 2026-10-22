@@ -2,49 +2,50 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\AuditLogResource;
-use App\Models\Accommodation;
-use App\Models\AuditLog;
-use App\Models\Barrier;
+use App\Http\Requests\StudentHistoryRequest;
+use App\Http\Resources\StudentHistoryEntryResource;
 use App\Models\Student;
-use App\Models\TechnicalReport;
+use App\Services\StudentChangeHistory;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
- * Read-only audit timeline for everything tied to a student — accommodations,
- * barriers and technical reports (docs/prompts/03-flujos-aprobacion-
- * trazabilidad.md §5). Same authorization as viewing the student's full
- * clinical profile: director/psychopedagogue only.
+ * Change history of a student's file ("historial de cambios", ClickUp
+ * 86e3qkwmc): every addition, modification and removal in any editable part
+ * of the file — summary, student data, learning profile, documents,
+ * accommodations, barriers, observations, reports, follow-ups and alerts.
+ * Changes only: reading the file writes nothing.
  *
- * Paginated with Laravel's standard page-based paginator (?page=N): the
- * response includes `links`/`meta` alongside `data`, same as any other
- * paginated Laravel API endpoint — no cursor pagination here since the
- * timeline is a bounded, page-browsable list rather than an infinite feed.
+ * Psychopedagogy and direction only (StudentHistoryRequest →
+ * StudentPolicy::viewChangeHistory). Each entry is additionally checked
+ * against the visibility rules of the record it is about
+ * (StudentChangeHistory) — an observation restricted to psychopedagogy never
+ * reaches a director through here.
+ *
+ * Filters: ?user_id, ?section, ?action (created|updated|deleted), ?from,
+ * ?to. Page-based pagination (?page=N, 20 per page) with Laravel's standard
+ * `links`/`meta`; `actors` lists the people in the visible history, for the
+ * "Persona" filter.
  */
 class StudentHistoryController extends Controller
 {
-    public function show(Student $student): AnonymousResourceCollection
+    private const PER_PAGE = 20;
+
+    public function show(StudentHistoryRequest $request, Student $student, StudentChangeHistory $history): AnonymousResourceCollection
     {
-        $this->authorize('view-clinical-profile', $student);
+        $visible = $history->visibleEntries($student, $request->user());
+        $filtered = $history->filter($visible, $request->validated());
 
-        $accommodationIds = $student->accommodations()->withTrashed()->pluck('id');
-        $barrierIds = $student->barriers()->withTrashed()->pluck('id');
-        $reportIds = $student->technicalReports()->pluck('id');
+        $page = max(1, (int) $request->validated('page', 1));
+        $paginator = new LengthAwarePaginator(
+            $history->withContent($filtered->forPage($page, self::PER_PAGE)->values()),
+            $filtered->count(),
+            self::PER_PAGE,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
 
-        $logs = AuditLog::query()
-            ->where(function ($query) use ($accommodationIds, $barrierIds, $reportIds) {
-                $query->where(fn ($q) => $q->where('auditable_type', Accommodation::class)->whereIn('auditable_id', $accommodationIds))
-                    ->orWhere(fn ($q) => $q->where('auditable_type', Barrier::class)->whereIn('auditable_id', $barrierIds))
-                    ->orWhere(fn ($q) => $q->where('auditable_type', TechnicalReport::class)->whereIn('auditable_id', $reportIds));
-            })
-            // Order by id, not created_at: audit_logs' timestamp column has
-            // only second precision, so two entries written within the same
-            // second would otherwise sort arbitrarily. id is monotonically
-            // increasing with insertion order on this insert-only table, so
-            // it's an exact, tie-free proxy for "most recent first".
-            ->orderByDesc('id')
-            ->paginate(20);
-
-        return AuditLogResource::collection($logs);
+        return StudentHistoryEntryResource::collection($paginator)
+            ->additional(['actors' => $history->actors($visible)]);
     }
 }

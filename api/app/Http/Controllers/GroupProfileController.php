@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Groups\BuildGroupAccommodationSummary;
 use App\Enums\AuditAction;
 use App\Http\Requests\GroupPerformanceTimelineRequest;
 use App\Models\Accommodation;
@@ -11,6 +12,8 @@ use App\Models\Barrier;
 use App\Models\CalendarEvent;
 use App\Models\Group;
 use App\Models\Student;
+use App\Services\GradeAccessRule;
+use App\Services\StudentGradeAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -24,6 +27,8 @@ use Illuminate\Support\Facades\Gate;
  */
 class GroupProfileController extends Controller
 {
+    public function __construct(protected StudentGradeAccess $gradeAccess) {}
+
     /**
      * GET /api/v1/groups/{group}/accommodations-summary — active accommodations
      * of the group's students, aggregated by `type` (§1).
@@ -34,30 +39,11 @@ class GroupProfileController extends Controller
      * yet be different concrete adjustments); `student_count` counts DISTINCT
      * students, not rows, and only effective accommodations are counted.
      */
-    public function accommodationsSummary(Group $group): JsonResponse
+    public function accommodationsSummary(Group $group, BuildGroupAccommodationSummary $summarize): JsonResponse
     {
         $this->authorize('view', $group);
 
-        $studentIds = $group->students()->pluck('students.id');
-
-        $summary = Accommodation::query()
-            ->whereIn('student_id', $studentIds)
-            ->get()
-            ->filter->isEffective()
-            ->groupBy('type')
-            ->map(fn (Collection $group, string $type): array => [
-                'type' => $type,
-                // A given `type` is expected to carry one category; if the data
-                // ever disagrees we take the first deterministically rather than
-                // silently dropping the row.
-                'category' => $group->first()->category?->value,
-                'student_count' => $group->pluck('student_id')->unique()->count(),
-            ])
-            // Deterministic order (the domain doc gives none): alphabetical by
-            // type, so the payload is stable across requests.
-            ->sortBy('type')
-            ->values()
-            ->all();
+        $summary = $summarize($group);
 
         return response()->json($summary);
     }
@@ -77,7 +63,7 @@ class GroupProfileController extends Controller
         $studentIds = $students->pluck('id');
 
         return response()->json([
-            'results' => $this->timelineResults($group, $from, $to),
+            'results' => $this->timelineResults($group, $this->gradeAccess->forGroup($user, $group), $from, $to),
             'marks' => $this->timelineMarks($group, $students, $studentIds, $user, $from, $to),
         ]);
     }
@@ -88,16 +74,22 @@ class GroupProfileController extends Controller
      * how many students have a score loaded. An assessment with no results
      * loaded yet produces no point.
      *
+     * The results counted are those the viewer may see (StudentGradeAccess): a
+     * teacher limited to their own subject gets no point for another subject's
+     * assessment — in a small group its average is nearly an individual grade.
+     *
      * @return list<array<string, mixed>>
      */
-    protected function timelineResults(Group $group, $from, $to): array
+    protected function timelineResults(Group $group, GradeAccessRule $gradeRule, $from, $to): array
     {
+        $visible = fn ($query) => $gradeRule->apply($query);
+
         return Assessment::query()
             ->where('group_id', $group->id)
             ->when($from, fn ($query) => $query->whereDate('administered_at', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('administered_at', '<=', $to))
-            ->withCount('results')
-            ->withAvg('results', 'score')
+            ->withCount(['results' => $visible])
+            ->withAvg(['results' => $visible], 'score')
             ->orderBy('administered_at')
             ->orderBy('id')
             ->get()

@@ -1,16 +1,17 @@
 import { api } from "@/lib/api"
 import type {
   Accommodation,
+  AccommodationNarrativeView,
   AccommodationInput,
   Alert,
-  AuditLogEntry,
   BarrierAccommodationLink,
   Comment,
   CommentCategory,
   GroupAccommodationSummaryEntry,
   GroupTracking,
-  Paginated,
   Role,
+  StudentHistoryFilters,
+  StudentHistoryPage,
   StudentTracking,
   TeamSummary,
 } from "@/types"
@@ -225,20 +226,37 @@ export async function validateBarrierAccommodation(
   return data.data
 }
 
-// ── Student audit history (Sesión 9) ─────────────────────────────────────
+// ── Student change history (ClickUp 86e3qkwmc) ─────────────────────────────
 // The only paginated endpoint in the frontend so far — return the whole
 // Paginated<T> envelope (docs/prompts/09 §2), never just the data array, so
-// callers do not have to re-implement pagination on top of `meta`.
+// callers do not have to re-implement pagination on top of `meta`. `actors`
+// (the people in the history) feeds the "Persona" filter. Filtering happens
+// server-side, where the per-entry permission check also runs.
 
 export async function fetchStudentHistory(
   studentId: number,
   page = 1,
-): Promise<Paginated<AuditLogEntry>> {
-  const { data } = await api.get<Paginated<AuditLogEntry>>(
-    `/api/v1/students/${studentId}/history`,
-    { params: { page } },
+  filters: StudentHistoryFilters = {},
+): Promise<StudentHistoryPage> {
+  const { data } = await api.get<StudentHistoryPage>(`/api/v1/students/${studentId}/history`, {
+    params: { page, ...filters },
+  })
+  return data
+}
+
+export async function fetchAccommodationNarrative(groupId: number): Promise<AccommodationNarrativeView> {
+  const { data } = await api.get<AccommodationNarrativeView>(
+    `/api/v1/groups/${groupId}/accommodation-narrative`,
   )
   return data
+}
+
+export async function generateAccommodationNarrative(groupId: number): Promise<void> {
+  await api.post(`/api/v1/groups/${groupId}/accommodation-narrative/generate`)
+}
+
+export async function publishAccommodationNarrative(groupId: number, narrativeId: number): Promise<void> {
+  await api.post(`/api/v1/groups/${groupId}/accommodation-narrative/${narrativeId}/publish`)
 }
 
 // ── Comment categories (replace the old comment "tone") ──────────────────────

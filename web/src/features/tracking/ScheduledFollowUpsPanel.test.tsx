@@ -81,7 +81,7 @@ describe("ScheduledFollowUpsPanel", () => {
     expect(fetchSpy).toHaveBeenNthCalledWith(2, 3, undefined)
   })
 
-  it("paints the 'Vencido' badge from is_overdue and never computes dates itself", async () => {
+  it("paints the 'Fuera de fecha' badge from is_overdue and never computes dates itself", async () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchScheduledFollowUps").mockResolvedValue([
       followUp({ id: 1, description: "Atrasado", is_overdue: true }),
       followUp({ id: 2, description: "A tiempo", is_overdue: false }),
@@ -92,8 +92,8 @@ describe("ScheduledFollowUpsPanel", () => {
     const overdue = (await screen.findByText("Atrasado")).closest("li") as HTMLElement
     const onTime = screen.getByText("A tiempo").closest("li") as HTMLElement
 
-    expect(within(overdue).getByText("Vencido")).toBeInTheDocument()
-    expect(within(onTime).queryByText("Vencido")).not.toBeInTheDocument()
+    expect(within(overdue).getByText("Fuera de fecha")).toBeInTheDocument()
+    expect(within(onTime).queryByText("Fuera de fecha")).not.toBeInTheDocument()
   })
 
   it("resolves with resolution_note when the field is filled", async () => {

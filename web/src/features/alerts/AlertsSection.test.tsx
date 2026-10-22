@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Alert } from "@/types"
-import { MyAlertsPage } from "./MyAlertsPage"
+import { AlertsSection } from "./AlertsSection"
 import * as alertsApi from "./alertsApi"
 
 vi.mock("./alertsApi")
@@ -41,12 +41,12 @@ const newAlert: Alert = {
 function renderPage() {
   render(
     <MemoryRouter>
-      <MyAlertsPage />
+      <AlertsSection />
     </MemoryRouter>,
   )
 }
 
-describe("MyAlertsPage", () => {
+describe("AlertsSection", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([newAlert])
@@ -118,5 +118,31 @@ describe("MyAlertsPage", () => {
     vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([])
     renderPage()
     expect(await screen.findByText("No tenés alertas abiertas.")).toBeInTheDocument()
+  })
+
+  it("keeps its heading while loading and when loading fails", async () => {
+    let fail!: (reason: unknown) => void
+    vi.mocked(alertsApi.fetchMyAlerts).mockReturnValue(new Promise<Alert[]>((_, reject) => (fail = reject)))
+    renderPage()
+
+    expect(screen.getByRole("heading", { level: 2, name: "Alertas" })).toBeInTheDocument()
+    expect(screen.getByText("Cargando…")).toBeInTheDocument()
+
+    fail(new Error("network"))
+    expect(await screen.findByText("No pudimos cargar tus alertas.")).toBeInTheDocument()
+    expect(screen.getByRole("heading", { level: 2, name: "Alertas" })).toBeInTheDocument()
+  })
+
+  it("is a section: an h2 heading with h3 subsections, no page title", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      newAlert,
+      { ...newAlert, id: 11, can: { act: false, resolve: false } },
+    ])
+    renderPage()
+
+    expect(await screen.findByRole("heading", { level: 3, name: "Te toca elegir una salida" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { level: 3, name: "En curso" })).toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "Alertas" })).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument()
   })
 })

@@ -11,6 +11,13 @@ use App\Models\User;
  * security rule 11. Unlike Accommodation, `director` is deliberately NOT
  * included for create/update/delete (doc02 §2 grants this only to teacher
  * and psychopedagogue — director is not listed).
+ *
+ * A barrier is part of one student's profile, so reaching it follows the
+ * same rule as the student (StudentPolicy::view): school-wide roles see every
+ * barrier of their school, a teacher only those of students they teach — the
+ * same students whose barriers they already see as support chips in the
+ * student profile. A teacher who doesn't teach the student can neither read
+ * nor edit (propose accommodation links on) their barriers.
  */
 class BarrierPolicy
 {
@@ -21,7 +28,8 @@ class BarrierPolicy
 
     public function view(User $user, Barrier $barrier): bool
     {
-        return $this->sharesSchool($user, $barrier);
+        return $this->sharesSchool($user, $barrier)
+            && ($user->hasAnyRole(Role::schoolWideValues()) || $this->teachesStudent($user, $barrier));
     }
 
     public function create(User $user): bool
@@ -32,13 +40,13 @@ class BarrierPolicy
     public function update(User $user, Barrier $barrier): bool
     {
         return $this->sharesSchool($user, $barrier)
-            && $user->hasAnyRole([Role::Teacher->value, Role::Psychopedagogue->value]);
+            && ($user->hasRole(Role::Psychopedagogue->value)
+                || ($user->hasRole(Role::Teacher->value) && $this->teachesStudent($user, $barrier)));
     }
 
     public function delete(User $user, Barrier $barrier): bool
     {
-        return $this->sharesSchool($user, $barrier)
-            && $user->hasAnyRole([Role::Teacher->value, Role::Psychopedagogue->value]);
+        return $this->update($user, $barrier);
     }
 
     /**
@@ -58,5 +66,10 @@ class BarrierPolicy
     protected function sharesSchool(User $user, Barrier $barrier): bool
     {
         return $user->school_id === $barrier->school_id;
+    }
+
+    protected function teachesStudent(User $user, Barrier $barrier): bool
+    {
+        return $barrier->student !== null && $user->teachesStudent($barrier->student);
     }
 }

@@ -7,7 +7,9 @@ use App\Models\Comment;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 // docs/prompts/04-seguimiento-institucional.md §3 and §7: the group tracking
@@ -161,4 +163,52 @@ it('includes the group teachers in the tracking payload', function () {
     expect($response->json('data.group.teachers'))->toBeArray();
     expect(collect($response->json('data.group.teachers'))->pluck('id')->all())
         ->toContain($teacher->id);
+});
+
+// ClickUp 86e3dpbwy follow-up: the flag follows Accommodation::scopeVisibleTo —
+// a teacher of another subject must not learn that a subject-specific
+// accommodation exists — and the effectiveness rule (active + approved when
+// approval is required), in one query for the whole group.
+it('flags only effective accommodations the viewer may see, in a single query', function () {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $math = Subject::factory()->create(['school_id' => $school->id]);
+    $science = Subject::factory()->create(['school_id' => $school->id]);
+    $mathTeacher = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $mathTeacher, $math);
+    $scienceTeacher = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $scienceTeacher, $science);
+    $director = User::factory()->forSchool($school)->director()->create();
+
+    $scoped = Student::factory()->create(['school_id' => $school->id]);
+    $pending = Student::factory()->create(['school_id' => $school->id]);
+    $general = Student::factory()->create(['school_id' => $school->id]);
+    foreach ([$scoped, $pending, $general] as $student) {
+        $student->groups()->attach($group, ['school_year' => now()->year]);
+    }
+    Accommodation::factory()->create(['student_id' => $scoped->id])->subjects()->attach($math);
+    Accommodation::factory()->create([
+        'student_id' => $pending->id,
+        'requires_external_approval' => true,
+        'approved' => null,
+    ]);
+    Accommodation::factory()->create(['student_id' => $general->id]);
+
+    $flags = function (User $viewer) use ($group): array {
+        Sanctum::actingAs($viewer);
+
+        return collect($this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()->json('data.students'))
+            ->mapWithKeys(fn (array $student) => [$student['id'] => $student['has_active_accommodations']])
+            ->all();
+    };
+
+    expect($flags($mathTeacher))->toEqual([$scoped->id => true, $pending->id => false, $general->id => true])
+        ->and($flags($scienceTeacher))->toEqual([$scoped->id => false, $pending->id => false, $general->id => true])
+        ->and($flags($director))->toEqual([$scoped->id => true, $pending->id => false, $general->id => true]);
+
+    DB::enableQueryLog();
+    $flags($director);
+    $accommodationQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], 'from "accommodations"'));
+    expect($accommodationQueries)->toHaveCount(1);
 });

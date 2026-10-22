@@ -21,6 +21,11 @@ use Illuminate\Validation\Rule;
  *   in the assessment's group — validated below. `Student` has no `group_id`;
  *   membership lives in the `group_student` pivot, hence the `students()` query.
  *
+ * - Scope (422): the accommodation must apply to that assessment — general or
+ *   scoped to its subject, and covering its type (ClickUp 86e3dpbwy
+ *   follow-up). Switching off, for one evaluation, an accommodation that never
+ *   applied to it would be a meaningless "constancia".
+ *
  * When the assessment can't be resolved (missing / invalid / cross-tenant) we
  * defer to the `exists` rule so the client gets a 422, not a misleading 403.
  */
@@ -81,6 +86,15 @@ class StoreAccommodationInstanceOverrideRequest extends FormRequest
                 $validator->errors()->add(
                     'accommodation',
                     "The accommodation must belong to a student in the assessment's group."
+                );
+
+                return;
+            }
+
+            if (! $accommodation->appliesToAssessment($assessment)) {
+                $validator->errors()->add(
+                    'accommodation',
+                    "The accommodation does not apply to this assessment's subject or type."
                 );
             }
         });

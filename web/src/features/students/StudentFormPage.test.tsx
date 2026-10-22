@@ -111,7 +111,7 @@ describe("StudentFormPage", () => {
 
     renderCreate()
 
-    await userEvent.click(await screen.findByLabelText(/clase/i))
+    await userEvent.click(await screen.findByLabelText(/grupo/i))
     expect(await screen.findByRole("button", { name: "3° A (actual)" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "2° A (pasado)" })).not.toBeInTheDocument()
   })
@@ -210,7 +210,7 @@ describe("StudentFormPage", () => {
 
       renderEdit("director")
 
-      const select = await screen.findByLabelText(/clase/i)
+      const select = await screen.findByLabelText(/grupo/i)
       expect(within(select).getByText("3° A")).toBeInTheDocument()
       expect(await screen.findByLabelText(/notas de seguimiento/i)).toHaveValue("Progresa bien.")
       expect(await screen.findByLabelText(/perfil individual/i)).toHaveValue("")

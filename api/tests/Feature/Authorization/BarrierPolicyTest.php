@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Barrier;
+use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
@@ -10,6 +11,9 @@ it('lets teacher and psychopedagogue create, update and delete barriers', functi
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
     $barrier = Barrier::factory()->create(['student_id' => $student->id]);
 
     foreach ([$teacher, $psychopedagogue] as $user) {
@@ -44,4 +48,19 @@ it('never authorizes across schools', function () {
 
     expect($teacherA->can('view', $barrierB))->toBeFalse()
         ->and($teacherA->can('update', $barrierB))->toBeFalse();
+});
+
+// Same rule as the student itself (StudentPolicy::view): a barrier is part of
+// the student's profile, so a teacher only reaches the barriers of students
+// they teach — not every barrier of the school.
+it('denies a teacher who does not teach the student', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup(Group::factory()->create(['school_id' => $school->id]), $teacher);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $barrier = Barrier::factory()->create(['student_id' => $student->id]);
+
+    expect($teacher->can('view', $barrier))->toBeFalse()
+        ->and($teacher->can('update', $barrier))->toBeFalse()
+        ->and($teacher->can('delete', $barrier))->toBeFalse();
 });
