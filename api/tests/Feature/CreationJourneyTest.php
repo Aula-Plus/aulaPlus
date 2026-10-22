@@ -10,6 +10,7 @@ use App\Models\School;
 use App\Models\Subject;
 use App\Models\UsageEvent;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -298,6 +299,31 @@ it('lists the requested month even when today is past that month\'s last day', f
     expect($response->json('meta.month'))->toBe('2026-02')
         ->and($response->json('data'))->toHaveCount(1)
         ->and($response->json('data.0.id'))->toBe('event-'.$february->id);
+});
+
+it('backfills earlier creations as confirmed steps of their type and rolls back cleanly', function () {
+    [$school, $teacher] = journeySchool();
+    $migration = require database_path('migrations/2026_10_18_000001_add_creation_journey_columns_to_usage_events_table.php');
+    $migration->down();
+
+    $row = fn (string $type) => DB::table('usage_events')->insertGetId([
+        'school_id' => $school->id, 'user_id' => $teacher->id, 'event_type' => $type,
+        'metadata' => json_encode(['id' => 1]), 'created_at' => now(),
+    ]);
+    $ids = [
+        'annual_plan.created' => $row('annual_plan.created'),
+        'class_session.created' => $row('class_session.created'),
+        'assessment.created' => $row('assessment.created'),
+        'login' => $row('login'),
+    ];
+
+    $migration->up();
+
+    $rows = DB::table('usage_events')->whereIn('id', $ids)->get()->keyBy('event_type');
+    expect($rows['annual_plan.created'])->step->toBe('creation_confirmed')->content_type->toBe('annual_plan')
+        ->and($rows['class_session.created'])->step->toBe('creation_confirmed')->content_type->toBe('class_session')
+        ->and($rows['assessment.created'])->step->toBe('creation_confirmed')->content_type->toBe('assessment')
+        ->and($rows['login'])->step->toBeNull()->content_type->toBeNull();
 });
 
 it('keeps an applied unit proposal journey labelled as a unit, not as the sessions it seeded', function () {

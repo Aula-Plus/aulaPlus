@@ -48,11 +48,15 @@ return new class extends Migration
             $table->index(['school_id', 'user_id', 'journey_id']);
         });
 
-        foreach (self::CREATED_EVENT_CONTENT_TYPES as $eventType => $contentType) {
-            DB::table('usage_events')
-                ->where('event_type', $eventType)
-                ->update(['step' => 'creation_confirmed', 'content_type' => $contentType]);
-        }
+        // One statement (one table pass) instead of one per type: the
+        // content type is the event type without its `.created` suffix.
+        // replace() is portable across PostgreSQL and SQLite.
+        DB::table('usage_events')
+            ->whereIn('event_type', array_keys(self::CREATED_EVENT_CONTENT_TYPES))
+            ->update([
+                'step' => 'creation_confirmed',
+                'content_type' => DB::raw("replace(event_type, '.created', '')"),
+            ]);
 
         Schema::table('ai_proposals', function (Blueprint $table) {
             $table->uuid('journey_id')->nullable()->after('requested_by_id');
