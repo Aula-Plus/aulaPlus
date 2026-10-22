@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -179,6 +179,65 @@ describe("StudentHistoryPage", () => {
     expect(fetchSpy).toHaveBeenLastCalledWith(3, 2, {})
     await screen.findByText(/página 2 de 2/i)
     expect(screen.getByRole("button", { name: /siguiente/i })).toBeDisabled()
+  })
+
+  it("names the student's group «Grupo» and shows an observation's categories before → after", async () => {
+    vi.spyOn(trackingApi, "fetchStudentHistory").mockResolvedValue(
+      page([
+        entry({
+          id: 1,
+          section: "student_data",
+          element: { type: "student", id: 3, label: null },
+          changes: [{ field: "group", before: "3°A", after: "3°B" }],
+        }),
+        entry({
+          id: 2,
+          section: "observations",
+          element: { type: "comment", id: 9, label: "Habla de la mudanza" },
+          changes: [{ field: "categories", before: ["Familiar"], after: [] }],
+        }),
+      ]),
+    )
+
+    renderPage()
+
+    const [group, categories] = within(
+      await screen.findByRole("list", { name: /cambios registrados/i }),
+    ).getAllByRole("listitem")
+
+    expect(within(group).getByText("Grupo")).toBeInTheDocument()
+    expect(within(group).queryByText("Clase")).not.toBeInTheDocument()
+    expect(within(categories).getByText("Categorías")).toBeInTheDocument()
+    expect(within(categories).getByText("Familiar")).toBeInTheDocument()
+    expect(within(categories).getByText("Sin categoría")).toBeInTheDocument()
+  })
+
+  it("ignores a slower response for filters that are no longer selected", async () => {
+    let resolveStale: (value: HistoryPage) => void = () => {}
+    const stale = new Promise<HistoryPage>((resolve) => {
+      resolveStale = resolve
+    })
+    const fetchSpy = vi.spyOn(trackingApi, "fetchStudentHistory")
+    fetchSpy.mockResolvedValueOnce(page([entry({ id: 1 })]))
+    fetchSpy.mockReturnValueOnce(stale)
+    fetchSpy.mockResolvedValueOnce(
+      page([entry({ id: 3, element: { type: "barrier", id: 4, label: "Atención" } })]),
+    )
+
+    renderPage()
+    await screen.findByText("Ajuste: Tiempo extra")
+
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-01" } })
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-02" } })
+    expect(await screen.findByText("Barrera: Atención")).toBeInTheDocument()
+
+    await act(async () => {
+      resolveStale(page([entry({ id: 2, element: { type: "accommodation", id: 1, label: "Viejo" } })]))
+      await stale
+    })
+
+    expect(screen.getByText("Barrera: Atención")).toBeInTheDocument()
+    expect(screen.queryByText("Ajuste: Viejo")).not.toBeInTheDocument()
   })
 
   it("shows an empty state when there are no changes", async () => {

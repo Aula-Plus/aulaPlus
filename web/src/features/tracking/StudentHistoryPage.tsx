@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import { FileClock } from "lucide-react"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
@@ -54,7 +54,7 @@ const fieldLabels: Record<string, string> = {
   birth_date: "Fecha de nacimiento",
   enrollment_year: "Año de ingreso",
   has_therapeutic_companion: "Acompañante terapéutico",
-  group: "Clase",
+  group: "Grupo",
   learning_profile: "Perfil de aprendizaje",
   individual_profile: "Perfil individual",
   tracking_notes: "Notas de seguimiento",
@@ -79,6 +79,7 @@ const fieldLabels: Record<string, string> = {
   content: "Texto",
   visible_to: "Visible para",
   author_only: "Solo para quien la escribió",
+  categories: "Categorías",
   summary: "Resumen",
   attachments: "Adjuntos",
   document_url: "Archivo del informe",
@@ -136,23 +137,28 @@ export function StudentHistoryPage() {
 
   const query = useMemo(() => toQuery(filters), [filters])
 
-  const load = useCallback(
-    (nextPage: number, nextQuery: StudentHistoryFilters) => {
-      return trackingApi
-        .fetchStudentHistory(studentId, nextPage, nextQuery)
-        .then((data) => {
-          setHistory(data)
-          setError(null)
-        })
-        .catch(() => setError("No pudimos cargar el historial de cambios."))
-        .finally(() => setPending(false))
-    },
-    [studentId],
-  )
-
   useEffect(() => {
-    load(page, query)
-  }, [load, page, query])
+    // Filters can change faster than the API answers (e.g. typing a date):
+    // only the latest request may update the page, so an older, slower
+    // response never overwrites the result of the current filters.
+    let current = true
+    trackingApi
+      .fetchStudentHistory(studentId, page, query)
+      .then((data) => {
+        if (!current) return
+        setHistory(data)
+        setError(null)
+      })
+      .catch(() => {
+        if (current) setError("No pudimos cargar el historial de cambios.")
+      })
+      .finally(() => {
+        if (current) setPending(false)
+      })
+    return () => {
+      current = false
+    }
+  }, [studentId, page, query])
 
   function updateFilter(patch: Partial<FilterState>) {
     setPending(true)
@@ -460,6 +466,7 @@ function formatValue(entry: StudentHistoryEntry, field: string, value: unknown):
   }
 
   if (Array.isArray(value)) {
+    if (field === "categories" && value.length === 0) return "Sin categoría"
     if (field === "visible_to") {
       return value.map((role) => roleLabels[role as Role] ?? String(role)).join(", ")
     }
