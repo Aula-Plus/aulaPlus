@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { isAxiosError } from "axios"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +11,7 @@ import { canReviewAccommodationProposals, createsAccommodationProposals } from "
 import { formatShortDate } from "@/lib/utils"
 import {
   accommodationCategoryLabels,
+  accommodationFieldLabels,
   accommodationReviewActionLabels,
   accommodationReviewStatusLabels,
   roleLabels,
@@ -60,12 +62,16 @@ export function AccommodationProposalsSection({
 }: AccommodationProposalsSectionProps) {
   const [proposals, setProposals] = useState<Accommodation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Bumped on every fetch: each row remounts with the fresh data, so an open
+  // history or step form never shows what the proposal was before.
+  const [version, setVersion] = useState(0)
 
   const load = useCallback(() => {
     trackingApi
       .fetchAccommodationProposals(studentId)
       .then((data) => {
         setProposals(data)
+        setVersion((current) => current + 1)
         setError(null)
       })
       .catch(() => setError("No pudimos cargar las propuestas de ajuste."))
@@ -100,10 +106,11 @@ export function AccommodationProposalsSection({
       <ul className="grid gap-2">
         {proposals.map((proposal) => (
           <ProposalItem
-            key={proposal.id}
+            key={`${proposal.id}:${version}`}
             proposal={proposal}
             onEdit={onEdit}
             onStepDone={handleStepDone}
+            onStale={load}
           />
         ))}
       </ul>
@@ -150,10 +157,13 @@ function ProposalItem({
   proposal,
   onEdit,
   onStepDone,
+  onStale,
 }: {
   proposal: Accommodation
   onEdit: (proposal: Accommodation) => void
   onStepDone: (updated: Accommodation) => void
+  /** Someone else moved the proposal meanwhile: refetch the list. */
+  onStale: () => void
 }) {
   const { user } = useAuth()
   const reviews = canReviewAccommodationProposals(user)
@@ -203,7 +213,13 @@ function ProposalItem({
       setHistory(null)
       setHistoryOpen(false)
       onStepDone(updated)
-    } catch {
+    } catch (err) {
+      // 422 on the proposal itself (not a field): someone else already took
+      // a step on it. Show where it stands now instead of a stale card.
+      if (isAxiosError(err) && err.response?.status === 422 && err.response.data?.errors?.accommodation) {
+        onStale()
+        return
+      }
       setFormError("No pudimos completar la acción. Volvé a cargar la ficha y probá de nuevo.")
     } finally {
       setSubmitting(false)
@@ -370,6 +386,12 @@ function ProposalItem({
                     ? `${event.user.name}${event.user.role ? ` (${roleLabels[event.user.role]})` : ""}`
                     : "Usuario eliminado"}
                   : {accommodationReviewActionLabels[event.action]}
+                  {event.changed_fields && event.changed_fields.length > 0 && (
+                    <>
+                      {" "}
+                      ({event.changed_fields.map((field) => accommodationFieldLabels[field] ?? field).join(", ")})
+                    </>
+                  )}
                   {event.note && <span className="whitespace-pre-wrap"> — «{event.note}»</span>}
                 </li>
               ))}

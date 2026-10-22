@@ -510,6 +510,33 @@ describe("StudentTrackingPage", () => {
     })
   })
 
+  it("tells direction when nobody in psychopedagogy can review the proposal", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [pendingAccommodation({ id: 5, is_effective: true })]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([])
+    vi.spyOn(trackingApi, "createAccommodation").mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 422, data: { errors: { review_recipients: ["No active psychopedagogue."] } } },
+    })
+
+    renderPage("director")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /proponer ajuste/i }))
+    await userEvent.type(screen.getByLabelText(/nombre del ajuste/i), "Más tiempo en escritos")
+    await userEvent.type(screen.getByLabelText(/descripción/i), "Media hora extra")
+    await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Escritura")
+    await userEvent.click(screen.getByLabelText(/^tipo de ajuste$/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Acceso" }))
+    await userEvent.type(screen.getByLabelText(/plazo para la revisión/i), "2099-01-15")
+    await userEvent.click(screen.getByRole("button", { name: /enviar a revisión de psicopedagogía/i }))
+
+    expect(
+      await screen.findByText("No hay personas de Psicopedagogía activas para revisar la propuesta."),
+    ).toBeInTheDocument()
+  })
+
   it("hides 'Nuevo ajuste' and 'Editar' from a viewer without clinical access", async () => {
     // A teacher's payload omits the accommodations array entirely — the whole
     // section (and its manage buttons) never renders.

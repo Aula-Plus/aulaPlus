@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
+import { isAxiosError } from "axios"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
@@ -258,7 +259,13 @@ export function AccommodationFormDialog({
       }
       onSaved()
       onOpenChange(false)
-    } catch {
+    } catch (err) {
+      // Sent to the whole role while nobody holds it: the server refuses it,
+      // since the review task would belong to nobody.
+      if (isAxiosError(err) && err.response?.status === 422 && err.response.data?.errors?.review_recipients) {
+        setFormError("No hay personas de Psicopedagogía activas para revisar la propuesta.")
+        return
+      }
       setFormError(proposal ? "No pudimos enviar la propuesta." : "No pudimos guardar el ajuste.")
     }
   }

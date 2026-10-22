@@ -436,8 +436,24 @@ export interface AccommodationReviewEvent {
   id: number
   action: AccommodationReviewAction
   note: string | null
+  /** `edited` only: the API names of the fields changed (never their content). */
+  changed_fields: string[] | null
   user: StaffMember | null
   created_at: string | null
+}
+
+/** Spanish names of the accommodation fields an `edited` step may list. */
+export const accommodationFieldLabels: Record<string, string> = {
+  type: "Nombre del ajuste",
+  description: "Descripción",
+  focus_area: "Área de enfoque",
+  category: "Tipo de ajuste",
+  starts_on: "Vigente desde",
+  subject_ids: "Materias donde aplica",
+  assessment_types: "Evaluaciones",
+  origin: "Origen",
+  active: "Activa",
+  llm_rule: "Regla para el asistente",
 }
 
 export const accommodationCategoryLabels: Record<AccommodationCategory, string> = {

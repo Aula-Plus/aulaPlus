@@ -144,13 +144,23 @@ describe("AccommodationProposalsSection", () => {
         id: 1,
         action: "submitted",
         note: null,
+        changed_fields: null,
         user: { id: 9, name: "Directora", role: "director" },
         created_at: "2026-10-20T10:00:00+00:00",
       },
       {
         id: 2,
+        action: "edited",
+        note: null,
+        changed_fields: ["description", "subject_ids"],
+        user: { id: 9, name: "Directora", role: "director" },
+        created_at: "2026-10-20T11:00:00+00:00",
+      },
+      {
+        id: 3,
         action: "rejected",
         note: "No corresponde",
+        changed_fields: null,
         user: { id: 1, name: "Ana", role: "psychopedagogue" },
         created_at: "2026-10-21T10:00:00+00:00",
       },
@@ -164,5 +174,28 @@ describe("AccommodationProposalsSection", () => {
     await userEvent.click(screen.getByRole("button", { name: /ver historial/i }))
     expect(await screen.findByText(/directora \(director\): envió la propuesta a revisión/i)).toBeInTheDocument()
     expect(screen.getByText(/la rechazó/i)).toBeInTheDocument()
+    // Who changed what: the fields an edit touched, never their content.
+    expect(screen.getByText(/editó la propuesta \(descripción, materias donde aplica\)/i)).toBeInTheDocument()
+  })
+
+  it("refetches the list when someone else already moved the proposal", async () => {
+    const fetch = vi
+      .spyOn(trackingApi, "fetchAccommodationProposals")
+      .mockResolvedValueOnce([proposal()])
+      .mockResolvedValueOnce([proposal({ review_status: "withdrawn", review_note: "Ya no hace falta" })])
+    vi.spyOn(trackingApi, "reviewAccommodationProposal").mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 422, data: { errors: { accommodation: ["Not in this state."] } } },
+    })
+    renderSection("psychopedagogue")
+
+    await userEvent.click(await screen.findByRole("button", { name: /^rechazar$/i }))
+    await userEvent.type(screen.getByLabelText(/motivo del rechazo/i), "No corresponde")
+    await userEvent.click(screen.getByRole("button", { name: /rechazar propuesta/i }))
+
+    // It shows where the proposal stands now, with no step left to take.
+    expect(await screen.findByText("Retirada por Dirección")).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole("button", { name: /^rechazar$/i })).not.toBeInTheDocument()
   })
 })
