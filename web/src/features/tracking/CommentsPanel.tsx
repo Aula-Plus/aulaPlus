@@ -15,10 +15,16 @@ import {
   type Comment,
   type CommentCategory,
   type CommentSignal,
+  type Role,
   type StaffMember,
 } from "@/types"
 import type { CommentInput } from "./trackingApi"
-import { CommentScopeSelector, type CommentScopeOption, type PickedPeople } from "./CommentScopeSelector"
+import {
+  COMMENT_SCOPE_ROLES,
+  CommentScopeSelector,
+  type CommentScopeOption,
+  type PickedPeople,
+} from "./CommentScopeSelector"
 
 /**
  * Translate the UI-only scope choice into the real payload fields. `everyone`
@@ -101,6 +107,26 @@ function CategorySignalPicker({
   )
 }
 
+/** How a whole role is named in the warning. */
+const ROLE_AUDIENCE_NAMES: Record<Role, string> = {
+  teacher: "Docentes",
+  psychopedagogue: "Psicopedagogía",
+  director: "Dirección",
+}
+
+/**
+ * «Elegir personas» narrows only the roles where someone was picked: a role of
+ * the option left with nobody picked still sees the comment in full (ClickUp
+ * 86e3qkwnv, 21/10 answer). When that mix happens, the author is warned before
+ * publishing. Returns the roles left whole, or none when there is no mix.
+ */
+function rolesLeftWhole(option: CommentScopeOption, picked: PickedPeople): Role[] {
+  const roles = COMMENT_SCOPE_ROLES[option]
+  const hasPicks = (role: Role) => (picked[role] ?? []).length > 0
+  if (!roles.some(hasPicks)) return []
+  return roles.filter((role) => !hasPicks(role))
+}
+
 export interface CommentsPanelProps {
   comments: Comment[]
   onCreate: (input: CommentInput) => Promise<void>
@@ -159,9 +185,16 @@ export function CommentsPanel({
   const [pickedPeople, setPickedPeople] = useState<PickedPeople>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // The roles a mixed «Elegir personas» leaves whole, while the author
+  // decides whether to publish as is or go back to pick people.
+  const [wholeRolesWarning, setWholeRolesWarning] = useState<Role[] | null>(null)
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    await publish(false)
+  }
+
+  async function publish(confirmedWholeRoles: boolean) {
     setError(null)
 
     const trimmed = content.trim()
@@ -194,6 +227,13 @@ export function CommentsPanel({
       ...buildScopeFields(scope),
       ...buildPeopleField(scope, pickedPeople),
     }
+
+    const wholeRoles = rolesLeftWhole(scope, pickedPeople)
+    if (!confirmedWholeRoles && wholeRoles.length > 0) {
+      setWholeRolesWarning(wholeRoles)
+      return
+    }
+    setWholeRolesWarning(null)
 
     setSubmitting(true)
     try {
@@ -273,11 +313,40 @@ export function CommentsPanel({
 
           <CommentScopeSelector
             value={scope}
-            onChange={setScope}
+            onChange={(next) => {
+              setScope(next)
+              setWholeRolesWarning(null)
+            }}
             people={scopeCandidates?.filter((person) => person.id !== currentUserId)}
             pickedPeople={pickedPeople}
-            onPickedPeopleChange={setPickedPeople}
+            onPickedPeopleChange={(next) => {
+              setPickedPeople(next)
+              setWholeRolesWarning(null)
+            }}
           />
+
+          {wholeRolesWarning && (
+            <div role="alert" className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+              {/* Provisional text: product has not defined it yet (ClickUp 86e3qkwnv). */}
+              <p>
+                En {wholeRolesWarning.map((role) => ROLE_AUDIENCE_NAMES[role]).join(" y ")} no elegiste a
+                nadie, así que la van a ver todos los de ese rol.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" disabled={submitting} onClick={() => publish(true)}>
+                  Publicar igual
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setWholeRolesWarning(null)}
+                >
+                  Volver a elegir personas
+                </Button>
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
