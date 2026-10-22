@@ -17,9 +17,9 @@ vi.mock("@/features/auth/AuthContext", () => ({
 const routing = [
   { type: "performance" as const, recipients: ["teacher" as const], is_default: true },
   {
-    type: "planning_attendance" as const,
+    type: "escalated_overdue" as const,
     recipients: ["teacher" as const, "psychopedagogue" as const],
-    is_default: true,
+    is_default: false,
   },
 ]
 

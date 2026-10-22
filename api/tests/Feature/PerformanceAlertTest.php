@@ -2,6 +2,7 @@
 
 use App\Enums\AlertType;
 use App\Models\Alert;
+use App\Models\AlertRoutingSetting;
 use App\Models\AlertRule;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
@@ -338,6 +339,19 @@ it('validates the parameter each condition needs and the recipients', function (
         ->assertUnprocessable();
     $this->putJson('/api/v1/alert-routing/unknown', ['recipients' => ['teacher']])
         ->assertNotFound();
+});
+
+it('does not offer routing for an alert type nothing generates yet', function () {
+    // "Planificación / asistencia" is a placeholder: the school must not be able
+    // to configure recipients for an alert that never happens (ClickUp 86e3qkyrn).
+    Sanctum::actingAs($this->director);
+
+    $types = collect($this->getJson('/api/v1/alert-settings')->assertOk()->json('data.routing'))->pluck('type');
+    expect($types->all())->toBe(['performance', 'escalated_overdue']);
+
+    $this->putJson('/api/v1/alert-routing/planning_attendance', ['recipients' => ['director']])
+        ->assertNotFound();
+    expect(AlertRoutingSetting::query()->withoutGlobalScopes()->count())->toBe(0);
 });
 
 it('isolates alert settings between schools', function () {
