@@ -115,7 +115,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('/reports/{report}', [ReportDocumentController::class, 'update']);
         Route::delete('/reports/{report}', [ReportDocumentController::class, 'destroy']);
         Route::put('/reports/{report}/anonymized-text', [ReportDocumentController::class, 'updateText']);
-        Route::post('/reports/{report}/confirm-send', [ReportDocumentController::class, 'confirmSend']);
+        // Each confirmation is a paid AI call (cost control, like the other AI endpoints).
+        Route::post('/reports/{report}/confirm-send', [ReportDocumentController::class, 'confirmSend'])
+            ->middleware('throttle:5,1');
         Route::post('/reports/{report}/proposals', [AccommodationProposalController::class, 'store']);
         Route::post('/accommodation-proposals/{proposal}/review', [AccommodationProposalController::class, 'review']);
         Route::get('/ai-report-setting', [AiReportSettingsController::class, 'show']);

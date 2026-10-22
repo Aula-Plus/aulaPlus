@@ -4,6 +4,7 @@ namespace App\Support\Reports;
 
 use App\Support\Pdf\BoundedPdfParser;
 use DOMDocument;
+use DOMNode;
 use RuntimeException;
 use Smalot\PdfParser\Config;
 use ZipArchive;
@@ -96,18 +97,27 @@ class ReportTextExtractor
 
             $stat = $zip->statName('word/document.xml');
 
-            if ($stat === false || $stat['size'] > self::MAX_DOCX_XML_BYTES) {
+            if ($stat === false || $stat['size'] > static::MAX_DOCX_XML_BYTES) {
                 $zip->close();
                 throw new RuntimeException('Word document unreadable or too large.');
             }
 
-            $xml = $zip->getFromName('word/document.xml');
+            // The size above is what the archive declares, and a crafted file
+            // can lie about it: read at most one byte past the cap, so a zip
+            // bomb is never inflated in memory, and refuse if it got there.
+            $xml = $zip->getFromName('word/document.xml', static::MAX_DOCX_XML_BYTES + 1);
             $zip->close();
         } finally {
             @unlink($tmp);
         }
 
-        if (! is_string($xml)) {
+        if (! is_string($xml) || strlen($xml) > static::MAX_DOCX_XML_BYTES) {
+            throw new RuntimeException('Word document unreadable or too large.');
+        }
+
+        // A real document.xml never carries a DTD: refusing one rules out
+        // entity tricks (external entities, "billion laughs" expansion).
+        if (stripos($xml, '<!DOCTYPE') !== false || stripos($xml, '<!ENTITY') !== false) {
             throw new RuntimeException('Word document unreadable.');
         }
 
@@ -121,6 +131,12 @@ class ReportTextExtractor
         $pages = [''];
 
         foreach ($dom->getElementsByTagNameNS('*', 'p') as $paragraph) {
+            // A paragraph nested in another (a text box) is read with its
+            // outer paragraph: reading it again would duplicate its text.
+            if ($this->hasParagraphAncestor($paragraph)) {
+                continue;
+            }
+
             $line = '';
 
             foreach ($paragraph->getElementsByTagNameNS('*', '*') as $node) {
@@ -129,6 +145,9 @@ class ReportTextExtractor
                 } elseif ($node->localName === 'tab') {
                     $line .= ' ';
                 } elseif ($node->localName === 'br' && $node->getAttributeNS($node->namespaceURI, 'type') === 'page') {
+                    // What came before the break, in this same paragraph,
+                    // belongs to the page that ends here.
+                    $pages[count($pages) - 1] .= $line."\n";
                     $pages[] = '';
                     $line = '';
                 }
@@ -140,12 +159,25 @@ class ReportTextExtractor
         return array_slice($pages, 0, self::MAX_PAGES);
     }
 
+    protected function hasParagraphAncestor(DOMNode $node): bool
+    {
+        for ($parent = $node->parentNode; $parent !== null; $parent = $parent->parentNode) {
+            if ($parent->localName === 'p') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Valid UTF-8 without control characters: PostgreSQL rejects NUL in text.
+     * Composed (NFC): PDFs often carry accents as separate combining marks
+     * ("i" + "´"), which the anonymizer would not see as the same letter.
      */
     protected function clean(string $text): string
     {
-        $text = mb_scrub($text, 'UTF-8');
+        $text = ReportAnonymizer::normalize(mb_scrub($text, 'UTF-8'));
         $text = (string) preg_replace('/[\x00-\x08\x0B-\x1F\x7F]/u', ' ', $text);
         $text = (string) preg_replace('/[ \t]+/u', ' ', $text);
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\ReportDocumentStatus;
 use App\Enums\ReportVisibility;
+use App\Enums\Role;
 use App\Http\Requests\UpdateAnonymizedReportTextRequest;
 use App\Http\Requests\UpdateReportDocumentRequest;
 use App\Http\Requests\UploadReportDocumentRequest;
@@ -16,8 +17,10 @@ use App\Models\Student;
 use App\Support\Reports\AiReportSwitch;
 use App\Support\Reports\ReportAnonymizer;
 use App\Support\Reports\ReportStorage;
+use App\Support\Reports\ReportTextExtractor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -48,11 +51,20 @@ class ReportDocumentController extends Controller
 
     public function index(Request $request, Student $student)
     {
-        abort_unless($request->user()->can('viewAnyFor', [ReportDocument::class, $student]), 403);
+        $user = $request->user();
+        abort_unless($user->can('viewAnyFor', [ReportDocument::class, $student]), 403);
 
-        $reports = ReportDocument::query()->where('student_id', $student->id)->orderByDesc('id')->get()
-            ->filter(fn (ReportDocument $report): bool => $request->user()->can('view', $report))
-            ->values();
+        // viewAnyFor already established that a teacher teaches this student,
+        // so ReportDocumentPolicy::view reduces to the visibility filter —
+        // done in the query instead of one "teaches?" query per report.
+        $reports = ReportDocument::query()
+            ->where('student_id', $student->id)
+            ->when(
+                ! $user->hasAnyRole(Role::schoolWideValues()),
+                fn ($query) => $query->where('visibility', ReportVisibility::Teachers->value),
+            )
+            ->orderByDesc('id')
+            ->get();
 
         return ReportDocumentResource::collection($reports);
     }
@@ -150,9 +162,30 @@ class ReportDocumentController extends Controller
             return response()->json(['message' => 'La cantidad de páginas no coincide con la del informe.'], 422);
         }
 
-        $report->update(['anonymized_pages' => $pages]);
+        // Same cap as the extraction: it bounds the row and the prompt.
+        if (mb_strlen(implode('', $pages)) > ReportTextExtractor::MAX_TEXT_LENGTH) {
+            return response()->json(['message' => 'El texto es demasiado largo.'], 422);
+        }
 
-        return new ReportDocumentDetailResource($report);
+        // Locked: the text must not change under a send that is being confirmed
+        // (the confirmation is for the text as it stood).
+        $saved = DB::transaction(function () use ($report, $pages): ?ReportDocument {
+            $locked = ReportDocument::query()->lockForUpdate()->findOrFail($report->id);
+
+            if (! in_array($locked->status, self::REVIEWABLE, true)) {
+                return null;
+            }
+
+            $locked->update(['anonymized_pages' => $pages]);
+
+            return $locked;
+        });
+
+        if ($saved === null) {
+            return response()->json(['message' => 'Este informe no está en un estado en el que se pueda corregir el texto.'], 422);
+        }
+
+        return new ReportDocumentDetailResource($saved);
     }
 
     /**
@@ -184,12 +217,34 @@ class ReportDocumentController extends Controller
             ], 422);
         }
 
-        $report->forceFill([
-            'status' => ReportDocumentStatus::Interpreting,
-            'send_confirmed_at' => now(),
-            'send_confirmed_by_id' => $request->user()->id,
-            'error_message' => null,
-        ])->save();
+        // Locked re-read of the state just checked: two simultaneous
+        // confirmations (a double click) must not queue two readings — the text
+        // would be sent twice and the proposals duplicated. Only the request that
+        // moves the report out of a reviewable state dispatches.
+        // The text is re-checked too: it is what gets sent, and it may have
+        // been edited in between.
+        $claimed = DB::transaction(function () use ($report, $request, $anonymizer): bool {
+            $locked = ReportDocument::query()->lockForUpdate()->findOrFail($report->id);
+
+            if (! in_array($locked->status, self::REVIEWABLE, true)
+                || $locked->anonymized_pages === null
+                || $anonymizer->leaksIdentity($locked->anonymized_pages)) {
+                return false;
+            }
+
+            $locked->forceFill([
+                'status' => ReportDocumentStatus::Interpreting,
+                'send_confirmed_at' => now(),
+                'send_confirmed_by_id' => $request->user()->id,
+                'error_message' => null,
+            ])->save();
+
+            return true;
+        });
+
+        if (! $claimed) {
+            return response()->json(['message' => 'El informe cambió mientras lo enviabas. Recargalo y volvé a intentar.'], 422);
+        }
 
         InterpretReportDocument::dispatch($report);
 

@@ -9,8 +9,8 @@ use App\Enums\ReportDocumentStatus;
 use App\Models\AccommodationProposal;
 use App\Models\ReportDocument;
 use App\Models\Subject;
-use App\Support\AiProvider;
 use App\Support\Reports\AiReportSwitch;
+use App\Support\Reports\ReportAnonymizer;
 use App\Support\Tenancy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -18,6 +18,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -34,6 +35,14 @@ use Throwable;
  * instruction. No student id, name or any other record data (CLAUDE.md rule
  * 11). The proposals are stored as pending: nothing is in force until a person
  * approves each one. Logs carry the report id only, never text.
+ *
+ * Timing: one HTTP attempt and one queue attempt. The HTTP budget (connect +
+ * response timeout) fits in $timeout, which stays below the queue's
+ * `retry_after` (90 s, config/queue.php): a slow reading is never handed to a
+ * second worker while the first is still waiting on the provider (that would
+ * send the text twice and duplicate the proposals). A failed reading is
+ * retried by psychopedagogy with «Volver a enviar», which reuses the reviewed
+ * text.
  */
 class InterpretReportDocument implements ShouldQueue
 {
@@ -43,19 +52,25 @@ class InterpretReportDocument implements ShouldQueue
 
     protected const ANTHROPIC_VERSION = '2023-06-01';
 
-    protected const MAX_HTTP_ATTEMPTS = 3;
+    public const CONNECT_TIMEOUT_SECONDS = 5;
 
-    protected const RETRY_BACKOFF_MS = 1000;
-
-    protected const HTTP_TIMEOUT_SECONDS = 90;
+    public const HTTP_TIMEOUT_SECONDS = 70;
 
     protected const MAX_TOKENS = 4096;
 
     protected const MAX_PROPOSALS = 30;
 
+    /** Stored when the text still names the student or the school (nothing is sent). */
+    public const ERROR_IDENTITY_IN_TEXT = 'The text still identifies the student; nothing was sent to the AI.';
+
+    /** The report was deleted before the job ran (e.g. removed right after uploading): nothing to do. */
+    public bool $deleteWhenMissingModels = true;
+
+    /** Never retried by the queue: a retry would send the text again. */
     public int $tries = 1;
 
-    public int $timeout = 150;
+    /** Seconds; above the HTTP budget, below the queue's `retry_after` (90). */
+    public int $timeout = 80;
 
     public bool $failOnTimeout = true;
 
@@ -71,12 +86,22 @@ class InterpretReportDocument implements ShouldQueue
             }
 
             if (! AiReportSwitch::allowedFor($report, $report->school)) {
-                $this->fail($report, 'The AI reading is switched off.');
+                $this->markError($report, 'The AI reading is switched off.');
 
                 return;
             }
 
             $pages = $report->anonymized_pages ?? [];
+
+            // Last check before the text leaves the system (rule 11): the send
+            // was confirmed on a name-free text, but the student's record may
+            // have changed since (a renamed student, a corrected surname).
+            if ($pages === [] || ReportAnonymizer::forStudent($report->student, $report->school)->leaksIdentity($pages)) {
+                $this->markError($report, self::ERROR_IDENTITY_IN_TEXT);
+
+                return;
+            }
+
             // Subject names are school catalogue data, not student data.
             $subjects = Subject::query()->orderBy('name')->pluck('name', 'id')->all();
 
@@ -86,8 +111,8 @@ class InterpretReportDocument implements ShouldQueue
                     'anthropic-version' => self::ANTHROPIC_VERSION,
                     'content-type' => 'application/json',
                 ])
+                    ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
                     ->timeout(self::HTTP_TIMEOUT_SECONDS)
-                    ->retry(self::MAX_HTTP_ATTEMPTS, self::RETRY_BACKOFF_MS, throw: false)
                     ->post(self::ENDPOINT, [
                         'model' => config('services.anthropic.model'),
                         'max_tokens' => self::MAX_TOKENS,
@@ -95,13 +120,13 @@ class InterpretReportDocument implements ShouldQueue
                         'messages' => [['role' => 'user', 'content' => $this->userPrompt($pages, $subjects)]],
                     ]);
             } catch (ConnectionException) {
-                $this->fail($report, 'Could not reach the AI provider after retries.');
+                $this->markError($report, 'Could not reach the AI provider.');
 
                 return;
             }
 
             if ($response->failed()) {
-                $this->fail($report, "AI provider returned HTTP {$response->status()}.");
+                $this->markError($report, "AI provider returned HTTP {$response->status()}.");
 
                 return;
             }
@@ -109,21 +134,24 @@ class InterpretReportDocument implements ShouldQueue
             $proposals = $this->parse($response->json('content.0.text'), $pages, array_keys($subjects));
 
             if ($proposals === null) {
-                $this->fail($report, 'AI response was not valid JSON matching the expected schema.');
+                $this->markError($report, 'AI response was not valid JSON matching the expected schema.');
 
                 return;
             }
 
-            foreach ($proposals as $proposal) {
-                AccommodationProposal::create([
-                    ...$proposal,
-                    'report_document_id' => $report->id,
-                    'student_id' => $report->student_id,
-                    'status' => ProposalStatus::Pending,
-                ]);
-            }
+            // All or nothing: a half-stored reading would be duplicated by «Volver a enviar».
+            DB::transaction(function () use ($proposals, $report): void {
+                foreach ($proposals as $proposal) {
+                    AccommodationProposal::create([
+                        ...$proposal,
+                        'report_document_id' => $report->id,
+                        'student_id' => $report->student_id,
+                        'status' => ProposalStatus::Pending,
+                    ]);
+                }
 
-            $report->forceFill(['status' => ReportDocumentStatus::Proposed, 'error_message' => null])->save();
+                $report->forceFill(['status' => ReportDocumentStatus::Proposed, 'error_message' => null])->save();
+            });
         });
     }
 
@@ -133,12 +161,12 @@ class InterpretReportDocument implements ShouldQueue
             $report = $this->report->fresh();
 
             if ($report !== null && $report->status === ReportDocumentStatus::Interpreting) {
-                $this->fail($report, 'The AI reading did not finish.', $e);
+                $this->markError($report, 'The AI reading did not finish.', $e);
             }
         });
     }
 
-    protected function fail(ReportDocument $report, string $message, ?Throwable $e = null): void
+    protected function markError(ReportDocument $report, string $message, ?Throwable $e = null): void
     {
         Log::warning('report.interpretation_failed', [
             'report_document_id' => $report->id,
@@ -148,7 +176,7 @@ class InterpretReportDocument implements ShouldQueue
 
         $report->forceFill([
             'status' => ReportDocumentStatus::Error,
-            'error_message' => $message === AiProvider::NOT_CONFIGURED ? AiProvider::UNAVAILABLE : $message,
+            'error_message' => $message,
         ])->save();
     }
 

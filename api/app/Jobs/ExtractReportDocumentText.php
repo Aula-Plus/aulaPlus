@@ -32,6 +32,9 @@ class ExtractReportDocumentText implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** The report was deleted before the job ran (e.g. removed right after uploading): nothing to do. */
+    public bool $deleteWhenMissingModels = true;
+
     /** One attempt: a file that crashed or hung the parser once would do it again. */
     public int $tries = 1;
 

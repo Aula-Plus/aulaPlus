@@ -14,6 +14,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\Reports\ReportAnonymizer;
+use App\Support\Reports\ReportTextExtractor;
 use App\Support\Tenancy;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -69,7 +70,13 @@ function reportDocx(array $paragraphs): string
             ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'
             : '<w:p><w:r><w:t>'.htmlspecialchars($paragraph).'</w:t></w:r></w:p>';
     }
-    $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'.$body.'</w:body></w:document>';
+
+    return reportDocxXml('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'.$body.'</w:body></w:document>');
+}
+
+/** A minimal .docx whose word/document.xml is exactly $xml. */
+function reportDocxXml(string $xml): string
+{
     $path = tempnam(sys_get_temp_dir(), 'docx');
     $zip = new ZipArchive;
     $zip->open($path, ZipArchive::OVERWRITE);
@@ -488,8 +495,6 @@ it('hides the page number of a Word file without explicit page breaks', function
 it('resends the already reviewed anonymized text after a provider failure', function () {
     Http::fakeSequence('api.anthropic.com/*')
         ->push([], 500)
-        ->push([], 500)
-        ->push([], 500)
         ->push(anthropicProposals([
             ['type' => 'Lectura', 'category' => 'access', 'description' => 'x', 'focus_area' => 'lectura', 'basis' => 'explicit', 'page' => 1, 'fragment' => 'lee con dificultad'],
         ]), 200);
@@ -575,4 +580,184 @@ it('lets direction read and switch the school AI setting; psychopedagogy and tea
 
     config(['services.ai_report.enabled' => false]);
     $this->getJson('/api/v1/ai-report-setting')->assertJsonPath('data.available', false);
+});
+
+// --- Review fixes -----------------------------------------------------------
+
+it('keeps the AI reading within the queue retry window, so it is never run twice', function () {
+    $job = new InterpretReportDocument(($this->readyReport)());
+
+    expect(InterpretReportDocument::CONNECT_TIMEOUT_SECONDS + InterpretReportDocument::HTTP_TIMEOUT_SECONDS)->toBeLessThan($job->timeout)
+        ->and($job->timeout)->toBeLessThan(config('queue.connections.database.retry_after'))
+        ->and($job->timeout)->toBeLessThan(config('queue.connections.redis.retry_after'))
+        ->and($job->tries)->toBe(1);
+});
+
+it('queues a single reading when the send is confirmed twice', function () {
+    Queue::fake();
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)();
+
+    $this->postJson("/api/v1/reports/{$report->id}/confirm-send")->assertOk();
+    $this->postJson("/api/v1/reports/{$report->id}/confirm-send")->assertUnprocessable();
+
+    Queue::assertPushed(InterpretReportDocument::class, 1);
+});
+
+it('does not send a text that names the student when the job runs, even if it was confirmed', function () {
+    Http::fake();
+    // e.g. the student's record was renamed after the confirmation.
+    $report = ($this->readyReport)([
+        'status' => ReportDocumentStatus::Interpreting, 'send_confirmed_at' => now(),
+        'anonymized_pages' => ['Pereyra lee con dificultad.'],
+    ]);
+
+    InterpretReportDocument::dispatchSync($report);
+
+    Http::assertNothingSent();
+    expect($report->fresh()->status)->toBe(ReportDocumentStatus::Error)
+        ->and($report->fresh()->error_message)->toBe(InterpretReportDocument::ERROR_IDENTITY_IN_TEXT);
+});
+
+it('keeps the text written before a page break in the same Word paragraph', function () {
+    Sanctum::actingAs($this->psycho);
+    $docx = reportDocxXml('<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+        .'<w:p><w:r><w:t>Final de la primera.</w:t><w:br w:type="page"/><w:t>Inicio de la segunda.</w:t></w:r></w:p>'
+        .'</w:body></w:document>');
+
+    $id = ($this->upload)($docx, 'informe.docx')->assertCreated()->json('data.id');
+
+    $report = ReportDocument::findOrFail($id);
+    expect($report->pages)->toHaveCount(2)
+        ->and($report->pages[0])->toContain('Final de la primera.')
+        ->and($report->pages[1])->toContain('Inicio de la segunda.')
+        ->and($report->pages[1])->not->toContain('Final de la primera.');
+});
+
+it('reads a Word text box once, not twice', function () {
+    $xml = '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+        .'<w:p><w:r><w:t>Fuera.</w:t></w:r><w:r><w:txbxContent><w:p><w:r><w:t>Dentro.</w:t></w:r></w:p></w:txbxContent></w:r></w:p>'
+        .'</w:body></w:document>';
+
+    $pages = (new ReportTextExtractor)->extract(reportDocxXml($xml), 'docx');
+
+    expect(substr_count($pages[0], 'Dentro.'))->toBe(1);
+});
+
+it('refuses a Word file whose XML declares a DTD (entity expansion)', function () {
+    $xml = '<?xml version="1.0"?><!DOCTYPE w:document [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]>'
+        .'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>&b;</w:t></w:r></w:p></w:body></w:document>';
+
+    expect(fn () => (new ReportTextExtractor)->extract(reportDocxXml($xml), 'docx'))->toThrow(RuntimeException::class);
+});
+
+it('refuses a Word file whose text is past the size cap', function () {
+    $extractor = new class extends ReportTextExtractor
+    {
+        public const MAX_DOCX_XML_BYTES = 200;
+    };
+    $xml = '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>'
+        .str_repeat('a', 500).'</w:t></w:r></w:p></w:body></w:document>';
+
+    expect(fn () => $extractor->extract(reportDocxXml($xml), 'docx'))->toThrow(RuntimeException::class);
+});
+
+it('anonymizes a name written with decomposed accents, as PDFs often extract them', function () {
+    $anonymizer = ReportAnonymizer::forStudent($this->student, $this->school);
+    $decomposed = "Luci\u{0301}a lee lento.";
+
+    expect($anonymizer->anonymize($decomposed))->not->toContain('Luc')
+        ->and($anonymizer->leaksIdentity([$decomposed]))->toBeTrue();
+
+    $pages = (new ReportTextExtractor)->extract(reportDocx([$decomposed]), 'docx');
+    expect($pages[0])->toContain('Lucía');
+});
+
+it('removes a surname too short to be replaced alone when the whole name is written', function () {
+    $student = Student::factory()->create(['school_id' => $this->school->id, 'full_name' => 'Ana Li']);
+    $anonymizer = ReportAnonymizer::forStudent($student, $this->school);
+
+    $text = $anonymizer->anonymize("Ana Li lee lento. Ana\nLi escribe bien.");
+
+    expect($text)->not->toMatch('/\bLi\b/')
+        ->and($anonymizer->leaksIdentity(['Ana  Li']))->toBeTrue();
+});
+
+it('does not accept a corrected text longer than the extraction cap', function () {
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)(['pages' => ['a', 'b'], 'anonymized_pages' => ['a', 'b']]);
+    $half = str_repeat('x', (int) (ReportTextExtractor::MAX_TEXT_LENGTH / 2) + 1);
+
+    $this->putJson("/api/v1/reports/{$report->id}/anonymized-text", ['pages' => [$half, $half]])->assertUnprocessable();
+
+    expect($report->fresh()->anonymized_pages)->toBe(['a', 'b']);
+});
+
+it('does not approve a proposal without a focus area', function () {
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)(['status' => ReportDocumentStatus::Proposed]);
+    $proposal = ($this->proposal)($report, ['focus_area' => null]);
+
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])
+        ->assertUnprocessable()->assertJsonValidationErrors('focus_area');
+    expect(Accommodation::count())->toBe(0)
+        ->and($proposal->fresh()->status)->toBe(ProposalStatus::Pending);
+
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve', 'focus_area' => 'lectura'])
+        ->assertOk()->assertJsonPath('data.status', 'modified');
+    expect(Accommodation::firstOrFail()->focus_area)->toBe('lectura');
+});
+
+it('asks to re-check the subjects when a preloaded one was deleted after the AI reading', function () {
+    $lengua = Subject::factory()->create(['school_id' => $this->school->id]);
+    $gone = Subject::factory()->create(['school_id' => $this->school->id]);
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)();
+    $proposal = ($this->proposal)($report, ['subject_ids' => [$lengua->id, $gone->id], 'subjects_basis' => 'explicit']);
+    $gone->delete();
+
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])
+        ->assertUnprocessable()->assertJsonValidationErrors('subject_ids');
+    expect(Accommodation::count())->toBe(0);
+
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve', 'subject_ids' => [$lengua->id]])
+        ->assertOk();
+    expect(Accommodation::find($proposal->fresh()->accommodation_id)->subjects->modelKeys())->toBe([$lengua->id]);
+});
+
+it('does not count the same subjects in another order as a modification', function () {
+    $a = Subject::factory()->create(['school_id' => $this->school->id]);
+    $b = Subject::factory()->create(['school_id' => $this->school->id]);
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)();
+    $proposal = ($this->proposal)($report, ['subject_ids' => [$a->id, $b->id], 'subjects_basis' => 'explicit']);
+
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve', 'subject_ids' => [$b->id, $a->id]])
+        ->assertOk()->assertJsonPath('data.status', 'approved');
+});
+
+it('throttles the AI send, each one being a paid call', function () {
+    Queue::fake();
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)();
+
+    foreach (range(1, 5) as $attempt) {
+        $this->postJson("/api/v1/reports/{$report->id}/confirm-send");
+    }
+
+    $this->postJson("/api/v1/reports/{$report->id}/confirm-send")->assertTooManyRequests();
+});
+
+it('drops the queued jobs of a report deleted before they ran', function () {
+    Http::fake();
+    $report = ($this->readyReport)(['status' => ReportDocumentStatus::Processing]);
+    $extract = new ExtractReportDocumentText($report);
+    $interpret = new InterpretReportDocument($report);
+    $report->delete();
+
+    dispatch($extract);
+    dispatch($interpret);
+
+    Http::assertNothingSent();
+    expect(ReportDocument::count())->toBe(0);
 });

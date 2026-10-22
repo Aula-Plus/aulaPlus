@@ -5,6 +5,7 @@ namespace App\Support\Reports;
 use App\Models\School;
 use App\Models\Student;
 use Illuminate\Support\Str;
+use Normalizer;
 
 /**
  * Automatic first pass at removing identifying data from a report's text
@@ -40,16 +41,19 @@ class ReportAnonymizer
 
     public static function forStudent(Student $student, School $school): self
     {
-        $terms = [];
+        // The whole name first, as a phrase: it also covers parts too short to
+        // be replaced on their own ("Ana Li" → no "Li" left behind).
+        $fullName = trim((string) preg_replace('/\s+/u', ' ', self::normalize((string) $student->full_name)));
+        $terms = $fullName !== '' ? [$fullName] : [];
 
-        foreach (self::words((string) $student->full_name) as $word) {
+        foreach (self::words(self::normalize((string) $student->full_name)) as $word) {
             $terms[] = $word;
         }
 
         // The school's own name, as a whole phrase (it may be the only thing
         // that says where the student studies).
         if (filled($school->name)) {
-            $terms[] = (string) $school->name;
+            $terms[] = trim((string) preg_replace('/\s+/u', ' ', self::normalize((string) $school->name)));
         }
 
         return new self(array_values(array_unique($terms)));
@@ -64,8 +68,25 @@ class ReportAnonymizer
         return array_map(fn (string $page): string => $this->anonymize($page), $pages);
     }
 
+    /**
+     * Unicode NFC: an accent written as a separate combining mark ("i" + "´",
+     * common in text extracted from PDFs) becomes the single letter the
+     * name patterns look for. Without it "Lucía" in decomposed form would
+     * not match and the name would reach the AI.
+     */
+    public static function normalize(string $text): string
+    {
+        $normalized = class_exists(Normalizer::class) ? Normalizer::normalize($text, Normalizer::FORM_C) : false;
+
+        // Without intl (or on invalid input), drop the combining marks rather
+        // than leave a decomposed name unmatched: "Luci´a" → "Lucia" still
+        // matches the accent-insensitive pattern.
+        return is_string($normalized) ? $normalized : (string) preg_replace('/\p{Mn}+/u', '', $text);
+    }
+
     public function anonymize(string $text): string
     {
+        $text = self::normalize($text);
         $labels = implode('|', self::LABELS);
         // «Madre: Ana Pérez» → «Madre: [DATO]» (to the end of the line).
         $text = (string) preg_replace_callback(
@@ -100,6 +121,8 @@ class ReportAnonymizer
     public function leaksIdentity(array $pages): bool
     {
         foreach ($pages as $page) {
+            $page = self::normalize($page);
+
             foreach ($this->terms as $term) {
                 if ($this->replaceTerm($page, $term) !== $page) {
                     return true;
@@ -131,6 +154,13 @@ class ReportAnonymizer
         $out = '';
 
         foreach (mb_str_split(Str::lower($term)) as $char) {
+            if (preg_match('/\s/u', $char) === 1) {
+                // Any run of spaces or a line break between two name parts.
+                $out .= '\s+';
+
+                continue;
+            }
+
             $base = Str::ascii($char);
             $out .= isset($map[$base]) && mb_strlen($char) === 1 && ctype_alpha($base)
                 ? $map[$base]
