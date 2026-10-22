@@ -56,11 +56,6 @@ class AlertRouting
         return [AlertType::Performance];
     }
 
-    public static function isConfigurable(AlertType $type): bool
-    {
-        return in_array($type, self::configurableTypes(), true);
-    }
-
     /**
      * Every configurable alert type with its effective recipients, for the
      * settings screen.
