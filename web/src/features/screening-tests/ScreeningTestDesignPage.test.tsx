@@ -175,6 +175,8 @@ describe("ScreeningTestDesignPage", () => {
     await waitFor(() => expect(preview).toHaveBeenCalledWith(1, bandsNow))
     const proposed = (await screen.findByText("Con el corte nuevo")).closest("div")!
     expect(within(proposed).getByText("50")).toBeInTheDocument()
+    // The impact says which design version the "current" column is computed with.
+    expect(screen.getByText(/^Con el corte actual \(vigente desde .+\)$/)).toBeInTheDocument()
     expect(screen.getByText(/Alumnos con resultado: 94/)).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText("Motivo del cambio (opcional)"), "Subir el corte")
@@ -220,5 +222,32 @@ describe("ScreeningTestDesignPage", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Volver atrás" }))
 
     await waitFor(() => expect(revert).toHaveBeenCalledWith(11))
+  })
+
+  it("refills the bands form with the design that rules again after going back", async () => {
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes")
+      .mockResolvedValueOnce([
+        type({ current_design: design(11, bandsNow), previous_design: design(10, bandsBefore) }),
+      ])
+      .mockResolvedValue([type({ current_design: design(10, bandsBefore) })])
+    vi.spyOn(screeningApi, "previewScreeningTestImpact").mockResolvedValue({
+      students: 0,
+      current: [],
+      proposed: [],
+    })
+    vi.spyOn(screeningApi, "revertScreeningTestDesign").mockResolvedValue(design(11, bandsNow))
+
+    renderPage("director", "/pruebas-de-sondeo/tipos?abrir=1")
+
+    const max = () => screen.getByLabelText("Hasta", { selector: "#band-1-1-max" })
+    await screen.findByText("Prueba de atención · cambio que ya rige")
+    expect(max()).toHaveValue(64)
+
+    await userEvent.click(screen.getByRole("button", { name: "Volver atrás" }))
+    const dialog = await screen.findByRole("dialog")
+    await userEvent.click(within(dialog).getByRole("button", { name: "Volver atrás" }))
+
+    // The reverted bands (up to 64) must not stay in the form ready to be saved again.
+    await waitFor(() => expect(max()).toHaveValue(59))
   })
 })

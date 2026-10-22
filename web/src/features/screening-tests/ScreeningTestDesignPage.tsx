@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useFieldArray, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -87,7 +87,7 @@ export function ScreeningTestDesignPage() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Screenings — Diseño de cada prueba"
+        title="Screenings — Diseño de cada screening"
         description="Población, cada cuánto se toma, las franjas, qué significa cada una y quiénes ven los resultados. Lo escribe el colegio: la IA no participa."
       />
 
@@ -616,6 +616,20 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
   })
   const { fields, append, remove } = useFieldArray({ control, name: "bands" })
 
+  // The editor stays mounted while the screening is open, so when the design
+  // in force changes under it (Dirección reverted it, or it was saved again)
+  // the form must start from the bands that rule now — otherwise it would keep
+  // showing, and could re-save, the reverted bands.
+  const currentDesignId = type.current_design?.id ?? null
+  const currentBands = type.current_design?.bands
+  const syncedDesignId = useRef(currentDesignId)
+  useEffect(() => {
+    if (syncedDesignId.current === currentDesignId) return
+    syncedDesignId.current = currentDesignId
+    reset({ bands: toFormBands(currentBands), reason: "" })
+    setImpact(null)
+  }, [currentDesignId, currentBands, reset])
+
   async function preview() {
     setFormError(null)
     if (!(await trigger())) return
@@ -727,7 +741,7 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
             {previewing ? "Calculando…" : "Ver cómo queda el grupo con este corte"}
           </Button>
         </div>
-        {impact && <ImpactTable impact={impact} />}
+        {impact && <ImpactTable impact={impact} currentSince={type.current_design?.created_at ?? null} />}
 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isSubmitting}>
@@ -748,12 +762,19 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
   )
 }
 
-/** Students per band with the design in force and with the proposed bands. */
-function ImpactTable({ impact }: { impact: ScreeningImpact }) {
+/**
+ * Students per band with the design in force and with the proposed bands. The
+ * "actual" column names the version it is computed with (decided 15/10:
+ * comparisons and impact say which design version they use).
+ */
+function ImpactTable({ impact, currentSince }: { impact: ScreeningImpact; currentSince: string | null }) {
+  const currentTitle = currentSince
+    ? `Con el corte actual (vigente desde ${formatShortDate(currentSince)})`
+    : "Con el corte actual"
   return (
     <div className="grid gap-2">
       <div className="grid gap-4 sm:grid-cols-2">
-        <ImpactColumn title="Con el corte actual" bands={impact.current} />
+        <ImpactColumn title={currentTitle} bands={impact.current} />
         <ImpactColumn title="Con el corte nuevo" bands={impact.proposed} />
       </div>
       <p className="text-xs text-muted-foreground">
