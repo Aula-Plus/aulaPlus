@@ -13,6 +13,9 @@ import { roleLabels, type Comment, type CommentShare, type StaffMember } from "@
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import * as trackingApi from "./trackingApi"
 
+/** Same cap as `StoreCommentShareRequest` (`content` max:5000). */
+const EXTRACT_MAX_LENGTH = 5000
+
 export interface ShareCommentDialogProps {
   studentId: number
   /** The observation being shared; `null` keeps the dialog closed. */
@@ -80,6 +83,12 @@ export function ShareCommentDialog({ studentId, comment, onOpenChange, onShared 
     }
     if (!trimmed) {
       setError("Escribí el extracto que vas a compartir.")
+      return
+    }
+    // Observations have no length cap, so «Usar el texto completo» can bring
+    // in more than an extract may hold: say so instead of a generic failure.
+    if (trimmed.length > EXTRACT_MAX_LENGTH) {
+      setError(`El extracto no puede superar los ${EXTRACT_MAX_LENGTH} caracteres. Acortalo antes de compartir.`)
       return
     }
 
