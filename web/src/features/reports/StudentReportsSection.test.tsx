@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AccommodationProposal, ReportDocument, ReportDocumentDetail, Subject } from "@/types"
@@ -217,5 +217,50 @@ describe("StudentReportsSection", () => {
     await userEvent.click(within(screen.getByRole("button", { name: "Subir informe" }).closest("form")!).getByRole("button", { name: "Subir informe" }))
 
     expect(upload).toHaveBeenCalledWith(3, { file, useAi: false, visibility: "clinical" })
+  })
+
+  it("opens the file in a tab created inside the click, then points it at the temporary URL", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([report])
+    vi.spyOn(reportsApi, "fetchReportDownloadUrl").mockResolvedValue("https://files.test/informe.pdf?sig=1")
+    const tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() }
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window)
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir archivo" }))
+
+    expect(openSpy).toHaveBeenCalledWith("", "_blank")
+    expect(tab.opener).toBeNull()
+    await waitFor(() => expect(tab.location.href).toBe("https://files.test/informe.pdf?sig=1"))
+  })
+
+  it("keeps the list badge in step with the status the review panel loads", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([report])
+    vi.spyOn(reportsApi, "fetchReport").mockResolvedValue({ ...detail, status: "proposed" })
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    expect(await screen.findByText("Falta revisar el texto anonimizado")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Revisar" }))
+
+    expect(await screen.findByText("Propuestas para revisar")).toBeInTheDocument()
+    expect(screen.queryByText("Falta revisar el texto anonimizado")).not.toBeInTheDocument()
+  })
+
+  it("shows why the server refused an approval", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([report])
+    vi.spyOn(reportsApi, "fetchReport").mockResolvedValue(detail)
+    vi.spyOn(reportsApi, "reviewProposal").mockRejectedValue({
+      response: {
+        data: {
+          message: "Una de las materias propuestas ya no existe.",
+          errors: { subject_ids: ["Revisá las materias antes de aprobar."] },
+        },
+      },
+    })
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    await userEvent.click(await screen.findByRole("button", { name: "Revisar" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Aprobar" }))
+
+    expect(await screen.findByText("Una de las materias propuestas ya no existe. Revisá las materias antes de aprobar.")).toBeInTheDocument()
   })
 })

@@ -17,6 +17,8 @@ interface ReportReviewPanelProps {
   canManage: boolean
   /** Called when a proposal is approved, so the student's adjustments can reload. */
   onAccommodationCreated: () => void
+  /** Called whenever the loaded report changes (e.g. its status, picked up by polling). */
+  onStatusChange?: (report: ReportDocumentDetail) => void
 }
 
 /**
@@ -25,7 +27,12 @@ interface ReportReviewPanelProps {
  * proposed adjustment (ClickUp 86e3jujgx). Nothing leaves the system before
  * the explicit confirmation, and nothing is in force before an approval.
  */
-export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated }: ReportReviewPanelProps) {
+export function ReportReviewPanel({
+  reportId,
+  canManage,
+  onAccommodationCreated,
+  onStatusChange,
+}: ReportReviewPanelProps) {
   const [report, setReport] = useState<ReportDocumentDetail | null>(null)
   const [pages, setPages] = useState<string[]>([])
   const [dirty, setDirty] = useState(false)
@@ -74,6 +81,13 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
   useEffect(() => {
     if (report && !dirty && report.anonymized_pages) setPages(report.anonymized_pages)
   }, [report, dirty])
+
+  const status = report?.status
+  useEffect(() => {
+    if (report && status) onStatusChange?.(report)
+    // Only on a status change: the rest of the report is the panel's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, onStatusChange])
 
   async function run(action: () => Promise<void>, failure: string) {
     setBusy(true)

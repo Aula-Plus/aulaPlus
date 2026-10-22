@@ -52,6 +52,8 @@ export function StudentReportsSection({
   const [reports, setReports] = useState<ReportDocument[] | null>(null)
   const [openId, setOpenId] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
+  // Remounts the file input after an upload, so it no longer shows the sent file.
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [useAi, setUseAi] = useState(true)
   const [uploadVisibility, setUploadVisibility] = useState<ReportVisibility>("clinical")
   const [busy, setBusy] = useState(false)
@@ -78,6 +80,7 @@ export function StudentReportsSection({
     try {
       const created = await reportsApi.uploadReport(studentId, { file, useAi, visibility: uploadVisibility })
       setFile(null)
+      setFileInputKey((key) => key + 1)
       await load()
       setOpenId(created.id)
     } catch (caught) {
@@ -88,13 +91,36 @@ export function StudentReportsSection({
     }
   }
 
-  async function open(report: ReportDocument) {
-    try {
-      window.open(await reportsApi.fetchReportDownloadUrl(report.id), "_blank", "noopener,noreferrer")
-    } catch {
-      setError("No pudimos abrir el archivo.")
-    }
+  function open(report: ReportDocument) {
+    setError(null)
+    // Open the tab synchronously, inside the click: Safari/iOS block a
+    // window.open that only happens after an await. Point it at the
+    // short-lived URL once it arrives (same as SubjectSyllabus).
+    const tab = window.open("", "_blank")
+    // noopener semantics: the file's tab can't reach back into the app.
+    if (tab) tab.opener = null
+
+    reportsApi
+      .fetchReportDownloadUrl(report.id)
+      .then((url) => {
+        if (tab) tab.location.href = url
+        else setError("Tu navegador bloqueó la pestaña nueva. Permití las ventanas emergentes y volvé a intentar.")
+      })
+      .catch(() => {
+        tab?.close()
+        setError("No pudimos abrir el archivo.")
+      })
   }
+
+  // The review panel polls the report; keep the badge of the list in step.
+  const syncStatus = useCallback((updated: ReportDocument) => {
+    setReports(
+      (current) =>
+        current?.map((r) =>
+          r.id === updated.id && r.status !== updated.status ? { ...r, status: updated.status } : r,
+        ) ?? null,
+    )
+  }, [])
 
   async function changeVisibility(report: ReportDocument, visibility: ReportVisibility) {
     setError(null)
@@ -135,6 +161,7 @@ export function StudentReportsSection({
           <div className="grid gap-1">
             <Label htmlFor="report-file">Subir informe (PDF o Word, hasta 10 MB)</Label>
             <input
+              key={fileInputKey}
               id="report-file"
               type="file"
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -246,6 +273,7 @@ export function StudentReportsSection({
                   reportId={report.id}
                   canManage={canManage}
                   onAccommodationCreated={onAccommodationCreated}
+                  onStatusChange={syncStatus}
                 />
               )}
             </li>

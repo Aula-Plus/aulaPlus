@@ -75,8 +75,14 @@ export function ProposalCard({ proposal, subjects, canReview, onReview }: Propos
     setError(null)
     try {
       await onReview(proposal, input)
-    } catch {
-      setError("No pudimos guardar tu decisión. Probá de nuevo.")
+    } catch (caught) {
+      // The server explains a refusal (e.g. a proposed subject no longer exists).
+      const response = (caught as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } })
+        .response?.data
+      const detail = response?.errors ? Object.values(response.errors)[0]?.[0] : undefined
+      setError(
+        response?.message ? [response.message, detail].filter(Boolean).join(" ") : "No pudimos guardar tu decisión. Probá de nuevo.",
+      )
     } finally {
       setBusy(false)
     }
