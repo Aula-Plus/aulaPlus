@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
-import { roleLabels } from "@/types"
 import type { AppNotification, ScheduledFollowUp } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import { refreshUnreadNoticeCount } from "./unreadNotices"
 import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
+import { responsiblesLine } from "./followUpDetailUtils"
 
 /**
  * The «Mis seguimientos» section of «Alertas y seguimientos» (`/alertas`): the
@@ -124,7 +124,7 @@ export function FollowUpsSection() {
                     <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Plazo: {formatShortDate(followUp.due_date)}
-                      {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
+                      {responsiblesLine(followUp) && ` · ${responsiblesLine(followUp)}`}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-3">
                       <Button type="button" size="sm" variant="outline" onClick={() => setOpenId(followUp.id)}>

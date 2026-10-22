@@ -14,6 +14,7 @@ import { roleLabels } from "@/types"
 import type { Role, ScheduledFollowUp, StaffMember } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
+import { responsiblesLine } from "./followUpDetailUtils"
 
 interface ScheduledFollowUpsPanelProps {
   studentId: number
@@ -311,11 +312,8 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
           <p className="mt-1 text-xs text-muted-foreground">
             Plazo: {formatShortDate(followUp.due_date)}
           </p>
-          {followUp.assigned_to && (
-            <p className="text-xs text-muted-foreground">
-              Responsable: {followUp.assigned_to.name}
-              {followUp.assigned_to.role && ` (${roleLabels[followUp.assigned_to.role]})`}
-            </p>
+          {responsiblesLine(followUp) && (
+            <p className="text-xs text-muted-foreground">{responsiblesLine(followUp)}</p>
           )}
           {followUp.shared_with && followUp.shared_with.length > 0 && (
             <p className="text-xs text-muted-foreground">

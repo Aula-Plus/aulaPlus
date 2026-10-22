@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { act, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -181,5 +181,67 @@ describe("FollowUpDetailDialog", () => {
     expect(screen.queryByRole("button", { name: /agregar etapa/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/conclusión general/i)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: /retirarme/i })).toBeInTheDocument()
+  })
+
+  it("lists every general responsible in Mis seguimientos, not only the first", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchMyFollowUps").mockResolvedValue([
+      detail({ general_responsibles: [psico, director] }),
+    ])
+    vi.spyOn(scheduledFollowUpsApi, "fetchNotifications").mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(/Responsables: Paula Psico \(Psicopedagogo\), Diana Directora \(Director\)/),
+    ).toBeInTheDocument()
+  })
+
+  it("tells someone who was removed that they were removed, not that they withdrew", async () => {
+    vi.spyOn(detailApi, "fetchFollowUpDetail").mockResolvedValue(
+      detail({
+        members: [
+          { ...detail().members[0], user: director },
+          { ...detail().members[1], user: psico, active: false, removed_at: "2026-10-19T10:00:00+00:00", removed_by_id: 5 },
+        ],
+        viewer: { user_id: 7, is_member: true, active: false, role: "participant", left_at: "2026-10-19T10:00:00+00:00", hidden: false, is_general_responsible: false },
+      }),
+    )
+
+    renderDialog()
+
+    expect(await screen.findByText(/te quitaron de este seguimiento/i)).toBeInTheDocument()
+    expect(screen.queryByText(/te retiraste/i)).not.toBeInTheDocument()
+  })
+
+  it("ignores a slow answer for a follow-up that is no longer open", async () => {
+    let answerFirst: (value: ScheduledFollowUpDetail) => void = () => {}
+    vi.spyOn(detailApi, "fetchFollowUpDetail").mockImplementation((id) =>
+      id === 1
+        ? new Promise((resolve) => {
+            answerFirst = resolve
+          })
+        : Promise.resolve(detail({ id: 2, title: "Segundo seguimiento" })),
+    )
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <FollowUpDetailDialog followUpId={1} onClose={() => {}} />
+      </MemoryRouter>,
+    )
+    rerender(
+      <MemoryRouter>
+        <FollowUpDetailDialog followUpId={2} onClose={() => {}} />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole("heading", { name: "Segundo seguimiento" })).toBeInTheDocument()
+
+    await act(async () => answerFirst(detail()))
+
+    expect(screen.getByRole("heading", { name: "Segundo seguimiento" })).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Ajuste de lectura" })).not.toBeInTheDocument()
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { isAxiosError } from "axios"
 import { Badge } from "@/components/ui/badge"
@@ -39,26 +39,34 @@ export function FollowUpDetailDialog({ followUpId, onClose, onChanged }: FollowU
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // Id of the follow-up the latest load is for: a slow answer for a
+  // follow-up opened earlier must not replace the one now on screen.
+  const current = useRef<number | null>(null)
+
   const load = useCallback(async (id: number) => {
+    current.current = id
     setError(null)
     setDetail(null)
+    setCandidates([])
     try {
       const loaded = await detailApi.fetchFollowUpDetail(id)
+      if (current.current !== id) return
       setDetail(loaded)
       // Only people who already see the student can be picked (backend rule).
       if (loaded.viewer.active) {
         scheduledFollowUpsApi
           .fetchFollowUpCandidates(loaded.student_id)
-          .then(setCandidates)
-          .catch(() => setCandidates([]))
+          .then((people) => current.current === id && setCandidates(people))
+          .catch(() => current.current === id && setCandidates([]))
       }
     } catch {
-      setError("No pudimos cargar el seguimiento.")
+      if (current.current === id) setError("No pudimos cargar el seguimiento.")
     }
   }, [])
 
   useEffect(() => {
     if (followUpId !== null) load(followUpId)
+    else current.current = null
   }, [followUpId, load])
 
   const run: RunAction = async (action) => {
@@ -110,8 +118,8 @@ export function FollowUpDetailDialog({ followUpId, onClose, onChanged }: FollowU
               </p>
               {detail.viewer.left_at && (
                 <p className="text-xs text-muted-foreground">
-                  Te retiraste de este seguimiento el {formatShortDate(detail.viewer.left_at)}: ves lo ocurrido hasta
-                  ese momento.
+                  {wasRemoved(detail) ? "Te quitaron de este seguimiento" : "Te retiraste de este seguimiento"} el{" "}
+                  {formatShortDate(detail.viewer.left_at)}: ves lo ocurrido hasta ese momento.
                 </p>
               )}
             </DialogHeader>
@@ -134,6 +142,12 @@ export function FollowUpDetailDialog({ followUpId, onClose, onChanged }: FollowU
       </DialogContent>
     </Dialog>
   )
+}
+
+/** Whether the viewer left because someone removed them (not by withdrawing). */
+function wasRemoved(detail: ScheduledFollowUpDetail): boolean {
+  const own = detail.members.find((member) => member.user?.id === detail.viewer.user_id)
+  return own?.removed_at != null && own.withdrawn_at == null
 }
 
 function errorMessage(err: unknown): string {
