@@ -1,8 +1,9 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it, vi } from "vitest"
-import type { AccommodationProposal, ReportDocument, ReportDocumentDetail } from "@/types"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { AccommodationProposal, ReportDocument, ReportDocumentDetail, Subject } from "@/types"
 import { StudentReportsSection } from "./StudentReportsSection"
+import * as subjectsApi from "@/features/subjects/subjectsApi"
 import * as reportsApi from "./reportsApi"
 
 const report: ReportDocument = {
@@ -27,6 +28,8 @@ const proposal: AccommodationProposal = {
   basis: "inferred",
   source_page: 2,
   source_fragment: "se cansa al leer textos largos",
+  subject_ids: [4],
+  subjects_basis: "inferred",
   status: "pending",
   accommodation_id: null,
   reviewed_at: null,
@@ -38,6 +41,15 @@ const detail: ReportDocumentDetail = {
   ai_available: true,
   proposals: [proposal],
 }
+
+const subjects = [
+  { id: 4, name: "Lengua" },
+  { id: 5, name: "Matemática" },
+] as Subject[]
+
+beforeEach(() => {
+  vi.spyOn(subjectsApi, "fetchSubjects").mockResolvedValue(subjects)
+})
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -118,16 +130,78 @@ describe("StudentReportsSection", () => {
     expect(screen.queryByRole("button", { name: "Confirmar y enviar a la IA" })).not.toBeInTheDocument()
   })
 
-  it("lets direction see the proposals but not decide them", async () => {
+  it("gives direction the file but neither the review workspace nor the proposals", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([{ id: 7, student_id: 3, name: "informe.pdf", format: "pdf", size: 1000, visibility: "clinical", uploaded_at: "2026-10-20T10:00:00Z" }])
+
+    render(<StudentReportsSection studentId={3} canManage={false} canSeeContent={false} onAccommodationCreated={vi.fn()} />)
+
+    expect(await screen.findByText("informe.pdf")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Abrir archivo" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Revisar" })).not.toBeInTheDocument()
+  })
+
+  it("preloads the subjects the report points to and sends the reviewer's change", async () => {
     vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([report])
     vi.spyOn(reportsApi, "fetchReport").mockResolvedValue(detail)
+    const review = vi.spyOn(reportsApi, "reviewProposal").mockResolvedValue({ ...proposal, status: "approved" })
 
-    render(<StudentReportsSection studentId={3} canManage={false} canSeeContent onAccommodationCreated={vi.fn()} />)
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
     await userEvent.click(await screen.findByRole("button", { name: "Revisar" }))
 
-    expect(await screen.findByText("Lectura en voz alta")).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Aprobar" })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Confirmar y enviar a la IA" })).not.toBeInTheDocument()
+    expect(await screen.findByText("(inferido)")).toBeInTheDocument()
+    const lengua = await screen.findByLabelText("Lengua")
+    expect(lengua).toBeChecked()
+    expect(screen.getByLabelText("Matemática")).not.toBeChecked()
+
+    await userEvent.click(screen.getByLabelText("Matemática"))
+    await userEvent.click(screen.getByRole("button", { name: "Aprobar" }))
+    expect(review).toHaveBeenCalledWith(11, { decision: "approve", subject_ids: [4, 5] })
+  })
+
+  it("shows only the source fragment when the proposal has no real page", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([{ ...report, format: "docx" }])
+    vi.spyOn(reportsApi, "fetchReport").mockResolvedValue({
+      ...detail,
+      format: "docx",
+      proposals: [{ ...proposal, source_page: null }],
+    })
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    await userEvent.click(await screen.findByRole("button", { name: "Revisar" }))
+
+    expect(await screen.findByText("Fragmento del informe")).toBeInTheDocument()
+    expect(screen.queryByText(/Página/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Texto del informe")).toBeInTheDocument()
+  })
+
+  it("offers «Volver a enviar» after a failure, reusing the reviewed text", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([{ ...report, status: "error" }])
+    vi.spyOn(reportsApi, "fetchReport").mockResolvedValue({ ...detail, status: "error", error_message: "x", proposals: [] })
+    const save = vi.spyOn(reportsApi, "saveAnonymizedText")
+    const confirm = vi.spyOn(reportsApi, "confirmSend").mockResolvedValue({ ...detail, status: "interpreting", proposals: [] })
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    await userEvent.click(await screen.findByRole("button", { name: "Revisar" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Volver a enviar" }))
+
+    expect(save).not.toHaveBeenCalled()
+    expect(confirm).toHaveBeenCalledWith(7)
+  })
+
+  it("warns next to «Todos los que ven al alumno» when uploading", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([])
+    const upload = vi.spyOn(reportsApi, "uploadReport").mockResolvedValue(report)
+    vi.spyOn(reportsApi, "fetchReport").mockResolvedValue(detail)
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    expect(await screen.findByLabelText(/Psicopedagogía y Dirección/)).toBeChecked()
+    expect(screen.getByText("Elegí esta opción solo si el archivo no tiene información clínica")).toBeInTheDocument()
+
+    const file = new File(["%PDF"], "informe.pdf", { type: "application/pdf" })
+    await userEvent.upload(screen.getByLabelText(/Subir informe \(PDF/), file)
+    await userEvent.click(screen.getByLabelText(/Todos los que ven al alumno/))
+    await userEvent.click(screen.getByRole("button", { name: "Subir informe" }))
+    expect(upload).toHaveBeenCalledWith(3, { file, useAi: true, visibility: "teachers" })
   })
 
   it("uploads a file with the AI choice", async () => {
@@ -142,6 +216,6 @@ describe("StudentReportsSection", () => {
     await userEvent.click(screen.getByLabelText(/Usar la IA para proponer/))
     await userEvent.click(within(screen.getByRole("button", { name: "Subir informe" }).closest("form")!).getByRole("button", { name: "Subir informe" }))
 
-    expect(upload).toHaveBeenCalledWith(3, { file, useAi: false })
+    expect(upload).toHaveBeenCalledWith(3, { file, useAi: false, visibility: "clinical" })
   })
 })

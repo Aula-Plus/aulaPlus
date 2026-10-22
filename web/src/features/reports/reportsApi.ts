@@ -15,11 +15,12 @@ export async function fetchReports(studentId: number): Promise<ReportDocument[]>
 
 export async function uploadReport(
   studentId: number,
-  input: { file: File; useAi: boolean },
+  input: { file: File; useAi: boolean; visibility: ReportVisibility },
 ): Promise<ReportDocument> {
   const form = new FormData()
   form.append("file", input.file)
   form.append("use_ai", input.useAi ? "1" : "0")
+  form.append("visibility", input.visibility)
   const { data } = await api.post<{ data: ReportDocument }>(`/api/v1/students/${studentId}/reports`, form)
   return data.data
 }
@@ -78,7 +79,7 @@ export async function addProposal(
 
 export async function reviewProposal(
   id: number,
-  input: { decision: "approve" | "reject" } & Partial<ProposalFields>,
+  input: { decision: "approve" | "reject"; subject_ids?: number[] } & Partial<ProposalFields>,
 ): Promise<AccommodationProposal> {
   const { data } = await api.post<{ data: AccommodationProposal }>(
     `/api/v1/accommodation-proposals/${id}/review`,

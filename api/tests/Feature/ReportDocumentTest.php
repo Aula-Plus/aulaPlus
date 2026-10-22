@@ -11,6 +11,7 @@ use App\Models\Group;
 use App\Models\ReportDocument;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 use App\Support\Reports\ReportAnonymizer;
 use App\Support\Tenancy;
@@ -416,18 +417,90 @@ it('does not let direction or teachers review proposals, edit text or send', fun
     expect(Accommodation::count())->toBe(0);
 });
 
-it('shows direction the clinical file and its content, never teachers', function () {
+it('shows direction the clinical file but never the anonymized text, status or proposals', function () {
     $report = ($this->readyReport)();
+    ($this->proposal)($report);
 
     Sanctum::actingAs($this->director);
-    $this->getJson("/api/v1/reports/{$report->id}")->assertOk()->assertJsonPath('data.anonymized_pages.0', '[ALUMNO] lee con dificultad textos largos.');
+    $this->getJson("/api/v1/reports/{$report->id}")->assertForbidden();
     $this->getJson("/api/v1/reports/{$report->id}/download")->assertOk();
-    $this->getJson("/api/v1/students/{$this->student->id}/reports")->assertOk()->assertJsonCount(1, 'data');
+    $list = $this->getJson("/api/v1/students/{$this->student->id}/reports")->assertOk()->assertJsonCount(1, 'data');
+    expect($list->json('data.0'))->toHaveKeys(['id', 'name', 'format', 'size', 'visibility'])
+        ->and($list->json('data.0'))->not->toHaveKeys(['status', 'use_ai', 'anonymized_pages', 'error_message']);
 
     Sanctum::actingAs($this->teacher);
     $this->getJson("/api/v1/reports/{$report->id}")->assertForbidden();
     $this->getJson("/api/v1/reports/{$report->id}/download")->assertForbidden();
     $this->getJson("/api/v1/students/{$this->student->id}/reports")->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('stores the subjects the report points to, dropping ids the school does not have', function () {
+    $lengua = Subject::factory()->create(['school_id' => $this->school->id, 'name' => 'Lengua']);
+    $foreign = Subject::factory()->create(['name' => 'Ajena secreta']);
+    Http::fake(['api.anthropic.com/*' => Http::response(anthropicProposals([
+        ['type' => 'Lectura', 'category' => 'access', 'description' => 'x', 'focus_area' => 'lectura', 'basis' => 'explicit', 'page' => 1, 'fragment' => 'lee con dificultad', 'subject_ids' => [$lengua->id, $foreign->id, 9999], 'subjects_basis' => 'explicit'],
+        ['type' => 'Tiempo', 'category' => 'criteria', 'description' => 'y', 'focus_area' => 'escritura', 'basis' => 'inferred', 'page' => 1, 'fragment' => '', 'subject_ids' => [], 'subjects_basis' => null],
+    ]), 200)]);
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)();
+
+    $this->postJson("/api/v1/reports/{$report->id}/confirm-send")->assertOk();
+
+    Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), 'Lengua') && ! str_contains(json_encode($request->data()), 'Ajena secreta'));
+    $detail = $this->getJson("/api/v1/reports/{$report->id}")->assertOk();
+    expect($detail->json('data.proposals.0.subject_ids'))->toBe([$lengua->id])
+        ->and($detail->json('data.proposals.0.subjects_basis'))->toBe('explicit')
+        ->and($detail->json('data.proposals.1.subject_ids'))->toBe([])
+        ->and($detail->json('data.proposals.1.subjects_basis'))->toBeNull();
+});
+
+it('approves with the preloaded subjects, or with the reviewer\'s own list', function () {
+    $lengua = Subject::factory()->create(['school_id' => $this->school->id]);
+    $mate = Subject::factory()->create(['school_id' => $this->school->id]);
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)();
+    $preloaded = ($this->proposal)($report, ['subject_ids' => [$lengua->id], 'subjects_basis' => 'inferred']);
+    $changed = ($this->proposal)($report, ['subject_ids' => [$lengua->id], 'subjects_basis' => 'inferred']);
+
+    $this->postJson("/api/v1/accommodation-proposals/{$preloaded->id}/review", ['decision' => 'approve'])
+        ->assertOk()->assertJsonPath('data.status', 'approved');
+    $this->postJson("/api/v1/accommodation-proposals/{$changed->id}/review", ['decision' => 'approve', 'subject_ids' => [$mate->id]])
+        ->assertOk()->assertJsonPath('data.status', 'modified');
+
+    expect(Accommodation::find($preloaded->fresh()->accommodation_id)->subjects->modelKeys())->toBe([$lengua->id])
+        ->and(Accommodation::find($changed->fresh()->accommodation_id)->subjects->modelKeys())->toBe([$mate->id]);
+});
+
+it('hides the page number of a Word file without explicit page breaks', function () {
+    Sanctum::actingAs($this->psycho);
+    $word = ($this->readyReport)(['format' => 'docx']);
+    ($this->proposal)($word, ['source_page' => 1, 'source_fragment' => 'lee']);
+    $paged = ($this->readyReport)(['format' => 'docx', 'pages' => ['a', 'b'], 'anonymized_pages' => ['a', 'b']]);
+    ($this->proposal)($paged, ['source_page' => 2, 'source_fragment' => 'b']);
+    $pdf = ($this->readyReport)();
+    ($this->proposal)($pdf, ['source_page' => 1, 'source_fragment' => 'lee']);
+
+    $this->getJson("/api/v1/reports/{$word->id}")->assertJsonPath('data.proposals.0.source_page', null);
+    $this->getJson("/api/v1/reports/{$paged->id}")->assertJsonPath('data.proposals.0.source_page', 2);
+    $this->getJson("/api/v1/reports/{$pdf->id}")->assertJsonPath('data.proposals.0.source_page', 1);
+});
+
+it('resends the already reviewed anonymized text after a provider failure', function () {
+    Http::fakeSequence('api.anthropic.com/*')
+        ->push([], 500)
+        ->push([], 500)
+        ->push([], 500)
+        ->push(anthropicProposals([
+            ['type' => 'Lectura', 'category' => 'access', 'description' => 'x', 'focus_area' => 'lectura', 'basis' => 'explicit', 'page' => 1, 'fragment' => 'lee con dificultad'],
+        ]), 200);
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)(['anonymized_pages' => ['[ALUMNO] lee con dificultad (corregido por Psico).']]);
+
+    $this->postJson("/api/v1/reports/{$report->id}/confirm-send")->assertOk()->assertJsonPath('data.status', 'error');
+    $this->postJson("/api/v1/reports/{$report->id}/confirm-send")->assertOk()->assertJsonPath('data.status', 'proposed');
+
+    expect($report->fresh()->anonymized_pages)->toBe(['[ALUMNO] lee con dificultad (corregido por Psico).'])
+        ->and($report->proposals()->count())->toBe(1);
 });
 
 it('lets the student teachers open only the files enabled for teachers, without clinical content', function () {

@@ -9,6 +9,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
 import {
   reportStatusLabels,
+  reportTeachersVisibilityWarning,
   reportVisibilityLabels,
   type ReportDocument,
   type ReportStatus,
@@ -31,7 +32,7 @@ interface StudentReportsSectionProps {
   studentId: number
   /** Psychopedagogy: upload, review, delete, set visibility. */
   canManage: boolean
-  /** Direction and psychopedagogy see status and can open the review workspace. */
+  /** Psychopedagogy only: status, anonymized text and AI proposals. */
   canSeeContent: boolean
   onAccommodationCreated: () => void
 }
@@ -40,6 +41,7 @@ interface StudentReportsSectionProps {
  * «Informes» of the student's profile (ClickUp 86e3jujgx). Every file has its
  * own visibility: clinical reports are for psychopedagogy and direction; a
  * teacher only sees (and opens) the files psychopedagogy enabled for teachers.
+ * The anonymized text and the AI proposals are psychopedagogy's alone.
  */
 export function StudentReportsSection({
   studentId,
@@ -51,6 +53,7 @@ export function StudentReportsSection({
   const [openId, setOpenId] = useState<number | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [useAi, setUseAi] = useState(true)
+  const [uploadVisibility, setUploadVisibility] = useState<ReportVisibility>("clinical")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -73,7 +76,7 @@ export function StudentReportsSection({
     setBusy(true)
     setError(null)
     try {
-      const created = await reportsApi.uploadReport(studentId, { file, useAi })
+      const created = await reportsApi.uploadReport(studentId, { file, useAi, visibility: uploadVisibility })
       setFile(null)
       await load()
       setOpenId(created.id)
@@ -139,6 +142,26 @@ export function StudentReportsSection({
               className="text-sm"
             />
           </div>
+          <fieldset className="grid gap-1 text-sm">
+            <legend className="font-medium">Quién lo ve</legend>
+            {(Object.keys(reportVisibilityLabels) as ReportVisibility[]).map((visibility) => (
+              <label key={visibility} className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="report-visibility"
+                  className="mt-1"
+                  checked={uploadVisibility === visibility}
+                  onChange={() => setUploadVisibility(visibility)}
+                />
+                <span>
+                  {reportVisibilityLabels[visibility]}
+                  {visibility === "teachers" && (
+                    <span className="block text-muted-foreground">{reportTeachersVisibilityWarning}</span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </fieldset>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-1" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
             <span>

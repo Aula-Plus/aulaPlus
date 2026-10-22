@@ -25,8 +25,10 @@ class AccommodationProposalResource extends JsonResource
             'focus_area' => $this->focus_area,
             // explicit (stated in the report) · inferred (deduced by the AI) · manual
             'basis' => $this->basis->value,
-            'source_page' => $this->source_page,
+            'source_page' => $this->reportDocument->hasReliablePages() ? $this->source_page : null,
             'source_fragment' => $this->source_fragment,
+            'subject_ids' => $this->subject_ids ?? [],
+            'subjects_basis' => $this->subjects_basis?->value,
             'status' => $this->status->value,
             'accommodation_id' => $this->accommodation_id,
             'reviewed_at' => $this->reviewed_at?->toIso8601String(),

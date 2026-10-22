@@ -10,6 +10,7 @@ import {
   type AccommodationProposal,
   type ProposalBasis,
   type ProposalStatus,
+  type Subject,
 } from "@/types"
 import type { ProposalFields } from "./reportsApi"
 
@@ -37,11 +38,13 @@ const statusTone: Record<ProposalStatus, BadgeTone> = {
 
 interface ProposalCardProps {
   proposal: AccommodationProposal
-  /** Only psychopedagogy decides; direction sees the proposals. */
+  /** The school's subjects, to show and change the ones the proposal applies to. */
+  subjects: Subject[]
+  /** Only psychopedagogy sees the proposals and decides. */
   canReview: boolean
   onReview: (
     proposal: AccommodationProposal,
-    input: { decision: "approve" | "reject" } & Partial<ProposalFields>,
+    input: { decision: "approve" | "reject"; subject_ids?: number[] } & Partial<ProposalFields>,
   ) => Promise<void>
 }
 
@@ -51,7 +54,7 @@ interface ProposalCardProps {
  * ways out — approve, modify and approve, or reject. Nothing is in force until
  * it is approved; approved ones appear in «Ajustes».
  */
-export function ProposalCard({ proposal, canReview, onReview }: ProposalCardProps) {
+export function ProposalCard({ proposal, subjects, canReview, onReview }: ProposalCardProps) {
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,9 +64,13 @@ export function ProposalCard({ proposal, canReview, onReview }: ProposalCardProp
     description: proposal.description,
     focus_area: proposal.focus_area ?? "",
   })
+  const [subjectIds, setSubjectIds] = useState<number[]>(proposal.subject_ids)
+  const subjectsChanged =
+    subjectIds.length !== proposal.subject_ids.length || subjectIds.some((id) => !proposal.subject_ids.includes(id))
+  const subjectNames = proposal.subject_ids.map((id) => subjects.find((s) => s.id === id)?.name).filter(Boolean)
   const pending = proposal.status === "pending" && canReview
 
-  async function decide(input: { decision: "approve" | "reject" } & Partial<ProposalFields>) {
+  async function decide(input: { decision: "approve" | "reject"; subject_ids?: number[] } & Partial<ProposalFields>) {
     setBusy(true)
     setError(null)
     try {
@@ -139,6 +146,44 @@ export function ProposalCard({ proposal, canReview, onReview }: ProposalCardProp
         </>
       )}
 
+      {pending ? (
+        <fieldset className="grid gap-1">
+          <legend className="font-medium">
+            Materias
+            {proposal.subjects_basis && (
+              <span className="ml-2 font-normal text-muted-foreground">
+                ({proposal.subjects_basis === "explicit" ? "lo dice el informe" : "inferido"})
+              </span>
+            )}
+          </legend>
+          <p className="text-muted-foreground">
+            {subjectIds.length === 0
+              ? "Sin materias marcadas: el ajuste va para todas las materias."
+              : "El docente ve solo los ajustes generales y los de sus materias."}
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {subjects.map((subject) => (
+              <label key={subject.id} className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={subjectIds.includes(subject.id)}
+                  onChange={(event) =>
+                    setSubjectIds(
+                      event.target.checked ? [...subjectIds, subject.id] : subjectIds.filter((id) => id !== subject.id),
+                    )
+                  }
+                />
+                {subject.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : (
+        proposal.subject_ids.length > 0 && (
+          <p className="text-muted-foreground">Materias: {subjectNames.join(", ") || "—"}</p>
+        )
+      )}
+
       <div className="rounded-md bg-muted/40 p-3 text-muted-foreground">
         {proposal.source_fragment ? (
           <>
@@ -171,7 +216,7 @@ export function ProposalCard({ proposal, canReview, onReview }: ProposalCardProp
                 type="button"
                 size="sm"
                 disabled={busy || !fields.type.trim() || !fields.description.trim() || !fields.focus_area.trim()}
-                onClick={() => decide({ decision: "approve", ...fields })}
+                onClick={() => decide({ decision: "approve", ...fields, ...(subjectsChanged ? { subject_ids: subjectIds } : {}) })}
               >
                 Aprobar con estos cambios
               </Button>
@@ -185,7 +230,7 @@ export function ProposalCard({ proposal, canReview, onReview }: ProposalCardProp
                 type="button"
                 size="sm"
                 disabled={busy || !proposal.focus_area}
-                onClick={() => decide({ decision: "approve" })}
+                onClick={() => decide({ decision: "approve", ...(subjectsChanged ? { subject_ids: subjectIds } : {}) })}
               >
                 Aprobar
               </Button>

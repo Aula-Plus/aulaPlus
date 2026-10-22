@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { SectionCard } from "@/components/ui/section-card"
-import type { AccommodationProposal, ReportDocumentDetail } from "@/types"
+import { fetchSubjects } from "@/features/subjects/subjectsApi"
+import type { AccommodationProposal, ReportDocumentDetail, Subject } from "@/types"
 import { AddProposalForm } from "./AddProposalForm"
 import { ProposalCard } from "./ProposalCard"
 import * as reportsApi from "./reportsApi"
@@ -12,7 +13,7 @@ const POLL_MS = 3000
 
 interface ReportReviewPanelProps {
   reportId: number
-  /** Psychopedagogy edits and decides; direction only reads. */
+  /** Psychopedagogy edits and decides; the panel is not shown to anyone else. */
   canManage: boolean
   /** Called when a proposal is approved, so the student's adjustments can reload. */
   onAccommodationCreated: () => void
@@ -30,6 +31,7 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [subjects, setSubjects] = useState<Subject[]>([])
 
   const apply = useCallback((next: ReportDocumentDetail) => {
     setReport(next)
@@ -47,6 +49,13 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!canManage) return
+    fetchSubjects()
+      .then(setSubjects)
+      .catch(() => undefined)
+  }, [canManage])
 
   const waiting = report?.status === "processing" || report?.status === "interpreting"
 
@@ -89,6 +98,7 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
     )
   }
 
+  const resend = report.status === "error"
   const reviewable = canManage && ["awaiting_review", "ready", "error"].includes(report.status ?? "")
   const canSend = reviewable && report.ai_available && pages.length > 0
 
@@ -133,7 +143,7 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
 
       {report.status === "error" && report.error_message && (
         <p role="alert" className="text-sm text-destructive">
-          La lectura con IA falló. Podés revisar el texto y volver a enviarlo, o seguir a mano.
+          La lectura con IA falló. «Volver a enviar» usa el texto anonimizado que ya revisaste, sin repetir la revisión; también podés seguir a mano.
         </p>
       )}
 
@@ -149,7 +159,9 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
           <div className="grid gap-3">
             {pages.map((text, index) => (
               <div key={index} className="grid gap-1">
-                <Label htmlFor={`report-${reportId}-page-${index}`}>Página {index + 1}</Label>
+                <Label htmlFor={`report-${reportId}-page-${index}`}>
+                  {report.format === "docx" && pages.length === 1 ? "Texto del informe" : `Página ${index + 1}`}
+                </Label>
                 <Textarea
                   id={`report-${reportId}-page-${index}`}
                   className="min-h-32"
@@ -188,7 +200,7 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
                     }, "No pudimos enviar el texto.")
                   }
                 >
-                  Confirmar y enviar a la IA
+                  {resend ? "Volver a enviar" : "Confirmar y enviar a la IA"}
                 </Button>
               )}
             </div>
@@ -216,7 +228,13 @@ export function ReportReviewPanel({ reportId, canManage, onAccommodationCreated 
         ) : (
           <ul className="mb-3 grid gap-3">
             {report.proposals.map((proposal) => (
-              <ProposalCard key={proposal.id} proposal={proposal} canReview={canManage} onReview={handleReview} />
+              <ProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                subjects={subjects}
+                canReview={canManage}
+                onReview={handleReview}
+              />
             ))}
           </ul>
         )}

@@ -1124,9 +1124,13 @@ export type ReportStatus =
 export type ReportVisibility = "clinical" | "teachers"
 
 export const reportVisibilityLabels: Record<ReportVisibility, string> = {
-  clinical: "Solo Psicopedagogía y Dirección",
-  teachers: "También los docentes del alumno",
+  clinical: "Psicopedagogía y Dirección",
+  teachers: "Todos los que ven al alumno",
 }
+
+/** Shown next to the «teachers» option: text only, it does not block or detect content. */
+export const reportTeachersVisibilityWarning =
+  "Elegí esta opción solo si el archivo no tiene información clínica"
 
 export const reportStatusLabels: Record<ReportStatus, string> = {
   processing: "Procesando",
@@ -1138,7 +1142,7 @@ export const reportStatusLabels: Record<ReportStatus, string> = {
   error: "La lectura con IA falló",
 }
 
-/** Teachers only receive the first six fields; the rest is psychopedagogy/direction. */
+/** Teachers and direction only receive the first six fields; the rest is psychopedagogy's. */
 export interface ReportDocument {
   id: number
   student_id: number
@@ -1166,6 +1170,10 @@ export interface AccommodationProposal {
   basis: ProposalBasis
   source_page: number | null
   source_fragment: string | null
+  /** Subjects the report points to (empty = every subject). */
+  subject_ids: number[]
+  /** Whether the subjects are stated in the report or inferred; null when none were proposed. */
+  subjects_basis: "explicit" | "inferred" | null
   status: ProposalStatus
   accommodation_id: number | null
   reviewed_at: string | null

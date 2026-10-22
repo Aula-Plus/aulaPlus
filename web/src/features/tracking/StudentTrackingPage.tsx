@@ -579,7 +579,7 @@ export function StudentTrackingPage() {
             <StudentReportsSection
               studentId={studentId}
               canManage={canManageReports(user)}
-              canSeeContent={isSchoolWideStaff(user)}
+              canSeeContent={canManageReports(user)}
               onAccommodationCreated={loadTracking}
             />
             {showHistoryLink && (

@@ -8,6 +8,7 @@ use App\Enums\ProposalStatus;
 use App\Enums\ReportDocumentStatus;
 use App\Models\AccommodationProposal;
 use App\Models\ReportDocument;
+use App\Models\Subject;
 use App\Support\AiProvider;
 use App\Support\Reports\AiReportSwitch;
 use App\Support\Tenancy;
@@ -76,6 +77,8 @@ class InterpretReportDocument implements ShouldQueue
             }
 
             $pages = $report->anonymized_pages ?? [];
+            // Subject names are school catalogue data, not student data.
+            $subjects = Subject::query()->orderBy('name')->pluck('name', 'id')->all();
 
             try {
                 $response = Http::withHeaders([
@@ -89,7 +92,7 @@ class InterpretReportDocument implements ShouldQueue
                         'model' => config('services.anthropic.model'),
                         'max_tokens' => self::MAX_TOKENS,
                         'system' => $this->systemPrompt(),
-                        'messages' => [['role' => 'user', 'content' => $this->userPrompt($pages)]],
+                        'messages' => [['role' => 'user', 'content' => $this->userPrompt($pages, $subjects)]],
                     ]);
             } catch (ConnectionException) {
                 $this->fail($report, 'Could not reach the AI provider after retries.');
@@ -103,7 +106,7 @@ class InterpretReportDocument implements ShouldQueue
                 return;
             }
 
-            $proposals = $this->parse($response->json('content.0.text'), $pages);
+            $proposals = $this->parse($response->json('content.0.text'), $pages, array_keys($subjects));
 
             if ($proposals === null) {
                 $this->fail($report, 'AI response was not valid JSON matching the expected schema.');
@@ -162,20 +165,28 @@ class InterpretReportDocument implements ShouldQueue
         - category es una de: {$categories} (access = cómo llega la tarea al alumno; content = qué se enseña o se pide se adapta; criteria = qué se evalúa cambia).
         - type: nombre corto del ajuste. description: qué hacer en clase, en términos pedagógicos concretos. focus_area: área en la que se aplica (ej. lectura, escritura, matemática, atención).
         - No incluyas nombres de personas ni datos que identifiquen al alumno. Si el texto trae alguno por error, no lo repitas.
+        - subject_ids: ids de las materias de la lista que el informe indique para ese ajuste (subjects_basis "explicit"), o que se deduzcan claramente (subjects_basis "inferred"). Si el informe no aclara materias, devolvé subject_ids [] y subjects_basis null. Usá solo ids de la lista.
         - Todo en español rioplatense neutro.
 
         Respondé SOLO con JSON, sin texto alrededor, con esta forma exacta:
-        {"proposals":[{"type":"","category":"","description":"","focus_area":"","basis":"explicit|inferred","page":1,"fragment":""}]}
+        {"proposals":[{"type":"","category":"","description":"","focus_area":"","basis":"explicit|inferred","page":1,"fragment":"","subject_ids":[],"subjects_basis":"explicit|inferred|null"}]}
         Si el informe no permite proponer nada, devolvé {"proposals":[]}.
         PROMPT;
     }
 
     /**
      * @param  list<string>  $pages
+     * @param  array<int, string>  $subjects  the school's subjects, id => name
      */
-    protected function userPrompt(array $pages): string
+    protected function userPrompt(array $pages, array $subjects): string
     {
-        $out = "Informe (texto anonimizado):\n";
+        $out = "Materias del colegio (id: nombre):\n";
+
+        foreach ($subjects as $id => $name) {
+            $out .= "{$id}: {$name}\n";
+        }
+
+        $out .= "\nInforme (texto anonimizado):\n";
 
         foreach ($pages as $i => $text) {
             $number = $i + 1;
@@ -191,9 +202,10 @@ class InterpretReportDocument implements ShouldQueue
      * on its page is dropped (the source is never invented).
      *
      * @param  list<string>  $pages
+     * @param  list<int>  $validSubjectIds  ids the school really has; anything else is dropped
      * @return list<array<string, mixed>>|null
      */
-    protected function parse(?string $text, array $pages): ?array
+    protected function parse(?string $text, array $pages, array $validSubjectIds = []): ?array
     {
         if ($text === null) {
             return null;
@@ -224,6 +236,14 @@ class InterpretReportDocument implements ShouldQueue
                 $fragment = null;
             }
 
+            $subjectIds = array_values(array_unique(array_filter(
+                is_array($item['subject_ids'] ?? null) ? $item['subject_ids'] : [],
+                fn ($id): bool => is_int($id) && in_array($id, $validSubjectIds, true),
+            )));
+            $subjectsBasis = $subjectIds !== [] && in_array($item['subjects_basis'] ?? null, ProposalBasis::aiValues(), true)
+                ? $item['subjects_basis']
+                : null;
+
             $out[] = [
                 'type' => Str::limit(trim($item['type']), 250, ''),
                 'category' => $item['category'],
@@ -234,6 +254,8 @@ class InterpretReportDocument implements ShouldQueue
                 'basis' => $item['basis'],
                 'source_page' => $page,
                 'source_fragment' => $fragment === null ? null : Str::limit($fragment, 600, ''),
+                'subject_ids' => $subjectsBasis === null ? [] : $subjectIds,
+                'subjects_basis' => $subjectsBasis,
             ];
         }
 

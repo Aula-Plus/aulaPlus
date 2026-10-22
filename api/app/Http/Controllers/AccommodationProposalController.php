@@ -65,7 +65,8 @@ class AccommodationProposalController extends Controller
             $fields = array_intersect_key($validated, array_flip(['type', 'category', 'description', 'focus_area']));
             $modified = collect($fields)->contains(
                 fn ($value, string $key): bool => (string) ($key === 'category' ? $locked->category->value : $locked->{$key}) !== (string) $value,
-            ) || isset($validated['starts_on']) || isset($validated['subject_ids']) || isset($validated['assessment_types']);
+            ) || isset($validated['starts_on'])
+                || (isset($validated['subject_ids']) && array_map('intval', $validated['subject_ids']) !== array_map('intval', $locked->subject_ids ?? [])) || isset($validated['assessment_types']);
 
             $accommodation = Accommodation::create([
                 'student_id' => $locked->student_id,
@@ -78,7 +79,9 @@ class AccommodationProposalController extends Controller
                 'active' => true,
                 'requires_external_approval' => false,
             ]);
-            $accommodation->subjects()->sync($validated['subject_ids'] ?? []);
+            // Subjects the report points to are pre-loaded in the review; the
+            // reviewer's own list (even empty = every subject) wins when sent.
+            $accommodation->subjects()->sync($validated['subject_ids'] ?? $locked->subject_ids ?? []);
 
             $locked->forceFill([
                 'status' => $modified ? ProposalStatus::Modified : ProposalStatus::Approved,

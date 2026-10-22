@@ -14,8 +14,8 @@ use App\Models\User;
  *
  * - psychopedagogy uploads, edits the anonymized text, confirms the AI send,
  *   reviews proposals, sets each file's visibility and deletes;
- * - direction opens clinical files and sees their status, but does not
- *   manage them;
+ * - direction opens clinical files (and sees the accommodations already
+ *   approved, in «Ajustes») but never the anonymized text or the proposals;
  * - a teacher only opens the files psychopedagogy enabled for teachers, of
  *   students they teach. The extracted text and proposals are never theirs.
  */
@@ -42,11 +42,16 @@ class ReportDocumentPolicy
             && $user->teachesStudent($report->student);
     }
 
-    /** Extracted text, anonymized text, status details, proposals. */
+    /**
+     * Anonymized text, status details, proposals. Psychopedagogy only: a
+     * proposal is an unreviewed AI draft and the document marks it
+     * «[Solo Psicopedagogía]»; direction follows the student through the
+     * accommodations psychopedagogy already approved.
+     */
     public function viewContent(User $user, ReportDocument $report): bool
     {
         return $user->school_id === $report->school_id
-            && $user->hasAnyRole(Role::schoolWideValues());
+            && $user->hasRole(Role::Psychopedagogue->value);
     }
 
     public function create(User $user, Student $student): bool

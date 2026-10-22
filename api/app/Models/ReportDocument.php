@@ -63,6 +63,17 @@ class ReportDocument extends Model
         ];
     }
 
+    /**
+     * Whether "page N" is a real place in the file. A PDF always has pages; a
+     * Word file only when it carries explicit page breaks (otherwise the whole
+     * text is one "page" and citing «página 1» would send the reader looking in
+     * the wrong place).
+     */
+    public function hasReliablePages(): bool
+    {
+        return $this->format === 'pdf' || count($this->anonymized_pages ?? $this->pages ?? []) > 1;
+    }
+
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
