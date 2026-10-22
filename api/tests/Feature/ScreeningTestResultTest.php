@@ -10,6 +10,7 @@ use App\Models\ScreeningTestType;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\Tenancy;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 afterEach(fn () => Tenancy::forget());
@@ -122,6 +123,60 @@ it('does not recompute an already-loaded color when a new design is approved', f
     $this->patchJson("/api/v1/screening-test-results/{$freshResult->id}", ['score' => 55])
         ->assertOk()
         ->assertJsonPath('data.color', 'red');
+});
+
+it('backfills the band of results loaded before free bands and does not flag them as changed', function () {
+    ['result' => $result, 'psychopedagogue' => $psychopedagogue, 'type' => $type, 'school' => $school] =
+        screeningResultReadyToLoad(40, 70);
+
+    // A result loaded under the legacy red/yellow/green design: colour only,
+    // no band name and no design version (what existed before free bands).
+    DB::table('screening_test_results')->where('id', $result->id)->update([
+        'score' => 55,
+        'color' => 'yellow',
+        'band' => null,
+        'screening_test_design_id' => null,
+    ]);
+
+    (require database_path('migrations/2026_10_16_000004_backfill_band_of_legacy_screening_test_results.php'))->up();
+
+    expect($result->fresh()->band)->toBe('Amarillo');
+
+    Sanctum::actingAs($psychopedagogue);
+    $resultsUrl = "/api/v1/screening-test-applications/{$result->screening_test_application_id}/results";
+
+    // Same legacy design still in force: same reading, nothing changed.
+    $this->getJson($resultsUrl)
+        ->assertOk()
+        ->assertJsonPath('data.0.band', 'Amarillo')
+        ->assertJsonPath('data.0.current_band', 'Amarillo')
+        ->assertJsonPath('data.0.band_changed', false);
+
+    // A new design that reads 55 differently does flag it.
+    Tenancy::useSchool($school->id);
+    ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => [
+        ['name' => 'Descendido', 'color' => 'red', 'max' => 60, 'meaning' => 'a'],
+        ['name' => 'Adecuado', 'color' => 'green', 'max' => null, 'meaning' => 'b'],
+    ]]);
+
+    $this->getJson($resultsUrl)
+        ->assertJsonPath('data.0.current_band', 'Descendido')
+        ->assertJsonPath('data.0.band_changed', true);
+});
+
+it('does not flag a result with an unknown original band name when its colour still matches', function () {
+    ['result' => $result, 'psychopedagogue' => $psychopedagogue] = screeningResultReadyToLoad(40, 70);
+    DB::table('screening_test_results')->where('id', $result->id)->update([
+        'score' => 80,
+        'color' => 'green',
+        'band' => null,
+        'screening_test_design_id' => null,
+    ]);
+    Sanctum::actingAs($psychopedagogue);
+
+    $this->getJson("/api/v1/screening-test-applications/{$result->screening_test_application_id}/results")
+        ->assertJsonPath('data.0.current_color', 'green')
+        ->assertJsonPath('data.0.band_changed', false);
 });
 
 it('keeps the original reading and shows the current one when the cutoffs change', function () {

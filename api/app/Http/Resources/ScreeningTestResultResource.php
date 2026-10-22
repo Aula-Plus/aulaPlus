@@ -67,11 +67,16 @@ class ScreeningTestResultResource extends JsonResource
 
         $band = $inForce->bandFor((float) $this->score);
 
+        // A result loaded before free bands may have no band name stored: then
+        // only the colour tells whether the reading changed (a null name is
+        // "unknown", not "different").
+        $nameChanged = $this->band !== null && $band['name'] !== $this->band;
+
         return [
             'design_id' => $inForce->id,
             'band' => $band['name'],
             'color' => $band['color'],
-            'changed' => $band['name'] !== $this->band || $band['color'] !== $this->color?->value,
+            'changed' => $nameChanged || $band['color'] !== $this->color?->value,
         ];
     }
 }
