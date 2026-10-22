@@ -351,3 +351,20 @@ it('re-checks under the lock that the actor still has it when resolving', functi
 
     expect($this->alert->fresh()->resolved)->toBeFalse();
 });
+
+it('re-checks under the lock that the actor still has it when leaving a note', function () {
+    ($this->handOff)($this->mariana, $this->galia)->assertOk();
+
+    // Galia's note passes the policy, but before it is written the alert is
+    // handed to Adriana from another tab: Galia only reads it now.
+    Gate::after(function (User $user, string $ability): void {
+        if ($ability === 'note' && $user->is($this->galia)) {
+            Alert::query()->withoutGlobalScopes()->whereKey($this->alert->id)->update(['assignee_id' => $this->adriana->id]);
+        }
+    });
+
+    Sanctum::actingAs($this->galia);
+    $this->postJson("/api/v1/alerts/{$this->alert->id}/notes", ['note' => 'Tarde.'])->assertForbidden();
+
+    expect($this->alert->actions()->where('kind', 'note')->count())->toBe(0);
+});

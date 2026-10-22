@@ -129,6 +129,27 @@ it('does not notify whoever handed it off: they only read it', function () {
         ->assertJsonPath('data.0.can.act', false);
 });
 
+it('lists the overdue notice in «Mis seguimientos» and counts it next to it', function () {
+    ($this->choose)($this->teacher, 'handed_off', 2, $this->psychopedagogue)->assertOk();
+
+    $this->travel(4)->days();
+    $this->artisan('alerts:overdue')->assertSuccessful();
+
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->getJson('/api/v1/notifications')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.data.type', 'alert_overdue')
+        ->assertJsonPath('data.0.data.alert_id', $this->alert->id);
+    $this->getJson('/api/v1/notifications/unread-count')
+        ->assertOk()
+        ->assertJsonPath('data.count', 1);
+
+    // Whoever handed it off gets nothing.
+    Sanctum::actingAs($this->teacher);
+    $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(0, 'data');
+});
+
 it('does not notify a holder who no longer sees the student, but still marks the case', function () {
     // Psychopedagogy hands it to the teacher, who then stops teaching the group.
     ($this->choose)($this->teacher, 'handed_off', 7, $this->psychopedagogue)->assertOk();

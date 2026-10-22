@@ -29,12 +29,16 @@ return new class extends Migration
 
         Schema::table('scheduled_follow_ups', function (Blueprint $table) {
             $table->foreignId('alert_id')->nullable()->after('student_id')->constrained()->nullOnDelete();
+            // Every alert list eager-loads its linked follow-ups by alert_id;
+            // PostgreSQL does not index a foreign key on its own.
+            $table->index('alert_id');
         });
     }
 
     public function down(): void
     {
         Schema::table('scheduled_follow_ups', function (Blueprint $table) {
+            $table->dropIndex(['alert_id']);
             $table->dropConstrainedForeignId('alert_id');
         });
 

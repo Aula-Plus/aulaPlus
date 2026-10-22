@@ -6,6 +6,8 @@ use App\Enums\AlertActionKind;
 use App\Http\Requests\StoreAlertNoteRequest;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Notes in an alert's thread (ClickUp 86e3jpzdp follow-up). A note is not a
@@ -24,11 +26,25 @@ class AlertThreadController extends Controller
      */
     public function note(StoreAlertNoteRequest $request, Alert $alert): AlertResource
     {
-        $alert->actions()->create([
-            'actor_id' => $request->user()->id,
-            'kind' => AlertActionKind::Note,
-            'note' => $request->validated('note'),
-        ]);
+        $user = $request->user();
+
+        $alert = DB::transaction(function () use ($request, $alert, $user): Alert {
+            // Lock the row and re-check under the lock, as choosing a way out
+            // and closing do: it may have just been handed off from another
+            // tab (so this user only reads it now) or closed.
+            $alert = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
+            if (! $alert->canBeNotedBy($user)) {
+                throw new AuthorizationException;
+            }
+
+            $alert->actions()->create([
+                'actor_id' => $user->id,
+                'kind' => AlertActionKind::Note,
+                'note' => $request->validated('note'),
+            ]);
+
+            return $alert;
+        });
 
         return new AlertResource($alert->fresh()->load(AlertResource::RELATIONS));
     }
