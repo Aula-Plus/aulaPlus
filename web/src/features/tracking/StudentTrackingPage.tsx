@@ -187,7 +187,7 @@ export function StudentTrackingPage() {
             className="text-sm text-primary underline-offset-4 hover:underline"
             to={`/alumnos/${studentId}/historial`}
           >
-            Ver historial de auditoría →
+            Ver historial de cambios →
           </Link>
         )}
       </PageHeader>
@@ -588,7 +588,7 @@ export function StudentTrackingPage() {
                   className="text-primary underline-offset-4 hover:underline"
                   to={`/alumnos/${studentId}/historial`}
                 >
-                  Ver registro de quién abrió esta ficha →
+                  Ver historial de cambios →
                 </Link>
               </p>
             )}

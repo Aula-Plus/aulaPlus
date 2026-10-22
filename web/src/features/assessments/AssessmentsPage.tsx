@@ -19,6 +19,7 @@ import { assessmentTypeLabels } from "@/types"
 import type { Assessment, AssessmentType, Group, GroupTrackingStudent } from "@/types"
 import * as trackingApi from "@/features/tracking/trackingApi"
 import * as subjectsApi from "@/features/subjects/subjectsApi"
+import { useCreationJourney } from "@/features/tracking/creationJourney"
 import * as assessmentsApi from "./assessmentsApi"
 import { AssessmentResultsEditor } from "./AssessmentResultsEditor"
 
@@ -70,11 +71,29 @@ export function AssessmentsPage() {
     control,
     handleSubmit,
     reset,
+    subscribe,
     formState: { errors, isSubmitting },
   } = useForm<AssessmentValues>({
     resolver: zodResolver(assessmentSchema),
     defaultValues: { type: "written", administered_at: today(), purpose: "" },
   })
+
+  // Creation journey for the adoption panel (ClickUp 86e3qkxtc). The form is
+  // inline (always visible), so "opened" is the first focus inside it; the
+  // first change in any field is "filling started". Only step names and ids
+  // are reported, never what was typed.
+  const journey = useCreationJourney("assessment", groupId)
+  const { fillingStarted } = journey
+  useEffect(
+    () =>
+      subscribe({
+        formState: { values: true },
+        callback: ({ type }) => {
+          if (type === "change") fillingStarted()
+        },
+      }),
+    [subscribe, fillingStarted],
+  )
 
   const loadAssessments = useCallback(() => {
     return assessmentsApi
@@ -121,7 +140,9 @@ export function AssessmentsPage() {
         subject_id: values.subject_id,
         administered_at: values.administered_at,
         purpose: values.purpose?.trim() ? values.purpose.trim() : null,
+        journey_id: journey.journeyId(),
       })
+      journey.restart()
       reset({ type: "written", administered_at: today(), purpose: "" })
       await loadAssessments()
     } catch {
@@ -161,7 +182,12 @@ export function AssessmentsPage() {
             <CardTitle>Nueva evaluación</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onCreate)} className="grid gap-4 sm:grid-cols-2" noValidate>
+            <form
+              onSubmit={handleSubmit(onCreate)}
+              onFocus={journey.formOpened}
+              className="grid gap-4 sm:grid-cols-2"
+              noValidate
+            >
               <div className="grid gap-2">
                 <Label htmlFor="type">Tipo</Label>
                 <Controller

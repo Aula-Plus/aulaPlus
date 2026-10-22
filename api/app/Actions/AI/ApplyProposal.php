@@ -13,6 +13,7 @@ use App\Models\CurricularItem;
 use App\Models\Unit;
 use App\Models\UsageEvent;
 use App\Models\User;
+use App\Support\UsageJourney;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
@@ -33,12 +34,14 @@ class ApplyProposal
     public function __invoke(AIProposal $proposal, User $applier): Model
     {
         return DB::transaction(function () use ($proposal, $applier): Model {
-            $entity = match ($proposal->type) {
+            // The created entity's `*.created` usage event is the journey's
+            // confirmed-creation step (ClickUp 86e3qkxtc).
+            $entity = UsageJourney::within($proposal->journey_id, fn (): Model => match ($proposal->type) {
                 AIProposalType::AnnualPlan => $this->applyAnnualPlan($proposal, $applier),
                 AIProposalType::Unit => $this->applyUnit($proposal),
                 AIProposalType::ClassSession => $this->applyClassSession($proposal),
                 AIProposalType::Assessment => $this->applyAssessment($proposal, $applier),
-            };
+            });
 
             $proposal->update([
                 'status' => AIProposalStatus::Applied,

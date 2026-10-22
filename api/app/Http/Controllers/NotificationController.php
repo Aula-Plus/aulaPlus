@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Notifications\FollowUpAssignedNotification;
+use App\Notifications\ScreeningDesignChangedNotification;
+use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -58,14 +60,25 @@ class NotificationController extends Controller
     }
 
     /**
-     * The caller's unread follow-up notices: the only kind "Mis seguimientos"
-     * renders. Both `index` and `unreadCount` read from here so the list and
-     * the sidebar count share one definition — a future database notification
-     * type will not inflate the count with notices the page cannot show.
+     * The notification classes the "Mis seguimientos" section of "Alertas y
+     * seguimientos" knows how to render: follow-up assignments and the
+     * screening design changed/reverted notices (screen 08).
+     */
+    private const RENDERED_TYPES = [
+        FollowUpAssignedNotification::class,
+        ScreeningDesignChangedNotification::class,
+        ScreeningDesignRevertedNotification::class,
+    ];
+
+    /**
+     * The caller's unread notices of a kind the page renders. Both `index` and
+     * `unreadCount` read from here so the list and the sidebar count share one
+     * definition — a future database notification type will not inflate the
+     * count with notices the page cannot show.
      */
     private function unreadFollowUpNotices(Request $request): MorphMany
     {
         return $request->user()->unreadNotifications()
-            ->where('type', FollowUpAssignedNotification::class);
+            ->whereIn('type', self::RENDERED_TYPES);
     }
 }

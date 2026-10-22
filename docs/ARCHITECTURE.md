@@ -111,6 +111,47 @@ eso nunca es la barrera de seguridad.
 9. Separación real de ambientes por env; sin hosts/URLs de deploy hardcodeados.
 10. Sin endpoints de debug que expongan información interna.
 
+## Historial de cambios de la ficha del alumno
+
+Registra **cambios, no vistas**: altas, modificaciones y bajas en todo lo
+editable de la ficha. Abrir la ficha, recorrer pestañas o consultar un documento
+no escribe nada (cubierto por test).
+
+- **Un solo rastro:** extiende `audit_logs` (no hay tabla paralela). El trait
+  `Auditable` sigue escribiendo cada created/updated/deleted; para los modelos de
+  la ficha delega en `App\Support\StudentFileHistory`, que agrega `student_id`,
+  `section` (`App\Enums\StudentFileSection`), `actor_role` (el rol con el que
+  actuó) y `details` (valores legibles). Un update que toca varias secciones (p.
+  ej. el formulario del alumno) se divide en una fila por sección. Cambios sólo
+  de pivote (grupo del alumno, vínculo ajuste↔barrera, categorías de una
+  observación) se registran con `StudentFileHistory::recordManual()` desde su
+  controller. Las categorías de una observación nueva van en su entrada de
+  alta; si cambian después (hoy: al borrar una categoría, que se la quita a
+  sus observaciones) queda una modificación antes → después
+  (`recordCommentCategoriesChange()`).
+- **Secciones:** `student_data`, `summary`, `learning_profile`, `documents`,
+  `accommodations` (incl. desactivación por evaluación), `barriers` (incl.
+  vínculos), `observations`, `reports`, `follow_ups`, `alerts`.
+- **Contenido sensible (regla 11):** `changes` sigue redactado como antes (lo
+  leen otras features); `details` guarda antes/después completos, **cifrado en
+  reposo** (`encrypted:array`, depende de `APP_KEY`; rotar con
+  `APP_PREVIOUS_KEYS`) y oculto en la serialización. `llm_rule` y `document_url`
+  nunca se copian (se informan como "modificado"). Nada de esto va a logs.
+- **Lectura:** `GET /api/v1/students/{id}/history` (filtros `user_id`,
+  `section`, `action`, `from`, `to`; paginado; `actors` para el filtro
+  Persona). Endpoint sólo para psicopedagogía y dirección
+  (`StudentPolicy::viewChangeHistory`). Además, cada entrada pasa por la
+  visibilidad del registro original (`App\Services\StudentChangeHistory`:
+  `Comment::isVisibleTo()` para observaciones, la Policy `view` del modelo para
+  el resto, `viewClinicalProfile` para perfil/documentos). **Si no la pasa, la
+  entrada se oculta entera** (no se devuelve ni la metadata), igual que en el
+  listado original. Ese chequeo recorre sólo las columnas de metadata de todo
+  el historial del alumno (índice `student_id, id`); `changes`/`details` se
+  leen y descifran sólo para la página devuelta.
+- Filas anteriores a esta feature: se backfillean `student_id`/`section` cuando
+  el registro dueño existe; sin `details`, se muestran desde `changes` (los
+  campos sensibles aparecen como "contenido no disponible").
+
 ## Estado actual (scaffolding)
 
 **Implementado**
