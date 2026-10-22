@@ -3,6 +3,7 @@ import { CircleCheck } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
 import type { Alert } from "@/types"
 import { AlertCard } from "./AlertCard"
+import { isInChargeOfAlert } from "./alertHolder"
 import * as alertsApi from "./alertsApi"
 
 /**
@@ -57,6 +58,26 @@ export function AlertsSection() {
   )
 }
 
+function AlertGroup({
+  title,
+  alerts,
+  onChange,
+}: {
+  title: string
+  alerts: Alert[]
+  onChange: (updated: Alert) => void
+}) {
+  if (alerts.length === 0) return null
+  return (
+    <section className="grid gap-3">
+      <h3 className="text-lg font-semibold">{title}</h3>
+      {alerts.map((alert) => (
+        <AlertCard key={alert.id} alert={alert} onChange={onChange} />
+      ))}
+    </section>
+  )
+}
+
 function AlertsSectionBody({
   alerts,
   error,
@@ -70,27 +91,25 @@ function AlertsSectionBody({
   if (!alerts) return <p className="text-muted-foreground">Cargando…</p>
   if (alerts.length === 0) return <EmptyState icon={CircleCheck} message="No tenés alertas abiertas." />
 
-  const pending = alerts.filter((alert) => alert.can?.act)
-  const others = alerts.filter((alert) => !alert.can?.act)
+  // Grouped as in screen 11 (decision of 21/10, option A: each one reads their
+  // own situation). An alert the viewer already has — a way out chosen and
+  // they are the one responsible, e.g. because it was handed to them — is «a
+  // tu cargo», never under «Te toca elegir una salida»: nothing is left to
+  // choose. «Te toca elegir una salida» is only the new ones nobody has yet.
+  const inCharge: Alert[] = []
+  const pending: Alert[] = []
+  const others: Alert[] = []
+  for (const alert of alerts) {
+    if (isInChargeOfAlert(alert)) inCharge.push(alert)
+    else if (alert.can?.act) pending.push(alert)
+    else others.push(alert)
+  }
 
   return (
     <>
-      {pending.length > 0 && (
-        <section className="grid gap-3">
-          <h3 className="text-lg font-semibold">Te toca elegir una salida</h3>
-          {pending.map((alert) => (
-            <AlertCard key={alert.id} alert={alert} onChange={onChange} />
-          ))}
-        </section>
-      )}
-      {others.length > 0 && (
-        <section className="grid gap-3">
-          <h3 className="text-lg font-semibold">En curso</h3>
-          {others.map((alert) => (
-            <AlertCard key={alert.id} alert={alert} onChange={onChange} />
-          ))}
-        </section>
-      )}
+      <AlertGroup title="Te toca elegir una salida" alerts={pending} onChange={onChange} />
+      <AlertGroup title="A tu cargo" alerts={inCharge} onChange={onChange} />
+      <AlertGroup title="En curso" alerts={others} onChange={onChange} />
     </>
   )
 }

@@ -134,6 +134,7 @@ it('transfers the alert to exactly one person: whoever handed it off keeps readi
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.assignee.name', 'Adriana Ruiz')
+            ->assertJsonPath('data.0.is_in_charge', false)
             ->assertJsonPath('data.0.can.act', false)
             ->assertJsonPath('data.0.can.note', false)
             ->assertJsonPath('data.0.can.resolve', false)
@@ -150,6 +151,7 @@ it('transfers the alert to exactly one person: whoever handed it off keeps readi
     // Only the one who has it now acts on it.
     Sanctum::actingAs($this->adriana);
     $this->getJson('/api/v1/alerts')
+        ->assertJsonPath('data.0.is_in_charge', true)
         ->assertJsonPath('data.0.can.act', true)
         ->assertJsonPath('data.0.can.note', true)
         ->assertJsonPath('data.0.can.resolve', true);
@@ -180,6 +182,7 @@ it('takes notes only from whoever has it, never before a way out was chosen', fu
     // Nobody chose yet: the alert reaches Mariana, but nobody has it.
     Sanctum::actingAs($this->mariana);
     $this->getJson('/api/v1/alerts')
+        ->assertJsonPath('data.0.is_in_charge', false)
         ->assertJsonPath('data.0.can.act', true)
         ->assertJsonPath('data.0.can.note', false);
     $this->postJson("/api/v1/alerts/{$this->alert->id}/notes", ['note' => 'x'])->assertForbidden();

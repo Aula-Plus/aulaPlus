@@ -116,6 +116,70 @@ describe("AlertsSection", () => {
     expect(screen.queryByRole("button", { name: "Me ocupo yo" })).not.toBeInTheDocument()
   })
 
+  it("shows a handed-off alert as «a tu cargo» to whoever received it, and as handed off to whoever passed it", async () => {
+    const handedOff: Alert = {
+      ...newAlert,
+      outcome: "handed_off",
+      assignee: { id: 3, name: "Galia Cohen" },
+      outcome_by: { id: 1, name: "Mariana López" },
+      outcome_at: "2026-10-20T12:00:00Z",
+      due_on: "2026-10-27",
+    }
+
+    // Galia, who received it: it is hers, nothing left to choose.
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      { ...handedOff, is_in_charge: true, can: { act: true, note: true, resolve: true, link_follow_up: true } },
+    ])
+    const { unmount } = render(
+      <MemoryRouter>
+        <AlertsSection />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole("heading", { name: "A tu cargo" })).toBeInTheDocument()
+    expect(screen.getByText("A tu cargo desde el 20/10 · plazo al 27/10")).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Te toca elegir una salida" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Pasada a otro rol")).not.toBeInTheDocument()
+    expect(screen.queryByText(/La tiene Galia Cohen/)).not.toBeInTheDocument()
+    unmount()
+
+    // Mariana, who handed it off: unchanged, she still reads «Pasada a otro rol».
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      { ...handedOff, is_in_charge: false, can: { act: false, note: false, resolve: false, link_follow_up: false } },
+    ])
+    renderPage()
+
+    expect(await screen.findByText("Pasada a otro rol")).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "En curso" })).toBeInTheDocument()
+    expect(screen.getByText(/La tiene Galia Cohen desde el/)).toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "A tu cargo" })).not.toBeInTheDocument()
+    expect(screen.queryByText(/A tu cargo desde el/)).not.toBeInTheDocument()
+  })
+
+  it("keeps «Te toca elegir una salida» for new alerts only, and lists the ones the viewer took under «A tu cargo»", async () => {
+    vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
+      newAlert,
+      {
+        ...newAlert,
+        id: 11,
+        student_name: "Tomás Díaz",
+        outcome: "owned",
+        assignee: { id: 1, name: "Mariana López" },
+        outcome_at: "2026-10-20T12:00:00Z",
+        due_on: "2026-10-27",
+        is_in_charge: true,
+        can: { act: true, note: true, resolve: true, link_follow_up: true },
+      },
+    ])
+    renderPage()
+
+    const pending = (await screen.findByRole("heading", { name: "Te toca elegir una salida" })).closest("section")
+    const mine = screen.getByRole("heading", { name: "A tu cargo" }).closest("section")
+    expect(pending).toHaveTextContent("Lucía Pereyra")
+    expect(pending).not.toHaveTextContent("Tomás Díaz")
+    expect(mine).toHaveTextContent("Tomás Díaz")
+  })
+
   it("offers no way to share the alert itself", async () => {
     vi.mocked(alertsApi.fetchMyAlerts).mockResolvedValue([
       {

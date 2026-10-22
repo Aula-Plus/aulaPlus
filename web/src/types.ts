@@ -238,6 +238,11 @@ export interface Alert {
   actions?: AlertActionEntry[]
   /** Follow-ups created from this alert («seguimiento vinculado»). */
   follow_ups?: AlertFollowUpLink[]
+  /**
+   * Whether the current user has the alert now (they are the one responsible
+   * once a way out was chosen): it is «a tu cargo» for them.
+   */
+  is_in_charge?: boolean
   /** What the current user may do, decided by `AlertPolicy`. */
   can?: { act: boolean; note?: boolean; resolve: boolean; link_follow_up?: boolean }
   resolved: boolean
@@ -861,7 +866,6 @@ export interface StaffMember {
   role: Role | null
 }
 
-/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
 /**
  * One unread notice. `follow_up_assigned`: someone assigned you a follow-up;
  * `alert_overdue`: an alert you have reached its deadline without a way out

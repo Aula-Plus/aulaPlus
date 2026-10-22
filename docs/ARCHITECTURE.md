@@ -154,8 +154,15 @@ endpoint de candidatos y `ChooseAlertOutcomeRequest`).
   operativo: qué se hizo con el caso, nunca un diagnóstico; las notas quedan
   fuera del diff de auditoría. Solo deja notas quien tiene la alerta, así que
   no antes de elegir una salida, ni en una alerta cerrada o escalada.
-- Elegir una salida y cerrar bloquean la fila (`lockForUpdate`) y vuelven a
-  verificar que quien actúa siga teniéndola.
+- Elegir una salida, dejar una nota y cerrar bloquean la fila
+  (`lockForUpdate`) y vuelven a verificar que quien actúa siga teniéndola.
+- **Cada uno lee su propia situación** (decisión del 21/10, opción A):
+  `AlertResource.is_in_charge` dice si quien mira tiene la alerta. En
+  «Alertas y seguimientos» las alertas se agrupan en «Te toca elegir una
+  salida» (nadie la tiene todavía), «A tu cargo» (la tenés vos) y «En curso»
+  (solo lectura). Quien recibe una alerta pasada ve «A tu cargo desde el dd/mm
+  · plazo al dd/mm», nunca «Pasada a otro rol»; quien la pasó sigue viendo
+  «Pasada a otro rol».
 - **Alumno dado de baja** (soft delete): su alerta no le llega a nadie nuevo
   (sin candidatos; pasarla da 422). Quien la tiene puede igual tomarla,
   dejarla en observación, anotarla y cerrarla.

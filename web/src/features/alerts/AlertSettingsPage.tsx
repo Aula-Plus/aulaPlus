@@ -34,7 +34,6 @@ const routingTypeLabels: Partial<Record<AlertType, string>> = {
   performance: "Desempeño bajo sostenido",
 }
 
-
 const ruleSchema = z
   .object({
     condition: z.enum(["consecutive_below", "average_below"]),
@@ -244,7 +243,7 @@ function RoutingRow({
           <Button
             type="button"
             size="sm"
-            disabled={saving || (selected.length === 0)}
+            disabled={saving || selected.length === 0}
             onClick={save}
           >
             {saving ? "Guardando…" : "Guardar"}

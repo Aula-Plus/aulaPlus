@@ -88,6 +88,10 @@ class AlertResource extends JsonResource
                     'resolved' => $followUp->resolved,
                     'is_overdue' => $followUp->isOverdue(),
                 ])->values()),
+            // Whether the viewer has the alert now (decision of 21/10, option
+            // A: each one reads their own situation): for whoever received it
+            // it is «a tu cargo», never «pasada a otro rol».
+            'is_in_charge' => $this->when($user !== null, fn () => $this->resource->isInChargeBy($user)),
             'can' => $this->when($user !== null, fn () => [
                 'act' => $this->resource->canBeActedOnBy($user),
                 'note' => $this->resource->canBeNotedBy($user),

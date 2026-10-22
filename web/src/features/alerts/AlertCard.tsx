@@ -18,7 +18,7 @@ import {
   type AlertOutcome,
 } from "@/types"
 import { NewFollowUpForm } from "@/features/tracking/ScheduledFollowUpsPanel"
-import { alertHolderPhrase } from "./alertHolder"
+import { alertHolderPhrase, inChargeLabel, isInChargeOfAlert } from "./alertHolder"
 import * as alertsApi from "./alertsApi"
 import type { HandoffCandidate } from "./alertsApi"
 
@@ -282,7 +282,9 @@ type Panel = AlertOutcome | "note" | "follow-up" | null
 export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (updated: Alert) => void }) {
   const [choosing, setChoosing] = useState<Panel>(null)
   const [error, setError] = useState<string | null>(null)
-  const status = statusLine(alert)
+  const receivedByViewer = alert.outcome === "handed_off" && isInChargeOfAlert(alert)
+  // The label already says since when and until when it is theirs.
+  const status = receivedByViewer ? null : statusLine(alert)
   // Legacy escalated alerts (no longer created) may still be open.
   const escalated = alert.type === "escalated_overdue"
   const overdue = Boolean(alert.overdue_at) || Boolean(alert.is_overdue)
@@ -320,7 +322,12 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
               : alertTypeLabels[alert.type]}
           {alert.condition_met_on && !escalated && ` — desde el ${formatShortDate(alert.condition_met_on)}`}
         </span>
-        {alert.outcome ? (
+        {receivedByViewer ? (
+          // Whoever received it reads their own situation (decision of 21/10):
+          // it is theirs now — not «Pasada a otro rol», which is how whoever
+          // handed it off reads it.
+          <Badge tone="info">{inChargeLabel(alert)}</Badge>
+        ) : alert.outcome ? (
           <Badge tone="info">{alertOutcomeLabels[alert.outcome]}</Badge>
         ) : (
           !escalated && <Badge tone="warning">Sin salida elegida</Badge>
