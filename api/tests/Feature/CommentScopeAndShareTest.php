@@ -8,7 +8,9 @@ use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Laravel\Sanctum\Sanctum;
 
 // ClickUp 86e3qkwnv: visibility scopes, the author's private signal and
@@ -356,7 +358,11 @@ it('lets the author narrow each role of the scope to specific people («Elegir p
     $outsider = User::factory()->forSchool($school)->teacher()->create();
     leadGroup($student->groups()->first(), $outsider);
     Sanctum::actingAs($outsider);
-    expect(collect(trackingFor($student)['comments'] ?? [])->pluck('content')->all())->not->toContain('Solo para un colega');
+    expect(collect(trackingFor($student)['recent_comments'])->pluck('content')->all())->not->toContain('Solo para un colega');
+    // ...while the picked colleague does get it there (so the check above is not vacuous).
+    Sanctum::actingAs($colleague);
+    expect(collect(trackingFor($student)['recent_comments'])->pluck('content')->all())->toContain('Solo para un colega');
+    Sanctum::actingAs($outsider);
     expect(listedCommentContents($student))->not->toContain('Solo para un colega');
 });
 
@@ -384,4 +390,47 @@ it('rejects people outside the roles of the scope or who cannot see the student 
         'content' => 'Privada', 'author_only' => true, 'visible_to_users' => ['director' => [$director->id]],
     ])->assertCreated();
     expect(Comment::withoutGlobalScopes()->where('content', 'Privada')->value('visible_to_users'))->toBeNull();
+});
+
+it('lists extracts without one recipient query per row', function () {
+    ['student' => $student, 'teacher' => $teacher, 'psico' => $psico] = scopeFixture();
+    $comment = Comment::factory()->forSubject($student)->create(['author_id' => $teacher->id]);
+
+    $queriesListing = function (int $newShares) use ($comment, $student, $teacher, $psico): int {
+        Sanctum::actingAs($psico);
+        foreach (range(1, $newShares) as $i) {
+            test()->postJson("/api/v1/comments/{$comment->id}/shares", ['content' => "E{$i}", 'recipient_ids' => [$teacher->id]])
+                ->assertCreated();
+        }
+
+        Sanctum::actingAs($teacher);
+        // Warm-up: the first request also loads the caller's roles.
+        test()->getJson("/api/v1/students/{$student->id}/comment-shares")->assertOk();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        test()->getJson("/api/v1/students/{$student->id}/comment-shares")->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $withOne = $queriesListing(1);
+    $withFour = $queriesListing(3);
+
+    expect($withFour)->toBe($withOne);
+});
+
+it('stores nothing when notifying a recipient fails', function () {
+    ['student' => $student, 'teacher' => $teacher, 'psico' => $psico] = scopeFixture();
+    $comment = Comment::factory()->forSubject($student)->create(['author_id' => $teacher->id]);
+    Event::listen(NotificationSending::class, fn () => throw new RuntimeException('notifications down'));
+
+    Sanctum::actingAs($psico);
+    $this->withoutExceptionHandling();
+    expect(fn () => $this->postJson("/api/v1/comments/{$comment->id}/shares", [
+        'content' => 'Extracto', 'recipient_ids' => [$teacher->id],
+    ]))->toThrow(RuntimeException::class);
+
+    expect(CommentShare::withoutGlobalScopes()->count())->toBe(0)
+        ->and(DB::table('comment_share_user')->count())->toBe(0);
 });

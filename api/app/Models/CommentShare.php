@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
+use App\Notifications\CommentSharedNotification;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,8 +25,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * `content` may hold sensitive observations about a minor, so it is excluded
  * from the audit diff (CLAUDE.md security rule 11), same as Comment.
  *
- * Seam for later (still open at product level, not built): how a recipient
- * is notified, and an easy way to share the full text.
+ * Each recipient is notified ({@see CommentSharedNotification}).
  */
 #[Fillable(['comment_id', 'student_id', 'author_id', 'content'])]
 class CommentShare extends Model

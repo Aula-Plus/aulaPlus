@@ -67,6 +67,21 @@ describe("ShareCommentDialog", () => {
     expect(share).not.toHaveBeenCalled()
   })
 
+  it("explains the length cap instead of failing when the full text is too long to share", async () => {
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([
+      { id: 4, name: "Dora Directora", role: "director" },
+    ])
+    const share = vi.spyOn(trackingApi, "shareComment")
+    renderDialog({ comment: { ...comment, content: "a".repeat(5001) } })
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: /dora directora/i }))
+    await userEvent.click(screen.getByRole("button", { name: "Usar el texto completo" }))
+    await userEvent.click(screen.getByRole("button", { name: "Compartir extracto" }))
+
+    expect(await screen.findByText(/no puede superar los 5000 caracteres/i)).toBeInTheDocument()
+    expect(share).not.toHaveBeenCalled()
+  })
+
   it("sends the extract with the chosen recipients and hands back the created share", async () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([
       { id: 4, name: "Dora Directora", role: "director" },

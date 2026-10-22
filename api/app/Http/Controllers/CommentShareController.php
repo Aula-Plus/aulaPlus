@@ -11,6 +11,7 @@ use App\Notifications\CommentSharedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * «Compartir con» extracts (ClickUp 86e3qkwnv) — see CommentShare for the
@@ -20,8 +21,11 @@ class CommentShareController extends Controller
 {
     /**
      * GET /api/v1/students/{student}/comment-shares — the extracts on this
-     * student the caller wrote or received. Each row is re-checked against
-     * CommentSharePolicy::view.
+     * student the caller wrote or received. This is CommentSharePolicy::view
+     * applied once for the whole list: every row belongs to `$student`, whose
+     * access is authorized here, and the query keeps only rows the caller
+     * authored or received — so no per-row policy call (and no per-row
+     * "does this teacher teach the student" query) is needed.
      */
     public function index(Request $request, Student $student): AnonymousResourceCollection
     {
@@ -34,12 +38,11 @@ class CommentShareController extends Controller
                 $query->where('author_id', $user->id)
                     ->orWhereHas('recipients', fn ($q) => $q->whereKey($user->id));
             })
-            ->with(['recipients.roles', 'student'])
+            ->with('recipients.roles')
             ->latest()
-            ->get()
-            ->filter(fn (CommentShare $share) => $user->can('view', $share));
+            ->get();
 
-        return CommentShareResource::collection($shares->values());
+        return CommentShareResource::collection($shares);
     }
 
     /**
@@ -48,20 +51,26 @@ class CommentShareController extends Controller
      */
     public function store(StoreCommentShareRequest $request, Comment $comment): JsonResponse
     {
-        $share = CommentShare::create([
-            'comment_id' => $comment->id,
-            'student_id' => $comment->commentable_id,
-            'author_id' => $request->user()->id,
-            'content' => $request->validated('content'),
-        ]);
+        // One unit: an extract without its recipients (or recipients without
+        // their notice) would be invisible to everyone but its author.
+        $share = DB::transaction(function () use ($request, $comment): CommentShare {
+            $share = CommentShare::create([
+                'comment_id' => $comment->id,
+                'student_id' => $comment->commentable_id,
+                'author_id' => $request->user()->id,
+                'content' => $request->validated('content'),
+            ]);
 
-        $share->recipients()->sync($request->validated('recipient_ids'));
-        $share->load('recipients.roles');
+            $share->recipients()->sync($request->validated('recipient_ids'));
+            $share->load('recipients.roles');
 
-        // Recipients only see the extract, so they are told it is there.
-        foreach ($share->recipients as $recipient) {
-            $recipient->notify(new CommentSharedNotification($share));
-        }
+            // Recipients only see the extract, so they are told it is there.
+            foreach ($share->recipients as $recipient) {
+                $recipient->notify(new CommentSharedNotification($share));
+            }
+
+            return $share;
+        });
 
         return (new CommentShareResource($share))->response()->setStatusCode(201);
     }
