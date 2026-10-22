@@ -58,7 +58,12 @@ class AccommodationController extends Controller
             $accommodation->subjects()->sync($validated['subject_ids'] ?? []);
 
             if ($proposes) {
-                $this->workflow->submitted($accommodation, $user);
+                $this->workflow->submitted(
+                    $accommodation,
+                    $user,
+                    $validated['review_due_date'],
+                    $validated['review_recipients'] === 'people' ? $validated['reviewer_ids'] : null,
+                );
             }
 
             return $accommodation;
@@ -95,7 +100,8 @@ class AccommodationController extends Controller
     }
 
     /**
-     * The validated payload minus the pivot-only `subject_ids`, with an empty
+     * The validated payload minus the pivot-only `subject_ids` and the review
+     * routing of a proposal (it lives on the review task), with an empty
      * `assessment_types` list normalized to null (= every type).
      *
      * @param  array<string, mixed>  $validated
@@ -103,7 +109,7 @@ class AccommodationController extends Controller
      */
     protected function attributes(array $validated): array
     {
-        $attributes = Arr::except($validated, ['subject_ids']);
+        $attributes = Arr::except($validated, ['subject_ids', 'review_due_date', 'review_recipients', 'reviewer_ids']);
 
         if (array_key_exists('assessment_types', $attributes) && empty($attributes['assessment_types'])) {
             $attributes['assessment_types'] = null;

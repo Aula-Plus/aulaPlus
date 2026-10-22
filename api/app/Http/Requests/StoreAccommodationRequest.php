@@ -3,8 +3,13 @@
 namespace App\Http\Requests;
 
 use App\Enums\AccommodationCategory;
+use App\Enums\Role;
 use App\Http\Requests\Concerns\ValidatesAccommodationScope;
 use App\Models\Accommodation;
+use App\Models\User;
+use App\Services\Accommodations\AccommodationProposalWorkflow;
+use App\Support\SchoolTime;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -24,6 +29,11 @@ use Illuminate\Validation\Rule;
  * ValidatesAccommodationScope. What direction creates is a proposal
  * psychopedagogy must confirm (ClickUp 86e3qkwkk; the controller decides,
  * never the payload). `requires_external_approval` is no longer accepted.
+ *
+ * Direction, when proposing, picks the review deadline (`review_due_date`) and
+ * who reviews it: the whole psychopedagogy role, or one or more specific
+ * psychopedagogues (`reviewer_ids`). «Origen» is psychopedagogy's to write:
+ * direction never sends it (ClickUp 86e3qkwkk, 21/10 answer).
  */
 class StoreAccommodationRequest extends FormRequest
 {
@@ -39,14 +49,52 @@ class StoreAccommodationRequest extends FormRequest
      */
     public function rules(): array
     {
+        $proposes = AccommodationProposalWorkflow::createsProposals($this->user());
+
         return [
             'category' => ['required', Rule::in(AccommodationCategory::values())],
             'type' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'focus_area' => ['required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
+            'origin' => $proposes ? ['prohibited'] : ['sometimes', 'nullable', 'string', 'max:255'],
             'llm_rule' => ['nullable', 'array'],
             ...$this->accommodationScopeRules(),
+            ...($proposes ? $this->reviewRules() : [
+                'review_due_date' => ['prohibited'],
+                'review_recipients' => ['prohibited'],
+                'reviewer_ids' => ['prohibited'],
+            ]),
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    protected function reviewRules(): array
+    {
+        $schoolId = $this->user()->school_id;
+
+        return [
+            'review_due_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.SchoolTime::today()->toDateString()],
+            'review_recipients' => ['required', Rule::in(['role', 'people'])],
+            'reviewer_ids' => ['exclude_unless:review_recipients,people', 'required', 'array', 'min:1'],
+            'reviewer_ids.*' => [
+                'integer',
+                'distinct',
+                function (string $attribute, mixed $value, Closure $fail) use ($schoolId): void {
+                    $isReviewer = User::query()
+                        ->whereKey($value)
+                        ->where('school_id', $schoolId)
+                        ->whereNull('disabled_at')
+                        ->role(Role::Psychopedagogue->value)
+                        ->exists();
+
+                    if (! $isReviewer) {
+                        $fail('The selected reviewer is not an active psychopedagogue of this school.');
+                    }
+                },
+            ],
         ];
     }
 }

@@ -143,7 +143,7 @@ export type AccommodationProposalStep = "confirm" | "return" | "resubmit" | "wit
 export async function reviewAccommodationProposal(
   accommodationId: number,
   step: AccommodationProposalStep,
-  body: { note?: string; reason?: string; starts_on?: string } = {},
+  body: { note?: string; reason?: string; starts_on?: string; origin?: string } = {},
 ): Promise<Accommodation> {
   const { data } = await api.post<{ data: Accommodation }>(
     `/api/v1/accommodations/${accommodationId}/proposal/${step}`,

@@ -211,6 +211,9 @@ it('stores a general accommodation when no subjects or assessment types are sent
         'focus_area' => 'attention',
         'starts_on' => '2026-05-04',
         'assessment_types' => [],
+        // Direction proposes: it picks the review deadline and reviewers.
+        'review_due_date' => now()->addWeek()->toDateString(),
+        'review_recipients' => 'role',
     ])->assertCreated();
 
     $response->assertJsonPath('data.subjects', [])

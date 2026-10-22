@@ -345,6 +345,21 @@ export function StudentTrackingPage() {
                             <p className="text-muted-foreground">
                               {capitalize(describeAccommodationScope(accommodation))}
                             </p>
+                            {/* This full record only reaches psychopedagogy and direction. */}
+                            {(accommodation.origin ||
+                              (accommodation.review_status === "confirmed" &&
+                                accommodation.reviewed_by_name)) && (
+                              <p className="text-xs text-muted-foreground">
+                                {[
+                                  accommodation.origin && `Origen: ${accommodation.origin}`,
+                                  accommodation.review_status === "confirmed" &&
+                                    accommodation.reviewed_by_name &&
+                                    `Confirmó ${accommodation.reviewed_by_name}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <AccommodationStatusBadge accommodation={accommodation} />

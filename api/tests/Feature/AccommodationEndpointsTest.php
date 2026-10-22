@@ -23,6 +23,9 @@ it('lets a staff member create an accommodation with a category', function () {
         'description' => 'La ortografía no puntúa en Idioma Español.',
         'focus_area' => 'literacy',
         'starts_on' => '2026-04-02',
+        // Direction proposes: it picks the review deadline and reviewers.
+        'review_due_date' => now()->addWeek()->toDateString(),
+        'review_recipients' => 'role',
     ])->assertCreated();
 
     $response->assertJsonPath('data.category', 'criteria')

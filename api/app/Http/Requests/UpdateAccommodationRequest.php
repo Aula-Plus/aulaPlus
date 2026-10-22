@@ -43,6 +43,10 @@ class UpdateAccommodationRequest extends FormRequest
             'active' => $this->user()->hasRole(Role::Psychopedagogue->value)
                 ? ['sometimes', 'boolean']
                 : ['prohibited'],
+            // «Origen» is edited by psychopedagogy only (ClickUp 86e3qkwkk).
+            'origin' => $this->user()->hasRole(Role::Psychopedagogue->value)
+                ? ['sometimes', 'nullable', 'string', 'max:255']
+                : ['prohibited'],
             'llm_rule' => ['nullable', 'array'],
             ...$this->accommodationScopeRules(editing: $this->route('accommodation')),
         ];

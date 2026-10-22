@@ -56,10 +56,13 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     deactivated_on: null,
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
+    origin: null,
     is_effective: false,
     review_status: null,
     proposed_by_id: null,
+    proposed_by_name: null,
     reviewed_by_id: null,
+    reviewed_by_name: null,
     reviewed_at: null,
     review_note: null,
     created_by_id: 5,
@@ -442,6 +445,8 @@ describe("StudentTrackingPage", () => {
       starts_on: "2026-04-02",
       subject_ids: [4],
       assessment_types: ["written"],
+      // «Origen» comes prefilled for what psychopedagogy registers itself.
+      origin: "Registrado por Psicopedagogía",
     })
   })
 
@@ -454,6 +459,10 @@ describe("StudentTrackingPage", () => {
     const create = vi
       .spyOn(trackingApi, "createAccommodation")
       .mockResolvedValue(pendingAccommodation({ id: 201, review_status: "pending" }))
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([
+      { id: 30, name: "Laura Ferrando", role: "psychopedagogue" },
+      { id: 31, name: "Marta Psico", role: "psychopedagogue" },
+    ])
 
     renderPage("director")
     await openTab("Ajustes")
@@ -467,12 +476,24 @@ describe("StudentTrackingPage", () => {
     // «Vigente desde» is set by psychopedagogy when it confirms; no switch-off either.
     expect(screen.queryByLabelText(/vigente desde/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/requiere aprobación externa/i)).not.toBeInTheDocument()
+    // «Origen» is psychopedagogy's to write.
+    expect(screen.queryByLabelText(/^origen$/i)).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText(/nombre del ajuste/i), "Más tiempo en escritos")
     await userEvent.type(screen.getByLabelText(/descripción/i), "Media hora extra")
     await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Escritura")
     await userEvent.click(screen.getByLabelText(/^tipo de ajuste$/i))
     await userEvent.click(await screen.findByRole("button", { name: "Acceso" }))
+
+    // Direction picks the review deadline and who reviews it.
+    await userEvent.click(screen.getByLabelText(/personas de psicopedagogía/i))
+    await userEvent.click(screen.getByRole("button", { name: /enviar a revisión de psicopedagogía/i }))
+    expect(await screen.findByText(/elegí hasta cuándo tiene para revisarla/i)).toBeInTheDocument()
+    expect(screen.getByText(/elegí al menos una persona/i)).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+
+    await userEvent.type(screen.getByLabelText(/plazo para la revisión/i), "2099-01-15")
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Marta Psico" }))
     await userEvent.click(screen.getByRole("button", { name: /enviar a revisión de psicopedagogía/i }))
 
     expect(create).toHaveBeenCalledWith(3, {
@@ -483,6 +504,9 @@ describe("StudentTrackingPage", () => {
       active: true,
       subject_ids: [],
       assessment_types: [],
+      review_due_date: "2099-01-15",
+      review_recipients: "people",
+      reviewer_ids: [31],
     })
   })
 

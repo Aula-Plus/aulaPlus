@@ -603,6 +603,11 @@ export interface Accommodation extends AccommodationScope {
   deactivated_on: string | null
   description: string | null
   focus_area: string | null
+  /**
+   * «Origen» (ClickUp 86e3qkwkk): free text psychopedagogy writes. Only this
+   * full record (psychopedagogy and direction) carries it; never a teacher.
+   */
+  origin: string | null
   is_effective: boolean
   /**
    * Direction proposal circuit (ClickUp 86e3qkwkk): `null` when psychopedagogy
@@ -611,8 +616,10 @@ export interface Accommodation extends AccommodationScope {
    */
   review_status: AccommodationReviewStatus | null
   proposed_by_id: number | null
+  proposed_by_name: string | null
   /** Who confirmed, withdrew or rejected the proposal, and when. */
   reviewed_by_id: number | null
+  reviewed_by_name: string | null
   reviewed_at: string | null
   /** Comment/reason of the step that left it returned, withdrawn or rejected. */
   review_note: string | null
@@ -643,6 +650,15 @@ export interface AccommodationInput {
   subject_ids: number[]
   /** Empty = every assessment type (stored as null). */
   assessment_types: AssessmentType[]
+  /** «Origen»: psychopedagogy only (the server rejects it from direction). */
+  origin?: string | null
+  /**
+   * Direction proposals only (ClickUp 86e3qkwkk): the review deadline and who
+   * reviews it — the whole psychopedagogy role or the people picked.
+   */
+  review_due_date?: string
+  review_recipients?: "role" | "people"
+  reviewer_ids?: number[]
 }
 
 export interface Barrier {

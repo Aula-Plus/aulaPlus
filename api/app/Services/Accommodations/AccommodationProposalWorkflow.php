@@ -12,7 +12,6 @@ use App\Models\ScheduledFollowUp;
 use App\Models\User;
 use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\FollowUpAssignedNotification;
-use App\Support\SchoolTime;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -25,15 +24,18 @@ use Illuminate\Validation\ValidationException;
  * step) and writes it, always in one transaction.
  *
  * - submit:   a new proposal is pending; psychopedagogy gets a review task
- *             (a ScheduledFollowUp linked to it), notified to its responsible.
+ *             (a ScheduledFollowUp linked to it) with the deadline direction
+ *             picked, sent to the whole role or to the people direction
+ *             picked — nobody is singled out as responsible on their behalf.
  * - edited:   direction or psychopedagogy edits an open proposal — the same
  *             proposal, no new one; editing never publishes it.
  * - return:   psychopedagogy sends it back with a comment (direction's turn);
  *             the proposer is notified. The review task stays open.
  * - resubmit: direction sends it back to review.
  * - confirm:  psychopedagogy confirms it; it becomes an ordinary accommodation
- *             (in force from today unless a start date is given) and the
- *             review task closes. Who confirmed it is recorded.
+ *             (in force from today unless a start date is given), with the
+ *             «Origen» psychopedagogy wrote, and the review task closes. Who
+ *             confirmed it is recorded.
  * - withdraw: direction withdraws it with a reason; the review task closes.
  * - reject:   psychopedagogy rejects it with a reason; the review task closes.
  *
@@ -42,9 +44,6 @@ use Illuminate\Validation\ValidationException;
  */
 class AccommodationProposalWorkflow
 {
-    /** Days psychopedagogy gets, by default, to review a proposal. */
-    public const REVIEW_DUE_DAYS = 7;
-
     /**
      * Whether an accommodation created by this user must go through review:
      * direction proposes, psychopedagogy creates directly. Someone holding
@@ -57,8 +56,13 @@ class AccommodationProposalWorkflow
 
     /**
      * Called right after a proposal was created (same transaction).
+     *
+     * @param  string  $dueDate  the review deadline direction picked (Y-m-d)
+     * @param  list<int>|null  $reviewerIds  the psychopedagogues direction
+     *                                       picked; null = the whole role
+     *                                       (every active psychopedagogue)
      */
-    public function submitted(Accommodation $accommodation, User $actor): void
+    public function submitted(Accommodation $accommodation, User $actor, string $dueDate, ?array $reviewerIds = null): void
     {
         $this->record($accommodation, $actor, AccommodationReviewAction::Submitted);
 
@@ -66,6 +70,7 @@ class AccommodationProposalWorkflow
             ->where('school_id', $accommodation->school_id)
             ->whereNull('disabled_at')
             ->role(Role::Psychopedagogue->value)
+            ->when($reviewerIds !== null, fn ($query) => $query->whereKey($reviewerIds))
             ->orderBy('name')
             ->get();
 
@@ -75,11 +80,13 @@ class AccommodationProposalWorkflow
             // The title is rendered by the client from the link (UI text lives
             // in the frontend); no proposal content is copied here.
             'description' => '',
-            'due_date' => SchoolTime::today()->addDays(self::REVIEW_DUE_DAYS)->toDateString(),
+            'due_date' => $dueDate,
             'created_by_id' => $actor->id,
-            'assigned_to_id' => $reviewers->first()?->id,
+            // Nobody is made responsible on the reviewers' behalf (21/10
+            // answer): every reviewer gets it in their pending list.
+            'assigned_to_id' => null,
         ]);
-        $followUp->sharedWith()->sync($reviewers->skip(1)->modelKeys());
+        $followUp->sharedWith()->sync($reviewers->modelKeys());
 
         foreach ($reviewers as $reviewer) {
             $reviewer->notify(new FollowUpAssignedNotification($followUp));
@@ -120,9 +127,12 @@ class AccommodationProposalWorkflow
         });
     }
 
-    public function confirm(Accommodation $accommodation, User $actor, ?string $startsOn): Accommodation
+    /**
+     * @param  array{origin?: string|null}  $origin  «Origen», when given
+     */
+    public function confirm(Accommodation $accommodation, User $actor, ?string $startsOn, array $origin = []): Accommodation
     {
-        return DB::transaction(function () use ($accommodation, $actor, $startsOn): Accommodation {
+        return DB::transaction(function () use ($accommodation, $actor, $startsOn, $origin): Accommodation {
             $this->ensureStatus($accommodation, [AccommodationReviewStatus::Pending, AccommodationReviewStatus::Returned]);
 
             $accommodation->update([
@@ -133,6 +143,7 @@ class AccommodationProposalWorkflow
                 // Absent: Accommodation::booted moves it to today, the day it
                 // becomes effective.
                 ...($startsOn !== null ? ['starts_on' => $startsOn] : []),
+                ...$origin,
             ]);
             $this->record($accommodation, $actor, AccommodationReviewAction::Confirmed);
             $this->closeReviewTask($accommodation, $actor);

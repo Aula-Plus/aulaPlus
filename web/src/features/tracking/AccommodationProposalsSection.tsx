@@ -162,6 +162,9 @@ function ProposalItem({
   const isOpen = status === "pending" || status === "returned"
   const [openForm, setOpenForm] = useState<OpenForm>(null)
   const [value, setValue] = useState("")
+  // «Origen», filled in on confirming (ClickUp 86e3qkwkk): prefilled with who
+  // proposed it, editable.
+  const [origin, setOrigin] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [history, setHistory] = useState<AccommodationReviewEvent[] | null>(null)
@@ -171,6 +174,9 @@ function ProposalItem({
   function open(form: Exclude<OpenForm, null>) {
     setOpenForm(form)
     setValue(form === "confirm" ? todayIso() : "")
+    setOrigin(
+      proposal.origin ?? (proposal.proposed_by_name ? `Propuesta de ${proposal.proposed_by_name}` : ""),
+    )
     setFormError(null)
   }
 
@@ -188,7 +194,10 @@ function ProposalItem({
       const updated = await trackingApi.reviewAccommodationProposal(
         proposal.id,
         openForm as AccommodationProposalStep,
-        trimmed ? { [config.field]: trimmed } : {},
+        {
+          ...(trimmed ? { [config.field]: trimmed } : {}),
+          ...(openForm === "confirm" ? { origin: origin.trim() || undefined } : {}),
+        },
       )
       setOpenForm(null)
       setHistory(null)
@@ -305,9 +314,21 @@ function ProposalItem({
             />
           )}
           {openForm === "confirm" && (
-            <p className="text-xs text-muted-foreground">
-              Al confirmarla, el ajuste queda vigente y llega a los docentes que corresponda.
-            </p>
+            <>
+              <Label htmlFor={`proposal-origin-${proposal.id}`} className="text-xs">
+                Origen
+              </Label>
+              <Input
+                id={`proposal-origin-${proposal.id}`}
+                value={origin}
+                maxLength={255}
+                onChange={(event) => setOrigin(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Al confirmarla, el ajuste queda vigente y llega a los docentes que corresponda. El
+                origen lo ven Psicopedagogía y Dirección, nunca el docente.
+              </p>
+            </>
           )}
           {formError && (
             <p role="alert" className="text-sm text-destructive">

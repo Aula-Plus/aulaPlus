@@ -16,8 +16,10 @@ import {
   type Accommodation,
   type AccommodationCategory,
   type AssessmentType,
+  type StaffMember,
   type Subject,
 } from "@/types"
+import { fetchFollowUpCandidates } from "./scheduledFollowUpsApi"
 import * as trackingApi from "./trackingApi"
 
 const CATEGORY_VALUES: readonly AccommodationCategory[] = ["access", "content", "criteria"]
@@ -54,9 +56,31 @@ const accommodationSchema = z.object({
   subject_ids: z.array(z.number()),
   // Empty = every assessment type.
   assessment_types: z.array(z.enum(ASSESSMENT_TYPE_VALUES)),
+  // «Origen»: psychopedagogy only; never sent by direction.
+  origin: z.string().max(255, "Usá hasta 255 caracteres"),
+  // Review routing of a new direction proposal (ClickUp 86e3qkwkk): only
+  // validated by `proposalSchema`, ignored otherwise.
+  review_due_date: z.string(),
+  review_recipients: z.enum(["role", "people"]),
+  reviewer_ids: z.array(z.number()),
+})
+
+/** A new direction proposal also needs its review deadline and reviewers. */
+const proposalSchema = accommodationSchema.superRefine((values, ctx) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.review_due_date)) {
+    ctx.addIssue({ code: "custom", path: ["review_due_date"], message: "Elegí hasta cuándo tiene para revisarla" })
+  } else if (values.review_due_date < todayIso()) {
+    ctx.addIssue({ code: "custom", path: ["review_due_date"], message: "El plazo no puede ser anterior a hoy" })
+  }
+  if (values.review_recipients === "people" && values.reviewer_ids.length === 0) {
+    ctx.addIssue({ code: "custom", path: ["reviewer_ids"], message: "Elegí al menos una persona" })
+  }
 })
 
 type AccommodationValues = z.infer<typeof accommodationSchema>
+
+/** Prefill of «Origen» for what psychopedagogy registers itself. */
+const DIRECT_ORIGIN = "Registrado por Psicopedagogía"
 
 interface AccommodationFormDialogProps {
   open: boolean
@@ -91,6 +115,9 @@ interface AccommodationFormDialogProps {
  * Field names (ClickUp 86e3qkwkk): «Nombre del ajuste» (`type`), «Tipo de
  * ajuste» (`category`: Acceso/Contenido/Criterio), «Materias donde aplica».
  * «Requiere aprobación externa» was removed from the form and the API.
+ * «Origen» is psychopedagogy's (prefilled «Registrado por Psicopedagogía» on a
+ * new one); a new direction proposal asks for the review deadline and whether
+ * it goes to the whole psychopedagogy role or to specific people.
  *
  * On save it calls `onSaved()` and closes — the parent refetches the whole
  * tracking aggregate, which is enough here: unlike the approve/reject of
@@ -111,8 +138,10 @@ export function AccommodationFormDialog({
   const isOpenProposal =
     accommodation?.review_status === "pending" || accommodation?.review_status === "returned"
   const offersActive = isEdit && !proposal && !isOpenProposal
+  const asksReview = proposal && !isEdit
   const [formError, setFormError] = useState<string | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [reviewers, setReviewers] = useState<StaffMember[]>([])
 
   const {
     register,
@@ -120,8 +149,9 @@ export function AccommodationFormDialog({
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
+    watch,
   } = useForm<AccommodationValues>({
-    resolver: zodResolver(accommodationSchema),
+    resolver: zodResolver(asksReview ? proposalSchema : accommodationSchema),
     defaultValues: {
       type: "",
       description: "",
@@ -131,8 +161,13 @@ export function AccommodationFormDialog({
       starts_on: todayIso(),
       subject_ids: [],
       assessment_types: [],
+      origin: "",
+      review_due_date: "",
+      review_recipients: "role",
+      reviewer_ids: [],
     },
   })
+  const reviewRecipients = watch("review_recipients")
 
   // The live catalog, plus the subjects already attached to the edited
   // accommodation that it no longer lists — a soft-deleted one shows as
@@ -165,6 +200,13 @@ export function AccommodationFormDialog({
       .catch(() => setSubjects([]))
   }, [open])
 
+  useEffect(() => {
+    if (!open || !asksReview) return
+    fetchFollowUpCandidates(studentId, "psychopedagogue")
+      .then(setReviewers)
+      .catch(() => setReviewers([]))
+  }, [open, asksReview, studentId])
+
   // Reset the fields whenever the dialog (re)opens: to the edited row's values,
   // or back to blanks for a new accommodation.
   useEffect(() => {
@@ -179,6 +221,10 @@ export function AccommodationFormDialog({
       starts_on: accommodation?.starts_on ?? todayIso(),
       subject_ids: accommodation?.subjects.map((subject) => subject.id) ?? [],
       assessment_types: accommodation?.assessment_types ?? [],
+      origin: accommodation ? (accommodation.origin ?? "") : DIRECT_ORIGIN,
+      review_due_date: "",
+      review_recipients: "role",
+      reviewer_ids: [],
     })
   }, [open, accommodation, reset])
 
@@ -195,6 +241,14 @@ export function AccommodationFormDialog({
       ...(proposal ? {} : { starts_on: values.starts_on }),
       subject_ids: values.subject_ids,
       assessment_types: values.assessment_types,
+      ...(proposal ? {} : { origin: values.origin.trim() || null }),
+      ...(asksReview
+        ? {
+            review_due_date: values.review_due_date,
+            review_recipients: values.review_recipients,
+            ...(values.review_recipients === "people" ? { reviewer_ids: values.reviewer_ids } : {}),
+          }
+        : {}),
     }
     try {
       if (accommodation) {
@@ -336,6 +390,91 @@ export function AccommodationFormDialog({
               Sin tipos marcados, aplica en todas las evaluaciones.
             </p>
           </fieldset>
+          {!proposal && (
+            <div className="grid gap-2">
+              <Label htmlFor="accommodation-origin">Origen</Label>
+              <Input id="accommodation-origin" {...register("origin")} />
+              {errors.origin && (
+                <p className="text-sm text-destructive">{errors.origin.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                De dónde salió el ajuste. Lo ven Psicopedagogía y Dirección, nunca el docente.
+              </p>
+            </div>
+          )}
+          {asksReview && (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="accommodation-review-due">Plazo para la revisión</Label>
+                <Input
+                  id="accommodation-review-due"
+                  type="date"
+                  min={todayIso()}
+                  {...register("review_due_date")}
+                />
+                {errors.review_due_date && (
+                  <p className="text-sm text-destructive">{errors.review_due_date.message}</p>
+                )}
+              </div>
+              <fieldset className="grid gap-2">
+                <legend className="text-sm font-medium">Enviar a</legend>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    className="size-4"
+                    value="role"
+                    {...register("review_recipients")}
+                  />
+                  Psicopedagogía (todo el rol)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    className="size-4"
+                    value="people"
+                    {...register("review_recipients")}
+                  />
+                  Personas de Psicopedagogía
+                </label>
+                {reviewRecipients === "people" && (
+                  <Controller
+                    name="reviewer_ids"
+                    control={control}
+                    render={({ field }) => (
+                      <div className="grid gap-1 pl-6">
+                        {reviewers.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            No hay personas de Psicopedagogía para elegir.
+                          </p>
+                        ) : (
+                          reviewers.map((reviewer) => (
+                            <label key={reviewer.id} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="size-4"
+                                checked={field.value.includes(reviewer.id)}
+                                onChange={(event) =>
+                                  field.onChange(
+                                    event.target.checked
+                                      ? [...field.value, reviewer.id]
+                                      : field.value.filter((id) => id !== reviewer.id),
+                                  )
+                                }
+                              />
+                              {reviewer.name}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  />
+                )}
+                {errors.reviewer_ids && (
+                  <p className="text-sm text-destructive">{errors.reviewer_ids.message}</p>
+                )}
+              </fieldset>
+            </>
+          )}
           {offersActive && (
             <div className="grid gap-1">
               <div className="flex items-center gap-2">

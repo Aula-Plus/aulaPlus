@@ -19,10 +19,13 @@ function proposal(overrides: Partial<Accommodation> = {}): Accommodation {
     deactivated_on: null,
     description: "Media hora extra.",
     focus_area: "Escritura",
+    origin: null,
     is_effective: false,
     review_status: "pending",
     proposed_by_id: 9,
+    proposed_by_name: "Dora Directora",
     reviewed_by_id: null,
+    reviewed_by_name: null,
     reviewed_at: null,
     review_note: null,
     created_by_id: 9,
@@ -64,7 +67,7 @@ describe("AccommodationProposalsSection", () => {
     expect(screen.queryByText("Propuestas de ajuste")).not.toBeInTheDocument()
   })
 
-  it("lets psychopedagogy confirm a pending proposal with «Vigente desde»", async () => {
+  it("lets psychopedagogy confirm a pending proposal with «Vigente desde» and «Origen»", async () => {
     vi.spyOn(trackingApi, "fetchAccommodationProposals")
       .mockResolvedValueOnce([proposal()])
       .mockResolvedValueOnce([])
@@ -81,9 +84,14 @@ describe("AccommodationProposalsSection", () => {
     const startsOn = screen.getByLabelText(/vigente desde/i)
     await userEvent.clear(startsOn)
     await userEvent.type(startsOn, "2026-11-01")
+    // «Origen» comes prefilled with who proposed it.
+    expect(screen.getByLabelText(/^origen$/i)).toHaveValue("Propuesta de Dora Directora")
     await userEvent.click(screen.getByRole("button", { name: /confirmar ajuste/i }))
 
-    expect(review).toHaveBeenCalledWith(40, "confirm", { starts_on: "2026-11-01" })
+    expect(review).toHaveBeenCalledWith(40, "confirm", {
+      starts_on: "2026-11-01",
+      origin: "Propuesta de Dora Directora",
+    })
     await vi.waitFor(() => expect(onConfirmed).toHaveBeenCalled())
   })
 

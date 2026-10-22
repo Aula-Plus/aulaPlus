@@ -39,6 +39,9 @@ class AccommodationResource extends JsonResource
             'active' => $this->active,
             'description' => $this->description,
             'focus_area' => $this->focus_area,
+            // «Origen» (ClickUp 86e3qkwkk): this resource only ever reaches
+            // psychopedagogy and direction; the teacher's chip never carries it.
+            'origin' => $this->origin,
             'is_effective' => $this->resource->isEffective(),
             // Direction proposal circuit (ClickUp 86e3qkwkk): null when
             // psychopedagogy created it directly. `review_note` is the comment
@@ -46,7 +49,10 @@ class AccommodationResource extends JsonResource
             // withdrawn, rejected); the full history has its own endpoint.
             'review_status' => $this->review_status?->value,
             'proposed_by_id' => $this->proposed_by_id,
+            // Names only, for «Propuesta de …» and «Confirmó …».
+            'proposed_by_name' => $this->proposed_by_id !== null ? $this->proposedBy?->name : null,
             'reviewed_by_id' => $this->reviewed_by_id,
+            'reviewed_by_name' => $this->reviewed_by_id !== null ? $this->reviewedBy?->name : null,
             'reviewed_at' => $this->reviewed_at?->toIso8601String(),
             'review_note' => $this->reviewNote(),
             'created_by_id' => $this->created_by_id,

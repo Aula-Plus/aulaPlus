@@ -45,10 +45,22 @@ function proposalPayload(array $overrides = []): array
     ];
 }
 
+/**
+ * What direction adds when proposing: the review deadline and who reviews it.
+ */
+function reviewRouting(array $overrides = []): array
+{
+    return [
+        'review_due_date' => now()->addDays(10)->toDateString(),
+        'review_recipients' => 'role',
+        ...$overrides,
+    ];
+}
+
 function proposeAs(User $director, Student $student, array $overrides = []): Accommodation
 {
     Sanctum::actingAs($director);
-    $id = test()->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload($overrides))
+    $id = test()->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload([...reviewRouting(), ...$overrides]))
         ->assertCreated()
         ->json('data.id');
 
@@ -60,7 +72,11 @@ it('turns what direction creates into a pending proposal with a review task for 
     ['director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
     Sanctum::actingAs($director);
 
-    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(['active' => false]))
+    $dueDate = now()->addDays(3)->toDateString();
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload([
+        'active' => false,
+        ...reviewRouting(['review_due_date' => $dueDate]),
+    ]))
         ->assertCreated()
         ->assertJsonPath('data.review_status', 'pending')
         ->assertJsonPath('data.proposed_by_id', $director->id)
@@ -70,7 +86,11 @@ it('turns what direction creates into a pending proposal with a review task for 
     $accommodation = Accommodation::query()->sole();
     $followUp = ScheduledFollowUp::query()->sole();
     expect($followUp->accommodation_id)->toBe($accommodation->id)
-        ->and($followUp->assigned_to_id)->toBe($psycho->id)
+        // Nobody is made responsible on psychopedagogy's behalf: the whole
+        // role gets it, with the deadline direction picked.
+        ->and($followUp->assigned_to_id)->toBeNull()
+        ->and($followUp->sharedWith()->pluck('users.id')->all())->toBe([$psycho->id])
+        ->and($followUp->due_date->toDateString())->toBe($dueDate)
         ->and($followUp->resolved)->toBeFalse()
         // No proposal content is copied into the task.
         ->and($followUp->description)->toBe('');
@@ -297,4 +317,108 @@ it('lists a student\'s proposals, open first, and drops a confirmed one from the
     $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")
         ->assertOk()
         ->assertJsonPath('data.*.id', [$open->id, $withdrawn->id]);
+});
+
+it('asks direction for the review deadline and who reviews the proposal', function () {
+    ['director' => $director, 'student' => $student] = proposalScenario();
+    Sanctum::actingAs($director);
+
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload())
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['review_due_date', 'review_recipients']);
+
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(
+        reviewRouting(['review_due_date' => now()->subDay()->toDateString()]),
+    ))->assertUnprocessable()->assertJsonValidationErrors(['review_due_date']);
+
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(
+        reviewRouting(['review_recipients' => 'people']),
+    ))->assertUnprocessable()->assertJsonValidationErrors(['reviewer_ids']);
+
+    expect(Accommodation::query()->count())->toBe(0);
+});
+
+it('sends the proposal only to the psychopedagogues direction picked', function () {
+    Notification::fake();
+    ['school' => $school, 'director' => $director, 'psycho' => $psycho, 'teacher' => $teacher, 'student' => $student] = proposalScenario();
+    $second = User::factory()->forSchool($school)->psychopedagogue()->create(['name' => 'Beatriz Psico']);
+    $third = User::factory()->forSchool($school)->psychopedagogue()->create(['name' => 'Carla Psico']);
+    $foreign = User::factory()->forSchool(School::factory()->create())->psychopedagogue()->create();
+    Sanctum::actingAs($director);
+
+    // Only psychopedagogues of the school can be picked.
+    foreach ([$teacher->id, $foreign->id] as $invalid) {
+        $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(
+            reviewRouting(['review_recipients' => 'people', 'reviewer_ids' => [$invalid]]),
+        ))->assertUnprocessable()->assertJsonValidationErrors(['reviewer_ids.0']);
+    }
+
+    proposeAs($director, $student, ['review_recipients' => 'people', 'reviewer_ids' => [$second->id, $third->id]]);
+
+    $followUp = ScheduledFollowUp::query()->sole();
+    expect($followUp->assigned_to_id)->toBeNull()
+        ->and($followUp->sharedWith()->orderBy('users.id')->pluck('users.id')->all())->toBe([$second->id, $third->id]);
+    Notification::assertSentTo([$second, $third], FollowUpAssignedNotification::class);
+    Notification::assertNotSentTo($psycho, FollowUpAssignedNotification::class);
+
+    Sanctum::actingAs($second);
+    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->assertJsonCount(1, 'data');
+    Sanctum::actingAs($psycho);
+    $this->getJson('/api/v1/scheduled-follow-ups/mine')->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('sends the proposal to every psychopedagogue when direction picks the whole role', function () {
+    Notification::fake();
+    ['school' => $school, 'director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
+    $second = User::factory()->forSchool($school)->psychopedagogue()->create(['name' => 'Beatriz Psico']);
+
+    proposeAs($director, $student);
+
+    expect(ScheduledFollowUp::query()->sole()->sharedWith()->orderBy('users.id')->pluck('users.id')->all())
+        ->toBe([$psycho->id, $second->id]);
+    Notification::assertSentTo([$psycho, $second], FollowUpAssignedNotification::class);
+});
+
+it('lets only psychopedagogy write «Origen», and never shows it to a teacher', function () {
+    ['director' => $director, 'psycho' => $psycho, 'teacher' => $teacher, 'student' => $student] = proposalScenario();
+
+    // Direction never sends it, neither proposing nor editing its proposal.
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(
+        [...reviewRouting(), 'origin' => 'Informe 2024'],
+    ))->assertUnprocessable()->assertJsonValidationErrors(['origin']);
+    $proposal = proposeAs($director, $student);
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['origin' => 'Informe 2024']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['origin']);
+    $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")
+        ->assertOk()
+        ->assertJsonPath('data.0.origin', null)
+        ->assertJsonPath('data.0.proposed_by_name', 'Directora');
+
+    // Psychopedagogy fills it in on confirming.
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/confirm", ['origin' => 'Propuesta de Directora'])
+        ->assertOk()
+        ->assertJsonPath('data.origin', 'Propuesta de Directora')
+        ->assertJsonPath('data.reviewed_by_name', 'Ana Psico');
+
+    // ...and when creating or editing one directly.
+    $direct = $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(['origin' => 'Registrado por Psicopedagogía']))
+        ->assertCreated()
+        ->assertJsonPath('data.origin', 'Registrado por Psicopedagogía')
+        ->json('data.id');
+    $this->patchJson("/api/v1/accommodations/{$direct}", proposalPayload(['origin' => 'Informe neuropsicológico 2024']))
+        ->assertOk()
+        ->assertJsonPath('data.origin', 'Informe neuropsicológico 2024');
+
+    // The teacher's chips never carry it.
+    Sanctum::actingAs($teacher);
+    $chips = $this->getJson("/api/v1/students/{$student->id}/tracking")
+        ->assertOk()
+        ->json('data.support_chips.accommodations');
+    expect($chips)->not->toBeEmpty();
+    foreach ($chips as $chip) {
+        expect($chip)->not->toHaveKey('origin');
+    }
 });

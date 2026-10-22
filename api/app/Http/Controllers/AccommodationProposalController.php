@@ -56,7 +56,12 @@ class AccommodationProposalController extends Controller
 
     public function confirm(ConfirmAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource
     {
-        return $this->respond($this->workflow->confirm($accommodation, $request->user(), $request->validated('starts_on')));
+        return $this->respond($this->workflow->confirm(
+            $accommodation,
+            $request->user(),
+            $request->validated('starts_on'),
+            $request->safe()->only(['origin']),
+        ));
     }
 
     public function returnProposal(ReturnAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource

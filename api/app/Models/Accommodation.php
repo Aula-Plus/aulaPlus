@@ -61,6 +61,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
     'active',
     'description',
     'focus_area',
+    'origin',
     'llm_rule',
     'requires_external_approval',
     'approved',
@@ -76,7 +77,7 @@ class Accommodation extends Model
     /** @use HasFactory<AccommodationFactory> */
     use Auditable, BelongsToSchool, HasFactory, SoftDeletes, TracksAuthorship;
 
-    public static array $auditableExcludeFromDiff = ['description', 'llm_rule'];
+    public static array $auditableExcludeFromDiff = ['description', 'origin', 'llm_rule'];
 
     protected function casts(): array
     {
