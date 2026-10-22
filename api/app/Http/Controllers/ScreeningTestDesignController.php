@@ -45,21 +45,28 @@ class ScreeningTestDesignController extends Controller
 
     public function store(StoreScreeningTestDesignRequest $request, ScreeningTestType $type): JsonResponse
     {
-        $design = ScreeningTestDesign::create([
-            'screening_test_type_id' => $type->id,
-            'bands' => $request->bands(),
-            'reason' => $request->validated('reason'),
-            'created_by_id' => $request->user()->id,
-            'approved' => true,
-        ]);
-        $design->setRelation('type', $type);
+        // The design rules at once and Dirección's notice is part of that same
+        // change (decided 15/10): both are written together or not at all, so
+        // a design never rules without its stored notice.
+        $design = DB::transaction(function () use ($request, $type): ScreeningTestDesign {
+            $design = ScreeningTestDesign::create([
+                'screening_test_type_id' => $type->id,
+                'bands' => $request->bands(),
+                'reason' => $request->validated('reason'),
+                'created_by_id' => $request->user()->id,
+                'approved' => true,
+            ]);
+            $design->setRelation('type', $type);
 
-        $directors = User::query()
-            ->where('school_id', $type->school_id)
-            ->whereKeyNot($request->user()->id)
-            ->role(Role::Director->value)
-            ->get();
-        Notification::send($directors, new ScreeningDesignChangedNotification($design));
+            $directors = User::query()
+                ->where('school_id', $type->school_id)
+                ->whereKeyNot($request->user()->id)
+                ->role(Role::Director->value)
+                ->get();
+            Notification::send($directors, new ScreeningDesignChangedNotification($design));
+
+            return $design;
+        });
 
         return (new ScreeningTestDesignResource($design->load('createdBy:id,name')))
             ->response()

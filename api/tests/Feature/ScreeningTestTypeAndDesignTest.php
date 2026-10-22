@@ -157,6 +157,21 @@ it('stores the notice for Dirección so it reaches a later session', function ()
         ->assertJsonPath('data.0.data.screening_test_type_id', $type->id);
 });
 
+it('does not keep a ruling design when its notice to Dirección cannot be stored', function () {
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    User::factory()->forSchool($school)->director()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('notifications table down'));
+    Sanctum::actingAs($psychopedagogue);
+
+    $this->withoutExceptionHandling();
+    expect(fn () => $this->postJson("/api/v1/screening-test-types/{$type->id}/designs", ['bands' => threeBands()]))
+        ->toThrow(RuntimeException::class);
+
+    $this->assertDatabaseCount('screening_test_designs', 0);
+});
+
 it('lets Dirección save a design too, and forbids a teacher', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
