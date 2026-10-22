@@ -279,3 +279,22 @@ it('records a discarded draft and a confirmed AI creation inside the proposal jo
     expect(UsageEvent::query()->where('journey_id', $journeyId)->pluck('step')->all())
         ->toBe(['draft_discarded', 'creation_confirmed']);
 });
+
+it('lists the requested month even when today is past that month\'s last day', function () {
+    [$school, $teacher, , , $director] = journeySchool();
+    $this->travelTo('2026-10-31 12:00:00');
+
+    $confirmed = fn (string $at) => UsageEvent::factory()->create([
+        'school_id' => $school->id, 'user_id' => $teacher->id, 'event_type' => 'assessment.created',
+        'step' => 'creation_confirmed', 'content_type' => 'assessment', 'created_at' => $at,
+    ]);
+    $february = $confirmed('2026-02-20 10:00:00');
+    $confirmed('2026-03-02 10:00:00');
+    Sanctum::actingAs($director);
+
+    $response = $this->getJson(journeysUrl($school, $teacher).'?month=2026-02')->assertOk();
+
+    expect($response->json('meta.month'))->toBe('2026-02')
+        ->and($response->json('data'))->toHaveCount(1)
+        ->and($response->json('data.0.id'))->toBe('event-'.$february->id);
+});

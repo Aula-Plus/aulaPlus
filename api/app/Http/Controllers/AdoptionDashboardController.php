@@ -180,7 +180,10 @@ class AdoptionDashboardController extends Controller
         $month = $request->validated('month');
         $monthStart = $month === null
             ? now()->startOfMonth()
-            : Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+            // `!` zeroes the unparsed fields: without it the day comes from
+            // today, so on the 29th–31st a shorter month overflows into the
+            // next one (e.g. "2026-02" read on Oct 31 is March 3).
+            : Carbon::createFromFormat('!Y-m', $month);
 
         return response()->json([
             'data' => $buildJourneys($school, $teacher, $request->user(), $monthStart),
