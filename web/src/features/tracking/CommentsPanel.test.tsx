@@ -353,10 +353,49 @@ describe("CommentsPanel observations bank", () => {
     await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Para Dora")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
+    // Psicopedagogía, with nobody picked, still sees it in full: warn first.
+    expect(onCreate).not.toHaveBeenCalled()
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /en psicopedagogía no elegiste a nadie, así que la van a ver todos los de ese rol/i,
+    )
+    await userEvent.click(screen.getByRole("button", { name: /publicar igual/i }))
+
     expect(onCreate).toHaveBeenCalledWith({
       content: "Para Dora",
       visible_to: ["director", "psychopedagogue"],
       visible_to_users: { director: [4] },
+    })
+  })
+
+  it("lets the author go back and pick people in the role left whole before publishing", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <CommentsPanel
+        comments={[]}
+        onCreate={onCreate}
+        scopeCandidates={[
+          { id: 4, name: "Dora Directora", role: "director" },
+          { id: 6, name: "Paula Psico", role: "psychopedagogue" },
+        ]}
+      />,
+    )
+
+    await chooseScope("Dirección y Psicopedagogía")
+    await userEvent.click(screen.getByRole("button", { name: /elegir personas/i }))
+    await userEvent.click(screen.getByRole("checkbox", { name: /dora directora/i }))
+    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Para Dora y Paula")
+    await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+
+    await userEvent.click(screen.getByRole("button", { name: /volver a elegir personas/i }))
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("checkbox", { name: /paula psico/i }))
+    await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+
+    // Every role narrowed: no warning, published at once.
+    expect(onCreate).toHaveBeenCalledWith({
+      content: "Para Dora y Paula",
+      visible_to: ["director", "psychopedagogue"],
+      visible_to_users: { director: [4], psychopedagogue: [6] },
     })
   })
 
