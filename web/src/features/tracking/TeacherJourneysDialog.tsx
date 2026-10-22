@@ -46,7 +46,7 @@ export function TeacherJourneysDialog({
         <DialogHeader>
           <DialogTitle>Recorridos de {teacherName}</DialogTitle>
           <DialogDescription>
-            Creaciones de este mes y los pasos registrados de cada una.
+            Recorridos de creación de este mes y los pasos registrados de cada uno.
           </DialogDescription>
         </DialogHeader>
         {error ? (
@@ -67,17 +67,23 @@ export function TeacherJourneysDialog({
   )
 }
 
-// The steps each kind of journey is expected to record. A missing one is
-// listed as «dato no disponible» (not recorded — e.g. the assistant screens
+// The earlier steps each kind of journey is expected to record. A missing one
+// is listed as «dato no disponible» (not recorded — e.g. the assistant screens
 // that report them don't exist yet), never as something the teacher didn't do.
+// The confirmation is not among them: the server always records it, so its
+// absence means the journey is not confirmed yet, not that data is missing.
 const EXPECTED_STEPS: Record<"ai" | "manual", JourneyStep[]> = {
-  manual: ["form_opened", "filling_started", "creation_confirmed"],
+  manual: ["form_opened", "filling_started"],
   ai: ["form_opened", "filling_started", "generation_requested"],
 }
+
+// Last steps that already explain why a journey has no confirmation.
+const CLOSING_STEPS: JourneyStep[] = ["generation_failed", "draft_discarded"]
 
 function JourneyItem({ journey }: { journey: CreationJourney }) {
   const recorded = new Set(journey.steps.map((step) => step.step))
   const missing = journey.flow ? EXPECTED_STEPS[journey.flow].filter((step) => !recorded.has(step)) : []
+  const pending = !journey.confirmed && !CLOSING_STEPS.includes(journey.last_step.step)
   const context = [journey.title, journey.group_name, journey.subject_name].filter(Boolean).join(" · ")
 
   return (
@@ -94,6 +100,9 @@ function JourneyItem({ journey }: { journey: CreationJourney }) {
       <p>
         Último paso: {stepText(journey.last_step)} ({formatDateTime(journey.last_step.at)})
       </p>
+      {pending && (
+        <p className="text-muted-foreground">Todavía sin confirmar: puede seguir en preparación.</p>
+      )}
 
       <ol className="grid gap-1 border-l pl-3" aria-label="Pasos registrados">
         {journey.steps.map((step, index) => (

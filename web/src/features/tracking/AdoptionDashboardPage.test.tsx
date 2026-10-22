@@ -222,6 +222,52 @@ describe("AdoptionDashboardPage", () => {
     expect(within(dialog).queryByText(/no intentó|abandon/i)).not.toBeInTheDocument()
   })
 
+  it("shows an unconfirmed journey as pending, not as missing data", async () => {
+    vi.spyOn(adoptionApi, "fetchAdoptionDashboard").mockResolvedValue(dashboard())
+    vi.spyOn(adoptionApi, "fetchAdoptionTeachers").mockResolvedValue({
+      rows: [
+        {
+          id: 7,
+          name: "Ana Fernández",
+          subjects: [],
+          month_counts: { annual_plans: 0, class_sessions: 0, assessments: 0 },
+          month_attempts: { annual_plans: null, class_sessions: null, assessments: null },
+        },
+      ],
+      dataSince: noData,
+    })
+    vi.spyOn(adoptionApi, "fetchTeacherJourneys").mockResolvedValue([
+      {
+        id: "j-1",
+        content_type: "assessment",
+        flow: "manual",
+        started_at: "2026-10-05T12:15:00Z",
+        confirmed: false,
+        last_step: { step: "filling_started", at: "2026-10-05T12:16:00Z" },
+        steps: [
+          { step: "form_opened", at: "2026-10-05T12:15:00Z" },
+          { step: "filling_started", at: "2026-10-05T12:16:00Z" },
+        ],
+        title: null,
+        group_name: "3° A",
+        subject_name: null,
+        content: null,
+      },
+    ])
+
+    renderPage("director")
+    await userEvent.click(await screen.findByRole("tab", { name: "Por docente" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Ver recorridos" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(
+      await within(dialog).findByText("Todavía sin confirmar: puede seguir en preparación."),
+    ).toBeInTheDocument()
+    // The server always records a confirmation: its absence is not missing data.
+    expect(within(dialog).queryByText(/dato no disponible/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/no intentó|abandon/i)).not.toBeInTheDocument()
+  })
+
   it("shows a notice when a director has no school assigned", async () => {
     const fetchDashboard = vi.spyOn(adoptionApi, "fetchAdoptionDashboard")
 
