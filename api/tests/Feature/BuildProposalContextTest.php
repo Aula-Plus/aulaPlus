@@ -232,76 +232,40 @@ function narrativeFor(array $scenario, AccommodationNarrativeStatus $status, str
     ]));
 }
 
-it('sends the last published group accommodation summary for class and assessment drafts', function () {
+it('sends neither the published accommodation narrative nor past results of other units', function () {
+    // PO, ClickUp 86e3jpzdr (latest decision): the AI no longer receives the
+    // narrative psychopedagogy publishes — it states how many students have
+    // each accommodation, which identifies someone in a small group. Group
+    // performance may only come from assessments of the unit being planned,
+    // and assessments are not tied to a unit yet, so none qualifies.
     $scenario = contextScopeScenario();
-    narrativeFor($scenario, AccommodationNarrativeStatus::Archived, 'Resumen viejo', now()->subMonth()->toDateTimeString());
     narrativeFor($scenario, AccommodationNarrativeStatus::Published, 'Cinco alumnos tienen tiempo extendido.', now()->subDay()->toDateTimeString());
-    narrativeFor($scenario, AccommodationNarrativeStatus::Draft, 'Borrador sin publicar');
-
-    $class = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
-    $assessment = contextFor($scenario, AIProposalType::Assessment, [
+    $assessment = Assessment::factory()->create([
+        'school_id' => $scenario['school']->id,
+        'group_id' => $scenario['group']->id,
         'subject_id' => $scenario['math']->id,
-        'assessment_type' => 'written',
-        'focus' => 'x',
+        'teacher_id' => $scenario['teacher']->id,
+        'type' => 'written',
+        'administered_at' => now()->subWeek()->toDateString(),
     ]);
-    $plan = contextFor($scenario, AIProposalType::AnnualPlan, ['subject_id' => $scenario['math']->id]);
+    AssessmentResult::factory()->create([
+        'assessment_id' => $assessment->id,
+        'student_id' => $scenario['student']->id,
+        'score' => 3.75,
+    ]);
 
-    expect($class['group_accommodation_summary']['text'])->toBe('Cinco alumnos tienen tiempo extendido.')
-        ->and($assessment['group_accommodation_summary']['text'])->toBe('Cinco alumnos tienen tiempo extendido.')
-        ->and($plan['group_accommodation_summary'])->toBeNull()
-        ->and(json_encode($class))->not->toContain('Borrador sin publicar');
-});
-
-it('generates without a group accommodation summary when none was published', function () {
-    $scenario = contextScopeScenario();
-    narrativeFor($scenario, AccommodationNarrativeStatus::Draft, 'Borrador sin publicar');
-
-    $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
-
-    expect($context['group_accommodation_summary'])->toBeNull();
-});
-
-it('sends the recent performance of the group in the subject as aggregates only', function () {
-    $scenario = contextScopeScenario();
-    $make = fn (Subject $subject, string $date, array $scores) => tap(
-        Assessment::factory()->create([
-            'school_id' => $scenario['school']->id,
-            'group_id' => $scenario['group']->id,
-            'subject_id' => $subject->id,
-            'teacher_id' => $scenario['teacher']->id,
-            'type' => 'written',
-            'administered_at' => $date,
+    foreach ([
+        contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']),
+        contextFor($scenario, AIProposalType::Assessment, [
+            'subject_id' => $scenario['math']->id,
+            'assessment_type' => 'written',
+            'focus' => 'x',
         ]),
-        function (Assessment $assessment) use ($scores, $scenario): void {
-            foreach ($scores as $score) {
-                AssessmentResult::factory()->create([
-                    'assessment_id' => $assessment->id,
-                    'student_id' => Student::factory()->create([
-                        'school_id' => $scenario['school']->id,
-                        'full_name' => 'Secret Performance Name',
-                    ])->id,
-                    'score' => $score,
-                ]);
-            }
-        },
-    );
-    $make($scenario['math'], now()->subWeeks(2)->toDateString(), [4, 6, 8]);
-    $make($scenario['math'], now()->subWeek()->toDateString(), [3, 5]);
-    $make($scenario['science'], now()->subDays(2)->toDateString(), [12]);
+    ] as $context) {
+        $sent = json_encode($context);
 
-    $context = contextFor($scenario, AIProposalType::Assessment, [
-        'subject_id' => $scenario['math']->id,
-        'assessment_type' => 'written',
-        'focus' => 'x',
-    ]);
-
-    expect($context['recent_performance'])->toHaveCount(2)
-        ->and($context['recent_performance'][0])->toMatchArray([
-            'results_count' => 2,
-            'average_score' => 4.0,
-            'lowest_score' => 3.0,
-            'highest_score' => 5.0,
-        ])
-        ->and($context['recent_performance'][1]['average_score'])->toBe(6.0)
-        ->and(json_encode($context))->not->toContain('Secret Performance Name');
+        expect($context)->not->toHaveKeys(['group_accommodation_summary', 'recent_performance'])
+            ->and($sent)->not->toContain('Cinco alumnos')
+            ->and($sent)->not->toContain('3.75');
+    }
 });

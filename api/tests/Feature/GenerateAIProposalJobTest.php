@@ -132,7 +132,10 @@ it('stores the rationale of a class draft and asks for one grounded in this grou
         ->and($proposal->raw_response['rationale'])->toBe('Propuse material concreto porque el grupo viene flojo.');
     Http::assertSent(fn ($request) => str_contains($request['system'], '"rationale"')
         && str_contains($request['system'], 'nunca nombres a un alumno')
-        && str_contains($request['system'], '"group_accommodation_summary"'));
+        && str_contains($request['system'], 'digas cuántos alumnos tienen un ajuste')
+        && str_contains($request['system'], 'No usé el desempeño del grupo')
+        && ! str_contains($request['system'], 'group_accommodation_summary')
+        && ! preg_match('/\d+ alumnos tienen/u', $request['system']));
 });
 
 it('marks a class or assessment draft without a rationale as off-schema', function (AIProposalType $type, array $draft) {
