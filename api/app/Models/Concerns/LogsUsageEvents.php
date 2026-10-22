@@ -60,7 +60,7 @@ trait LogsUsageEvents
 
     /**
      * Same multi-guard resolution as Auditable's — see
-     * Auditable::auditableCurrentUser() for why this is duplicated rather
+     * StudentFileHistory::baseAttributes() for why this is duplicated rather
      * than shared.
      */
     protected static function logsUsageEventsCurrentUserId(): ?int
