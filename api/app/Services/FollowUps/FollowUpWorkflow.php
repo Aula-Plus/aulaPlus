@@ -13,6 +13,7 @@ use App\Models\ScheduledFollowUp;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\FollowUpAssignedNotification;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -28,6 +29,12 @@ use Illuminate\Support\Facades\DB;
  *   `reopened` one; closed stages are left as they were.
  * - Whoever is made responsible of a stage becomes a participant.
  * - `assigned_to_id` mirrors the first active general responsible.
+ * - Every multi-row change runs in one transaction holding a row lock on the
+ *   follow-up, and re-checks the invariants the policy checked before the
+ *   lock (no pending stage on resolve, the stage is still pending, at least
+ *   one general responsible left): two people acting at once cannot leave a
+ *   resolved follow-up with a pending stage, or one with nobody in charge. A
+ *   broken invariant aborts with a 403, as the policy would.
  *
  * Free text (descriptions, notes, conclusions, reasons) goes to the database
  * only — never to logs or event `data` (CLAUDE.md security rule 11).
@@ -85,6 +92,7 @@ class FollowUpWorkflow
     public function addStage(ScheduledFollowUp $followUp, User $actor, array $data): FollowUpStage
     {
         $stage = DB::transaction(function () use ($followUp, $actor, $data): FollowUpStage {
+            $this->lock($followUp);
             $stage = $this->newStage($followUp, $actor, $data);
             $this->record($followUp, FollowUpEventType::StageAdded, $actor, $stage, $stage->responsible_id, [
                 'due_date' => $stage->due_date->toDateString(),
@@ -106,15 +114,22 @@ class FollowUpWorkflow
     public function updateStage(FollowUpStage $stage, User $actor, array $data): FollowUpStage
     {
         $followUp = $stage->followUp;
-        $previousResponsible = $stage->responsible_id;
 
-        DB::transaction(function () use ($stage, $followUp, $actor, $data, $previousResponsible): void {
+        $responsibleChanged = DB::transaction(function () use ($stage, $followUp, $actor, $data): bool {
+            $this->lock($followUp);
+            $this->ensurePending($stage);
+
+            $previousResponsible = $stage->responsible_id;
             $previousDue = $stage->due_date->toDateString();
+            if (array_key_exists('responsible_id', $data)) {
+                $data['responsible_id'] = (int) $data['responsible_id'];
+            }
             $stage->fill($data)->save();
 
             // Ids and dates only: the description is sensitive.
             $changes = ['description_changed' => $stage->wasChanged('description')];
-            if ($stage->wasChanged('responsible_id')) {
+            $responsibleChanged = $stage->wasChanged('responsible_id');
+            if ($responsibleChanged) {
                 $changes['responsible_from'] = $previousResponsible;
                 $changes['responsible_to'] = $stage->responsible_id;
                 $this->member($followUp, $stage->responsible_id, FollowUpMemberRole::Participant);
@@ -126,9 +141,11 @@ class FollowUpWorkflow
 
             $this->record($followUp, FollowUpEventType::StageUpdated, $actor, $stage, data: $changes);
             $this->syncDeadline($followUp, $actor);
+
+            return $responsibleChanged;
         });
 
-        if ($stage->responsible_id !== $previousResponsible) {
+        if ($responsibleChanged) {
             $this->notifyStageResponsible($followUp, $stage, $actor);
         }
 
@@ -147,6 +164,8 @@ class FollowUpWorkflow
         $followUp = $stage->followUp;
 
         $children = DB::transaction(function () use ($stage, $followUp, $actor, $parts): array {
+            $this->lock($followUp);
+            $this->ensurePending($stage);
             $stage->update(['status' => FollowUpStageStatus::Split]);
 
             $children = array_map(
@@ -172,6 +191,8 @@ class FollowUpWorkflow
     public function closeStage(FollowUpStage $stage, User $actor, string $conclusion): void
     {
         DB::transaction(function () use ($stage, $actor, $conclusion): void {
+            $this->lock($stage->followUp);
+            $this->ensurePending($stage);
             $stage->update([
                 'status' => FollowUpStageStatus::Done,
                 'conclusion' => $conclusion,
@@ -216,13 +237,9 @@ class FollowUpWorkflow
     public function addGeneralResponsible(ScheduledFollowUp $followUp, User $actor, User $user): void
     {
         $added = DB::transaction(function () use ($followUp, $actor, $user): bool {
-            if (! $this->member($followUp, $user->id, FollowUpMemberRole::GeneralResponsible)) {
-                return false;
-            }
-            $this->record($followUp, FollowUpEventType::GeneralResponsibleAdded, $actor, subjectId: $user->id);
-            $this->syncAssignee($followUp);
+            $this->lock($followUp);
 
-            return true;
+            return $this->promote($followUp, $actor, $user);
         });
 
         if ($added && ! $user->is($actor)) {
@@ -234,7 +251,9 @@ class FollowUpWorkflow
     public function removeGeneralResponsible(ScheduledFollowUp $followUp, User $actor, User $user): void
     {
         DB::transaction(function () use ($followUp, $actor, $user): void {
-            $followUp->memberFor($user)->update(['role' => FollowUpMemberRole::Participant]);
+            $this->lock($followUp);
+            $this->activeMember($followUp, $user)?->update(['role' => FollowUpMemberRole::Participant]);
+            $this->ensureGeneralResponsibleLeft($followUp);
             $this->record($followUp, FollowUpEventType::GeneralResponsibleRemoved, $actor, subjectId: $user->id);
             $this->syncAssignee($followUp);
         });
@@ -247,18 +266,40 @@ class FollowUpWorkflow
      */
     public function withdraw(ScheduledFollowUp $followUp, User $actor, string $reason, ?User $successor): void
     {
-        if ($successor !== null) {
-            $this->addGeneralResponsible($followUp, $actor, $successor);
-        }
+        // One transaction: the successor is never promoted without the
+        // withdrawal taking place, and the follow-up is never left without a
+        // general responsible (e.g. two of them withdrawing at once).
+        $promoted = DB::transaction(function () use ($followUp, $actor, $reason, $successor): bool {
+            $this->lock($followUp);
+            $hasPendingStage = FollowUpStage::query()
+                ->where('scheduled_follow_up_id', $followUp->id)
+                ->where('responsible_id', $actor->id)
+                ->where('status', FollowUpStageStatus::Pending->value)
+                ->exists();
+            if ($hasPendingStage) {
+                throw new AuthorizationException('Close or reassign your pending stages before withdrawing.');
+            }
 
-        DB::transaction(function () use ($followUp, $actor, $reason): void {
-            $followUp->load('members')->memberFor($actor)->update([
+            $promoted = $successor !== null && $this->promote($followUp, $actor, $successor);
+
+            $member = $this->activeMember($followUp, $actor);
+            if ($member === null) {
+                throw new AuthorizationException('You are not taking part in this follow-up.');
+            }
+            $member->update([
                 'withdrawn_at' => now(),
                 'withdrawal_reason' => $reason,
             ]);
+            $this->ensureGeneralResponsibleLeft($followUp);
             $this->record($followUp, FollowUpEventType::Withdrew, $actor, subjectId: $actor->id, note: $reason);
             $this->syncAssignee($followUp);
+
+            return $promoted;
         });
+
+        if ($promoted) {
+            $successor->notify(new FollowUpAssignedNotification($followUp, $actor));
+        }
     }
 
     public function hide(ScheduledFollowUp $followUp, User $actor): void
@@ -269,6 +310,18 @@ class FollowUpWorkflow
     public function resolve(ScheduledFollowUp $followUp, User $actor, string $conclusion): void
     {
         DB::transaction(function () use ($followUp, $actor, $conclusion): void {
+            $this->lock($followUp);
+            if ($followUp->resolved) {
+                throw new AuthorizationException('This follow-up is already resolved.');
+            }
+            $hasPendingStages = FollowUpStage::query()
+                ->where('scheduled_follow_up_id', $followUp->id)
+                ->where('status', FollowUpStageStatus::Pending->value)
+                ->exists();
+            if ($hasPendingStages) {
+                throw new AuthorizationException('Every stage must be closed before resolving.');
+            }
+
             $followUp->update([
                 'resolved' => true,
                 'resolved_by_id' => $actor->id,
@@ -277,6 +330,64 @@ class FollowUpWorkflow
             ]);
             $this->record($followUp, FollowUpEventType::Resolved, $actor, note: $conclusion);
         });
+    }
+
+    /**
+     * Take the follow-up's row lock for the rest of the transaction (a no-op
+     * on SQLite, which locks the whole database) and refresh the model's own
+     * columns from the locked row, so the checks that follow see what is
+     * committed rather than what the request loaded.
+     */
+    protected function lock(ScheduledFollowUp $followUp): void
+    {
+        $locked = ScheduledFollowUp::query()->whereKey($followUp->id)->lockForUpdate()->firstOrFail();
+        $followUp->setRawAttributes($locked->getAttributes(), true);
+        $followUp->unsetRelation('members')->unsetRelation('stages');
+    }
+
+    /** The stage may have been closed or split since the policy looked at it. */
+    protected function ensurePending(FollowUpStage $stage): void
+    {
+        $current = FollowUpStage::query()->whereKey($stage->id)->first(['id', 'status']);
+        if ($current?->status !== FollowUpStageStatus::Pending) {
+            throw new AuthorizationException('This stage is no longer pending.');
+        }
+    }
+
+    protected function ensureGeneralResponsibleLeft(ScheduledFollowUp $followUp): void
+    {
+        $left = FollowUpMember::query()
+            ->where('scheduled_follow_up_id', $followUp->id)
+            ->where('role', FollowUpMemberRole::GeneralResponsible->value)
+            ->whereNull('withdrawn_at')
+            ->whereNull('removed_at')
+            ->exists();
+
+        if (! $left) {
+            throw new AuthorizationException('A follow-up needs at least one general responsible.');
+        }
+    }
+
+    protected function activeMember(ScheduledFollowUp $followUp, User $user): ?FollowUpMember
+    {
+        return FollowUpMember::query()
+            ->where('scheduled_follow_up_id', $followUp->id)
+            ->where('user_id', $user->id)
+            ->whereNull('withdrawn_at')
+            ->whereNull('removed_at')
+            ->first();
+    }
+
+    /** Make `$user` a general responsible and record it; false if they already were. */
+    protected function promote(ScheduledFollowUp $followUp, User $actor, User $user): bool
+    {
+        if (! $this->member($followUp, $user->id, FollowUpMemberRole::GeneralResponsible)) {
+            return false;
+        }
+        $this->record($followUp, FollowUpEventType::GeneralResponsibleAdded, $actor, subjectId: $user->id);
+        $this->syncAssignee($followUp);
+
+        return true;
     }
 
     /**

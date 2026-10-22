@@ -181,10 +181,27 @@ class ScheduledFollowUpDetailResource extends ScheduledFollowUpResource
             $followUp->resolution_note = null;
         }
 
-        // People who joined after they left are not shown either.
-        $followUp->setRelation('members', $followUp->members->filter(fn (FollowUpMember $m) => $m->created_at <= $cutoff)->values());
-        $followUp->setRelation('sharedWith', $followUp->sharedWith->filter(
-            fn (User $u) => $followUp->members->contains(fn (FollowUpMember $m) => $m->user_id === $u->id && $m->role === FollowUpMemberRole::Participant)
-        )->values());
+        // People who joined after they left are not shown either, and whoever
+        // withdrew or was removed later still shows as taking part (without
+        // that later reason, which is free text about the case).
+        $members = $followUp->members
+            ->filter(fn (FollowUpMember $m) => $m->created_at <= $cutoff)
+            ->each(function (FollowUpMember $m) use ($cutoff): void {
+                if ($m->withdrawn_at !== null && $m->withdrawn_at > $cutoff) {
+                    $m->withdrawn_at = null;
+                    $m->withdrawal_reason = null;
+                }
+                if ($m->removed_at !== null && $m->removed_at > $cutoff) {
+                    $m->removed_at = null;
+                    $m->removed_by_id = null;
+                    $m->removal_reason = null;
+                }
+            });
+        $followUp->setRelation('members', $members->values());
+        $followUp->setRelation('sharedWith', $members
+            ->filter(fn (FollowUpMember $m) => $m->isActive() && $m->role === FollowUpMemberRole::Participant)
+            ->pluck('user')
+            ->filter()
+            ->values());
     }
 }

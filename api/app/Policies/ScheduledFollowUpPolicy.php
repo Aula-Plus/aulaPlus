@@ -41,6 +41,14 @@ use Illuminate\Auth\Access\Response;
  */
 class ScheduledFollowUpPolicy
 {
+    /**
+     * `teachesStudent` answers memoized for this policy instance (one request
+     * at most: the Gate and the detail resource resolve a fresh one).
+     *
+     * @var array<string, bool>
+     */
+    protected array $teaches = [];
+
     public function view(User $user, ScheduledFollowUp $followUp): bool
     {
         return $this->canAccessStudent($user, $followUp->student);
@@ -248,7 +256,16 @@ class ScheduledFollowUpPolicy
      */
     protected function canAccessStudent(User $user, Student $student): bool
     {
-        return $user->school_id === $student->school_id
-            && ($user->teachesStudent($student) || $user->hasAnyRole(Role::schoolWideValues()));
+        if ($user->school_id !== $student->school_id) {
+            return false;
+        }
+        // The role check needs no query (roles are loaded once per user), so
+        // it goes first; the "teaches" query is remembered per user/student
+        // because the detail resource asks for ~5 flags per stage.
+        if ($user->hasAnyRole(Role::schoolWideValues())) {
+            return true;
+        }
+
+        return $this->teaches[$user->id.':'.$student->id] ??= $user->teachesStudent($student);
     }
 }

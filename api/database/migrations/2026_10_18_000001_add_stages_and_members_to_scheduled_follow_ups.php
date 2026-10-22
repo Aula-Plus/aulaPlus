@@ -52,8 +52,10 @@ return new class extends Migration
             $table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
+            // PostgreSQL does not index foreign keys on its own.
             $table->index(['scheduled_follow_up_id', 'status']);
             $table->index(['responsible_id', 'status']);
+            $table->index('parent_stage_id');
         });
 
         Schema::create('follow_up_stage_notes', function (Blueprint $table) {
@@ -63,6 +65,9 @@ return new class extends Migration
             $table->foreignId('author_id')->nullable()->constrained('users')->nullOnDelete();
             $table->text('body');
             $table->timestamps();
+
+            // Notes are always loaded per stage (eager load by stage ids).
+            $table->index('follow_up_stage_id');
         });
 
         Schema::create('follow_up_members', function (Blueprint $table) {
@@ -96,6 +101,7 @@ return new class extends Migration
             $table->timestamp('created_at')->nullable();
 
             $table->index(['scheduled_follow_up_id', 'created_at']);
+            $table->index('follow_up_stage_id');
         });
 
         $this->backfill();

@@ -35,6 +35,9 @@ class WithdrawFromFollowUpRequest extends FormRequest
             'reason' => ['required', 'string', 'max:2000'],
             'new_general_responsible_id' => [
                 Rule::requiredIf($this->isOnlyGeneralResponsible()),
+                // Naming a general responsible is reserved to general
+                // responsibles: a participant leaving cannot promote anyone.
+                Rule::prohibitedIf(! $this->isGeneralResponsible()),
                 'nullable',
                 'integer',
                 Rule::notIn([$this->user()->id]),
@@ -48,8 +51,12 @@ class WithdrawFromFollowUpRequest extends FormRequest
         $followUp = $this->followUp()->loadMissing('members');
         $generals = $followUp->members->filter->isGeneralResponsible();
 
-        return $generals->count() === 1
-            && app(ScheduledFollowUpPolicy::class)->isGeneralResponsible($this->user(), $followUp);
+        return $generals->count() === 1 && $this->isGeneralResponsible();
+    }
+
+    public function isGeneralResponsible(): bool
+    {
+        return app(ScheduledFollowUpPolicy::class)->isGeneralResponsible($this->user(), $this->followUp());
     }
 
     protected function followUp(): ScheduledFollowUp

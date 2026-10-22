@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\FollowUpStageStatus;
 use App\Models\AuditLog;
+use App\Models\FollowUpEvent;
 use App\Models\FollowUpStage;
 use App\Models\FollowUpStageNote;
 use App\Models\Group;
@@ -8,6 +10,10 @@ use App\Models\ScheduledFollowUp;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\FollowUps\FollowUpWorkflow;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -325,4 +331,125 @@ it('keeps stage descriptions, conclusions, notes and the title out of the audit 
         ->and($updated->changes['conclusion'])->toBe(['changed' => true])
         ->and($noteLog->changes['body'])->toBe('[excluded]')
         ->and($followUpLog->changes['title'])->toBe('[excluded]');
+});
+
+it('does not let a participant who withdraws promote anyone to general responsible', function () {
+    ['psico' => $psico, 'director' => $director, 'teacher' => $teacher, 'followUpId' => $id] = followUpScenario();
+
+    // Direction created it and is a plain participant.
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/scheduled-follow-ups/{$id}/withdraw", [
+        'reason' => 'Ya no me corresponde',
+        'new_general_responsible_id' => $teacher->id,
+    ])->assertJsonValidationErrors('new_general_responsible_id');
+
+    $followUp = ScheduledFollowUp::with('members')->findOrFail($id);
+    expect($followUp->members->filter->isGeneralResponsible()->pluck('user_id')->values()->all())->toBe([$psico->id])
+        ->and($followUp->memberFor($director)->isActive())->toBeTrue();
+});
+
+it('re-checks the invariants under the lock, rolling back the whole change', function () {
+    ['psico' => $psico, 'teacher' => $teacher, 'followUpId' => $id] = followUpScenario();
+    $workflow = app(FollowUpWorkflow::class);
+
+    // Loaded before someone else adds a pending stage: resolve must refuse.
+    $stale = ScheduledFollowUp::findOrFail($id);
+    $stageId = firstStageId($id);
+    FollowUpStage::query()->whereKey($stageId)->update(['status' => 'done']);
+    FollowUpStage::query()->create([
+        'school_id' => $stale->school_id,
+        'scheduled_follow_up_id' => $id,
+        'description' => 'Agregada en paralelo',
+        'responsible_id' => $teacher->id,
+        'due_date' => now()->addDay()->toDateString(),
+    ]);
+    expect(fn () => $workflow->resolve($stale, $psico, 'Listo'))
+        ->toThrow(AuthorizationException::class, 'Every stage must be closed before resolving.')
+        ->and(ScheduledFollowUp::findOrFail($id)->resolved)->toBeFalse();
+
+    // A stage closed meanwhile cannot be closed again.
+    $closed = FollowUpStage::findOrFail($stageId);
+    $closed->status = FollowUpStageStatus::Pending; // what the request saw
+    expect(fn () => $workflow->closeStage($closed, $psico, 'Otra vez'))
+        ->toThrow(AuthorizationException::class, 'This stage is no longer pending.');
+
+    // The only general responsible leaving without a successor (e.g. the
+    // other one withdrew at the same time) is refused and nothing changes.
+    expect(fn () => $workflow->withdraw(ScheduledFollowUp::findOrFail($id), $psico, 'Me voy', null))
+        ->toThrow(AuthorizationException::class, 'A follow-up needs at least one general responsible.');
+    expect(ScheduledFollowUp::with('members')->findOrFail($id)->memberFor($psico)->isGeneralResponsible())->toBeTrue()
+        ->and(FollowUpEvent::query()->where('type', 'withdrew')->exists())->toBeFalse();
+});
+
+it('does not re-notify the stage responsible when an edit sends the same responsible as a string', function () {
+    ['psico' => $psico, 'teacher' => $teacher, 'followUpId' => $id] = followUpScenario();
+    Sanctum::actingAs($psico);
+    $this->postJson("/api/v1/scheduled-follow-ups/{$id}/stages", [
+        'description' => 'x', 'responsible_id' => $teacher->id, 'due_date' => now()->addDay()->toDateString(),
+    ])->assertOk();
+    $stageId = FollowUpStage::query()->where('responsible_id', $teacher->id)->value('id');
+    expect($teacher->unreadNotifications()->count())->toBe(1);
+
+    $this->patchJson("/api/v1/follow-up-stages/{$stageId}", ['description' => 'y', 'responsible_id' => (string) $teacher->id])->assertOk();
+
+    expect($teacher->unreadNotifications()->count())->toBe(1)
+        ->and(FollowUpEvent::query()->where('type', 'stage_updated')->latest('id')->first()->data)
+        ->not->toHaveKey('responsible_from');
+});
+
+it('does not run more queries for the detail as stages are added', function () {
+    ['psico' => $psico, 'teacher' => $teacher, 'followUpId' => $id] = followUpScenario();
+    $url = "/api/v1/scheduled-follow-ups/{$id}";
+    Sanctum::actingAs($psico);
+    $this->postJson("{$url}/stages", ['description' => 'a', 'responsible_id' => $teacher->id, 'due_date' => now()->addDay()->toDateString()])->assertOk();
+
+    $countQueries = function () use ($url, $teacher): int {
+        Sanctum::actingAs($teacher->fresh());
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson($url)->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $before = $countQueries();
+    Sanctum::actingAs($psico);
+    foreach (range(1, 4) as $day) {
+        $this->postJson("{$url}/stages", ['description' => "e{$day}", 'responsible_id' => $teacher->id, 'due_date' => now()->addDays($day)->toDateString()])->assertOk();
+    }
+
+    expect($countQueries())->toBe($before);
+});
+
+it('shows a person who left the others as they were at that moment', function () {
+    ['psico' => $psico, 'director' => $director, 'teacher' => $teacher, 'followUpId' => $id] = followUpScenario();
+    $url = "/api/v1/scheduled-follow-ups/{$id}";
+    Sanctum::actingAs($psico);
+    $this->postJson("{$url}/participants", ['user_id' => $teacher->id])->assertOk();
+
+    Sanctum::actingAs($director);
+    $this->postJson("{$url}/withdraw", ['reason' => 'Primero yo'])->assertOk();
+
+    $this->travel(1)->minutes();
+    Sanctum::actingAs($teacher);
+    $this->postJson("{$url}/withdraw", ['reason' => 'Motivo posterior y sensible'])->assertOk();
+
+    Sanctum::actingAs($director);
+    $response = $this->getJson($url)->assertOk();
+    $members = collect($response->json('data.members'))->keyBy('user.id');
+    expect($members[$teacher->id]['active'])->toBeTrue()
+        ->and($members[$teacher->id]['withdrawal_reason'])->toBeNull()
+        ->and($members[$director->id]['active'])->toBeFalse()
+        ->and(collect($response->json('data.participants'))->pluck('id')->all())->toBe([$teacher->id])
+        ->and($response->getContent())->not->toContain('Motivo posterior');
+});
+
+it('indexes the foreign keys the detail loads by', function () {
+    $indexed = fn (string $table, string $column) => collect(Schema::getIndexes($table))
+        ->contains(fn (array $index) => ($index['columns'][0] ?? null) === $column);
+
+    expect($indexed('follow_up_stage_notes', 'follow_up_stage_id'))->toBeTrue()
+        ->and($indexed('follow_up_stages', 'parent_stage_id'))->toBeTrue()
+        ->and($indexed('follow_up_events', 'follow_up_stage_id'))->toBeTrue();
 });
