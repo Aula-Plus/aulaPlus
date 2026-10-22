@@ -4,6 +4,7 @@ use App\Enums\AIProposalStatus;
 use App\Enums\AIProposalType;
 use App\Jobs\GenerateAIProposalJob;
 use App\Models\AIProposal;
+use App\Models\ClassSession;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Subject;
@@ -297,4 +298,27 @@ it('lists the requested month even when today is past that month\'s last day', f
     expect($response->json('meta.month'))->toBe('2026-02')
         ->and($response->json('data'))->toHaveCount(1)
         ->and($response->json('data.0.id'))->toBe('event-'.$february->id);
+});
+
+it('keeps an applied unit proposal journey labelled as a unit, not as the sessions it seeded', function () {
+    [$school, $teacher, $group, , $director] = journeySchool();
+    $journeyId = (string) Str::uuid();
+    $step = fn (string $step, string $type, array $extra = []) => UsageEvent::factory()->create([
+        'school_id' => $school->id, 'user_id' => $teacher->id, 'event_type' => 'journey.'.$step,
+        'journey_id' => $journeyId, 'step' => $step, 'content_type' => $type, 'group_id' => $group->id,
+        'created_at' => now(), ...$extra,
+    ]);
+    $step('generation_requested', 'unit');
+    $step('generation_succeeded', 'unit');
+    $session = ClassSession::factory()->create(['school_id' => $school->id, 'group_id' => $group->id, 'title' => 'Sesión sembrada']);
+    $step('creation_confirmed', 'class_session', ['event_type' => 'class_session.created', 'content_id' => $session->id]);
+    Sanctum::actingAs($director);
+
+    $journey = $this->getJson(journeysUrl($school, $teacher))->assertOk()->json('data.0');
+
+    expect($journey['content_type'])->toBe('unit')
+        ->and($journey['confirmed'])->toBeTrue()
+        ->and($journey['title'])->toBeNull()
+        ->and($journey['content'])->toBeNull()
+        ->and($journey['group_name'])->toBe($group->name);
 });

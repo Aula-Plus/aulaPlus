@@ -118,8 +118,14 @@ class BuildTeacherJourneys
             default => null,
         };
 
-        $contentType = $confirmation?->content_type ?? $steps->first()->content_type;
-        $content = $confirmation === null ? null : $this->contentFor($confirmation, $contents);
+        // The journey is about what its first step was about (the form's or
+        // the AI proposal's type). Applying a unit proposal confirms the
+        // class sessions it seeds, not a unit: such a journey stays a unit
+        // one and links/titles none of those sessions as if it were them.
+        $contentType = $steps->first()->content_type;
+        $content = $confirmation === null || $confirmation->content_type !== $contentType
+            ? null
+            : $this->contentFor($confirmation, $contents);
 
         $groupId = $steps->pluck('group_id')->filter()->first();
         $groupName = $content?->getRelationValue('group')?->name
