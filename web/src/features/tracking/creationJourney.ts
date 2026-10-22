@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { api } from "@/lib/api"
 import type { JourneyContentType } from "@/types"
 
@@ -68,6 +68,10 @@ export function useCreationJourney(contentType: JourneyContentType, groupId?: nu
   const restart = useCallback(() => {
     journey.current = null
   }, [])
+
+  // The same page can switch to another group (route param) without
+  // remounting: that is a different form, so a different journey.
+  useEffect(() => restart, [contentType, groupId, restart])
 
   return { formOpened, fillingStarted, journeyId, restart }
 }
