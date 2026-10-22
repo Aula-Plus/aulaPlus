@@ -77,7 +77,7 @@ class StudentController extends Controller
     }
 
     /**
-     * Class membership is a pivot (no model event), so the change history
+     * Group membership is a pivot (no model event), so the change history
      * (StudentFileHistory) is written here. Group names are not sensitive.
      */
     private function recordGroupChange(Student $student, ?int $fromGroupId, int $toGroupId): void

@@ -12,7 +12,7 @@ use App\Support\StudentFileHistory;
  */
 enum StudentFileSection: string
 {
-    /** Basic record: name, photo, birth date, enrollment year, AT flag, class. */
+    /** Basic record: name, photo, birth date, enrollment year, AT flag, group. */
     case StudentData = 'student_data';
 
     /** Team-facing summary of the technical report (psychopedagogy writes it). */

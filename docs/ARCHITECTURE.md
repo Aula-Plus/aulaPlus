@@ -123,8 +123,12 @@ no escribe nada (cubierto por test).
   `section` (`App\Enums\StudentFileSection`), `actor_role` (el rol con el que
   actuó) y `details` (valores legibles). Un update que toca varias secciones (p.
   ej. el formulario del alumno) se divide en una fila por sección. Cambios sólo
-  de pivote (clase del alumno, vínculo ajuste↔barrera) se registran con
-  `StudentFileHistory::recordManual()` desde su controller.
+  de pivote (grupo del alumno, vínculo ajuste↔barrera, categorías de una
+  observación) se registran con `StudentFileHistory::recordManual()` desde su
+  controller. Las categorías de una observación nueva van en su entrada de
+  alta; si cambian después (hoy: al borrar una categoría, que se la quita a
+  sus observaciones) queda una modificación antes → después
+  (`recordCommentCategoriesChange()`).
 - **Secciones:** `student_data`, `summary`, `learning_profile`, `documents`,
   `accommodations` (incl. desactivación por evaluación), `barriers` (incl.
   vínculos), `observations`, `reports`, `follow_ups`, `alerts`.
@@ -141,7 +145,9 @@ no escribe nada (cubierto por test).
   `Comment::isVisibleTo()` para observaciones, la Policy `view` del modelo para
   el resto, `viewClinicalProfile` para perfil/documentos). **Si no la pasa, la
   entrada se oculta entera** (no se devuelve ni la metadata), igual que en el
-  listado original.
+  listado original. Ese chequeo recorre sólo las columnas de metadata de todo
+  el historial del alumno (índice `student_id, id`); `changes`/`details` se
+  leen y descifran sólo para la página devuelta.
 - Filas anteriores a esta feature: se backfillean `student_id`/`section` cuando
   el registro dueño existe; sin `details`, se muestran desde `changes` (los
   campos sensibles aparecen como "contenido no disponible").

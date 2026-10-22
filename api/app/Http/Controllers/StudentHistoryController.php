@@ -38,7 +38,7 @@ class StudentHistoryController extends Controller
 
         $page = max(1, (int) $request->validated('page', 1));
         $paginator = new LengthAwarePaginator(
-            $filtered->forPage($page, self::PER_PAGE)->values(),
+            $history->withContent($filtered->forPage($page, self::PER_PAGE)->values()),
             $filtered->count(),
             self::PER_PAGE,
             $page,

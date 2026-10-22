@@ -29,22 +29,32 @@ use Illuminate\Support\Facades\Gate;
  *
  * The visibility check runs in PHP (it reuses the model methods instead of
  * re-encoding them in SQL), so filters and pagination are applied after it,
- * over one student's history — a bounded set.
+ * over one student's history. That pass only reads the narrow metadata
+ * columns (no `details`/`changes` payloads, which grow with every edit and
+ * would each need decrypting); the content is fetched afterwards for the
+ * page actually returned ({@see self::withContent()}).
  */
 class StudentChangeHistory
 {
+    /** What the visibility check, the filters and the "Persona" list need. */
+    private const METADATA_COLUMNS = [
+        'id', 'school_id', 'auditable_type', 'auditable_id', 'student_id', 'section',
+        'action', 'user_id', 'actor_role', 'origin', 'created_at',
+    ];
+
     /** @var array<string, bool> */
     private array $decisions = [];
 
     /**
      * Every entry of `$student`'s history that `$viewer` may see, newest
-     * first.
+     * first — metadata only (see the class docblock).
      *
      * @return Collection<int, AuditLog>
      */
     public function visibleEntries(Student $student, User $viewer): Collection
     {
         $rows = AuditLog::query()
+            ->select(self::METADATA_COLUMNS)
             ->where('student_id', $student->id)
             ->whereNotNull('section')
             ->with('user:id,name')
@@ -55,6 +65,31 @@ class StudentChangeHistory
 
         return $rows
             ->filter(fn (AuditLog $row): bool => $this->canView($viewer, $student, $row, $subjects))
+            ->values();
+    }
+
+    /**
+     * The full rows (with their `changes`/`details`) of a page of entries
+     * already cleared by {@see self::visibleEntries()}, in the same order.
+     *
+     * @param  Collection<int, AuditLog>  $entries
+     * @return Collection<int, AuditLog>
+     */
+    public function withContent(Collection $entries): Collection
+    {
+        if ($entries->isEmpty()) {
+            return $entries;
+        }
+
+        $full = AuditLog::query()
+            ->with('user:id,name')
+            ->whereKey($entries->modelKeys())
+            ->get()
+            ->keyBy('id');
+
+        return $entries
+            ->map(fn (AuditLog $entry): ?AuditLog => $full->get($entry->id))
+            ->filter()
             ->values();
     }
 
@@ -144,9 +179,24 @@ class StudentChangeHistory
 
             $subjects[$class] = $query->whereKey($group->pluck('auditable_id')->unique()->all())->get()->keyBy(fn (Model $m) => $m->getKey())->all();
 
-            foreach ($group->where('action', AuditAction::Deleted) as $deleted) {
-                if (! isset($subjects[$class][$deleted->auditable_id]) && is_array($deleted->changes)) {
-                    $subjects[$class][$deleted->auditable_id] = (new $class)->forceFill($deleted->changes);
+            $gone = $group
+                ->where('action', AuditAction::Deleted)
+                ->reject(fn (AuditLog $row): bool => isset($subjects[$class][$row->auditable_id]));
+
+            if ($gone->isEmpty()) {
+                continue;
+            }
+
+            // Only these rows need their snapshot (`changes` is not part of
+            // the metadata pass).
+            $snapshots = AuditLog::query()->whereKey($gone->modelKeys())->pluck('changes', 'id');
+
+            foreach ($gone as $deleted) {
+                $snapshot = $snapshots[$deleted->id] ?? null;
+                $snapshot = is_string($snapshot) ? json_decode($snapshot, true) : $snapshot;
+
+                if (is_array($snapshot)) {
+                    $subjects[$class][$deleted->auditable_id] = (new $class)->forceFill($snapshot);
                 }
             }
         }

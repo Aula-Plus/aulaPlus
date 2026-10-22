@@ -32,8 +32,8 @@ use Illuminate\Support\Str;
  * created/updated/deleted row; for a model registered here it hands the row
  * over to {@see self::recordModelChange()}, which annotates it with
  * `student_id`, `section`, `actor_role` and the readable `details` (encrypted
- * at rest). Pivot-only changes that fire no model event (class membership,
- * barrier↔accommodation links) are recorded with {@see self::recordManual()}
+ * at rest). Pivot-only changes that fire no model event (group membership,
+ * barrier↔accommodation links, an observation's categories) are recorded with {@see self::recordManual()}
  * from the controllers that make them.
  *
  * Only changes are recorded — reads (opening the file, switching tabs,
@@ -77,7 +77,8 @@ class StudentFileHistory
             Accommodation::class => $all(StudentFileSection::Accommodations, ['type', 'category', 'description', 'focus_area', 'active', 'requires_external_approval', 'approved', 'llm_rule']),
             AccommodationInstanceOverride::class => $all(StudentFileSection::Accommodations, ['assessment_id', 'reason']),
             Barrier::class => $all(StudentFileSection::Barriers, ['description', 'coping_strategy', 'active', 'accommodation', 'validated']),
-            Comment::class => $all(StudentFileSection::Observations, ['content', 'visible_to', 'author_only']),
+            // `categories` is a pivot, not a column: see categoryNamesOf().
+            Comment::class => $all(StudentFileSection::Observations, ['content', 'visible_to', 'author_only', 'categories']),
             TechnicalReport::class => $all(StudentFileSection::Reports, ['summary', 'attachments', 'document_url']),
             ScheduledFollowUp::class => $all(StudentFileSection::FollowUps, ['description', 'due_date', 'resolved', 'resolution_note']),
             Alert::class => $all(StudentFileSection::Alerts, ['type', 'severity', 'description', 'outcome', 'due_on', 'resolved']),
@@ -151,13 +152,10 @@ class StudentFileHistory
             // What was added/removed: the fields that held a value (empty
             // ones would only be noise in the history).
             $values = [];
-            foreach (array_keys($fields) as $field) {
-                if (array_key_exists($field, $model->getAttributes()) && $model->getAttribute($field) !== null) {
-                    $value = self::normalize($model, $field, $model->getAttribute($field));
-                    $values[] = $action === AuditAction::Created
-                        ? self::entry($field, null, $value)
-                        : self::entry($field, $value, null);
-                }
+            foreach (self::presentValues($model, array_keys($fields)) as $field => $value) {
+                $values[] = $action === AuditAction::Created
+                    ? self::entry($field, null, $value)
+                    : self::entry($field, $value, null);
             }
 
             AuditLog::create([
@@ -243,6 +241,50 @@ class StudentFileHistory
     }
 
     /**
+     * Record a change to an observation's categories (ClickUp 86e3qkwmc,
+     * thread of 15/10: "que se registre como una modificación más"). The
+     * categories are a pivot, so no model event fires: whoever changes them
+     * calls this with the category names before and after. A comment that is
+     * not on a student, or whose categories did not actually change, writes
+     * nothing.
+     *
+     * @param  list<string>  $before
+     * @param  list<string>  $after
+     */
+    public static function recordCommentCategoriesChange(Comment $comment, array $before, array $after): void
+    {
+        $studentId = self::studentIdFor($comment);
+
+        if ($studentId === null || self::sortedNames($before) === self::sortedNames($after)) {
+            return;
+        }
+
+        self::recordManual(
+            $comment,
+            $studentId,
+            StudentFileSection::Observations,
+            AuditAction::Updated,
+            self::entityFor(Comment::class),
+            self::labelFor($comment),
+            [['categories', $before, $after]],
+        );
+    }
+
+    /**
+     * Category names of a comment, in the order the school lists them.
+     *
+     * @return list<string>
+     */
+    public static function categoryNamesOf(Comment $comment): array
+    {
+        return $comment->categories
+            ->sortBy([['position', 'asc'], ['name', 'asc']])
+            ->pluck('name')
+            ->values()
+            ->all();
+    }
+
+    /**
      * The audit_logs columns common to every row: tenant, subject, actor
      * (and the role they acted with), origin and timestamp.
      *
@@ -282,6 +324,50 @@ class StudentFileHistory
         };
 
         return self::truncate($label);
+    }
+
+    /**
+     * The displayable fields of `$model` that hold a value — what an addition
+     * added or a removal removed (empty ones would only be noise).
+     *
+     * An observation's categories are a pivot, so they are only included when
+     * the relation is already loaded: the comment controllers load it before
+     * saving, which is how a new observation's entry carries its categories
+     * (the pivot rows themselves are written right after the `created` event).
+     *
+     * @param  list<string>  $fields
+     * @return array<string, mixed>
+     */
+    private static function presentValues(Model $model, array $fields): array
+    {
+        $values = [];
+
+        foreach ($fields as $field) {
+            if ($field === 'categories' && $model instanceof Comment) {
+                if ($model->relationLoaded('categories') && $model->categories->isNotEmpty()) {
+                    $values[$field] = self::categoryNamesOf($model);
+                }
+
+                continue;
+            }
+
+            if (array_key_exists($field, $model->getAttributes()) && $model->getAttribute($field) !== null) {
+                $values[$field] = self::normalize($model, $field, $model->getAttribute($field));
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param  list<string>  $names
+     * @return list<string>
+     */
+    private static function sortedNames(array $names): array
+    {
+        sort($names);
+
+        return $names;
     }
 
     /**

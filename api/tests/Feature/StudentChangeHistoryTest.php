@@ -4,6 +4,7 @@ use App\Models\Accommodation;
 use App\Models\AuditLog;
 use App\Models\Barrier;
 use App\Models\Comment;
+use App\Models\CommentCategory;
 use App\Models\Group;
 use App\Models\ScheduledFollowUp;
 use App\Models\School;
@@ -356,4 +357,94 @@ it('still shows entries written before the history existed, without their redact
             ['field' => 'description', 'redacted' => true],
             ['field' => 'approved', 'before' => null, 'after' => true],
         ]);
+});
+
+it('lists an observation’s categories in its alta entry', function () {
+    Sanctum::actingAs($this->psychopedagogue);
+    $social = CommentCategory::create(['name' => 'Recreos', 'position' => 20]);
+    $academic = CommentCategory::create(['name' => 'Lectura', 'position' => 10]);
+
+    $this->postJson("/api/v1/students/{$this->student->id}/comments", [
+        'content' => 'Trabaja mejor en grupo',
+        'category_ids' => [$social->id, $academic->id],
+    ])->assertCreated()->assertJsonCount(2, 'data.categories');
+
+    Sanctum::actingAs($this->director);
+    $created = entriesOf($this->student, ['section' => 'observations'])[0];
+
+    expect($created['action'])->toBe('created')
+        ->and(collect($created['changes'])->firstWhere('field', 'categories'))
+        ->toBe(['field' => 'categories', 'before' => null, 'after' => ['Lectura', 'Recreos']]);
+});
+
+it('records a change of an observation’s categories as a modification, with who, role and before → after', function () {
+    Sanctum::actingAs($this->psychopedagogue);
+    $social = CommentCategory::create(['name' => 'Recreos', 'position' => 10]);
+    $family = CommentCategory::create(['name' => 'Mudanza', 'position' => 20]);
+    $commentId = $this->postJson("/api/v1/students/{$this->student->id}/comments", [
+        'content' => 'Habla de la mudanza', 'category_ids' => [$social->id, $family->id],
+    ])->assertCreated()->json('data.id');
+
+    // A comment on a group is not part of any student's file.
+    $group = Group::factory()->create(['school_id' => $this->school->id]);
+    $groupComment = Comment::factory()->create([
+        'school_id' => $this->school->id, 'commentable_type' => Group::class, 'commentable_id' => $group->id,
+        'author_id' => $this->psychopedagogue->id,
+    ]);
+    $groupComment->categories()->attach($family->id);
+
+    Sanctum::actingAs($this->director);
+    $this->deleteJson("/api/v1/comment-categories/{$family->id}")->assertNoContent();
+
+    $entries = entriesOf($this->student, ['section' => 'observations', 'action' => 'updated']);
+
+    expect($entries)->toHaveCount(1)
+        ->and($entries[0]['element'])->toMatchArray(['type' => 'comment', 'id' => $commentId, 'label' => 'Habla de la mudanza'])
+        ->and($entries[0]['actor'])->toBe(['id' => $this->director->id, 'name' => 'Dora Directora', 'role' => 'director'])
+        ->and($entries[0]['changes'])->toBe([['field' => 'categories', 'before' => ['Recreos', 'Mudanza'], 'after' => ['Recreos']]]);
+
+    expect(AuditLog::where('auditable_type', Comment::class)->where('auditable_id', $groupComment->id)->where('action', 'updated')->exists())->toBeFalse();
+});
+
+it('keeps a restricted observation’s category change out of the director’s history', function () {
+    Sanctum::actingAs($this->psychopedagogue);
+    $family = CommentCategory::create(['name' => 'Mudanza', 'position' => 10]);
+    $this->postJson("/api/v1/students/{$this->student->id}/comments", [
+        'content' => 'Reservada', 'visible_to' => ['psychopedagogue'], 'category_ids' => [$family->id],
+    ])->assertCreated();
+
+    Sanctum::actingAs($this->director);
+    $this->deleteJson("/api/v1/comment-categories/{$family->id}")->assertNoContent();
+
+    expect(entriesOf($this->student, ['section' => 'observations']))->toBe([]);
+
+    Sanctum::actingAs($this->psychopedagogue);
+    expect(collect(entriesOf($this->student, ['section' => 'observations']))->pluck('action')->all())->toBe(['updated', 'created']);
+});
+
+it('reads only metadata for the whole history and the content of the returned page only', function () {
+    Sanctum::actingAs($this->psychopedagogue);
+    foreach (range(1, 30) as $i) {
+        Barrier::factory()->create(['student_id' => $this->student->id, 'school_id' => $this->school->id]);
+    }
+
+    Sanctum::actingAs($this->director);
+    $queries = [];
+    DB::listen(function ($query) use (&$queries) {
+        if (str_contains($query->sql, 'audit_logs')) {
+            $queries[] = $query;
+        }
+    });
+
+    $response = historyOf($this->student)->assertOk();
+    expect($response->json('data'))->toHaveCount(20)
+        ->and($response->json('meta.total'))->toBe(31);
+
+    $withContent = collect($queries)->filter(fn ($q) => str_contains($q->sql, 'select *'));
+
+    // One full-row read, limited to the 20 ids of the page.
+    expect($withContent)->toHaveCount(1)
+        ->and($withContent->first()->sql)->not->toContain('student_id')
+        ->and(preg_match('/"id" in \(([^)]*)\)/', $withContent->first()->sql, $ids))->toBe(1)
+        ->and(explode(',', $ids[1]))->toHaveCount(20);
 });
