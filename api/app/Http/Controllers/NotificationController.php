@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Notifications\AlertOverdueNotification;
 use App\Notifications\FollowUpAssignedNotification;
+use App\Notifications\ScreeningDesignChangedNotification;
+use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,12 +63,15 @@ class NotificationController extends Controller
 
     /**
      * The notice types "Mis seguimientos" renders: a follow-up assigned to
-     * you, and an alert you have that reached its deadline without a way out
-     * («Llegó a su fecha sin salida», ClickUp 86e3jpzdp review of 14/10).
+     * you, an alert you have that reached its deadline without a way out
+     * («Llegó a su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), and
+     * the screening design changed/reverted notices (screen 08).
      */
     public const LISTED_TYPES = [
         FollowUpAssignedNotification::class,
         AlertOverdueNotification::class,
+        ScreeningDesignChangedNotification::class,
+        ScreeningDesignRevertedNotification::class,
     ];
 
     /**

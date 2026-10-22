@@ -19,6 +19,8 @@ export interface AssessmentInput {
   administered_at: string
   purpose?: string | null
   duration_minutes?: number | null
+  /** The creation journey this save confirms (adoption panel; ids only). */
+  journey_id?: string
 }
 
 /** One row of the results upsert batch. */

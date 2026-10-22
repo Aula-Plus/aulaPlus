@@ -93,15 +93,31 @@ export function FollowUpsSection() {
                       Ver alertas
                     </Link>
                   </span>
-                ) : (
+                ) : notice.data.type === "follow_up_assigned" ? (
                   <span>
                     Te asignaron un seguimiento
-                    {notice.data.follow_up_id !== undefined && studentNameByFollowUp.get(notice.data.follow_up_id)
+                    {studentNameByFollowUp.get(notice.data.follow_up_id)
                       ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
                       : ""}{" "}
                     con fecha {formatShortDate(notice.data.due_date)}.{" "}
                     <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
                       Ver ficha del alumno
+                    </Link>
+                  </span>
+                ) : (
+                  <span>
+                    {notice.data.type === "screening_design_changed"
+                      ? "Cambiaron las franjas"
+                      : "Dirección volvió atrás tu cambio en las franjas"}
+                    {notice.data.screening_test_type_name
+                      ? ` del screening «${notice.data.screening_test_type_name}»`
+                      : " de un screening"}
+                    .{" "}
+                    <Link
+                      className="underline"
+                      to={`/pruebas-de-sondeo/tipos?abrir=${notice.data.screening_test_type_id}`}
+                    >
+                      Ver diseño
                     </Link>
                   </span>
                 )}

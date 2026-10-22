@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AssessmentsPage } from "./AssessmentsPage"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as trackingApi from "@/features/tracking/trackingApi"
 import * as subjectsApi from "@/features/subjects/subjectsApi"
 import * as assessmentsApi from "./assessmentsApi"
+import { api } from "@/lib/api"
 import type { Assessment, GroupTeacherAssignment, GroupTracking, Role } from "@/types"
 
 /** One teacher-subject assignment for the authed teacher (id 1) in the group. */
@@ -70,9 +71,71 @@ function renderPage({ role = "teacher" as Role } = {}) {
   )
 }
 
+interface ReportedStep {
+  journey_id: string
+  step: string
+  content_type: string
+}
+
+/** The creation-journey steps the form reported (POST /usage/journey-steps). */
+function journeySteps(post: { mock: { calls: unknown[][] } }): ReportedStep[] {
+  return post.mock.calls
+    .filter(([url]) => url === "/api/v1/usage/journey-steps")
+    .map(([, body]) => body as ReportedStep)
+}
+
 describe("AssessmentsPage", () => {
+  beforeEach(() => {
+    vi.spyOn(api, "post").mockResolvedValue({ data: null })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it("reports form_opened and filling_started once per journey and links the save to it", async () => {
+    const post = vi.mocked(api.post)
+    vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([1]))
+    vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([])
+    vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
+    const createAssessment = vi
+      .spyOn(assessmentsApi, "createAssessment")
+      .mockResolvedValue(assessment())
+
+    renderPage()
+
+    // Nothing is reported just by landing on the page.
+    await screen.findByRole("button", { name: /crear evaluación/i })
+    expect(journeySteps(post)).toEqual([])
+
+    await userEvent.click(screen.getByLabelText(/propósito/i))
+    await userEvent.type(screen.getByLabelText(/propósito/i), "Repaso")
+    await userEvent.click(screen.getByLabelText(/materia/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Matemática" }))
+
+    const steps = journeySteps(post)
+    expect(steps.map((step) => step.step)).toEqual(["form_opened", "filling_started"])
+    expect(steps.every((step) => step.content_type === "assessment")).toBe(true)
+    const journeyId = steps[0].journey_id
+    expect(journeyId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(steps[1].journey_id).toBe(journeyId)
+    // Only ids and step names travel — never what was typed.
+    expect(JSON.stringify(steps)).not.toContain("Repaso")
+
+    await userEvent.click(screen.getByRole("button", { name: /crear evaluación/i }))
+    await waitFor(() =>
+      expect(createAssessment).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ journey_id: journeyId }),
+      ),
+    )
+
+    // After saving, the next creation is a new journey.
+    await userEvent.type(screen.getByLabelText(/propósito/i), "Otra")
+    await waitFor(() => expect(journeySteps(post)).toHaveLength(4))
+    const next = journeySteps(post).slice(2)
+    expect(next.map((step) => step.step)).toEqual(["form_opened", "filling_started"])
+    expect(next[0].journey_id).not.toBe(journeyId)
   })
 
   it("submits the correct payload when creating an assessment", async () => {
@@ -102,6 +165,7 @@ describe("AssessmentsPage", () => {
         subject_id: 3,
         administered_at: "2026-09-12",
         purpose: "Parcial de lengua",
+        journey_id: expect.any(String),
       }),
     )
   })

@@ -29,6 +29,9 @@ import { ALERT_RULE_PRESETS, describeAlertRule } from "./alertRuleText"
 
 const RECIPIENTS: AlertRecipient[] = ["teacher", "psychopedagogue", "director"]
 
+const ONLY_DIRECTOR_WARNING =
+  "Esta alerta llegará solo a Dirección. El docente y Psicopedagogía no recibirán este aviso."
+
 /** On this screen the performance type reads as the alert's product name. */
 const routingTypeLabels: Partial<Record<AlertType, string>> = {
   performance: "Desempeño bajo sostenido",
@@ -207,6 +210,9 @@ function RoutingRow({
   }
 
   const label = routingTypeLabels[entry.type] ?? alertTypeLabels[entry.type]
+  // Direction as the only recipient is allowed, but the school is told who
+  // stops hearing about it before saving (ClickUp 86e3qkyrn).
+  const onlyDirector = selected.length === 1 && selected[0] === "director"
 
   return (
     <fieldset className="grid gap-3 rounded-md border p-4">
@@ -233,6 +239,11 @@ function RoutingRow({
       {selected.length === 0 && (
         <p className="text-sm text-destructive">Elegí al menos a quién le llega.</p>
       )}
+      {onlyDirector && (
+        <p role="status" className="rounded-md bg-warning-background px-3 py-2 text-sm text-warning">
+          {ONLY_DIRECTOR_WARNING}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -246,7 +257,7 @@ function RoutingRow({
             disabled={saving || selected.length === 0}
             onClick={save}
           >
-            {saving ? "Guardando…" : "Guardar"}
+            {saving ? "Guardando…" : onlyDirector ? "Guardar igual" : "Guardar"}
           </Button>
         </div>
       )}
@@ -438,7 +449,7 @@ export function AlertSettingsPage() {
         <CardContent className="grid gap-4">
           <p className="text-sm text-muted-foreground">
             «Docente de la materia» es solo quien dicta esa materia en el grupo del alumno. Dirección no
-            recibe las alertas nuevas salvo que lo elijas acá.
+            recibe las alertas nuevas salvo que la elijas acá, junto con otros o como único destino.
           </p>
           {routing.map((entry) => (
             <RoutingRow

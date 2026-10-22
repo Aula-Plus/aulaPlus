@@ -5,6 +5,7 @@ import {
   ClipboardList,
   GraduationCap,
   Eye,
+  FileText,
   MessageSquare,
   Home,
   TriangleAlert,
@@ -15,11 +16,11 @@ import {
 } from "lucide-react"
 import type { User } from "@/types"
 import {
-  canApproveScreeningTestDesign,
+  canEditScreeningTestDesign,
+  canManageAiReportSetting,
   canManageGradesVisibility,
   canManageAlertSettings,
   canManageCommentSettings,
-  canManageScreeningTests,
   canManageSubjects,
   canManageUsers,
   canViewAdoptionDashboard,
@@ -71,11 +72,11 @@ export function buildNavSections(
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
         // One screen for the alerts that reach the user and their own scheduled
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
-        // is unread follow-up notices only (not alerts); it goes away once read.
+        // is unread notices only (not alerts); it goes away once read.
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
-        // The screening-test design screen is for psychopedagogy (manage) and
-        // direction (approve) — docs/prompts/12 §4.
-        ...(canManageScreeningTests(user) || canApproveScreeningTestDesign(user)
+        // The screening design screen is for Psicopedagogía and Dirección,
+        // who both edit designs (screen 08).
+        ...(canEditScreeningTestDesign(user)
           ? [{ to: "/pruebas-de-sondeo/tipos", label: "Screenings", icon: ClipboardList }]
           : []),
         // Read-only subjects list for everyone but the director (who manages
@@ -100,6 +101,10 @@ export function buildNavSections(
         // Grade visibility for teachers is director-only.
         ...(canManageGradesVisibility(user)
           ? [{ to: "/ajustes/notas", label: "Visibilidad de notas", icon: Eye }]
+          : []),
+        // Switch for the AI reading of student reports: director-only.
+        ...(canManageAiReportSetting(user)
+          ? [{ to: "/ajustes/informes-ia", label: "IA en informes", icon: FileText }]
           : []),
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.

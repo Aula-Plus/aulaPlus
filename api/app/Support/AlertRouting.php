@@ -43,7 +43,27 @@ class AlertRouting
     }
 
     /**
-     * Every alert type with its effective recipients, for the settings screen.
+     * The alert types the school can route: only the ones something actually
+     * generates. `PlanningAttendance` is a placeholder nothing produces yet, so
+     * the school can't configure recipients for an alert that never happens
+     * (ClickUp 86e3qkyrn), and `EscalatedOverdue` is no longer created
+     * (86e3jpzdp). Add a type here once its generator exists.
+     *
+     * @return list<AlertType>
+     */
+    public static function configurableTypes(): array
+    {
+        return [AlertType::Performance];
+    }
+
+    public static function isConfigurable(AlertType $type): bool
+    {
+        return in_array($type, self::configurableTypes(), true);
+    }
+
+    /**
+     * Every configurable alert type with its effective recipients, for the
+     * settings screen.
      *
      * @return list<array{type: string, recipients: list<string>, is_default: bool}>
      */
@@ -56,18 +76,5 @@ class AlertRouting
             'recipients' => $settings->get($type->value)?->recipients ?? self::defaultFor($type),
             'is_default' => ! $settings->has($type->value),
         ], self::configurableTypes());
-    }
-
-    /**
-     * The alert types a school can route: every type that is still created.
-     *
-     * @return list<AlertType>
-     */
-    public static function configurableTypes(): array
-    {
-        return array_values(array_filter(
-            AlertType::cases(),
-            fn (AlertType $type) => $type !== AlertType::EscalatedOverdue,
-        ));
     }
 }

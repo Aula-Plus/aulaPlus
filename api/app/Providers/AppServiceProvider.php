@@ -23,6 +23,13 @@ class AppServiceProvider extends ServiceProvider
     public const AI_PROPOSAL_GENERATE_PER_HOUR = 20;
 
     /**
+     * Creation-journey steps reported by the browser (ClickUp 86e3qkxtc): at
+     * most two per create form opened, so this is generous for real use and
+     * still caps a misbehaving client.
+     */
+    public const USAGE_JOURNEY_STEPS_PER_MINUTE = 30;
+
+    /**
      * Register any application services.
      */
     public function register(): void
@@ -62,6 +69,10 @@ class AppServiceProvider extends ServiceProvider
         // .env); the strict default applies whenever the env var is unset.
         RateLimiter::for('login', fn ($request) => Limit::perMinute((int) config('auth.login_max_attempts'))
             ->by($request->ip()));
+
+        // Browser-reported creation-journey steps, per user.
+        RateLimiter::for('usage-journey-steps', fn ($request) => Limit::perMinute(self::USAGE_JOURNEY_STEPS_PER_MINUTE)
+            ->by($request->user()->id));
 
         // AI-assistant generation limit: per school (cost control). Applied only
         // to the generation route, never to poll/apply/discard.

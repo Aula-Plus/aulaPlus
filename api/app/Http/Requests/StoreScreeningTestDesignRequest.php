@@ -2,18 +2,21 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesScreeningBands;
 use App\Models\ScreeningTestDesign;
 use App\Models\ScreeningTestType;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 /**
- * Validates POST /screening-test-types/{type}/designs. Authorization delegates
- * to ScreeningTestDesignPolicy::create (psychopedagogy only, same school as
- * the route type). `cutoff_high` must be >= `cutoff_low` so the yellow band is
- * well-formed.
+ * Validates POST /screening-test-types/{type}/designs (screen 08). Authorization
+ * delegates to ScreeningTestDesignPolicy::create (Psicopedagogía or Dirección,
+ * same school as the route type). `reason` is the optional "Motivo".
  */
 class StoreScreeningTestDesignRequest extends FormRequest
 {
+    use ValidatesScreeningBands;
+
     public function authorize(): bool
     {
         return $this->user()->can('create', [ScreeningTestDesign::class, $this->type()]);
@@ -25,12 +28,14 @@ class StoreScreeningTestDesignRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'cutoff_low' => ['required', 'numeric'],
-            'cutoff_high' => ['required', 'numeric', 'gte:cutoff_low'],
-            'meaning_red' => ['required', 'string'],
-            'meaning_yellow' => ['required', 'string'],
-            'meaning_green' => ['required', 'string'],
+            ...$this->bandRules(),
+            'reason' => ['nullable', 'string', 'max:500'],
         ];
+    }
+
+    public function after(): array
+    {
+        return [fn (Validator $validator) => $this->validateBandOrder($validator)];
     }
 
     protected function type(): ScreeningTestType

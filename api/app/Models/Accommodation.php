@@ -326,8 +326,18 @@ class Accommodation extends Model
 
     public function isVisibleTo(User $user): bool
     {
+        // A hard-deleted record rebuilt from its audit snapshot (the student
+        // file history) can't be checked against the DB, and its subject
+        // scope went with it: only school-wide roles may still see it.
+        if (! $this->exists) {
+            return $user->school_id === $this->school_id
+                && $user->hasAnyRole(Role::schoolWideValues());
+        }
+
+        // withTrashed: visibility is about who may see the record, not whether
+        // it's still in force — the file history checks soft-deleted ones too.
         return $user->school_id === $this->school_id
-            && static::query()->whereKey($this->getKey())->visibleTo($user)->exists();
+            && static::query()->withTrashed()->whereKey($this->getKey())->visibleTo($user)->exists();
     }
 
     public function barriers(): BelongsToMany

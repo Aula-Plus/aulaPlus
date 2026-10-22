@@ -24,14 +24,15 @@ function design(typeId: number): ScreeningTestDesign {
   return {
     id: typeId * 10,
     screening_test_type_id: typeId,
-    cutoff_low: 4,
-    cutoff_high: 7,
-    meaning_red: "r",
-    meaning_yellow: "y",
-    meaning_green: "g",
+    bands: [
+      { name: "Bajo", color: "red", max: 4, meaning: "r" },
+      { name: "Alto", color: "green", max: null, meaning: "g" },
+    ],
+    reason: null,
     approved: true,
-    approved_by_id: 9,
     created_by_id: 2,
+    reverted_at: null,
+    reverted_by_id: null,
   }
 }
 
@@ -40,9 +41,14 @@ function type(id: number, name: string, withDesign: boolean): ScreeningTestType 
     id,
     name,
     area: null,
+    levels: [],
+    frequency: null,
+    frequency_years: null,
+    teacher_visible: false,
     active: true,
     created_by_id: 2,
     current_design: withDesign ? design(id) : null,
+    previous_design: null,
   }
 }
 
@@ -80,9 +86,9 @@ describe("ScreeningTestApplicationPage", () => {
 
     renderPage()
 
-    const trigger = await screen.findByLabelText(/tipo de prueba/i)
+    const trigger = await screen.findByLabelText(/^screening$/i)
     // Nothing selected yet: the trigger shows the placeholder.
-    expect(within(trigger).getByText("Elegí un tipo…")).toBeInTheDocument()
+    expect(within(trigger).getByText("Elegí un screening…")).toBeInTheDocument()
     await userEvent.click(trigger)
     // Only the applicable type is offered; the design-less type is excluded.
     expect(await screen.findByRole("button", { name: "Comprensión lectora" })).toBeInTheDocument()
@@ -107,7 +113,7 @@ describe("ScreeningTestApplicationPage", () => {
 
     renderPage()
 
-    await userEvent.click(await screen.findByLabelText(/tipo de prueba/i))
+    await userEvent.click(await screen.findByLabelText(/^screening$/i))
     await userEvent.click(await screen.findByRole("button", { name: "Comprensión lectora" }))
     const dateInput = screen.getByLabelText(/fecha/i)
     await userEvent.clear(dateInput)
