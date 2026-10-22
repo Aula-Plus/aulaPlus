@@ -13,9 +13,11 @@ use Laravel\Sanctum\Sanctum;
  */
 it('lets a staff member create an accommodation with a category', function () {
     $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
+    // Psychopedagogy creates directly (direction proposes instead — its
+    // circuit is covered by AccommodationProposalTest).
+    $psycho = User::factory()->forSchool($school)->psychopedagogue()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
-    Sanctum::actingAs($director);
+    Sanctum::actingAs($psycho);
 
     $response = $this->postJson("/api/v1/students/{$student->id}/accommodations", [
         'category' => 'criteria',
@@ -23,9 +25,6 @@ it('lets a staff member create an accommodation with a category', function () {
         'description' => 'La ortografía no puntúa en Idioma Español.',
         'focus_area' => 'literacy',
         'starts_on' => '2026-04-02',
-        // Direction proposes: it picks the review deadline and reviewers.
-        'review_due_date' => now()->addWeek()->toDateString(),
-        'review_recipients' => 'role',
     ])->assertCreated();
 
     $response->assertJsonPath('data.category', 'criteria')
@@ -35,7 +34,7 @@ it('lets a staff member create an accommodation with a category', function () {
         'student_id' => $student->id,
         'category' => 'criteria',
         'school_id' => $school->id,
-        'created_by_id' => $director->id,
+        'created_by_id' => $psycho->id,
     ]);
 });
 

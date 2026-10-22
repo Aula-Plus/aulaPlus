@@ -169,6 +169,40 @@ class Accommodation extends Model
     }
 
     /**
+     * When it was activated: when it was created, or — for a direction
+     * proposal — when psychopedagogy confirmed it (it was not an accommodation
+     * before that). Null while it is an unconfirmed proposal.
+     */
+    public function activatedAt(): ?CarbonInterface
+    {
+        return match (true) {
+            $this->review_status === null => $this->created_at,
+            $this->review_status === AccommodationReviewStatus::Confirmed => $this->reviewed_at,
+            default => null,
+        };
+    }
+
+    /**
+     * Query side of {@see self::activatedAt()}: activated within the given
+     * (inclusive, by calendar day) bounds; either bound may be null.
+     */
+    public function scopeActivatedBetween(Builder $query, mixed $from, mixed $to): Builder
+    {
+        $within = fn (string $column) => fn (Builder $range) => $range
+            ->when($from, fn (Builder $bounded) => $bounded->whereDate("accommodations.{$column}", '>=', $from))
+            ->when($to, fn (Builder $bounded) => $bounded->whereDate("accommodations.{$column}", '<=', $to));
+
+        return $query->where(fn (Builder $activated) => $activated
+            ->where(fn (Builder $direct) => $direct
+                ->whereNull('accommodations.review_status')
+                ->where($within('created_at')))
+            ->orWhere(fn (Builder $confirmed) => $confirmed
+                ->where('accommodations.review_status', AccommodationReviewStatus::Confirmed->value)
+                ->whereNotNull('accommodations.reviewed_at')
+                ->where($within('reviewed_at'))));
+    }
+
+    /**
      * A direction proposal still under review (pending or returned).
      */
     public function isOpenProposal(): bool
@@ -305,6 +339,15 @@ class Accommodation extends Model
     public function reviewEvents(): HasMany
     {
         return $this->hasMany(AccommodationReviewEvent::class)->orderBy('id');
+    }
+
+    /**
+     * The latest step of a direction proposal — eager-load it on lists so the
+     * resource's `review_note` costs no query per row.
+     */
+    public function latestReviewEvent(): HasOne
+    {
+        return $this->hasOne(AccommodationReviewEvent::class)->latestOfMany('id');
     }
 
     /**

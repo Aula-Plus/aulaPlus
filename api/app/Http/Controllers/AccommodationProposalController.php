@@ -45,7 +45,8 @@ class AccommodationProposalController extends Controller
                 AccommodationReviewStatus::Withdrawn->value,
                 AccommodationReviewStatus::Rejected->value,
             ])
-            ->with('subjects')
+            // Everything AccommodationResource reads, so no query per row.
+            ->with(['subjects', 'proposedBy', 'reviewedBy', 'latestReviewEvent'])
             ->latest('id')
             ->get()
             ->sortBy(fn (Accommodation $proposal): int => $proposal->isOpenProposal() ? 0 : 1)

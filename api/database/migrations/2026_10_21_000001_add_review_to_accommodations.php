@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
  *   and who confirmed or rejected it, and when, are recorded by the server.
  * - accommodation_review_events: the back-and-forth of a proposal (submitted,
  *   edited, returned, resubmitted, confirmed, withdrawn, rejected) with the
- *   comment/reason given. `note` may hold sensitive content about a minor
+ *   comment/reason given and, for an edit, the names of the fields changed. `note` may hold sensitive content about a minor
  *   (CLAUDE.md rule 11): it is only returned to school-wide roles and never
  *   logged.
  * - scheduled_follow_ups.accommodation_id: the review task psychopedagogy gets
@@ -41,6 +41,9 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('action');
             $table->text('note')->nullable();
+            // Which fields an `edited` step changed (names only, never their
+            // content — CLAUDE.md rule 11): the history says who changed what.
+            $table->json('changed_fields')->nullable();
             $table->timestamp('created_at')->nullable();
 
             $table->index(['accommodation_id', 'id']);
@@ -49,12 +52,16 @@ return new class extends Migration
         Schema::table('scheduled_follow_ups', function (Blueprint $table) {
             $table->foreignId('accommodation_id')->nullable()->after('student_id')
                 ->constrained()->nullOnDelete();
+            // PostgreSQL does not index foreign keys on its own; the circuit
+            // looks the review task up by its proposal.
+            $table->index('accommodation_id');
         });
     }
 
     public function down(): void
     {
         Schema::table('scheduled_follow_ups', function (Blueprint $table) {
+            $table->dropIndex(['accommodation_id']);
             $table->dropConstrainedForeignId('accommodation_id');
         });
 

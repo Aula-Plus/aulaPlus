@@ -6,11 +6,15 @@ use App\Models\Group;
 use App\Models\ScheduledFollowUp;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\FollowUpAssignedNotification;
+use App\Services\Accommodations\AccommodationProposalWorkflow;
 use App\Support\Tenancy;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -421,4 +425,172 @@ it('lets only psychopedagogy write «Origen», and never shows it to a teacher',
     foreach ($chips as $chip) {
         expect($chip)->not->toHaveKey('origin');
     }
+});
+
+it('does not let a step overwrite one a concurrent request already took', function () {
+    ['director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
+    $proposal = proposeAs($director, $student);
+    // The copy route-model binding loaded before the other step committed.
+    $stale = Accommodation::query()->findOrFail($proposal->id);
+
+    // Meanwhile direction withdraws it.
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/withdraw", ['reason' => 'Ya no hace falta'])->assertOk();
+
+    expect(fn () => app(AccommodationProposalWorkflow::class)->confirm($stale, $psycho, null))
+        ->toThrow(ValidationException::class);
+
+    expect($proposal->refresh()->review_status)->toBe(AccommodationReviewStatus::Withdrawn)
+        ->and($proposal->isEffective())->toBeFalse()
+        ->and($proposal->reviewEvents()->pluck('action')->map->value->all())->toBe(['submitted', 'withdrawn']);
+});
+
+it('does not let a direction edit land on a proposal confirmed while it was in flight', function () {
+    ['director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
+    $proposal = proposeAs($director, $student);
+
+    // Psychopedagogy confirms it right after route-model binding loaded the
+    // (still pending) copy the director's request is authorized against.
+    $confirmedMeanwhile = false;
+    Accommodation::retrieved(function (Accommodation $retrieved) use (&$confirmedMeanwhile, $proposal, $psycho): void {
+        if ($confirmedMeanwhile || $retrieved->id !== $proposal->id) {
+            return;
+        }
+        $confirmedMeanwhile = true;
+        DB::table('accommodations')->where('id', $proposal->id)->update([
+            'review_status' => AccommodationReviewStatus::Confirmed->value,
+            'reviewed_by_id' => $psycho->id,
+            'reviewed_at' => now(),
+        ]);
+    });
+
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['type' => 'Cambiado por Dirección']))
+        ->assertForbidden();
+
+    expect($confirmedMeanwhile)->toBeTrue()
+        ->and($proposal->refresh()->type)->toBe('Más tiempo en escritos');
+});
+
+it('leaves «Vigente desde» of a proposal to psychopedagogy, on the server too', function () {
+    ['director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
+    Sanctum::actingAs($director);
+
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(
+        [...reviewRouting(), 'starts_on' => now()->addMonth()->toDateString()],
+    ))->assertUnprocessable()->assertJsonValidationErrors(['starts_on']);
+
+    $proposal = proposeAs($director, $student);
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['starts_on' => now()->addMonth()->toDateString()]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['starts_on']);
+
+    // Psychopedagogy may set it while reviewing.
+    Sanctum::actingAs($psycho);
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['starts_on' => '2026-11-02']))
+        ->assertOk()
+        ->assertJsonPath('data.starts_on', '2026-11-02');
+});
+
+it('does not let a teacher write «Origen»', function () {
+    ['teacher' => $teacher, 'student' => $student] = proposalScenario();
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(['origin' => 'Informe 2024']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['origin']);
+});
+
+it('refuses a proposal sent to the whole role when there is no active psychopedagogue', function () {
+    ['director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
+    $psycho->update(['disabled_at' => now()]);
+    Sanctum::actingAs($director);
+
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(reviewRouting()))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['review_recipients']);
+
+    expect(Accommodation::query()->count())->toBe(0)
+        ->and(ScheduledFollowUp::query()->count())->toBe(0);
+});
+
+it('records which fields each edit changed, and skips an edit that changed nothing', function () {
+    ['director' => $director, 'student' => $student] = proposalScenario();
+    Tenancy::useSchool($student->school);
+    $subject = Subject::factory()->create(['school_id' => $student->school_id]);
+    $proposal = proposeAs($director, $student);
+
+    // Same values: not a step of the history.
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload())->assertOk();
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload([
+        'description' => 'Solo en escritos de Matemática.',
+        'subject_ids' => [$subject->id],
+    ]))->assertOk();
+
+    $history = $this->getJson("/api/v1/accommodations/{$proposal->id}/proposal/history")
+        ->assertOk()
+        ->assertJsonPath('data.*.action', ['submitted', 'edited'])
+        ->assertJsonPath('data.1.changed_fields', ['description', 'subject_ids']);
+    // Names only, never the content.
+    expect($history->getContent())->not->toContain('Solo en escritos');
+});
+
+it('lists proposals with a fixed number of queries', function () {
+    ['director' => $director, 'psycho' => $psycho, 'student' => $student] = proposalScenario();
+
+    $countFor = function () use ($director, $student): int {
+        Sanctum::actingAs($director);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        test()->getJson("/api/v1/students/{$student->id}/accommodation-proposals")->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $returned = proposeAs($director, $student);
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/accommodations/{$returned->id}/proposal/return", ['note' => 'Revisar'])->assertOk();
+    $rejectOne = function (int $i) use ($director, $psycho, $student): void {
+        $more = proposeAs($director, $student, ['type' => "Otra {$i}"]);
+        Sanctum::actingAs($psycho);
+        test()->postJson("/api/v1/accommodations/{$more->id}/proposal/reject", ['reason' => 'No corresponde'])->assertOk();
+    };
+    $rejectOne(0);
+    $few = $countFor();
+
+    foreach (range(1, 3) as $i) {
+        $rejectOne($i);
+    }
+
+    expect($countFor())->toBe($few);
+    $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")
+        ->assertJsonCount(5, 'data')
+        ->assertJsonPath('data.0.review_note', 'Revisar')
+        ->assertJsonPath('data.0.proposed_by_name', 'Directora')
+        ->assertJsonPath('data.1.review_note', 'No corresponde')
+        ->assertJsonPath('data.1.reviewed_by_name', 'Ana Psico');
+});
+
+it('dates the activation of a confirmed proposal on its confirmation, not on its proposal', function () {
+    ['director' => $director, 'psycho' => $psycho, 'student' => $student, 'group' => $group] = proposalScenario();
+    $this->travelTo('2026-04-01 10:00:00');
+    $proposal = proposeAs($director, $student);
+    $this->travelTo('2026-04-08 10:00:00');
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/confirm")->assertOk();
+    $this->travelBack();
+
+    $groupActivations = collect($this->getJson("/api/v1/groups/{$group->id}/performance-timeline")->assertOk()->json('marks'))
+        ->where('type', 'accommodation_activated')
+        ->pluck('date')
+        ->values()
+        ->all();
+    expect($groupActivations)->toBe(['2026-04-08']);
+
+    $studentActivations = collect($this->getJson("/api/v1/students/{$student->id}/performance-timeline")->assertOk()->json('marks'))
+        ->where('type', 'accommodation_activated')
+        ->pluck('date')
+        ->map(fn (string $date) => substr($date, 0, 10))
+        ->values()
+        ->all();
+    expect($studentActivations)->toBe(['2026-04-08']);
 });

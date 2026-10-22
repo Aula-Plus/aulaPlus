@@ -148,17 +148,16 @@ class GroupProfileController extends Controller
      */
     protected function accommodationActivatedMarks(Collection $studentIds, $from, $to): array
     {
+        // Activated = created, or for a direction proposal confirmed by
+        // psychopedagogy; an unconfirmed one was never activated.
         $accommodations = Accommodation::query()
             ->whereIn('student_id', $studentIds)
-            // An unconfirmed direction proposal was never activated.
-            ->confirmed()
-            ->when($from, fn ($query) => $query->whereDate('created_at', '>=', $from))
-            ->when($to, fn ($query) => $query->whereDate('created_at', '<=', $to))
+            ->activatedBetween($from, $to)
             ->get();
 
         $marks = [];
 
-        foreach ($accommodations->groupBy(fn (Accommodation $a): string => $a->created_at->toDateString()) as $date => $onDate) {
+        foreach ($accommodations->groupBy(fn (Accommodation $a): string => $a->activatedAt()->toDateString()) as $date => $onDate) {
             foreach ($onDate->groupBy('type') as $type => $items) {
                 $marks[] = [
                     'type' => 'accommodation_activated',

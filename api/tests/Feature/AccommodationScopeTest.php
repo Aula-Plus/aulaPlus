@@ -201,8 +201,8 @@ it('lets psychopedagogy create an accommodation scoped to subjects and assessmen
 
 it('stores a general accommodation when no subjects or assessment types are sent', function () {
     ['school' => $school, 'lucia' => $lucia] = scopeScenario();
-    $director = User::factory()->forSchool($school)->director()->create();
-    Sanctum::actingAs($director);
+    $psycho = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psycho);
 
     $response = $this->postJson("/api/v1/students/{$lucia->id}/accommodations", [
         'category' => 'access',
@@ -211,9 +211,6 @@ it('stores a general accommodation when no subjects or assessment types are sent
         'focus_area' => 'attention',
         'starts_on' => '2026-05-04',
         'assessment_types' => [],
-        // Direction proposes: it picks the review deadline and reviewers.
-        'review_due_date' => now()->addWeek()->toDateString(),
-        'review_recipients' => 'role',
     ])->assertCreated();
 
     $response->assertJsonPath('data.subjects', [])

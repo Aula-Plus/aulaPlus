@@ -24,6 +24,8 @@ class AccommodationReviewEventResource extends JsonResource
             'id' => $this->id,
             'action' => $this->action->value,
             'note' => $this->note,
+            // `edited` only: the API names of the fields changed (no content).
+            'changed_fields' => $this->changed_fields,
             'user' => $this->user ? new StaffMemberResource($this->user) : null,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

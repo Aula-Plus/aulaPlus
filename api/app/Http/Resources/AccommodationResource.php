@@ -71,6 +71,9 @@ class AccommodationResource extends JsonResource
             return null;
         }
 
-        return $this->resource->reviewEvents()->reorder('id', 'desc')->value('note');
+        // Eager-loaded on lists (no query per row); queried for a single one.
+        return $this->resource->relationLoaded('latestReviewEvent')
+            ? $this->resource->latestReviewEvent?->note
+            : $this->resource->reviewEvents()->reorder('id', 'desc')->value('note');
     }
 }

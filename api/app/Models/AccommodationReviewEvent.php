@@ -13,8 +13,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * it is itself the history, so it is not Auditable. `note` (a return comment,
  * a withdrawal or rejection reason) may hold sensitive content about a minor
  * — only school-wide roles read it, and it is never logged (CLAUDE.md rule 11).
+ * `changed_fields` lists which fields an `edited` step changed — names only,
+ * never their content — so the history tells who changed what and when.
  */
-#[Fillable(['accommodation_id', 'user_id', 'action', 'note'])]
+#[Fillable(['accommodation_id', 'user_id', 'action', 'note', 'changed_fields'])]
 class AccommodationReviewEvent extends Model
 {
     use BelongsToSchool;
@@ -25,6 +27,7 @@ class AccommodationReviewEvent extends Model
     {
         return [
             'action' => AccommodationReviewAction::class,
+            'changed_fields' => 'array',
         ];
     }
 

@@ -33,6 +33,8 @@ class UpdateAccommodationRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isPsychopedagogue = $this->user()->hasRole(Role::Psychopedagogue->value);
+
         return [
             'category' => ['required', Rule::in(AccommodationCategory::values())],
             'type' => ['sometimes', 'required', 'string', 'max:255'],
@@ -40,15 +42,14 @@ class UpdateAccommodationRequest extends FormRequest
             'focus_area' => ['sometimes', 'required', 'string', 'max:255'],
             // Direction only edits its own proposals while under review; it
             // never switches an accommodation on or off (ClickUp 86e3qkwkk).
-            'active' => $this->user()->hasRole(Role::Psychopedagogue->value)
-                ? ['sometimes', 'boolean']
-                : ['prohibited'],
+            'active' => $isPsychopedagogue ? ['sometimes', 'boolean'] : ['prohibited'],
             // «Origen» is edited by psychopedagogy only (ClickUp 86e3qkwkk).
-            'origin' => $this->user()->hasRole(Role::Psychopedagogue->value)
-                ? ['sometimes', 'nullable', 'string', 'max:255']
-                : ['prohibited'],
+            'origin' => $isPsychopedagogue ? ['sometimes', 'nullable', 'string', 'max:255'] : ['prohibited'],
             'llm_rule' => ['nullable', 'array'],
             ...$this->accommodationScopeRules(editing: $this->route('accommodation')),
+            // «Vigente desde» of a proposal is psychopedagogy's to set when it
+            // confirms it; direction never sends it (same rule as the screen).
+            ...($isPsychopedagogue ? [] : ['starts_on' => ['prohibited']]),
         ];
     }
 }

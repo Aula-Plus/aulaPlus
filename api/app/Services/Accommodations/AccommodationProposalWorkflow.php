@@ -41,6 +41,12 @@ use Illuminate\Validation\ValidationException;
  *
  * Nothing is ever deleted: content, history, who and when stay on the proposal.
  * Notes are stored but never logged (CLAUDE.md rule 11).
+ *
+ * Concurrency: two people may act on the same proposal at once (psychopedagogy
+ * confirms while direction withdraws). Every step locks the row and re-reads
+ * its state inside its transaction ({@see self::lockFresh()}) before checking
+ * it, so the second one sees the first one's result and gets a 422 instead of
+ * overwriting it.
  */
 class AccommodationProposalWorkflow
 {
@@ -93,14 +99,35 @@ class AccommodationProposalWorkflow
         }
     }
 
-    public function edited(Accommodation $accommodation, User $actor): void
+    /**
+     * @param  list<string>  $changedFields  the API names of the fields the
+     *                                       edit changed (never their content)
+     */
+    public function edited(Accommodation $accommodation, User $actor, array $changedFields): void
     {
-        $this->record($accommodation, $actor, AccommodationReviewAction::Edited);
+        $this->record($accommodation, $actor, AccommodationReviewAction::Edited, changedFields: $changedFields);
+    }
+
+    /**
+     * Locks the accommodation's row for the rest of the current transaction
+     * and reloads its attributes, so a state check made right after sees what
+     * a concurrent step already committed — never the copy route-model binding
+     * loaded before this request waited for the lock.
+     */
+    public function lockFresh(Accommodation $accommodation): void
+    {
+        $fresh = Accommodation::query()
+            ->whereKey($accommodation->getKey())
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $accommodation->setRawAttributes($fresh->getAttributes(), true);
     }
 
     public function returnToDirection(Accommodation $accommodation, User $actor, string $note): Accommodation
     {
         return DB::transaction(function () use ($accommodation, $actor, $note): Accommodation {
+            $this->lockFresh($accommodation);
             $this->ensureStatus($accommodation, [AccommodationReviewStatus::Pending]);
 
             $accommodation->update(['review_status' => AccommodationReviewStatus::Returned]);
@@ -118,6 +145,7 @@ class AccommodationProposalWorkflow
     public function resubmit(Accommodation $accommodation, User $actor, ?string $note): Accommodation
     {
         return DB::transaction(function () use ($accommodation, $actor, $note): Accommodation {
+            $this->lockFresh($accommodation);
             $this->ensureStatus($accommodation, [AccommodationReviewStatus::Returned]);
 
             $accommodation->update(['review_status' => AccommodationReviewStatus::Pending]);
@@ -133,6 +161,7 @@ class AccommodationProposalWorkflow
     public function confirm(Accommodation $accommodation, User $actor, ?string $startsOn, array $origin = []): Accommodation
     {
         return DB::transaction(function () use ($accommodation, $actor, $startsOn, $origin): Accommodation {
+            $this->lockFresh($accommodation);
             $this->ensureStatus($accommodation, [AccommodationReviewStatus::Pending, AccommodationReviewStatus::Returned]);
 
             $accommodation->update([
@@ -148,7 +177,9 @@ class AccommodationProposalWorkflow
             $this->record($accommodation, $actor, AccommodationReviewAction::Confirmed);
             $this->closeReviewTask($accommodation, $actor);
             // It is in force now: the cached «Ajustes vigentes» must show it.
-            Cache::forget(StudentTrackingController::cacheKey($accommodation->student_id));
+            // After the commit, so a request racing it can't re-cache the
+            // pre-confirmation state.
+            DB::afterCommit(fn () => Cache::forget(StudentTrackingController::cacheKey($accommodation->student_id)));
 
             return $accommodation;
         });
@@ -157,6 +188,7 @@ class AccommodationProposalWorkflow
     public function withdraw(Accommodation $accommodation, User $actor, string $reason): Accommodation
     {
         return DB::transaction(function () use ($accommodation, $actor, $reason): Accommodation {
+            $this->lockFresh($accommodation);
             $this->ensureStatus($accommodation, [AccommodationReviewStatus::Pending, AccommodationReviewStatus::Returned]);
 
             $accommodation->update([
@@ -174,6 +206,7 @@ class AccommodationProposalWorkflow
     public function reject(Accommodation $accommodation, User $actor, string $reason): Accommodation
     {
         return DB::transaction(function () use ($accommodation, $actor, $reason): Accommodation {
+            $this->lockFresh($accommodation);
             $this->ensureStatus($accommodation, [AccommodationReviewStatus::Pending, AccommodationReviewStatus::Returned]);
 
             $accommodation->update([
@@ -203,13 +236,22 @@ class AccommodationProposalWorkflow
         }
     }
 
-    protected function record(Accommodation $accommodation, User $actor, AccommodationReviewAction $action, ?string $note = null): void
-    {
+    /**
+     * @param  list<string>|null  $changedFields
+     */
+    protected function record(
+        Accommodation $accommodation,
+        User $actor,
+        AccommodationReviewAction $action,
+        ?string $note = null,
+        ?array $changedFields = null,
+    ): void {
         AccommodationReviewEvent::create([
             'accommodation_id' => $accommodation->id,
             'user_id' => $actor->id,
             'action' => $action,
             'note' => $note,
+            'changed_fields' => $changedFields,
         ]);
     }
 

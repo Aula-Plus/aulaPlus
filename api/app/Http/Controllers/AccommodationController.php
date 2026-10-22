@@ -12,6 +12,7 @@ use App\Services\Accommodations\AccommodationProposalWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -77,22 +78,37 @@ class AccommodationController extends Controller
     public function update(UpdateAccommodationRequest $request, Accommodation $accommodation): AccommodationResource
     {
         $validated = $request->validated();
+        $user = $request->user();
 
-        if ($accommodation->review_status?->isClosedUnconfirmed()) {
-            throw ValidationException::withMessages([
-                'accommodation' => 'A withdrawn or rejected proposal can no longer be edited.',
-            ]);
-        }
+        DB::transaction(function () use ($validated, $accommodation, $user): void {
+            // Re-read under a row lock: the FormRequest authorized the copy
+            // route-model binding loaded, and a concurrent step (psychopedagogy
+            // confirming, direction withdrawing) may have changed it since.
+            // Direction must never land an edit on a confirmed accommodation.
+            $this->workflow->lockFresh($accommodation);
+            Gate::forUser($user)->authorize('update', $accommodation);
 
-        DB::transaction(function () use ($validated, $accommodation, $request): void {
-            $accommodation->update($this->attributes($validated));
-
-            if (array_key_exists('subject_ids', $validated)) {
-                $accommodation->subjects()->sync($validated['subject_ids']);
+            if ($accommodation->review_status?->isClosedUnconfirmed()) {
+                throw ValidationException::withMessages([
+                    'accommodation' => 'A withdrawn or rejected proposal can no longer be edited.',
+                ]);
             }
 
-            if ($accommodation->isOpenProposal()) {
-                $this->workflow->edited($accommodation, $request->user());
+            $accommodation->update($this->attributes($validated));
+            $changedFields = array_keys(Arr::except($accommodation->getChanges(), ['updated_at', 'deactivated_on']));
+
+            if (array_key_exists('subject_ids', $validated)) {
+                $synced = $accommodation->subjects()->sync($validated['subject_ids']);
+
+                if ($synced['attached'] !== [] || $synced['detached'] !== []) {
+                    $changedFields[] = 'subject_ids';
+                }
+            }
+
+            // The proposal's history says who changed what (field names only,
+            // never content); an edit that changed nothing is not a step.
+            if ($accommodation->isOpenProposal() && $changedFields !== []) {
+                $this->workflow->edited($accommodation, $user, array_values($changedFields));
             }
         });
 

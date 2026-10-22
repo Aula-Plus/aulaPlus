@@ -33,7 +33,8 @@ use Illuminate\Validation\Rule;
  * Direction, when proposing, picks the review deadline (`review_due_date`) and
  * who reviews it: the whole psychopedagogy role, or one or more specific
  * psychopedagogues (`reviewer_ids`). «Origen» is psychopedagogy's to write:
- * direction never sends it (ClickUp 86e3qkwkk, 21/10 answer).
+ * nobody else sends it (ClickUp 86e3qkwkk, 21/10 answer). Nor does direction
+ * send «Vigente desde»: psychopedagogy sets it when confirming.
  */
 class StoreAccommodationRequest extends FormRequest
 {
@@ -57,9 +58,16 @@ class StoreAccommodationRequest extends FormRequest
             'description' => ['required', 'string'],
             'focus_area' => ['required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
-            'origin' => $proposes ? ['prohibited'] : ['sometimes', 'nullable', 'string', 'max:255'],
+            // «Origen» is psychopedagogy's alone (21/10 answer): neither
+            // direction nor a teacher writes it.
+            'origin' => $this->user()->hasRole(Role::Psychopedagogue->value)
+                ? ['sometimes', 'nullable', 'string', 'max:255']
+                : ['prohibited'],
             'llm_rule' => ['nullable', 'array'],
             ...$this->accommodationScopeRules(),
+            // «Vigente desde» of a proposal is set by psychopedagogy when it
+            // confirms it, never by direction (same rule as the screen).
+            ...($proposes ? ['starts_on' => ['prohibited']] : []),
             ...($proposes ? $this->reviewRules() : [
                 'review_due_date' => ['prohibited'],
                 'review_recipients' => ['prohibited'],
@@ -77,7 +85,27 @@ class StoreAccommodationRequest extends FormRequest
 
         return [
             'review_due_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:'.SchoolTime::today()->toDateString()],
-            'review_recipients' => ['required', Rule::in(['role', 'people'])],
+            'review_recipients' => [
+                'required',
+                Rule::in(['role', 'people']),
+                // Sent to the whole role: someone must be there to review it,
+                // or the review task would belong to nobody.
+                function (string $attribute, mixed $value, Closure $fail) use ($schoolId): void {
+                    if ($value !== 'role') {
+                        return;
+                    }
+
+                    $hasReviewers = User::query()
+                        ->where('school_id', $schoolId)
+                        ->whereNull('disabled_at')
+                        ->role(Role::Psychopedagogue->value)
+                        ->exists();
+
+                    if (! $hasReviewers) {
+                        $fail('There is no active psychopedagogue in this school to review the proposal.');
+                    }
+                },
+            ],
             'reviewer_ids' => ['exclude_unless:review_recipients,people', 'required', 'array', 'min:1'],
             'reviewer_ids.*' => [
                 'integer',
