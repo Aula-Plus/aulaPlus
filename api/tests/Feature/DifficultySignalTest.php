@@ -321,8 +321,8 @@ it('raises the alert per category once N difficulty signals fall within D days',
     expect(Alert::query()->withoutGlobalScopes()->count())->toBe(1);
 });
 
-it('counts reserved observations too, but the alert shows only the number and the category', function () {
-    ($this->rule)(4, 30);
+it('counts reserved observations too (not «Solo quien escribe»), but the alert shows only the number and the category', function () {
+    ($this->rule)(3, 30);
     Log::spy();
 
     $texts = [
@@ -339,7 +339,8 @@ it('counts reserved observations too, but the alert shows only the number and th
     $this->artisan('alerts:difficulty-signals')->assertSuccessful();
 
     $alert = ($this->alerts)()->sole();
-    expect($alert->description)->toBe('4 señales de dificultad en Emocional');
+    // The «Solo quien escribe» note is left out: 3, not 4.
+    expect($alert->description)->toBe('3 señales de dificultad en Emocional');
 
     Sanctum::actingAs($this->psico);
     $json = $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(1, 'data')
@@ -367,6 +368,22 @@ it('counts reserved observations too, but the alert shows only the number and th
     // Direction is not marked by default: it doesn't see the alert.
     Sanctum::actingAs($this->director);
     $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('never counts «Solo quien escribe» notes in the alert: they only feed their author\'s private mark', function () {
+    ($this->rule)(2, 30);
+    $private = ['author_only' => true, 'visible_to' => null];
+    ($this->observe)(['Social' => 'difficulty'], 3, $this->teacher, $private);
+    ($this->observe)(['Social' => 'difficulty'], 2, $this->teacher, $private);
+    ($this->observe)(['Social' => 'difficulty'], 1, $this->teacher, $private);
+
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)()->count())->toBe(0);
+
+    // One more, readable by others, is still only one counted signal.
+    ($this->observe)(['Social' => 'difficulty'], 1, $this->teacher);
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)()->count())->toBe(0);
 });
 
 it('keeps one open alert per student and category and never re-raises it on the same evidence', function () {

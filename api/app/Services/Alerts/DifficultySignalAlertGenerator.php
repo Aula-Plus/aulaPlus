@@ -25,10 +25,13 @@ use Illuminate\Support\Facades\DB;
  * student's observations within the last `period_days` days. With no active
  * rule, nothing is generated — Aula+ never proposes the numbers.
  *
- * Counting: EVERY difficulty signal on the student's observations counts
- * ("se cuenta todo"), whatever the observation's scope — «Solo
- * Psicopedagogía», «Elegir personas» and also «Solo quien escribe» notes.
- * That is safe because the alert never exposes its evidence: it carries only
+ * Counting: every difficulty signal on the student's observations counts,
+ * whatever the observation's scope — «Solo Psicopedagogía», «Elegir
+ * personas» included — EXCEPT «Solo quien escribe» notes (`author_only`,
+ * 21/10 answer): choosing that scope promises the author that nobody else
+ * reads it nor adds it to anyone else's count, so those only feed the
+ * author's private mark. Counting reserved notes is safe because the alert
+ * never exposes its evidence: it carries only
  * the number and the category («3 señales de dificultad en Social») — never
  * any observation text, author or id — and each recipient then opens only the
  * observations they may read (Comment visibility rules, unchanged).
@@ -180,6 +183,8 @@ class DifficultySignalAlertGenerator
             ->where('comments.commentable_type', Student::class)
             ->whereNull('students.deleted_at')
             ->where('comment_comment_category.signal', CommentSignal::Difficulty->value)
+            // «Solo quien escribe» never adds to anyone else's alert.
+            ->where('comments.author_only', false)
             ->where('comments.created_at', '>=', $since)
             ->orderBy('comments.created_at')
             ->orderBy('comments.id')

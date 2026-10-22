@@ -244,7 +244,8 @@ function DifficultyRuleForm({
       </div>
       <p className="text-sm text-muted-foreground sm:col-span-2">
         Cuenta las señales de dificultad de un mismo alumno en una misma categoría, también las de
-        observaciones reservadas. La alerta solo muestra cuántas son y en qué categoría.
+        observaciones reservadas, salvo las de «Solo quien escribe». La alerta solo muestra cuántas
+        son y en qué categoría.
       </p>
       {formError && (
         <p role="alert" className="text-sm text-destructive sm:col-span-2">
