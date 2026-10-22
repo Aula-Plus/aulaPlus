@@ -49,12 +49,6 @@ function buildPeopleField(
   return entries.length > 0 ? { visible_to_users: Object.fromEntries(entries) } : {}
 }
 
-/**
- * «Elegir personas» narrows only the roles where someone was picked: a role of
- * the option left with nobody picked still sees the comment in full (ClickUp
- * 86e3qkwnv, 21/10 answer). When that mix happens, the author is warned before
- * publishing. Returns the roles left whole, or none when there is no mix.
- */
 /** How a whole role is named in the warning. */
 const ROLE_AUDIENCE_NAMES: Record<Role, string> = {
   teacher: "Docentes",
@@ -62,6 +56,12 @@ const ROLE_AUDIENCE_NAMES: Record<Role, string> = {
   director: "Dirección",
 }
 
+/**
+ * «Elegir personas» narrows only the roles where someone was picked: a role of
+ * the option left with nobody picked still sees the comment in full (ClickUp
+ * 86e3qkwnv, 21/10 answer). When that mix happens, the author is warned before
+ * publishing. Returns the roles left whole, or none when there is no mix.
+ */
 function rolesLeftWhole(option: CommentScopeOption, picked: PickedPeople): Role[] {
   const roles = COMMENT_SCOPE_ROLES[option]
   const hasPicks = (role: Role) => (picked[role] ?? []).length > 0
