@@ -23,6 +23,7 @@ class AIProposalResource extends JsonResource
             'id' => $this->id,
             'group_id' => $this->group_id,
             'requested_by_id' => $this->requested_by_id,
+            'journey_id' => $this->journey_id,
             'type' => $this->type?->value,
             'status' => $this->status?->value,
             'input_parameters' => $this->input_parameters,

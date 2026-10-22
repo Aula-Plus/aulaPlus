@@ -5,9 +5,11 @@ namespace App\Jobs;
 use App\Actions\AI\BuildProposalContext;
 use App\Enums\AIProposalStatus;
 use App\Enums\AIProposalType;
+use App\Enums\JourneyStep;
 use App\Models\AIProposal;
 use App\Support\AiProvider;
 use App\Support\Tenancy;
+use App\Support\UsageJourney;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -62,7 +64,7 @@ class GenerateAIProposalJob implements ShouldQueue
             // Queued before the provider was removed (or dispatched directly):
             // record the error without calling the API.
             if (! AiProvider::isConfigured()) {
-                $this->markError(AiProvider::NOT_CONFIGURED);
+                $this->markError(AiProvider::NOT_CONFIGURED, 'not_configured');
 
                 return;
             }
@@ -88,13 +90,13 @@ class GenerateAIProposalJob implements ShouldQueue
                         ]],
                     ]);
             } catch (ConnectionException $e) {
-                $this->markError('Could not reach the AI provider after retries.');
+                $this->markError('Could not reach the AI provider after retries.', 'provider_unreachable');
 
                 return;
             }
 
             if ($response->failed()) {
-                $this->markError("AI provider returned HTTP {$response->status()}.");
+                $this->markError("AI provider returned HTTP {$response->status()}.", 'provider_error');
 
                 return;
             }
@@ -102,7 +104,7 @@ class GenerateAIProposalJob implements ShouldQueue
             $parsed = $this->parse($response->json('content.0.text'), $this->proposal->type);
 
             if ($parsed === null) {
-                $this->markError('AI response was not valid JSON matching the expected schema.');
+                $this->markError('AI response was not valid JSON matching the expected schema.', 'invalid_response');
 
                 return;
             }
@@ -112,10 +114,16 @@ class GenerateAIProposalJob implements ShouldQueue
                 'status' => AIProposalStatus::Completed,
                 'error_message' => null,
             ]);
+
+            $this->recordJourneyStep(JourneyStep::GenerationSucceeded);
         });
     }
 
-    protected function markError(string $message): void
+    /**
+     * @param  string  $reasonCategory  a fixed, non-technical failure category
+     *                                  for the adoption dashboard — never $message
+     */
+    protected function markError(string $message, string $reasonCategory): void
     {
         Log::warning('AIProposal generation failed', [
             'ai_proposal_id' => $this->proposal->id,
@@ -126,6 +134,31 @@ class GenerateAIProposalJob implements ShouldQueue
             'status' => AIProposalStatus::Error,
             'error_message' => $message,
         ]);
+
+        $this->recordJourneyStep(JourneyStep::GenerationFailed, ['failure_reason' => $reasonCategory]);
+    }
+
+    /**
+     * The generation outcome as a creation-journey step (ClickUp 86e3qkxtc),
+     * attributed to the requesting teacher. Ids and a failure category only:
+     * never the prompt, the context sent or the provider's response.
+     *
+     * @param  array<string, string>  $metadata
+     */
+    protected function recordJourneyStep(JourneyStep $step, array $metadata = []): void
+    {
+        if ($this->proposal->journey_id === null) {
+            return;
+        }
+
+        UsageJourney::record(
+            $this->proposal->requested_by_id,
+            $this->proposal->journey_id,
+            $step,
+            $this->proposal->type->value,
+            $this->proposal->group_id,
+            metadata: ['ai_proposal_id' => $this->proposal->id, ...$metadata],
+        );
     }
 
     /**
