@@ -155,8 +155,10 @@ it('records the team summary, observations, barriers, barrier links and follow-u
 
     Sanctum::actingAs($teacher);
     $followUpId = $this->postJson("/api/v1/students/{$this->student->id}/scheduled-follow-ups", [
-        'description' => 'Revisar lectura', 'due_date' => now()->addWeek()->toDateString(),
+        'title' => 'Lectura', 'description' => 'Revisar lectura', 'due_date' => now()->addWeek()->toDateString(),
     ])->assertCreated()->json('data.id');
+    $stageId = ScheduledFollowUp::query()->findOrFail($followUpId)->stages()->value('id');
+    $this->postJson("/api/v1/follow-up-stages/{$stageId}/close", ['conclusion' => 'Hecho'])->assertOk();
     $this->postJson("/api/v1/scheduled-follow-ups/{$followUpId}/resolve", ['resolution_note' => 'Mejoró'])->assertOk();
 
     Sanctum::actingAs($this->director);

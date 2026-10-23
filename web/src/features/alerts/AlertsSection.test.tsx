@@ -317,15 +317,15 @@ describe("AlertsSection", () => {
     renderPage()
 
     await userEvent.click(await screen.findByRole("button", { name: "Crear seguimiento vinculado" }))
-    await userEvent.type(
-      screen.getByLabelText("Seguimiento vinculado a esta alerta"),
-      "Armar el plan con la familia.",
-    )
+    expect(screen.getByText("Seguimiento vinculado a esta alerta")).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText("Título"), "Plan con la familia")
+    await userEvent.type(screen.getByLabelText("Qué hay que hacer y por qué"), "Armar el plan con la familia.")
     await userEvent.type(screen.getByLabelText("Fecha límite"), "2026-10-30")
     await userEvent.click(screen.getByRole("button", { name: "Programar seguimiento" }))
 
     await waitFor(() =>
       expect(scheduledFollowUpsApi.createScheduledFollowUp).toHaveBeenCalledWith(5, {
+        title: "Plan con la familia",
         description: "Armar el plan con la familia.",
         due_date: "2026-10-30",
         alert_id: 10,
