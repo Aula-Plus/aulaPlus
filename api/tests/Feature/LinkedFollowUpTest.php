@@ -53,6 +53,7 @@ beforeEach(function () {
         Sanctum::actingAs($actor);
 
         return $this->postJson("/api/v1/students/{$this->student->id}/scheduled-follow-ups", [
+            'title' => 'Plan con la familia',
             'description' => 'Armar el plan con la familia y el equipo.',
             'due_date' => now()->addWeeks(3)->toDateString(),
             'alert_id' => $this->alert->id,
@@ -73,7 +74,8 @@ it('lets whoever has the alert create a linked follow-up with several people, wi
         ->assertCreated()
         ->assertJsonPath('data.alert_id', $this->alert->id)
         ->assertJsonPath('data.assigned_to_id', $this->adriana->id)
-        ->assertJsonCount(3, 'data.shared_with');
+        // The three picked plus the creator, who takes part too (ClickUp 86e3qkwna).
+        ->assertJsonCount(4, 'data.shared_with');
 
     // The alert keeps its state, holder, deadline and people.
     $after = $this->alert->fresh();
@@ -135,6 +137,7 @@ it('only links an alert about the same student, of the same school', function ()
 
     Sanctum::actingAs($this->galia);
     $this->postJson("/api/v1/students/{$otherStudent->id}/scheduled-follow-ups", [
+        'title' => 'x',
         'description' => 'x',
         'due_date' => now()->addWeek()->toDateString(),
         'alert_id' => $this->alert->id,
@@ -157,9 +160,11 @@ it('keeps each record\'s state, deadline and closing independent', function () {
     ($this->link)($this->galia)->assertCreated();
     $followUp = ScheduledFollowUp::query()->withoutGlobalScopes()->sole();
 
-    // Resolving the follow-up does not close the alert.
+    // Resolving the follow-up does not close the alert. Every stage is
+    // closed first and resolving takes a conclusion (ClickUp 86e3qkwna).
     Sanctum::actingAs($this->galia);
-    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve")->assertOk();
+    $this->postJson("/api/v1/follow-up-stages/{$followUp->stages()->value('id')}/close", ['conclusion' => 'Plan armado'])->assertOk();
+    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve", ['resolution_note' => 'Plan en marcha'])->assertOk();
     $alert = $this->alert->fresh();
     expect($alert->resolved)->toBeFalse()
         ->and($alert->due_on->toDateString())->toBe(now()->addDays(2)->toDateString());

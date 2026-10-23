@@ -412,7 +412,7 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
             studentId={alert.student_id}
             alertId={alert.id}
             idPrefix={`alert-${alert.id}-follow-up`}
-            title="Seguimiento vinculado a esta alerta"
+            heading="Seguimiento vinculado a esta alerta"
             onCancel={closePanel}
             onCreated={(created) => {
               closePanel()

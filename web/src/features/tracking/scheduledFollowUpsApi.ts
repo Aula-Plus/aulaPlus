@@ -52,6 +52,7 @@ export async function fetchGroupScheduledFollowUps(
 export async function createScheduledFollowUp(
   studentId: number,
   input: {
+    title: string
     description: string
     due_date: string
     /** Omitted when the creator keeps it (the default). */

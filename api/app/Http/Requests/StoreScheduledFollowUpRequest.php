@@ -61,6 +61,9 @@ class StoreScheduledFollowUpRequest extends FormRequest
         $student = $this->route('student');
 
         return [
+            // Required for new follow-ups; nullable in the DB only for the
+            // rows backfilled by the stages migration (ClickUp 86e3qkwna).
+            'title' => ['required', 'string', 'max:150'],
             'description' => ['required', 'string'],
             'due_date' => ['required', 'date'],
             'alert_id' => [
@@ -70,7 +73,7 @@ class StoreScheduledFollowUpRequest extends FormRequest
                     ->where('student_id', $student->id),
             ],
             'assigned_to_id' => ['nullable', 'integer', $this->activeColleague($student)],
-            'shared_with_ids' => ['nullable', 'array', 'max:20'],
+            'shared_with_ids' => ['nullable', 'array', 'max:50'],
             'shared_with_ids.*' => ['integer', 'distinct', $this->activeColleague($student)],
         ];
     }

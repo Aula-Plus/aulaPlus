@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
-import { roleLabels } from "@/types"
 import type { AppNotification, ScheduledFollowUp } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import { refreshUnreadNoticeCount } from "./unreadNotices"
+import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
+import { responsiblesLine } from "./followUpDetailUtils"
 
 /**
  * The «Mis seguimientos» section of «Alertas y seguimientos» (`/alertas`): the
@@ -25,6 +26,9 @@ import { refreshUnreadNoticeCount } from "./unreadNotices"
  *
  * A section, not a page: its heading is an <h2> under the page's <h1>, and its
  * cards («Avisos», «Pendientes») are <h3> subsections.
+ *
+ * "Ver detalle" opens FollowUpDetailDialog to manage the follow-up right here
+ * (stages, notes, people, withdrawing, resolving).
  */
 export function FollowUpsSection() {
   const headingId = useId()
@@ -34,6 +38,7 @@ export function FollowUpsSection() {
   // A failed load is not an empty list: the error says so, and «Pendientes»
   // is not rendered rather than claiming there are none.
   const [loadFailed, setLoadFailed] = useState(false)
+  const [openId, setOpenId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -141,15 +146,21 @@ export function FollowUpsSection() {
               {followUps.map((followUp) => (
                 <li key={followUp.id} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
                   <div>
+                    {followUp.title && <p className="text-base font-semibold">{followUp.title}</p>}
                     {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
-                    <p className="whitespace-pre-wrap">{followUp.description}</p>
+                    <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Plazo: {formatShortDate(followUp.due_date)}
-                      {followUp.assigned_to?.role && ` · Responsable: ${followUp.assigned_to.name} (${roleLabels[followUp.assigned_to.role]})`}
+                      {responsiblesLine(followUp) && ` · ${responsiblesLine(followUp)}`}
                     </p>
-                    <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
-                      Ver ficha del alumno
-                    </Link>
+                    <div className="mt-1 flex flex-wrap items-center gap-3">
+                      <Button type="button" size="sm" variant="outline" onClick={() => setOpenId(followUp.id)}>
+                        Ver detalle
+                      </Button>
+                      <Link className="text-xs underline" to={`/alumnos/${followUp.student_id}/seguimiento`}>
+                        Ver ficha del alumno
+                      </Link>
+                    </div>
                   </div>
                   {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
                 </li>
@@ -158,6 +169,9 @@ export function FollowUpsSection() {
           )}
         </SectionCard>
       )}
+
+      {/* Reload the list on every change: a resolved/hidden follow-up leaves it. */}
+      <FollowUpDetailDialog followUpId={openId} onClose={() => setOpenId(null)} onChanged={() => load()} />
     </section>
   )
 }

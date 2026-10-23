@@ -6,14 +6,15 @@ use App\Enums\Role;
 use App\Http\Requests\GroupScheduledFollowUpsRequest;
 use App\Http\Requests\ResolveScheduledFollowUpRequest;
 use App\Http\Requests\StoreScheduledFollowUpRequest;
+use App\Http\Resources\ScheduledFollowUpDetailResource;
 use App\Http\Resources\ScheduledFollowUpResource;
 use App\Http\Resources\StaffMemberResource;
 use App\Models\Group;
 use App\Models\ScheduledFollowUp;
 use App\Models\Student;
 use App\Models\User;
-use App\Notifications\FollowUpAssignedNotification;
 use App\Policies\ScheduledFollowUpPolicy;
+use App\Services\FollowUps\FollowUpWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -22,6 +23,8 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  * Scheduled follow-ups on a student (docs/prompts/17-seguimiento-
  * programado.md §3). Every action is authorized in code — store/resolve via
  * their FormRequests, index via ScheduledFollowUpPolicy::viewForStudent.
+ * Stages and people are managed by FollowUpStageController and
+ * FollowUpMemberController (ClickUp 86e3qkwna).
  */
 class ScheduledFollowUpController extends Controller
 {
@@ -29,7 +32,7 @@ class ScheduledFollowUpController extends Controller
     {
         $this->authorize('viewForStudent', [ScheduledFollowUp::class, $student]);
 
-        $query = $student->scheduledFollowUps()->with(['assignedTo.roles', 'sharedWith.roles'])->latest();
+        $query = $student->scheduledFollowUps()->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles'])->latest();
 
         // The endpoint returns every follow-up unless the caller narrows it
         // with ?resolved=true|false — the default filter is a client concern,
@@ -62,7 +65,7 @@ class ScheduledFollowUpController extends Controller
         $studentIds = $group->students()->pluck('students.id');
 
         $followUps = ScheduledFollowUp::query()
-            ->with(['assignedTo.roles', 'sharedWith.roles'])
+            ->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles'])
             ->whereIn('student_id', $studentIds)
             ->latest()
             ->get();
@@ -102,20 +105,19 @@ class ScheduledFollowUpController extends Controller
 
     /**
      * GET /api/v1/scheduled-follow-ups/mine — the caller's pending list:
-     * follow-ups they are responsible for or that were shared with them,
-     * dropping any on a student they can no longer see.
+     * follow-ups they take part in (general responsible, stage responsible
+     * or participant — stage responsibles are always members), including ones
+     * they left until they choose to hide them, dropping any on a student
+     * they can no longer see.
      */
     public function mine(Request $request): AnonymousResourceCollection
     {
         $user = $request->user();
 
         $followUps = ScheduledFollowUp::query()
-            ->with(['assignedTo.roles', 'sharedWith.roles', 'student'])
+            ->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles', 'student'])
             ->where('resolved', false)
-            ->where(function ($query) use ($user): void {
-                $query->where('assigned_to_id', $user->id)
-                    ->orWhereHas('sharedWith', fn ($q) => $q->whereKey($user->id));
-            })
+            ->whereHas('members', fn ($query) => $query->where('user_id', $user->id)->whereNull('hidden_at'))
             ->orderBy('due_date')
             ->get()
             ->filter(fn (ScheduledFollowUp $followUp) => $user->can('view', $followUp));
@@ -123,49 +125,32 @@ class ScheduledFollowUpController extends Controller
         return ScheduledFollowUpResource::collection($followUps->values());
     }
 
-    public function store(StoreScheduledFollowUpRequest $request, Student $student): JsonResponse
+    public function store(StoreScheduledFollowUpRequest $request, Student $student, FollowUpWorkflow $workflow): JsonResponse
     {
-        $creator = $request->user();
-        $assignedToId = (int) ($request->validated('assigned_to_id') ?? $creator->id);
+        $followUp = $workflow->create($student, $request->user(), $request->validated());
 
-        $followUp = ScheduledFollowUp::create([
-            'student_id' => $student->id,
-            // Linking never touches the alert: its state, holder and deadline
-            // stay as they are (review of 14/10).
-            'alert_id' => $request->validated('alert_id'),
-            'created_by_id' => $creator->id,
-            'assigned_to_id' => $assignedToId,
-            'description' => $request->validated('description'),
-            'due_date' => $request->validated('due_date'),
-        ]);
-
-        // The responsible person is not also "shared with".
-        $shared = collect($request->validated('shared_with_ids') ?? [])
-            ->map(fn ($id) => (int) $id)
-            ->reject(fn (int $id) => $id === $assignedToId)
-            ->values();
-        $followUp->sharedWith()->sync($shared->all());
-
-        if ($assignedToId !== $creator->id) {
-            User::query()->find($assignedToId)?->notify(new FollowUpAssignedNotification($followUp));
-        }
-
-        $followUp->load(['assignedTo.roles', 'sharedWith.roles']);
+        $followUp->load(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles']);
 
         return (new ScheduledFollowUpResource($followUp))->response()->setStatusCode(201);
     }
 
-    public function resolve(ResolveScheduledFollowUpRequest $request, ScheduledFollowUp $followUp): ScheduledFollowUpResource
+    /**
+     * GET /api/v1/scheduled-follow-ups/{followUp} — the full record (stages,
+     * notes, people, history) for anyone who may see the student, with the
+     * caller's `can` flags. Opened from "Mis seguimientos" and the student
+     * file alike, so everyone involved sees the same up-to-date record.
+     */
+    public function show(Request $request, ScheduledFollowUp $followUp): ScheduledFollowUpDetailResource
     {
-        $followUp->update([
-            'resolved' => true,
-            'resolved_by_id' => $request->user()->id,
-            'resolved_at' => now(),
-            'resolution_note' => $request->validated('resolution_note'),
-        ]);
+        $this->authorize('view', $followUp);
 
-        $followUp->load(['assignedTo.roles', 'sharedWith.roles']);
+        return ScheduledFollowUpDetailResource::forViewer($followUp, $request->user());
+    }
 
-        return new ScheduledFollowUpResource($followUp);
+    public function resolve(ResolveScheduledFollowUpRequest $request, ScheduledFollowUp $followUp, FollowUpWorkflow $workflow): ScheduledFollowUpDetailResource
+    {
+        $workflow->resolve($followUp, $request->user(), $request->validated('resolution_note'));
+
+        return ScheduledFollowUpDetailResource::forViewer($followUp, $request->user());
     }
 }
