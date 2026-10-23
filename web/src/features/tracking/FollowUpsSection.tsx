@@ -156,7 +156,8 @@ export function FollowUpsSection() {
                   <div>
                     <p className="text-base font-semibold">{followUpTitle(followUp)}</p>
                     {followUp.student && <p className="font-medium">{followUp.student.full_name}</p>}
-                    {followUp.description && (
+                    {/* Without a title the description is already the heading. */}
+                    {followUp.title && followUp.description && (
                       <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
                     )}
                     <p className="mt-1 text-xs text-muted-foreground">

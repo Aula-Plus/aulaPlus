@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\FollowUpAssignedNotification;
 use App\Services\Accommodations\AccommodationProposalWorkflow;
+use App\Support\SchoolTime;
 use App\Support\Tenancy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -279,6 +280,19 @@ it('does not let the review task be resolved by hand', function () {
         ->assertJsonPath('data.0.accommodation_id', $followUp->accommodation_id);
     $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/resolve", ['resolution_note' => 'ok'])
         ->assertForbidden();
+
+    // Nor managed by hand through the stages model (ClickUp 86e3qkwna): no
+    // stages, no people changes, no leaving it — the circuit closes it.
+    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/stages", [
+        'description' => 'x', 'responsible_id' => $psycho->id, 'due_date' => now()->addWeek()->toDateString(),
+    ])->assertForbidden();
+    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/general-responsibles", ['user_id' => $psycho->id])
+        ->assertForbidden();
+    $this->postJson("/api/v1/scheduled-follow-ups/{$followUp->id}/withdraw", ['reason' => 'x'])
+        ->assertForbidden();
+    $this->getJson("/api/v1/scheduled-follow-ups/{$followUp->id}")
+        ->assertOk()
+        ->assertJsonPath('data.can.resolve', false);
 });
 
 it('lists the returned-proposal notice to the proposer', function () {
@@ -332,7 +346,9 @@ it('asks direction for the review deadline and who reviews the proposal', functi
         ->assertJsonValidationErrors(['review_due_date', 'review_recipients']);
 
     $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(
-        reviewRouting(['review_due_date' => now()->subDay()->toDateString()]),
+        // School calendar day, as the rule: UTC's yesterday is the school's today
+        // late in the evening in Montevideo.
+        reviewRouting(['review_due_date' => SchoolTime::today()->subDay()->toDateString()]),
     ))->assertUnprocessable()->assertJsonValidationErrors(['review_due_date']);
 
     $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(

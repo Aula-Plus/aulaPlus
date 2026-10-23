@@ -333,7 +333,8 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-base font-semibold">{followUpTitle(followUp)}</p>
-          {followUp.description && (
+          {/* Without a title the description is already the heading. */}
+          {followUp.title && followUp.description && (
             <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
