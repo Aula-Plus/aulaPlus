@@ -34,6 +34,8 @@ class CommentResource extends JsonResource
                 'name' => $category->name,
             ])->values()->all()),
             'visible_to' => $this->visible_to,
+            // «Elegir personas»: ids only, for the author to see who they picked.
+            'visible_to_users' => $this->when($request->user()?->id === $this->author_id, $this->visible_to_users),
             'author_only' => $this->author_only,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

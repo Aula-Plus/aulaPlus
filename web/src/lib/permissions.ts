@@ -320,3 +320,12 @@ export function canManageReports(user: User | null): boolean {
 export function canManageAiReportSetting(user: User | null): boolean {
   return isDirector(user)
 }
+
+/**
+ * «Compartir con» on an observation: psychopedagogy only. Mirror of the role
+ * portion of `CommentSharePolicy::create` (the server also checks that the
+ * observation is readable by the caller and the recipients see the student).
+ */
+export function canShareComment(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}

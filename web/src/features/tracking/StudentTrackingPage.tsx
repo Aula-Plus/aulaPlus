@@ -6,6 +6,7 @@ import {
   canEditConfirmedAccommodations,
   canManageAccommodations,
   canManageReports,
+  canShareComment,
   canResolveAlert,
   canViewStudentHistory,
   createsAccommodationProposals,
@@ -29,6 +30,8 @@ import {
   type Alert,
   type Comment,
   type CommentCategory,
+  type CommentShare,
+  type StaffMember,
   type GradeAccommodation,
   type StudentTracking,
 } from "@/types"
@@ -38,10 +41,14 @@ import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverri
 import { AccommodationProposalsSection } from "./AccommodationProposalsSection"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
+import { PrivateNotesSignal } from "./PrivateNotesSignal"
+import { ShareCommentDialog } from "./ShareCommentDialog"
+import { SharedExtractsList } from "./SharedExtractsList"
 import { StudentReportsSection } from "@/features/reports/StudentReportsSection"
 import { TeamSummaryCard } from "./TeamSummaryCard"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import { StudentPerformanceChart } from "./StudentPerformanceChart"
+import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import * as trackingApi from "./trackingApi"
 import type { CommentInput, TeamSummaryInput } from "./trackingApi"
 
@@ -81,6 +88,11 @@ export function StudentTrackingPage() {
   const [tracking, setTracking] = useState<StudentTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [categories, setCategories] = useState<CommentCategory[]>([])
+  const [commentShares, setCommentShares] = useState<CommentShare[]>([])
+  // People who see the student, for «Elegir personas» in «Visible para».
+  const [scopeCandidates, setScopeCandidates] = useState<StaffMember[] | undefined>(undefined)
+  const [sharingComment, setSharingComment] = useState<Comment | null>(null)
+  const showShareComment = canShareComment(user)
   const [error, setError] = useState<string | null>(null)
   const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
@@ -100,14 +112,26 @@ export function StudentTrackingPage() {
       .catch(() => setComments([]))
   }, [studentId])
 
+  const loadCommentShares = useCallback(() => {
+    return trackingApi
+      .fetchStudentCommentShares(studentId)
+      .then((data) => setCommentShares(data))
+      .catch(() => setCommentShares([]))
+  }, [studentId])
+
   useEffect(() => {
     loadTracking()
     loadComments()
+    loadCommentShares()
     trackingApi
       .fetchCommentCategories()
       .then(setCategories)
       .catch(() => setCategories([]))
-  }, [loadTracking, loadComments])
+    scheduledFollowUpsApi
+      .fetchFollowUpCandidates(studentId)
+      .then(setScopeCandidates)
+      .catch(() => setScopeCandidates(undefined))
+  }, [loadTracking, loadComments, loadCommentShares, studentId])
 
   async function handleCreateComment(input: CommentInput) {
     await trackingApi.createStudentComment(studentId, input)
@@ -182,6 +206,9 @@ export function StudentTrackingPage() {
           {trend.authors === 1 ? "persona" : "personas"} en {trend.days} días
         </div>
       ))}
+
+      {/* Only ever true for the author of the private notes (server-computed). */}
+      <PrivateNotesSignal active={tracking.private_notes_signal} />
 
       <div role="tablist" aria-label="Secciones del perfil" className="flex flex-wrap gap-1 border-b">
         {TABS.map((item) => (
@@ -440,9 +467,27 @@ export function StudentTrackingPage() {
             onCreate={handleCreateComment}
             title="Observaciones"
             categories={categories}
+            beforeList={<SharedExtractsList shares={commentShares} />}
+            renderCommentActions={
+              showShareComment
+                ? (comment) => (
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSharingComment(comment)}
+                      >
+                        Compartir con
+                      </Button>
+                    </div>
+                  )
+                : undefined
+            }
             showAuthors
             currentUserId={user?.id}
             showCount={isSchoolWideStaff(user)}
+            scopeCandidates={scopeCandidates}
           />
         )}
 
@@ -576,6 +621,17 @@ export function StudentTrackingPage() {
           </>
         )}
       </div>
+
+      {showShareComment && (
+        <ShareCommentDialog
+          studentId={studentId}
+          comment={sharingComment}
+          onOpenChange={(open) => {
+            if (!open) setSharingComment(null)
+          }}
+          onShared={(share) => setCommentShares((current) => [share, ...current])}
+        />
+      )}
 
       {showManageAccommodations && (
         <AccommodationFormDialog

@@ -91,7 +91,15 @@ export function FollowUpsSection() {
           <ul className="grid gap-2">
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                {notice.data.type === "alert_overdue" ? (
+                {notice.data.type === "comment_shared" ? (
+                  <span>
+                    Psicopedagogía te compartió un extracto
+                    {notice.data.student_name ? ` sobre ${notice.data.student_name}` : ""}.{" "}
+                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </span>
+                ) : notice.data.type === "alert_overdue" ? (
                   <span>
                     Una alerta que tenés llegó a su fecha sin salida (plazo al{" "}
                     {formatShortDate(notice.data.due_date)}).{" "}

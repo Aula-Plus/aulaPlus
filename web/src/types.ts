@@ -128,6 +128,11 @@ export interface Comment {
    * comment reaches the client only when the viewer is its own author.
    */
   author_only: boolean
+  /**
+   * «Elegir personas» (ClickUp 86e3qkwnv): per role, the specific people the
+   * author picked. Only sent back to the author.
+   */
+  visible_to_users?: Partial<Record<Role, number[]>> | null
   created_at: string | null
 }
 
@@ -783,6 +788,12 @@ export interface StudentTracking {
   recent_comments: Comment[]
   /** Absent for a teacher: only psychopedagogy/direction get the recurrence mark. */
   comment_trends?: CommentTrend[]
+  /**
+   * The viewer's OWN "solo quien escribe" notes on this student reached the
+   * school's trend threshold. Computed per viewer server-side, so it is only
+   * ever `true` for that author. Optional for older cached responses.
+   */
+  private_notes_signal?: boolean
   alerts?: Alert[]
   open_alerts_count: number
 }
@@ -1088,14 +1099,34 @@ export interface StaffMember {
 }
 
 /**
+ * An extract of an observation that psychopedagogy shared («Compartir con»,
+ * `CommentShareResource`). A recipient gets only the extract text: the link to
+ * the original (`comment_id`) and the recipient list reach its author only.
+ */
+export interface CommentShare {
+  id: number
+  student_id: number
+  author_id: number
+  content: string
+  comment_id?: number
+  recipients?: StaffMember[]
+  created_at: string | null
+}
+
+/**
  * One unread notice: a follow-up assigned to you, an alert of yours that
  * reached its deadline without a way out, an accommodation proposal returned
- * to you for corrections, or a screening design change. Ids, names and dates
- * only.
+ * to you for corrections, an extract psychopedagogy shared with you, or a
+ * screening design change. Ids, names and dates only.
  */
 export interface AppNotification {
   id: string
-  data: FollowUpAssignedNotice | AlertOverdueNotice | AccommodationProposalReturnedNotice | ScreeningDesignNotice
+  data:
+    | FollowUpAssignedNotice
+    | AlertOverdueNotice
+    | AccommodationProposalReturnedNotice
+    | CommentSharedNotice
+    | ScreeningDesignNotice
   created_at: string | null
 }
 
@@ -1114,6 +1145,18 @@ export interface AccommodationProposalReturnedNotice {
   type: "accommodation_proposal_returned"
   accommodation_id: number
   student_id: number
+}
+
+/**
+ * «Psicopedagogía te compartió un extracto» (ClickUp 86e3qkwnv): the stored
+ * payload holds ids only; the server adds `student_name` at read time when the
+ * caller may see the student.
+ */
+export interface CommentSharedNotice {
+  type: "comment_shared"
+  comment_share_id: number
+  student_id: number
+  student_name?: string | null
 }
 
 /** An alert you have reached its deadline without a way out («Llegó a su fecha sin salida»). */

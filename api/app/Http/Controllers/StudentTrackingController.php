@@ -87,6 +87,8 @@ class StudentTrackingController extends Controller
             'comments' => $this->hydrate(Comment::class, $cached['comments'])->load('categories'),
             // Never cached: depends on the asking user (visibility + role).
             'comment_trends' => app(CommentTrendDetector::class)->forStudent($student, request()->user()),
+            // Never cached either: the caller's own private-notes signal.
+            'private_notes_signal' => app(CommentTrendDetector::class)->hasPrivateNotesSignal($student, request()->user()),
             'alerts' => $this->hydrate(Alert::class, $cached['alerts']),
             // Grades are role-dependent (a teacher only sees their own subjects
             // unless direction opened more), so they are computed per request,

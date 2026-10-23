@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
+use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
@@ -112,6 +113,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/students/{student}/comments', [StudentCommentController::class, 'store']);
         Route::get('/groups/{group}/comments', [GroupCommentController::class, 'index']);
         Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
+        // «Compartir con» (ClickUp 86e3qkwnv): psychopedagogy shares an
+        // extract of a student observation; recipients read only the extract.
+        Route::get('/students/{student}/comment-shares', [CommentShareController::class, 'index']);
+        Route::post('/comments/{comment}/shares', [CommentShareController::class, 'store']);
 
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
         Route::get('/grades-visibility', [GradesVisibilitySettingsController::class, 'show']);
