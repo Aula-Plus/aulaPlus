@@ -72,7 +72,7 @@ class StudentTrackingController extends Controller
         // (Dropping keys, as when grades left the cache, needs no bump: a stale
         // entry's extra keys are simply ignored.)
         $cached = Cache::remember(
-            "student-tracking.v4.{$student->id}",
+            self::cacheKey($student->id),
             60,
             fn () => $this->aggregate($student)
         );
@@ -103,6 +103,16 @@ class StudentTrackingController extends Controller
             'grades_truncated' => count($grades) > self::GRADES_LIMIT,
             'grades_view' => $gradeRule->describe(),
         ]);
+    }
+
+    /**
+     * Key of the cached tracking aggregate of a student. Writers that change
+     * what it holds and must show at once (e.g. psychopedagogy confirming an
+     * accommodation proposal, ClickUp 86e3qkwkk) forget it.
+     */
+    public static function cacheKey(int $studentId): string
+    {
+        return "student-tracking.v4.{$studentId}";
     }
 
     /**

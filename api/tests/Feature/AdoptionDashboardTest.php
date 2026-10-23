@@ -35,8 +35,19 @@ it('lets the director of the school see the adoption dashboard', function () {
     $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard")
         ->assertOk()
         ->assertJsonStructure([
-            'data' => ['teacher_login_rate_30d', 'teacher_planning_rate_30d', 'weekly_login_series', 'weekly_content_series'],
+            'data' => ['teacher_started_rate_30d', 'teacher_planning_rate_30d', 'data_since', 'weekly_content_series', 'weekly_content_by_type'],
         ]);
+});
+
+// ClickUp 86e3qkxtc: «Docentes con login» and «Logins por semana» are gone.
+it('no longer returns any login metric in the summary', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    Sanctum::actingAs($director);
+
+    $data = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard")->assertOk()->json('data');
+
+    expect($data)->not->toHaveKeys(['teacher_login_rate_30d', 'weekly_login_series']);
 });
 
 // docs/prompts/04-seguimiento-institucional.md §6: the % active teachers
@@ -46,7 +57,7 @@ it('computes the % of active teachers correctly against a known dataset', functi
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
 
-    // 4 teachers total: 3 log in within 30 days, 1 does not.
+    // 4 teachers total: 3 started creating within 30 days, 1 did not.
     $activeTeachers = User::factory()->forSchool($school)->teacher()->count(3)->create();
     $inactiveTeacher = User::factory()->forSchool($school)->teacher()->create();
 
@@ -54,17 +65,27 @@ it('computes the % of active teachers correctly against a known dataset', functi
         UsageEvent::factory()->create([
             'school_id' => $school->id,
             'user_id' => $teacher->id,
-            'event_type' => 'login',
+            'event_type' => 'journey.filling_started',
+            'step' => 'filling_started',
             'created_at' => now()->subDays(2),
         ]);
     }
 
-    // A login event outside the 30-day window must not count.
+    // A step outside the 30-day window must not count.
+    UsageEvent::factory()->create([
+        'school_id' => $school->id,
+        'user_id' => $inactiveTeacher->id,
+        'event_type' => 'journey.filling_started',
+        'step' => 'filling_started',
+        'created_at' => now()->subDays(45),
+    ]);
+
+    // Logins no longer count for anything in the summary.
     UsageEvent::factory()->create([
         'school_id' => $school->id,
         'user_id' => $inactiveTeacher->id,
         'event_type' => 'login',
-        'created_at' => now()->subDays(45),
+        'created_at' => now()->subDay(),
     ]);
 
     // Only 1 of the 4 teachers created a planning object in the last 30 days.
@@ -75,32 +96,35 @@ it('computes the % of active teachers correctly against a known dataset', functi
         'created_at' => now()->subDays(1),
     ]);
 
-    // Noise: a non-teacher user's login must not affect the percentage.
+    // Noise: a non-teacher user's step must not affect the percentage.
     UsageEvent::factory()->create([
         'school_id' => $school->id,
         'user_id' => $director->id,
-        'event_type' => 'login',
+        'event_type' => 'journey.filling_started',
+        'step' => 'filling_started',
         'created_at' => now()->subDays(1),
     ]);
 
     Sanctum::actingAs($director);
     $response = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard")->assertOk();
 
-    // 3 of 4 teachers logged in within 30 days = 75%.
-    expect($response->json('data.teacher_login_rate_30d'))->toEqual(75.0);
+    // 3 of 4 teachers started creating within 30 days = 75%.
+    expect($response->json('data.teacher_started_rate_30d'))->toEqual(75.0);
     // 1 of 4 teachers created a planning object within 30 days = 25%.
     expect($response->json('data.teacher_planning_rate_30d'))->toEqual(25.0);
 });
 
-it('returns 0% when the school has no teachers', function () {
+it('returns 0% confirmed and «dato no disponible» (null) started when nothing is recorded', function () {
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     Sanctum::actingAs($director);
 
     $response = $this->getJson("/api/v1/schools/{$school->id}/adoption-dashboard")->assertOk();
 
-    expect($response->json('data.teacher_login_rate_30d'))->toEqual(0.0)
-        ->and($response->json('data.teacher_planning_rate_30d'))->toEqual(0.0);
+    expect($response->json('data.teacher_started_rate_30d'))->toBeNull()
+        ->and($response->json('data.teacher_planning_rate_30d'))->toEqual(0.0)
+        ->and($response->json('data.data_since.form_opened'))->toBeNull()
+        ->and($response->json('data.data_since.generation_requested'))->toBeNull();
 });
 
 it('splits the weekly content series by type', function () {

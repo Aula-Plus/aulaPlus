@@ -18,8 +18,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * `metadata` must never carry a student's name or clinical content — only
  * IDs (CLAUDE.md security rules 2 and 11).
+ *
+ * Creation-journey rows (ClickUp 86e3qkxtc) also fill `journey_id`, `step`
+ * (App\Enums\JourneyStep), `content_type`/`content_id` and `group_id` — see
+ * App\Support\UsageJourney.
  */
-#[Fillable(['user_id', 'event_type', 'metadata'])]
+#[Fillable(['user_id', 'event_type', 'journey_id', 'step', 'content_type', 'content_id', 'group_id', 'metadata'])]
 class UsageEvent extends Model
 {
     /** @use HasFactory<UsageEventFactory> */
@@ -38,5 +42,10 @@ class UsageEvent extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(Group::class);
     }
 }

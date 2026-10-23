@@ -1,5 +1,7 @@
 import { api } from "@/lib/api"
 import type {
+  ScreeningBand,
+  ScreeningImpact,
   ScreeningTestApplication,
   ScreeningTestApplicationInput,
   ScreeningTestDesign,
@@ -23,9 +25,9 @@ import type {
  * mutations do not fetch it again.
  */
 
-// ── Types & designs (design screen) ─────────────────────────────────────────
+// ── Screenings & designs (design screen) ─────────────────────────────────────────
 
-/** List the school's screening-test types with their in-force approved design. */
+/** List the school's screenings with their design in force and the previous one. */
 export async function fetchScreeningTestTypes(): Promise<ScreeningTestType[]> {
   const { data } = await api.get<{ data: ScreeningTestType[] }>("/api/v1/screening-test-types")
   return data.data
@@ -41,10 +43,29 @@ export async function createScreeningTestType(
   return data.data
 }
 
+/** Edit a screening's general data (name, area, population, frequency, teacher access). */
+export async function updateScreeningTestType(
+  typeId: number,
+  input: ScreeningTestTypeInput,
+): Promise<ScreeningTestType> {
+  const { data } = await api.patch<{ data: ScreeningTestType }>(
+    `/api/v1/screening-test-types/${typeId}`,
+    input,
+  )
+  return data.data
+}
+
+/** Every version of a screening's design, newest first. */
+export async function fetchScreeningTestDesigns(typeId: number): Promise<ScreeningTestDesign[]> {
+  const { data } = await api.get<{ data: ScreeningTestDesign[] }>(
+    `/api/v1/screening-test-types/${typeId}/designs`,
+  )
+  return data.data
+}
+
 /**
- * Author a new design version for a type. Always inserts a fresh row left
- * `approved === null` (pending) — the backend keeps the whole history and never
- * mutates an earlier version.
+ * Save a new design version. It rules right away and Dirección is notified;
+ * the backend keeps the whole history and never mutates an earlier version.
  */
 export async function createScreeningTestDesign(
   typeId: number,
@@ -57,17 +78,25 @@ export async function createScreeningTestDesign(
   return data.data
 }
 
-export async function approveScreeningTestDesign(designId: number): Promise<ScreeningTestDesign> {
-  const { data } = await api.post<{ data: ScreeningTestDesign }>(
-    `/api/v1/screening-test-designs/${designId}/approve`,
-    {},
+/**
+ * "Ver cómo queda el grupo con este corte": students per band with the design
+ * in force and with the given bands, counting each student's latest take.
+ */
+export async function previewScreeningTestImpact(
+  typeId: number,
+  bands: ScreeningBand[],
+): Promise<ScreeningImpact> {
+  const { data } = await api.post<{ data: ScreeningImpact }>(
+    `/api/v1/screening-test-types/${typeId}/impact`,
+    { bands },
   )
   return data.data
 }
 
-export async function rejectScreeningTestDesign(designId: number): Promise<ScreeningTestDesign> {
+/** "Volver atrás" (Dirección): the previous design rules again. */
+export async function revertScreeningTestDesign(designId: number): Promise<ScreeningTestDesign> {
   const { data } = await api.post<{ data: ScreeningTestDesign }>(
-    `/api/v1/screening-test-designs/${designId}/reject`,
+    `/api/v1/screening-test-designs/${designId}/revert`,
     {},
   )
   return data.data
@@ -128,9 +157,9 @@ export async function fetchScreeningTestResults(
 }
 
 /**
- * Load a score onto a result. The backend computes and persists the traffic
- * -light `color` against the type's current approved design and returns the
- * updated result — the client renders that colour as-is, never recomputing it.
+ * Load a score onto a result. The backend reads its band with the design in
+ * force and returns the updated result — the client renders that band as-is,
+ * never recomputing it.
  */
 export async function updateScreeningTestResult(
   resultId: number,

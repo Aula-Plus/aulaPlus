@@ -38,7 +38,7 @@ trait TracksAuthorship
 
     /**
      * Same multi-guard resolution as Tenancy's — see
-     * Auditable::auditableCurrentUser() for why this is duplicated rather
+     * StudentFileHistory::baseAttributes() for why this is duplicated rather
      * than shared.
      */
     protected static function tracksAuthorshipCurrentUserId(): ?int

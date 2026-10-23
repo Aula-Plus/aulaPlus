@@ -3,14 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\Student;
+use App\Notifications\AccommodationProposalReturnedNotification;
+use App\Notifications\AlertOverdueNotification;
 use App\Notifications\CommentSharedNotification;
 use App\Notifications\FollowUpAssignedNotification;
+use App\Notifications\ScreeningDesignChangedNotification;
+use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /**
- * The caller's own unread notices (e.g. "a follow-up was assigned to you").
+ * The caller's own unread notices ("a follow-up was assigned to you", "an
+ * alert you have reached its deadline without a way out").
  * Always scoped to the authenticated user's notifications, so no further
  * policy is needed; payloads hold ids only (see FollowUpAssignedNotification).
  */
@@ -24,13 +30,16 @@ class NotificationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $notifications = $this->unreadNotices($request)
+        $notices = $this->unreadListedNotices($request)
             ->latest()
             ->limit(self::LIST_LIMIT)
-            ->get()
+            ->get();
+        $studentNames = $this->sharedStudentNames($request, $notices->pluck('data'));
+
+        $notifications = $notices
             ->map(fn ($notification) => [
                 'id' => $notification->id,
-                'data' => $this->withStudentName($request, $notification->data),
+                'data' => $this->withStudentName($notification->data, $studentNames),
                 'created_at' => $notification->created_at?->toIso8601String(),
             ]);
 
@@ -48,7 +57,7 @@ class NotificationController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         return response()->json([
-            'data' => ['count' => $this->unreadNotices($request)->count()],
+            'data' => ['count' => $this->unreadListedNotices($request)->count()],
         ]);
     }
 
@@ -61,36 +70,73 @@ class NotificationController extends Controller
 
     /**
      * A shared-extract notice names the student (ClickUp 86e3qkwnv), but the
-     * stored payload holds ids only; the name is resolved here, and only when
-     * the caller may still see that student (tenant scope + StudentPolicy).
+     * stored payload holds ids only; the names are resolved here in one query,
+     * and only for students the caller may still see (tenant scope +
+     * StudentPolicy).
      *
+     * @param  Collection<int, array<string, mixed>>  $payloads
+     * @return array<int, string>  student id => name
+     */
+    private function sharedStudentNames(Request $request, Collection $payloads): array
+    {
+        $ids = $payloads
+            ->filter(fn (array $data) => ($data['type'] ?? null) === 'comment_shared')
+            ->pluck('student_id')
+            ->filter()
+            ->unique();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return Student::query()
+            ->whereKey($ids->all())
+            ->get()
+            ->filter(fn (Student $student) => $request->user()->can('view', $student))
+            ->mapWithKeys(fn (Student $student) => [$student->id => $student->full_name])
+            ->all();
+    }
+
+    /**
      * @param  array<string, mixed>  $data
+     * @param  array<int, string>  $studentNames
      * @return array<string, mixed>
      */
-    private function withStudentName(Request $request, array $data): array
+    private function withStudentName(array $data, array $studentNames): array
     {
         if (($data['type'] ?? null) !== 'comment_shared') {
             return $data;
         }
 
-        $student = Student::query()->find($data['student_id'] ?? null);
-
-        return [
-            ...$data,
-            'student_name' => $student !== null && $request->user()->can('view', $student) ? $student->full_name : null,
-        ];
+        return [...$data, 'student_name' => $studentNames[$data['student_id'] ?? 0] ?? null];
     }
 
     /**
-     * The caller's unread notices of the kinds "Alertas y seguimientos"
-     * renders: follow-up assignments and shared extracts. Both `index` and
-     * `unreadCount` read from here so the list and the sidebar count share
+     * The notice types the page renders: a follow-up assigned to you, an
+     * alert you have that reached its deadline without a way out («Llegó a
+     * su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), an
+     * accommodation proposal returned to you for corrections (86e3qkwkk), an
+     * extract psychopedagogy shared with you (86e3qkwnv), and the screening
+     * design changed/reverted notices (screen 08).
+     */
+    public const LISTED_TYPES = [
+        FollowUpAssignedNotification::class,
+        AlertOverdueNotification::class,
+        AccommodationProposalReturnedNotification::class,
+        CommentSharedNotification::class,
+        ScreeningDesignChangedNotification::class,
+        ScreeningDesignRevertedNotification::class,
+    ];
+
+    /**
+     * The caller's unread notices of the kinds the page renders. Both `index`
+     * and `unreadCount` read from here so the list and the sidebar count share
      * one definition — a future database notification type will not inflate
      * the count with notices the page cannot show.
      */
-    private function unreadNotices(Request $request): MorphMany
+    private function unreadListedNotices(Request $request): MorphMany
     {
         return $request->user()->unreadNotifications()
-            ->whereIn('type', [FollowUpAssignedNotification::class, CommentSharedNotification::class]);
+            ->whereIn('type', self::LISTED_TYPES);
     }
 }

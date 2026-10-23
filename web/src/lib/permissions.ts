@@ -179,11 +179,30 @@ export function canManageAlertSettings(user: User | null): boolean {
 }
 
 /**
- * Approve/reject an accommodation. Director or psychopedagogue.
- * Mirror of `AccommodationPolicy::approve`.
+ * Direction proposes accommodations instead of creating them (ClickUp
+ * 86e3qkwkk): what it saves goes to psychopedagogy's review. Mirror of
+ * `AccommodationProposalWorkflow::createsProposals` (someone holding both
+ * roles creates directly).
  */
-export function canApproveAccommodation(user: User | null): boolean {
-  return isSchoolWideStaff(user)
+export function createsAccommodationProposals(user: User | null): boolean {
+  return isDirector(user) && !isPsychopedagogue(user)
+}
+
+/**
+ * Edit or switch off an accommodation already in force. Mirror of the
+ * confirmed-accommodation half of `AccommodationPolicy::update`:
+ * psychopedagogy only (direction reads; it edits only its open proposals).
+ */
+export function canEditConfirmedAccommodations(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}
+
+/**
+ * Confirm, return or reject a direction proposal. Mirror of
+ * `AccommodationPolicy::confirm`/`returnProposal`/`reject`: psychopedagogy only.
+ */
+export function canReviewAccommodationProposals(user: User | null): boolean {
+  return isPsychopedagogue(user)
 }
 
 /**
@@ -211,8 +230,9 @@ export function canValidateBarrierAccommodation(
 }
 
 /**
- * View a student's tracking history. Director or psychopedagogue.
- * Mirror of `StudentHistoryController` (school-wide staff).
+ * View a student's change history ("Ver historial de cambios"). Director or
+ * psychopedagogue. Mirror of `StudentPolicy::viewChangeHistory`; the server
+ * also drops each entry the viewer could not read in its original place.
  */
 export function canViewStudentHistory(user: User | null): boolean {
   return isSchoolWideStaff(user)
@@ -269,13 +289,35 @@ export function canManageScreeningTests(user: User | null): boolean {
 }
 
 /**
- * Approve/reject a screening-test design. Mirror of
- * `ScreeningTestDesignPolicy::approve`/`reject` (role portion): **director
- * only**. The mirror of `canApproveAccommodation`'s director half — but note
- * that helper also allows psychopedagogue, whereas design approval is stricter
- * (director alone), so this is its own predicate rather than a reuse.
+ * Edit a screening's general data and save a new design (screen 08). Mirror
+ * of `ScreeningTestTypePolicy::update` / `ScreeningTestDesignPolicy::create`
+ * (role portion): Psicopedagogía and Dirección. UX only — the server decides.
  */
-export function canApproveScreeningTestDesign(user: User | null): boolean {
+export function canEditScreeningTestDesign(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
+}
+
+/**
+ * "Volver atrás" on the design in force. Mirror of
+ * `ScreeningTestDesignPolicy::revert` (role portion): Dirección only.
+ */
+export function canRevertScreeningTestDesign(user: User | null): boolean {
+  return hasAnyRole(user, ["director"])
+}
+
+/**
+ * Upload and review student reports (and their AI proposals): psychopedagogy
+ * only. Mirror of `ReportDocumentPolicy::create` / `::manage`.
+ */
+export function canManageReports(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}
+
+/**
+ * Direction's switch for the AI reading of reports. Mirror of
+ * `UpdateAiReportSettingRequest::authorize`.
+ */
+export function canManageAiReportSetting(user: User | null): boolean {
   return isDirector(user)
 }
 

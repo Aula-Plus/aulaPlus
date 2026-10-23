@@ -195,6 +195,27 @@ describe("FollowUpsSection", () => {
     expect(screen.queryByText(/te asignaron un seguimiento/i)).not.toBeInTheDocument()
   })
 
+  it("tells whoever has an alert that it reached its deadline without a way out", async () => {
+    vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([])
+    vi.spyOn(api, "fetchNotifications").mockResolvedValue([
+      {
+        id: "n2",
+        data: { type: "alert_overdue", alert_id: 10, student_id: 3, due_date: "2026-10-20" },
+        created_at: null,
+      },
+    ])
+
+    render(
+      <MemoryRouter>
+        <FollowUpsSection />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(/una alerta que tenés llegó a su fecha sin salida/i)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Ver alertas" })).toHaveAttribute("href", "/alertas")
+    expect(screen.queryByText(/te asignaron un seguimiento/i)).not.toBeInTheDocument()
+  })
+
   it("shows a shared-extract notice naming the student, with a link to the file", async () => {
     vi.spyOn(api, "fetchMyFollowUps").mockResolvedValue([])
     vi.spyOn(api, "fetchNotifications").mockResolvedValue([
