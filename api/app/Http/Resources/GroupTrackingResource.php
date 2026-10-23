@@ -11,20 +11,23 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * The group tracking view (docs/prompts/04-seguimiento-institucional.md §3).
  * Wraps a plain array assembled by GroupTrackingController.
  *
- * Per-student indicators are deliberately COUNTS/BOOLEANS ONLY, for every
- * viewer regardless of role — never the underlying clinical detail
- * (accommodation/barrier description, alert description). This is the
- * concrete place CLAUDE.md security rule 11 is at stake for this session: a
- * teacher leading the group and a director see the exact same shape here:
+ * Per-student indicators are deliberately COUNTS/BOOLEANS ONLY — never the
+ * underlying clinical detail (accommodation/barrier description, alert
+ * description). This is the concrete place CLAUDE.md security rule 11 is at
+ * stake for this session:
  *
  *     {"id": ..., "full_name": ..., "open_alerts_count": N,
  *      "has_active_accommodations": bool}
  *
- * — full clinical content is only ever reachable through
+ * `has_active_accommodations` goes to psychopedagogue/director only: for a
+ * teacher a yes/no per name is a roster of who has accommodations ("agregado
+ * por tipo, nunca nómina", pantallas 02 y 03), so the key is omitted for them
+ * and they read the aggregate table (GET /groups/{group}/accommodations-summary).
+ * Full clinical content is only ever reachable through
  * /students/{id}/tracking, which re-applies StudentPolicy::viewClinicalProfile
  * per viewer (see StudentTrackingResource).
  *
- * The one role-gated field here is the trend `comments_count` (docs/prompts/
+ * The other role-gated field is the trend `comments_count` (docs/prompts/
  * 19-comentarios-alcance.md §2): "el número ancla, el contenido no" — a
  * teacher may read the *content* of other teachers' comments, but the raw
  * *count* over the period (private comments included) belongs to
@@ -36,7 +39,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *     group: Group,
  *     students: iterable,
  *     period_days: int,
- *     assessments_count: int,
  *     comments_count: int,
  * }
  */
@@ -48,6 +50,7 @@ class GroupTrackingResource extends JsonResource
     public function toArray(Request $request): array
     {
         $user = $request->user();
+        $schoolWide = $user->hasAnyRole(Role::schoolWideValues());
 
         return [
             'group' => new GroupResource($this->resource['group']),
@@ -55,13 +58,11 @@ class GroupTrackingResource extends JsonResource
                 'id' => $summary['id'],
                 'full_name' => $summary['full_name'],
                 'open_alerts_count' => $summary['open_alerts_count'],
-                'has_active_accommodations' => $summary['has_active_accommodations'],
-            ])->values(),
+            ] + ($schoolWide ? ['has_active_accommodations' => $summary['has_active_accommodations']] : []))->values(),
             'trend' => [
                 'period_days' => $this->resource['period_days'],
-                'assessments_count' => $this->resource['assessments_count'],
                 'comments_count' => $this->when(
-                    $user->hasAnyRole(Role::schoolWideValues()),
+                    $schoolWide,
                     fn () => $this->resource['comments_count']
                 ),
             ],

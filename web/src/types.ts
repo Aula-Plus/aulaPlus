@@ -823,7 +823,8 @@ export interface GroupTrackingStudent {
   id: number
   full_name: string
   open_alerts_count: number
-  has_active_accommodations: boolean
+  /** Psychopedagogue/director only: omitted for a teacher (it would be a roster). */
+  has_active_accommodations?: boolean
 }
 
 /** Aggregated per-group tracking view (`GET /api/v1/groups/{id}/tracking`). */
@@ -832,7 +833,6 @@ export interface GroupTracking {
   students: GroupTrackingStudent[]
   trend: {
     period_days: number
-    assessments_count: number
     /**
      * Omitted entirely (not `0`, not `null`) for a viewer without a school-wide
      * role — the backend drops the key via `$this->when(...)`

@@ -30,7 +30,7 @@ function groupTracking(teacherIds: number[]): GroupTracking {
       { id: 3, full_name: "Juan Pérez", open_alerts_count: 0, has_active_accommodations: false },
       { id: 4, full_name: "Ana Gómez", open_alerts_count: 0, has_active_accommodations: false },
     ],
-    trend: { period_days: 30, assessments_count: 0, comments_count: 0 },
+    trend: { period_days: 30, comments_count: 0 },
   }
 }
 

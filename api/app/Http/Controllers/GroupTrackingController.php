@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Http\Resources\GroupTrackingResource;
 use App\Models\Accommodation;
 use App\Models\Alert;
-use App\Models\Assessment;
 use App\Models\Comment;
 use App\Models\Group;
 use Illuminate\Http\Request;
@@ -14,9 +14,9 @@ use Illuminate\Http\Request;
  * GET /api/v1/groups/{group}/tracking — read-only aggregator view
  * (docs/prompts/04-seguimiento-institucional.md §3), not cached (unlike the
  * student tracking view — see StudentTrackingController): its per-student
- * summaries are counts/booleans only for every viewer — though still filtered
- * per viewer (alerts by recipient, accommodations by
- * Accommodation::scopeVisibleTo), which is one more reason not to share a cache.
+ * summaries are counts/booleans only — though still filtered per viewer
+ * (alerts by recipient; the accommodation flag for school-wide roles only),
+ * which is one more reason not to share a cache.
  */
 class GroupTrackingController extends Controller
 {
@@ -47,17 +47,22 @@ class GroupTrackingController extends Controller
         // the relation resolves through a join over the group_student pivot.
         $students = $group->students()->orderBy('students.full_name')->get();
 
-        // One query for the whole group, through the single visibility rule
-        // (Accommodation::scopeVisibleTo): a teacher of another subject must
-        // not learn that a subject-specific accommodation exists. "Active"
-        // keeps the isEffective() semantics (active + approved when required).
-        $withActiveAccommodations = Accommodation::query()
-            ->visibleTo($user)
-            ->effective()
-            ->whereIn('accommodations.student_id', $students->modelKeys())
-            ->distinct()
-            ->pluck('accommodations.student_id')
-            ->flip();
+        // Only psychopedagogy and direction get the per-student accommodation
+        // flag. For a teacher it would be a roster of who has accommodations —
+        // "agregado por tipo, nunca nómina" (pantallas 02 y 03): they read the
+        // aggregate table instead, and reach a single case only by opening the
+        // student file. One query for the whole group, through the single
+        // visibility rule (Accommodation::scopeVisibleTo). "Active" keeps the
+        // isEffective() semantics (active + approved when required).
+        $withActiveAccommodations = $user->hasAnyRole(Role::schoolWideValues())
+            ? Accommodation::query()
+                ->visibleTo($user)
+                ->effective()
+                ->whereIn('accommodations.student_id', $students->modelKeys())
+                ->distinct()
+                ->pluck('accommodations.student_id')
+                ->flip()
+            : null;
 
         $students = $students->map(fn ($student) => [
             'id' => $student->id,
@@ -69,17 +74,13 @@ class GroupTrackingController extends Controller
                 ->where('resolved', false)
                 ->countableFor($user)
                 ->count(),
-            'has_active_accommodations' => $withActiveAccommodations->has($student->id),
+            'has_active_accommodations' => $withActiveAccommodations?->has($student->id),
         ]);
 
         return new GroupTrackingResource([
             'group' => $group,
             'students' => $students,
             'period_days' => self::TREND_PERIOD_DAYS,
-            'assessments_count' => Assessment::query()
-                ->where('group_id', $group->id)
-                ->where('created_at', '>=', $since)
-                ->count(),
             'comments_count' => Comment::query()
                 ->where('commentable_type', Group::class)
                 ->where('commentable_id', $group->id)
