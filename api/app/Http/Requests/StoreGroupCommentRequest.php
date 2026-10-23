@@ -3,17 +3,26 @@
 namespace App\Http\Requests;
 
 use App\Enums\Role;
+use App\Http\Requests\Concerns\ValidatesCommentCategorySignals;
+use App\Models\Comment;
 use App\Models\Group;
 use App\Support\Tenancy;
+use Closure;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
  * Authorization for commenting on a Group reuses GroupPolicy::view — same
  * pattern as StoreStudentCommentRequest (no parallel authorization rule).
+ * Group comments take categories too, so the same signal-per-category rule
+ * applies (ClickUp 86e3qkwpn), for consistency; group comments never feed a
+ * student's trend marks or the «Señal de dificultad» alert.
  */
 class StoreGroupCommentRequest extends FormRequest
 {
+    use ValidatesCommentCategorySignals;
+
     public function authorize(): bool
     {
         /** @var Group $group */
@@ -45,6 +54,16 @@ class StoreGroupCommentRequest extends FormRequest
         // the two and break the invariant their docblocks promise.
         if ($this->input('visible_to') === []) {
             $this->merge(['visible_to' => null]);
+
+            return;
+        }
+
+        // The selector's presets (ClickUp 86e3qkwnv): canonicalize before the
+        // preset check below, so an older client still sending "solo
+        // dirección" (`["director"]`) stores "Dirección y Psicopedagogía".
+        $visibleTo = $this->input('visible_to');
+        if (is_array($visibleTo) && array_is_list($visibleTo) && collect($visibleTo)->every(fn ($role) => is_string($role))) {
+            $this->merge(['visible_to' => Comment::normalizeVisibleTo($visibleTo)]);
         }
     }
 
@@ -61,9 +80,25 @@ class StoreGroupCommentRequest extends FormRequest
                 'integer', 'distinct',
                 Rule::exists('comment_categories', 'id')->where('school_id', Tenancy::schoolId()),
             ],
+            // One signal per category (ClickUp 86e3qkwpn) — see the trait.
+            ...$this->categorySignalRules(),
             'author_only' => ['sometimes', 'boolean'],
-            'visible_to' => ['nullable', 'array'],
+            'visible_to' => ['nullable', 'array', function (string $attribute, mixed $value, Closure $fail): void {
+                // Only the four selector presets are storable; free role
+                // combinations are not (null and author_only are the others).
+                if (is_array($value) && ! in_array($value, Comment::visibleToPresets(), true)) {
+                    $fail('The selected visibility is not one of the allowed scopes.');
+                }
+            }],
             'visible_to.*' => [Rule::in(Role::values())],
         ];
+    }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [fn (Validator $validator) => $this->validateCategorySignals($validator)];
     }
 }

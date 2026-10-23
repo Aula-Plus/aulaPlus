@@ -12,6 +12,11 @@ Artisan::command('inspire', function () {
 // school's configured conditions once a day.
 Schedule::command('alerts:performance')->daily();
 
-// "Alerta escalada con plazo vencido" (ClickUp 86e3jpzdp): handed-off alerts
-// whose deadline passed without a way out.
-Schedule::command('alerts:escalate')->daily();
+// «Señal de dificultad» alerts (ClickUp 86e3qkwpn): evaluated daily alongside
+// the performance alerts, from each school's configured conditions.
+Schedule::command('alerts:difficulty-signals')->daily();
+
+// «Llegó a su fecha sin salida» (ClickUp 86e3jpzdp, review of 14/10): marks
+// the same alert when its deadline passed while still pending — no second
+// alert is created.
+Schedule::command('alerts:overdue')->daily();

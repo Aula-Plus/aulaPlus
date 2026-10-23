@@ -40,7 +40,7 @@ class GroupCommentController extends Controller
             'author_only' => $request->boolean('author_only'),
         ]);
 
-        $comment->categories()->sync($request->validated('category_ids') ?? []);
+        $comment->categories()->sync($request->categoriesWithSignals());
         $comment->load('categories');
 
         return (new CommentResource($comment))->response()->setStatusCode(201);

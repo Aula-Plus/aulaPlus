@@ -2,6 +2,7 @@
 
 use App\Enums\AlertType;
 use App\Models\Alert;
+use App\Models\AlertRoutingSetting;
 use App\Models\AlertRule;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
@@ -249,6 +250,29 @@ it('routes new alerts to psychopedagogy too when the school changes the setting'
     $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
 });
 
+it('lets the school route an alert to direction only, saving exactly that', function () {
+    ($this->rule)();
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4]);
+
+    // Psychopedagogy can configure routing too; direction alone is allowed
+    // (the screen warns before saving, ClickUp 86e3qkyrn).
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->putJson('/api/v1/alert-routing/performance', ['recipients' => ['director']])
+        ->assertOk()
+        ->assertJsonFragment(['type' => 'performance', 'recipients' => ['director'], 'is_default' => false]);
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    Sanctum::actingAs($this->director);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(1, 'data');
+
+    Sanctum::actingAs($this->mathTeacher);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+
+    Sanctum::actingAs($this->psychopedagogue);
+    $this->getJson('/api/v1/alerts')->assertOk()->assertJsonCount(0, 'data');
+});
+
 it('keeps legacy alerts visible to school-wide roles only', function () {
     Tenancy::forSchool($this->school, fn () => Alert::factory()->create(['student_id' => $this->student->id]));
 
@@ -315,6 +339,19 @@ it('validates the parameter each condition needs and the recipients', function (
         ->assertUnprocessable();
     $this->putJson('/api/v1/alert-routing/unknown', ['recipients' => ['teacher']])
         ->assertNotFound();
+});
+
+it('does not offer routing for an alert type nothing generates yet', function () {
+    // "Planificación / asistencia" is a placeholder: the school must not be able
+    // to configure recipients for an alert that never happens (ClickUp 86e3qkyrn).
+    Sanctum::actingAs($this->director);
+
+    $types = collect($this->getJson('/api/v1/alert-settings')->assertOk()->json('data.routing'))->pluck('type');
+    expect($types->all())->toBe(['performance', 'difficulty_signal']);
+
+    $this->putJson('/api/v1/alert-routing/planning_attendance', ['recipients' => ['director']])
+        ->assertJsonValidationErrors('type');
+    expect(AlertRoutingSetting::query()->withoutGlobalScopes()->count())->toBe(0);
 });
 
 it('isolates alert settings between schools', function () {

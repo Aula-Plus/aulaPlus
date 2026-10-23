@@ -75,7 +75,11 @@ class GroupController extends Controller
 
         $union(Alert::query()->where('alerts.resolved', false));
 
-        $union(ScheduledFollowUp::query()->where('scheduled_follow_ups.resolved', false));
+        // A proposal's review task is not tracking of the student yet: the
+        // proposal is not an accommodation until psychopedagogy confirms it.
+        $union(ScheduledFollowUp::query()
+            ->where('scheduled_follow_ups.resolved', false)
+            ->whereNull('scheduled_follow_ups.accommodation_id'));
 
         return array_map('count', $studentsByGroup);
     }

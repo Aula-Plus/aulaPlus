@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Alert;
 use App\Models\ScheduledFollowUp;
 use App\Models\Student;
 use App\Models\User;
@@ -20,6 +21,12 @@ use Illuminate\Validation\Rules\Exists;
  * The responsible person and the people it is shared with must themselves be
  * able to see the student (same policy rule): a follow-up can go up to
  * psychopedagogy or direction, never to someone with no access to the case.
+ * There is no cap on how many people follow it.
+ *
+ * Optionally linked to an alert about the same student («Crear seguimiento
+ * vinculado», ClickUp 86e3jpzdp review of 14/10): the caller must also be
+ * allowed to act on that alert (AlertPolicy::linkFollowUp — whoever handed
+ * it off only reads it).
  */
 class StoreScheduledFollowUpRequest extends FormRequest
 {
@@ -28,7 +35,21 @@ class StoreScheduledFollowUpRequest extends FormRequest
         /** @var Student $student */
         $student = $this->route('student');
 
-        return $this->user()->can('create', [ScheduledFollowUp::class, $student]);
+        if (! $this->user()->can('create', [ScheduledFollowUp::class, $student])) {
+            return false;
+        }
+
+        // A malformed or unknown alert id is left to the validation rules
+        // (422); an alert the caller may not act on is a 403.
+        $alertId = $this->input('alert_id');
+        if (is_int($alertId) || (is_string($alertId) && ctype_digit($alertId))) {
+            $alert = Alert::query()->find((int) $alertId);
+            if ($alert !== null && ! $this->user()->can('linkFollowUp', $alert)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -40,10 +61,19 @@ class StoreScheduledFollowUpRequest extends FormRequest
         $student = $this->route('student');
 
         return [
+            // Required for new follow-ups; nullable in the DB only for the
+            // rows backfilled by the stages migration (ClickUp 86e3qkwna).
+            'title' => ['required', 'string', 'max:150'],
             'description' => ['required', 'string'],
             'due_date' => ['required', 'date'],
+            'alert_id' => [
+                'nullable', 'integer',
+                Rule::exists('alerts', 'id')
+                    ->where('school_id', $student->school_id)
+                    ->where('student_id', $student->id),
+            ],
             'assigned_to_id' => ['nullable', 'integer', $this->activeColleague($student)],
-            'shared_with_ids' => ['nullable', 'array', 'max:20'],
+            'shared_with_ids' => ['nullable', 'array', 'max:50'],
             'shared_with_ids.*' => ['integer', 'distinct', $this->activeColleague($student)],
         ];
     }

@@ -1,17 +1,20 @@
 import { api } from "@/lib/api"
 import type {
   Accommodation,
+  AccommodationReviewEvent,
   AccommodationNarrativeView,
   AccommodationInput,
   Alert,
-  AuditLogEntry,
   BarrierAccommodationLink,
   Comment,
   CommentCategory,
+  CommentShare,
+  CommentSignal,
   GroupAccommodationSummaryEntry,
   GroupTracking,
-  Paginated,
   Role,
+  StudentHistoryFilters,
+  StudentHistoryPage,
   StudentTracking,
   TeamSummary,
 } from "@/types"
@@ -29,6 +32,11 @@ export interface CommentInput {
   content: string
   /** Optional; several allowed; only this school's categories. */
   category_ids?: number[]
+  /**
+   * The signal for EACH category in `category_ids`, keyed by category id
+   * (ClickUp 86e3qkwpn) — mandatory per category, sent only with categories.
+   */
+  category_signals?: Record<number, CommentSignal>
   /**
    * Roles allowed to see the comment.
    *
@@ -48,6 +56,12 @@ export interface CommentInput {
    * not send them as if independent).
    */
   author_only?: boolean
+  /**
+   * «Elegir personas» (ClickUp 86e3qkwnv): per role of the chosen scope, the
+   * specific people who may read it; a role left out keeps its whole
+   * audience. Student observations only; never sent with `author_only`.
+   */
+  visible_to_users?: Partial<Record<Role, number[]>>
 }
 
 export async function fetchStudentTracking(studentId: number): Promise<StudentTracking> {
@@ -107,6 +121,34 @@ export async function createStudentComment(
   return data.data
 }
 
+// ── «Compartir con» extracts (psychopedagogy only shares; server-enforced) ──
+
+export interface CommentShareInput {
+  /** The extract: new text, never the original observation. */
+  content: string
+  /** Direction and/or teachers who already see the student. */
+  recipient_ids: number[]
+}
+
+/** Extracts on this student the caller wrote or received. */
+export async function fetchStudentCommentShares(studentId: number): Promise<CommentShare[]> {
+  const { data } = await api.get<{ data: CommentShare[] }>(
+    `/api/v1/students/${studentId}/comment-shares`,
+  )
+  return data.data
+}
+
+export async function shareComment(
+  commentId: number,
+  input: CommentShareInput,
+): Promise<CommentShare> {
+  const { data } = await api.post<{ data: CommentShare }>(
+    `/api/v1/comments/${commentId}/shares`,
+    input,
+  )
+  return data.data
+}
+
 export async function fetchGroupComments(groupId: number): Promise<Comment[]> {
   const { data } = await api.get<{ data: Comment[] }>(`/api/v1/groups/${groupId}/comments`)
   return data.data
@@ -132,21 +174,38 @@ export async function resolveAlert(alertId: number): Promise<Alert> {
   return data.data
 }
 
-// ── Accommodation approval (Sesión 9) ─────────────────────────────────────
-// Both endpoints return the updated AccommodationResource wrapped in `{ data }`.
-// The 422 business-state precondition (docs/prompts/03 §3) is checked by the
-// server; callers should only invoke these when the UI shows the buttons.
+// ── Direction accommodation proposals (ClickUp 86e3qkwkk) ─────────────────
+// Every step returns the updated AccommodationResource wrapped in `{ data }`.
+// Whether the proposal's state allows the step is checked by the server (422);
+// who may take it by AccommodationPolicy (403).
 
-export async function approveAccommodation(accommodationId: number): Promise<Accommodation> {
+export type AccommodationProposalStep = "confirm" | "return" | "resubmit" | "withdraw" | "reject"
+
+export async function reviewAccommodationProposal(
+  accommodationId: number,
+  step: AccommodationProposalStep,
+  body: { note?: string; reason?: string; starts_on?: string; origin?: string } = {},
+): Promise<Accommodation> {
   const { data } = await api.post<{ data: Accommodation }>(
-    `/api/v1/accommodations/${accommodationId}/approve`,
+    `/api/v1/accommodations/${accommodationId}/proposal/${step}`,
+    body,
   )
   return data.data
 }
 
-export async function rejectAccommodation(accommodationId: number): Promise<Accommodation> {
-  const { data } = await api.post<{ data: Accommodation }>(
-    `/api/v1/accommodations/${accommodationId}/reject`,
+/** The student's direction proposals not confirmed yet (school-wide roles only). */
+export async function fetchAccommodationProposals(studentId: number): Promise<Accommodation[]> {
+  const { data } = await api.get<{ data: Accommodation[] }>(
+    `/api/v1/students/${studentId}/accommodation-proposals`,
+  )
+  return data.data
+}
+
+export async function fetchAccommodationProposalHistory(
+  accommodationId: number,
+): Promise<AccommodationReviewEvent[]> {
+  const { data } = await api.get<{ data: AccommodationReviewEvent[] }>(
+    `/api/v1/accommodations/${accommodationId}/proposal/history`,
   )
   return data.data
 }
@@ -226,19 +285,21 @@ export async function validateBarrierAccommodation(
   return data.data
 }
 
-// ── Student audit history (Sesión 9) ─────────────────────────────────────
+// ── Student change history (ClickUp 86e3qkwmc) ─────────────────────────────
 // The only paginated endpoint in the frontend so far — return the whole
 // Paginated<T> envelope (docs/prompts/09 §2), never just the data array, so
-// callers do not have to re-implement pagination on top of `meta`.
+// callers do not have to re-implement pagination on top of `meta`. `actors`
+// (the people in the history) feeds the "Persona" filter. Filtering happens
+// server-side, where the per-entry permission check also runs.
 
 export async function fetchStudentHistory(
   studentId: number,
   page = 1,
-): Promise<Paginated<AuditLogEntry>> {
-  const { data } = await api.get<Paginated<AuditLogEntry>>(
-    `/api/v1/students/${studentId}/history`,
-    { params: { page } },
-  )
+  filters: StudentHistoryFilters = {},
+): Promise<StudentHistoryPage> {
+  const { data } = await api.get<StudentHistoryPage>(`/api/v1/students/${studentId}/history`, {
+    params: { page, ...filters },
+  })
   return data
 }
 

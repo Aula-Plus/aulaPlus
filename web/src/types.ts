@@ -113,8 +113,12 @@ export interface Comment {
   commentable_type: string
   commentable_id: number
   content: string
-  /** Optional, several allowed; empty = "Sin categoría". */
-  categories?: { id: number; name: string }[]
+  /**
+   * Optional, several allowed; empty = "Sin categoría". Each carries the
+   * author's signal for it (ClickUp 86e3qkwpn); `null` on observations written
+   * before signals existed.
+   */
+  categories?: { id: number; name: string; signal?: CommentSignal | null }[]
   /**
    * Roles allowed to see the comment, or null when visible to everyone who
    * can see the parent record. Never an empty array from the API.
@@ -128,16 +132,34 @@ export interface Comment {
    * comment reaches the client only when the viewer is its own author.
    */
   author_only: boolean
+  /**
+   * «Elegir personas» (ClickUp 86e3qkwnv): per role, the specific people the
+   * author picked. Only sent back to the author.
+   */
+  visible_to_users?: Partial<Record<Role, number[]>> | null
   created_at: string | null
 }
 
+/**
+ * Mirror of `App\Enums\CommentSignal` — the signal an author picks for each
+ * category of an observation (ClickUp 86e3qkwpn). Mandatory per category.
+ */
+export type CommentSignal = "improvement" | "difficulty" | "no_change"
+
+export const commentSignalLabels: Record<CommentSignal, string> = {
+  improvement: "Señal de mejora",
+  difficulty: "Señal de dificultad",
+  no_change: "Sin cambio observado",
+}
+
 /** Mirror of `App\Enums\AlertType`. */
-export type AlertType = "performance" | "planning_attendance" | "escalated_overdue"
+export type AlertType = "performance" | "planning_attendance" | "escalated_overdue" | "difficulty_signal"
 
 export const alertTypeLabels: Record<AlertType, string> = {
   performance: "Rendimiento",
   planning_attendance: "Planificación / asistencia",
   escalated_overdue: "Alerta escalada con plazo vencido",
+  difficulty_signal: "Señal de dificultad",
 }
 
 /** Mirror of `App\Enums\AlertOutcome` — the three ways out of an alert (ClickUp 86e3jpzdp). */
@@ -162,15 +184,37 @@ export interface AlertPerson {
   name: string | null
 }
 
+/**
+ * Mirror of `App\Enums\AlertActionKind`: a way out chosen, a note by whoever
+ * has the alert, or the deadline arriving with the alert still pending
+ * («Llegó a su fecha sin salida»).
+ */
+export type AlertActionKind = "outcome" | "note" | "overdue"
+
 /** One step of an alert's thread. */
 export interface AlertActionEntry {
   id: number
-  outcome: AlertOutcome
-  actor: AlertPerson
-  assignee: AlertPerson
+  kind: AlertActionKind
+  /** Only on `outcome` steps. */
+  outcome: AlertOutcome | null
+  /** `null` on an `overdue` step: written by the daily run, not by a person. */
+  actor: AlertPerson | null
+  /** Who became responsible (`outcome`) or who had it (`overdue`); `null` on a note. */
+  assignee: AlertPerson | null
   due_on: string | null
   note: string | null
   created_at: string | null
+}
+
+/**
+ * A follow-up linked to an alert, as the alert lists it: state and deadline
+ * only; its content is read through the follow-up endpoints.
+ */
+export interface AlertFollowUpLink {
+  id: number
+  due_date: string | null
+  resolved: boolean
+  is_overdue: boolean
 }
 
 /** Mirror of `App\Enums\AlertSeverity`. */
@@ -190,6 +234,9 @@ export interface Alert {
   /** The subject a sustained-low-performance alert was met in (ClickUp 86e3jpzcv). */
   subject_id?: number | null
   subject_name?: string | null
+  /** «Señal de dificultad» alerts: the category the signals were counted in (ClickUp 86e3qkwpn). */
+  comment_category_id?: number | null
+  comment_category_name?: string | null
   type: AlertType
   severity: AlertSeverity
   description: string
@@ -197,7 +244,7 @@ export interface Alert {
   condition_met_on?: string | null
   /** Who the alert reached first; `null` on alerts created before 86e3jpzcv. */
   recipients?: AlertRecipient[] | null
-  /** Escalated alerts: the alert whose deadline passed. */
+  /** Legacy escalated alerts (no longer created): the alert whose deadline passed. */
   source_alert_id?: number | null
   /** The way out chosen (ClickUp 86e3jpzdp), `null` while none was. */
   outcome?: AlertOutcome | null
@@ -207,9 +254,22 @@ export interface Alert {
   outcome_at?: string | null
   due_on?: string | null
   is_overdue?: boolean
+  /**
+   * «Llegó a su fecha sin salida»: when the daily run found the current
+   * deadline passed with the alert still pending. The same alert — no second
+   * one is created.
+   */
+  overdue_at?: string | null
   actions?: AlertActionEntry[]
+  /** Follow-ups created from this alert («seguimiento vinculado»). */
+  follow_ups?: AlertFollowUpLink[]
+  /**
+   * Whether the current user has the alert now (they are the one responsible
+   * once a way out was chosen): it is «a tu cargo» for them.
+   */
+  is_in_charge?: boolean
   /** What the current user may do, decided by `AlertPolicy`. */
-  can?: { act: boolean; resolve: boolean }
+  can?: { act: boolean; note?: boolean; resolve: boolean; link_follow_up?: boolean }
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null
@@ -401,6 +461,61 @@ export interface StudentPerformanceTimeline {
  */
 export type AccommodationCategory = "access" | "content" | "criteria"
 
+/** Where a direction accommodation proposal stands (`App\Enums\AccommodationReviewStatus`). */
+export type AccommodationReviewStatus = "pending" | "returned" | "confirmed" | "withdrawn" | "rejected"
+
+export const accommodationReviewStatusLabels: Record<AccommodationReviewStatus, string> = {
+  pending: "Pendiente de confirmación de Psicopedagogía",
+  returned: "Devuelta para corregir",
+  confirmed: "Confirmada por Psicopedagogía",
+  withdrawn: "Retirada por Dirección",
+  rejected: "Rechazada por Psicopedagogía",
+}
+
+/** One step of a proposal's review (`AccommodationReviewEventResource`). */
+export type AccommodationReviewAction =
+  | "submitted"
+  | "edited"
+  | "returned"
+  | "resubmitted"
+  | "confirmed"
+  | "withdrawn"
+  | "rejected"
+
+export const accommodationReviewActionLabels: Record<AccommodationReviewAction, string> = {
+  submitted: "Envió la propuesta a revisión",
+  edited: "Editó la propuesta",
+  returned: "La devolvió para corregir",
+  resubmitted: "La reenvió a revisión",
+  confirmed: "La confirmó",
+  withdrawn: "La retiró",
+  rejected: "La rechazó",
+}
+
+export interface AccommodationReviewEvent {
+  id: number
+  action: AccommodationReviewAction
+  note: string | null
+  /** `edited` only: the API names of the fields changed (never their content). */
+  changed_fields: string[] | null
+  user: StaffMember | null
+  created_at: string | null
+}
+
+/** Spanish names of the accommodation fields an `edited` step may list. */
+export const accommodationFieldLabels: Record<string, string> = {
+  type: "Nombre del ajuste",
+  description: "Descripción",
+  focus_area: "Área de enfoque",
+  category: "Tipo de ajuste",
+  starts_on: "Vigente desde",
+  subject_ids: "Materias donde aplica",
+  assessment_types: "Evaluaciones",
+  origin: "Origen",
+  active: "Activa",
+  llm_rule: "Regla para el asistente",
+}
+
 export const accommodationCategoryLabels: Record<AccommodationCategory, string> = {
   access: "Acceso",
   content: "Contenido",
@@ -564,17 +679,26 @@ export interface Accommodation extends AccommodationScope {
   deactivated_on: string | null
   description: string | null
   focus_area: string | null
-  requires_external_approval: boolean
   /**
-   * Approval state for accommodations that require external approval:
-   *   - `null` → pending an approve/reject decision (only meaningful when
-   *     `requires_external_approval` is true).
-   *   - `true` → approved, `false` → rejected.
-   * When `requires_external_approval` is false, `approved` is not part of
-   * the effective vigency test — use `is_effective` instead.
+   * «Origen» (ClickUp 86e3qkwkk): free text psychopedagogy writes. Only this
+   * full record (psychopedagogy and direction) carries it; never a teacher.
    */
-  approved: boolean | null
+  origin: string | null
   is_effective: boolean
+  /**
+   * Direction proposal circuit (ClickUp 86e3qkwkk): `null` when psychopedagogy
+   * created it directly; otherwise where the proposal stands. Only `null` or
+   * `confirmed` ever reach a teacher or count as in force.
+   */
+  review_status: AccommodationReviewStatus | null
+  proposed_by_id: number | null
+  proposed_by_name: string | null
+  /** Who confirmed, withdrew or rejected the proposal, and when. */
+  reviewed_by_id: number | null
+  reviewed_by_name: string | null
+  reviewed_at: string | null
+  /** Comment/reason of the step that left it returned, withdrawn or rejected. */
+  review_note: string | null
   created_by_id: number | null
   created_at: string | null
   updated_at: string | null
@@ -591,17 +715,26 @@ export interface AccommodationInput {
   description: string
   focus_area: string
   category: AccommodationCategory
-  requires_external_approval: boolean
-  active: boolean
+  /** Psychopedagogy only on edit; direction never switches one on or off. */
+  active?: boolean
   /**
-   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form always sends it (today
+   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form sends it (today
    * by default); the backend also defaults it to today when absent.
    */
-  starts_on: string
+  starts_on?: string
   /** Empty = a general accommodation (every subject). */
   subject_ids: number[]
   /** Empty = every assessment type (stored as null). */
   assessment_types: AssessmentType[]
+  /** «Origen»: psychopedagogy only (the server rejects it from direction). */
+  origin?: string | null
+  /**
+   * Direction proposals only (ClickUp 86e3qkwkk): the review deadline and who
+   * reviews it — the whole psychopedagogy role or the people picked.
+   */
+  review_due_date?: string
+  review_recipients?: "role" | "people"
+  reviewer_ids?: number[]
 }
 
 export interface Barrier {
@@ -675,6 +808,12 @@ export interface StudentTracking {
   recent_comments: Comment[]
   /** Absent for a teacher: only psychopedagogy/direction get the recurrence mark. */
   comment_trends?: CommentTrend[]
+  /**
+   * The viewer's OWN "solo quien escribe" notes on this student reached the
+   * school's trend threshold. Computed per viewer server-side, so it is only
+   * ever `true` for that author. Optional for older cached responses.
+   */
+  private_notes_signal?: boolean
   alerts?: Alert[]
   open_alerts_count: number
 }
@@ -725,11 +864,13 @@ export interface WeeklySeriesPoint {
 /**
  * Director-only pilot-adoption dashboard
  * (`GET /api/v1/schools/{id}/adoption-dashboard`). Rates are percentages 0–100.
+ * The login indicators were removed (ClickUp 86e3qkxtc): `null` means the
+ * school has no record of the step yet («dato no disponible»), never 0.
  */
 export interface AdoptionDashboard {
-  teacher_login_rate_30d: number
+  teacher_started_rate_30d: number | null
   teacher_planning_rate_30d: number
-  weekly_login_series: WeeklySeriesPoint[]
+  data_since: JourneyDataSince
   weekly_content_series: WeeklySeriesPoint[]
   weekly_content_by_type: WeeklyContentByTypePoint[]
 }
@@ -742,19 +883,111 @@ export interface WeeklyContentByTypePoint {
   assessments: number
 }
 
+/** Per-type counts: programs, classes, assessments (no projects yet). */
+export interface ContentCounts<T = number> {
+  annual_plans: T
+  class_sessions: T
+  assessments: T
+}
+
 /**
  * One row of the director-only "Por docente" tab. Plain counts for the
  * current month — deliberately no totals, scores or login timestamps.
+ * `month_counts` are confirmed creations; `month_attempts` are AI generation
+ * attempts (one per journey), `null` while there is no record of them.
  */
 export interface AdoptionTeacherRow {
   id: number
   name: string
   subjects: string[]
-  month_counts: { annual_plans: number; class_sessions: number; assessments: number }
+  month_counts: ContentCounts
+  month_attempts: ContentCounts<number | null>
 }
 
 /** Coarse last-login range shown by "Ver detalles de uso" (never day/time). */
 export type LastLoginRange = "this_week" | "within_10_days" | "over_10_days" | "never"
+
+/** A recorded step of a creation journey (backend `App\Enums\JourneyStep`). */
+export type JourneyStep =
+  | "form_opened"
+  | "filling_started"
+  | "generation_requested"
+  | "regeneration_requested"
+  | "generation_succeeded"
+  | "generation_failed"
+  | "creation_confirmed"
+  | "draft_discarded"
+
+/** The kind of content a journey is about (no projects until that entity exists). */
+export type JourneyContentType = "annual_plan" | "unit" | "class_session" | "assessment"
+
+/** Since when the school has data for each step (ISO), or `null` if never. */
+export type JourneyDataSince = Record<JourneyStep, string | null>
+
+/** Fixed failure categories of a generation (never the technical error). */
+export type JourneyFailureReason =
+  | "not_configured"
+  | "provider_unreachable"
+  | "provider_error"
+  | "invalid_response"
+
+export interface JourneyStepRecord {
+  step: JourneyStep
+  /** ISO date-time of the step. */
+  at: string
+  failure_reason?: JourneyFailureReason
+}
+
+/**
+ * One creation journey behind a teacher's counts
+ * (`GET …/adoption-dashboard/teachers/{id}/journeys`). `flow` is `ai`
+ * (assistant), `manual` (form + Guardar) or `null` when no earlier step was
+ * recorded. `content` is present only if Dirección may open it.
+ */
+export interface CreationJourney {
+  id: string
+  content_type: JourneyContentType
+  flow: "ai" | "manual" | null
+  started_at: string
+  confirmed: boolean
+  last_step: JourneyStepRecord
+  steps: JourneyStepRecord[]
+  title: string | null
+  group_name: string | null
+  subject_name: string | null
+  content: { type: JourneyContentType; id: number; group_id: number | null } | null
+}
+
+/**
+ * Shown wherever a step or figure has no record. Never «no intentó»: missing
+ * data is not evidence the teacher didn't do something.
+ */
+export const NOT_AVAILABLE_LABEL = "dato no disponible"
+
+export const journeyStepLabels: Record<JourneyStep, string> = {
+  form_opened: "Abrió el formulario",
+  filling_started: "Empezó a completar",
+  generation_requested: "Pidió generar con el asistente",
+  regeneration_requested: "Pidió un cambio o reintentó",
+  generation_succeeded: "Recibió la propuesta (pendiente de confirmar)",
+  generation_failed: "La generación falló",
+  creation_confirmed: "Guardó / confirmó la creación",
+  draft_discarded: "Descartó el borrador",
+}
+
+export const journeyContentTypeLabels: Record<JourneyContentType, string> = {
+  annual_plan: "Programa",
+  unit: "Unidad",
+  class_session: "Clase",
+  assessment: "Evaluación",
+}
+
+export const journeyFailureReasonLabels: Record<JourneyFailureReason, string> = {
+  not_configured: "El asistente no estaba disponible en ese momento.",
+  provider_unreachable: "No se pudo conectar con el asistente.",
+  provider_error: "El asistente tuvo un problema y no pudo responder.",
+  invalid_response: "El asistente respondió en un formato que no se pudo usar.",
+}
 
 // ── Approval flows & traceability (Sesión 9) ────────────────────────────────
 // Mirrors the backend Session 3 API (docs/prompts/03-flujos-aprobacion-
@@ -787,10 +1020,11 @@ export interface BarrierAccommodationLink {
 /** Mirror of `App\Enums\AuditAction`. */
 export type AuditAction = "created" | "updated" | "deleted"
 
+/** How the change history names each action ("altas, modificaciones o bajas"). */
 export const auditActionLabels: Record<AuditAction, string> = {
-  created: "Creado",
-  updated: "Actualizado",
-  deleted: "Eliminado",
+  created: "Alta",
+  updated: "Modificación",
+  deleted: "Baja",
 }
 
 /** Mirror of `App\Enums\AuditOrigin`. `system` entries have `user_id === null`. */
@@ -801,27 +1035,80 @@ export const auditOriginLabels: Record<AuditOrigin, string> = {
   system: "Sistema",
 }
 
+/** Mirror of `App\Enums\StudentFileSection`: the parts of a student's file. */
+export type StudentFileSection =
+  | "student_data"
+  | "summary"
+  | "learning_profile"
+  | "documents"
+  | "accommodations"
+  | "barriers"
+  | "observations"
+  | "reports"
+  | "follow_ups"
+  | "alerts"
+
+export const studentFileSectionLabels: Record<StudentFileSection, string> = {
+  student_data: "Datos del alumno",
+  summary: "Resumen para el equipo",
+  learning_profile: "Perfil de aprendizaje",
+  documents: "Documentos",
+  accommodations: "Ajustes",
+  barriers: "Barreras",
+  observations: "Observaciones",
+  reports: "Informes",
+  follow_ups: "Seguimientos programados",
+  alerts: "Alertas",
+}
+
 /**
- * One row of the student audit timeline
- * (`GET /api/v1/students/{id}/history`). Mirror of `AuditLogResource`.
- *
- * `auditable_type` is the class-basename ("Accommodation" | "Barrier" |
- * "TechnicalReport"), not the fully-qualified PHP class. `changes` is the raw
- * `audit_logs.changes` JSON; its shape varies by action (a `created` row
- * carries the initial column values, an `updated` row carries
- * `{ before, after }` pairs), so it is typed loosely and rendered as
- * pretty-printed JSON in the UI rather than picked apart per action.
+ * One changed field of a history entry. An addition has `before: null`, a
+ * removal `after: null`. `redacted` fields are reported as changed but their
+ * value is never sent (e.g. the private path of a report file).
  */
-export interface AuditLogEntry {
+export interface StudentHistoryChange {
+  field: string
+  before?: unknown
+  after?: unknown
+  redacted?: boolean
+}
+
+/**
+ * One entry of a student's change history (`GET /api/v1/students/{id}/history`).
+ * Mirror of `StudentHistoryEntryResource`. The server only sends entries the
+ * viewer may read under the original record's own permissions.
+ */
+export interface StudentHistoryEntry {
   id: number
-  auditable_type: string
-  auditable_id: number
-  action: AuditAction
-  /** `null` when `origin === "system"` (background jobs, seeders, etc.). */
-  user_id: number | null
-  origin: AuditOrigin
-  changes: Record<string, unknown>
   created_at: string | null
+  action: AuditAction
+  section: StudentFileSection | null
+  origin: AuditOrigin
+  /** `null` for system changes (no person behind them). */
+  actor: { id: number; name: string; role: Role | null } | null
+  element: { type: string; id: number; label: string | null }
+  changes: StudentHistoryChange[]
+}
+
+/** A person who appears in the history — options of the "Persona" filter. */
+export interface StudentHistoryActor {
+  id: number
+  name: string
+  role: Role | null
+}
+
+export interface StudentHistoryPage extends Paginated<StudentHistoryEntry> {
+  actors: StudentHistoryActor[]
+}
+
+export interface StudentHistoryFilters {
+  user_id?: number
+  section?: StudentFileSection
+  action?: AuditAction
+  /** ISO-8601 instant (start of the viewer's local day). */
+  from?: string
+  /** ISO-8601 instant (end of the viewer's local day). */
+  to?: string
 }
 
 /** A colleague as exposed by `StaffMemberResource`: id, name and role only. */
@@ -831,16 +1118,81 @@ export interface StaffMember {
   role: Role | null
 }
 
-/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+/**
+ * An extract of an observation that psychopedagogy shared («Compartir con»,
+ * `CommentShareResource`). A recipient gets only the extract text: the link to
+ * the original (`comment_id`) and the recipient list reach its author only.
+ */
+export interface CommentShare {
+  id: number
+  student_id: number
+  author_id: number
+  content: string
+  comment_id?: number
+  recipients?: StaffMember[]
+  created_at: string | null
+}
+
+/**
+ * One unread notice: a follow-up assigned to you, an alert of yours that
+ * reached its deadline without a way out, an accommodation proposal returned
+ * to you for corrections, an extract psychopedagogy shared with you, or a
+ * screening design change. Ids, names and dates only.
+ */
 export interface AppNotification {
   id: string
-  data: {
-    type: string
-    follow_up_id: number
-    student_id: number
-    due_date: string
-  }
+  data:
+    | FollowUpAssignedNotice
+    | AlertOverdueNotice
+    | AccommodationProposalReturnedNotice
+    | CommentSharedNotice
+    | ScreeningDesignNotice
   created_at: string | null
+}
+
+export interface FollowUpAssignedNotice {
+  type: "follow_up_assigned"
+  follow_up_id: number
+  student_id: number
+  due_date: string
+  /** Made general responsible of the follow-up or responsible of one stage. */
+  assigned_as?: "general_responsible" | "stage_responsible"
+  stage_id?: number | null
+}
+
+/** Psychopedagogy returned my accommodation proposal for corrections (ClickUp 86e3qkwkk). */
+export interface AccommodationProposalReturnedNotice {
+  type: "accommodation_proposal_returned"
+  accommodation_id: number
+  student_id: number
+}
+
+/**
+ * «Psicopedagogía te compartió un extracto» (ClickUp 86e3qkwnv): the stored
+ * payload holds ids only; the server adds `student_name` at read time when the
+ * caller may see the student.
+ */
+export interface CommentSharedNotice {
+  type: "comment_shared"
+  comment_share_id: number
+  student_id: number
+  student_name?: string | null
+}
+
+/** An alert you have reached its deadline without a way out («Llegó a su fecha sin salida»). */
+export interface AlertOverdueNotice {
+  type: "alert_overdue"
+  alert_id: number
+  student_id: number
+  due_date: string | null
+}
+
+/** A screening's design changed (to Dirección) or was reverted (to its author). */
+export interface ScreeningDesignNotice {
+  type: "screening_design_changed" | "screening_design_reverted"
+  screening_test_type_id: number
+  screening_test_type_name: string | null
+  design_id: number
 }
 
 /**
@@ -853,9 +1205,22 @@ export interface ScheduledFollowUp {
   student_id: number
   /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
   student?: { id: number; full_name: string }
+  /** Required for new follow-ups; older ones were backfilled from the description. */
+  title?: string | null
+  /** The alert it was created from («seguimiento vinculado»), if any. */
+  alert_id?: number | null
+  /**
+   * Set only on psychopedagogy's review task for a direction accommodation
+   * proposal (ClickUp 86e3qkwkk): its title is rendered from this, its
+   * description is empty, and it closes with the proposal (never by hand).
+   */
+  accommodation_id?: number | null
   description: string
+  /** General deadline: the latest due date among the stages (server-computed). */
   due_date: string
   created_by_id: number
+  /** Active general responsibles (one or more). */
+  general_responsibles?: StaffMember[]
   /** Responsible person — the creator unless they picked someone else. */
   assigned_to_id?: number | null
   assigned_to?: StaffMember | null
@@ -873,67 +1238,211 @@ export interface ScheduledFollowUp {
   created_at: string | null
 }
 
+// ── Follow-up stages, people and history (ClickUp 86e3qkwna) ─────────────
+
+export type FollowUpStageStatus = "pending" | "done" | "split"
+
+export const followUpStageStatusLabels: Record<FollowUpStageStatus, string> = {
+  pending: "Pendiente",
+  done: "Cerrada",
+  split: "Subdividida",
+}
+
+export interface FollowUpStageNote {
+  id: number
+  body: string
+  author: StaffMember | null
+  created_at: string | null
+}
+
+/** One stage ("etapa"). `can` flags only drive the UI; the backend re-checks. */
+export interface FollowUpStage {
+  id: number
+  parent_stage_id: number | null
+  description: string
+  responsible: StaffMember | null
+  due_date: string
+  status: FollowUpStageStatus
+  conclusion: string | null
+  closed_by: StaffMember | null
+  closed_at: string | null
+  created_by_id: number | null
+  created_at: string | null
+  notes: FollowUpStageNote[]
+  can: { update: boolean; split: boolean; close: boolean; add_note: boolean }
+}
+
+export type FollowUpMemberRole = "general_responsible" | "participant"
+
+export interface FollowUpMember {
+  user: StaffMember | null
+  role: FollowUpMemberRole
+  active: boolean
+  has_pending_stage: boolean
+  withdrawn_at: string | null
+  withdrawal_reason: string | null
+  removed_at: string | null
+  removed_by_id: number | null
+  removal_reason: string | null
+}
+
+export interface FollowUpEvent {
+  id: number
+  type: string
+  actor: StaffMember | null
+  subject_user: StaffMember | null
+  stage_id: number | null
+  data: Record<string, unknown> | null
+  note: string | null
+  created_at: string | null
+}
+
+/** Full record of a follow-up as the caller sees it (`GET /scheduled-follow-ups/{id}`). */
+export interface ScheduledFollowUpDetail extends ScheduledFollowUp {
+  participants: StaffMember[]
+  members: FollowUpMember[]
+  stages: FollowUpStage[]
+  events: FollowUpEvent[]
+  viewer: {
+    user_id: number
+    is_member: boolean
+    active: boolean
+    role: FollowUpMemberRole | null
+    left_at: string | null
+    hidden: boolean
+    is_general_responsible: boolean
+  }
+  can: {
+    add_stage: boolean
+    add_participant: boolean
+    manage_general_responsibles: boolean
+    withdraw: boolean
+    withdraw_requires_successor: boolean
+    resolve: boolean
+    hide: boolean
+  }
+}
+
 // ── Screening tests / pruebas de sondeo (Sesión 17) ─────────────────────────
 // Mirrors the backend Session 13 API (docs/prompts/11-pruebas-de-sondeo.md;
 // frontend docs/prompts/12-frontend-pruebas-de-sondeo.md) under /api/v1. This
-// is a school-wide, psychopedagogy-led module; teachers never see any of it.
-// The design/approval pair follows the same tri-state `approved` pattern as
-// Accommodation; results are anonymised BY CODE and never carry a student name
+// is a school-wide, psychopedagogy-led module; teachers never see the catalog
+// or the designs. A saved design rules at once (screen 08) and Dirección can
+// revert it; results are anonymised BY CODE and never carry a student name
 // (that mapping lives only in the roster endpoint).
 
 /**
- * The traffic-light band a screening score falls into (mirror of
- * `App\Enums\ScreeningColor`). English identifiers in code; the Spanish labels
- * below are the only user-facing text, per CLAUDE.md. The colour is always the
- * one the backend confirms on a loaded result — never recomputed on the client.
+ * The colour of a screening band (mirror of `App\Enums\ScreeningColor`). The
+ * school picks one per band; the band's name and meaning are its own text.
+ * English identifiers in code; the Spanish labels below are the only
+ * user-facing text, per CLAUDE.md.
  */
-export type ScreeningColor = "red" | "yellow" | "green"
+export type ScreeningColor = "red" | "orange" | "yellow" | "green" | "blue"
+
+export const screeningColors: ScreeningColor[] = ["red", "orange", "yellow", "green", "blue"]
 
 export const screeningColorLabels: Record<ScreeningColor, string> = {
   red: "Rojo",
+  orange: "Naranja",
   yellow: "Amarillo",
   green: "Verde",
+  blue: "Azul",
+}
+
+/** Levels a screening's population can cover (mirror of `App\Enums\SchoolLevel`). */
+export type SchoolLevel = "primary" | "lower_secondary" | "upper_secondary"
+
+export const schoolLevels: SchoolLevel[] = ["primary", "lower_secondary", "upper_secondary"]
+
+export const schoolLevelLabels: Record<SchoolLevel, string> = {
+  primary: "Primaria",
+  lower_secondary: "Ciclo Básico",
+  upper_secondary: "Bachillerato",
+}
+
+/** How often a screening is taken (mirror of `App\Enums\ScreeningFrequency`). */
+export type ScreeningFrequency = "yearly" | "twice_yearly" | "every_few_years" | "on_demand"
+
+export const screeningFrequencies: ScreeningFrequency[] = [
+  "yearly",
+  "twice_yearly",
+  "every_few_years",
+  "on_demand",
+]
+
+export const screeningFrequencyLabels: Record<ScreeningFrequency, string> = {
+  yearly: "Una vez por año",
+  twice_yearly: "Dos veces por año",
+  every_few_years: "Cada varios años",
+  on_demand: "Cuando el colegio quiera",
 }
 
 /**
- * One version of a screening test's design (mirror of
- * `ScreeningTestDesignResource`). "Editing" a design creates a new version left
- * `approved === null` (pending director approval); `true`/`false` once decided.
- * The version used to compute new colours is the most recent approved one.
+ * One band of a design: name, colour, the score it goes up to (inclusive;
+ * `null` only on an open-ended last band) and its mandatory meaning, written
+ * by the school (never by the AI).
+ */
+export interface ScreeningBand {
+  name: string
+  color: ScreeningColor
+  max: number | null
+  meaning: string | null
+}
+
+/**
+ * One version of a screening's design (mirror of `ScreeningTestDesignResource`).
+ * A saved design rules right away; Dirección can revert the one in force
+ * (`reverted_at`) and the previous one rules again.
  */
 export interface ScreeningTestDesign {
   id: number
   screening_test_type_id: number
-  cutoff_low: number
-  cutoff_high: number
-  meaning_red: string
-  meaning_yellow: string
-  meaning_green: string
-  /** `null` pending, `true` approved, `false` rejected. */
+  bands: ScreeningBand[]
+  reason: string | null
   approved: boolean | null
-  approved_by_id: number | null
   created_by_id: number | null
+  created_by_name?: string | null
+  reverted_at: string | null
+  reverted_by_id: number | null
+  reverted_by_name?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
 
 /**
- * A kind of screening test offered by the school (mirror of
- * `ScreeningTestTypeResource`). `current_design` is the in-force APPROVED design
- * only (the resource resolves `currentApprovedDesign()`); a pending or rejected
- * design is not carried here — the API exposes no listing of non-approved
- * designs, so a freshly created pending design is known to the client only as
- * the POST response that created it.
+ * A screening the school takes (mirror of `ScreeningTestTypeResource`).
+ * `current_design` is the design in force and `previous_design` the one that
+ * ruled right before it ("Volver atrás" goes back to it).
  */
 export interface ScreeningTestType {
   id: number
   name: string
   area: string | null
+  levels: SchoolLevel[]
+  frequency: ScreeningFrequency | null
+  frequency_years: number | null
+  teacher_visible: boolean
   active: boolean
   created_by_id: number | null
   current_design: ScreeningTestDesign | null
+  previous_design: ScreeningTestDesign | null
   created_at?: string | null
   updated_at?: string | null
+}
+
+/** One band's count in the impact preview (counts only, never names). */
+export interface ScreeningImpactBand {
+  name: string
+  color: ScreeningColor
+  max: number | null
+  count: number
+}
+
+/** `POST /screening-test-types/{type}/impact`. */
+export interface ScreeningImpact {
+  students: number
+  current: ScreeningImpactBand[] | null
+  proposed: ScreeningImpactBand[]
 }
 
 /**
@@ -957,15 +1466,22 @@ export interface ScreeningTestApplication {
  * One result of an application, the ANONYMISED by-code view (mirror of
  * `ScreeningTestResultResource`). It deliberately never carries `student_id` or
  * a name — the code→student mapping is exposed solely by the roster endpoint.
- * `score`/`color` are `null` until a score is loaded; `color` is whatever the
- * backend computed against the in-force design, never derived on the client.
+ * `band`/`color` are the reading when the score was loaded (design version
+ * `screening_test_design_id`); `current_band`/`current_color` are the reading
+ * with the design in force, and `band_changed` says whether they differ.
  */
 export interface ScreeningTestResult {
   id: number
   screening_test_application_id: number
   code: string
-  score: number | null
+  score: number | string | null
+  screening_test_design_id: number | null
+  band: string | null
   color: ScreeningColor | null
+  current_design_id: number | null
+  current_band: string | null
+  current_color: ScreeningColor | null
+  band_changed: boolean
   loaded_by_id: number | null
   loaded_at: string | null
 }
@@ -982,24 +1498,28 @@ export interface ScreeningTestRosterEntry {
   full_name: string | null
 }
 
-/** Body for `POST /screening-test-types` (`StoreScreeningTestTypeRequest`). */
+/**
+ * Body for `POST /screening-test-types` and `PATCH /screening-test-types/{id}`.
+ * `frequency_years` is required only for `every_few_years`.
+ */
 export interface ScreeningTestTypeInput {
-  name: string
+  name?: string
   area?: string | null
   active?: boolean
+  levels?: SchoolLevel[]
+  frequency?: ScreeningFrequency | null
+  frequency_years?: number | null
+  teacher_visible?: boolean
 }
 
 /**
- * Body for `POST /screening-test-types/{type}/designs`
- * (`StoreScreeningTestDesignRequest`). All five fields are required; the backend
- * additionally enforces `cutoff_high >= cutoff_low`.
+ * Body for `POST /screening-test-types/{type}/designs`: 2 to 5 bands with a
+ * strictly increasing `max` (all but the last required) and a mandatory
+ * meaning; `reason` is the optional "Motivo".
  */
 export interface ScreeningTestDesignInput {
-  cutoff_low: number
-  cutoff_high: number
-  meaning_red: string
-  meaning_yellow: string
-  meaning_green: string
+  bands: ScreeningBand[]
+  reason?: string | null
 }
 
 /**
@@ -1014,7 +1534,7 @@ export interface ScreeningTestApplicationInput {
 
 /**
  * Wrapper for endpoints paginated with Laravel's default page paginator.
- * Currently only the audit history uses this — every other endpoint uses the
+ * Currently only the change history uses this — every other endpoint uses the
  * unpaginated `{ data: T[] }` sleeve. When a second paginated endpoint appears,
  * this stays as the canonical shape (do not re-derive it per feature).
  */
@@ -1072,7 +1592,7 @@ export interface GradesVisibilitySettings {
 // ── Alert settings (ClickUp 86e3jpzcv) ──────────────────────────────────────
 
 /** Mirror of `App\Enums\AlertCondition`. */
-export type AlertCondition = "consecutive_below" | "average_below"
+export type AlertCondition = "consecutive_below" | "average_below" | "difficulty_signals"
 
 /** Mirror of `App\Enums\AlertRecipient` — who an alert type reaches first. */
 export type AlertRecipient = "teacher" | "psychopedagogue" | "director"
@@ -1083,12 +1603,19 @@ export const alertRecipientLabels: Record<AlertRecipient, string> = {
   director: "Dirección",
 }
 
-/** A school-configured sustained-low-performance condition (`AlertRuleResource`). */
+/**
+ * A school-configured alert condition (`AlertRuleResource`): sustained low
+ * performance, or «Señal de dificultad» (ClickUp 86e3qkwpn), which uses only
+ * `signal_count` and `period_days`.
+ */
 export interface AlertRule {
   id: number
   condition: AlertCondition
-  threshold: number
+  /** `null` on a «Señal de dificultad» condition. */
+  threshold: number | null
   consecutive_count: number | null
+  /** «Señal de dificultad»: how many signals in one category. */
+  signal_count?: number | null
   period_days: number | null
   /** `null` = applies to every subject. */
   subject_id: number | null
@@ -1099,6 +1626,8 @@ export interface AlertRule {
 export interface AlertRoutingEntry {
   type: AlertType
   recipients: AlertRecipient[]
+  /** The recipients the school may choose; teachers never get «Señal de dificultad». */
+  allowed_recipients?: AlertRecipient[]
   /** `true` while the school hasn't changed the product default. */
   is_default: boolean
 }
@@ -1106,4 +1635,89 @@ export interface AlertRoutingEntry {
 export interface AlertSettings {
   rules: AlertRule[]
   routing: AlertRoutingEntry[]
+}
+
+/**
+ * Student reports uploaded by psychopedagogy and read by the AI
+ * (`App\Enums\ReportDocumentStatus`, ClickUp 86e3jujgx).
+ */
+export type ReportStatus =
+  | "processing"
+  | "extraction_failed"
+  | "ready"
+  | "awaiting_review"
+  | "interpreting"
+  | "proposed"
+  | "error"
+
+export type ReportVisibility = "clinical" | "teachers"
+
+export const reportVisibilityLabels: Record<ReportVisibility, string> = {
+  clinical: "Psicopedagogía y Dirección",
+  teachers: "Todos los que ven al alumno",
+}
+
+/** Shown next to the «teachers» option: text only, it does not block or detect content. */
+export const reportTeachersVisibilityWarning =
+  "Elegí esta opción solo si el archivo no tiene información clínica"
+
+export const reportStatusLabels: Record<ReportStatus, string> = {
+  processing: "Procesando",
+  extraction_failed: "No se pudo leer el texto",
+  ready: "Texto leído",
+  awaiting_review: "Falta revisar el texto anonimizado",
+  interpreting: "La IA está leyendo",
+  proposed: "Propuestas para revisar",
+  error: "La lectura con IA falló",
+}
+
+/** Teachers and direction only receive the first six fields; the rest is psychopedagogy's. */
+export interface ReportDocument {
+  id: number
+  student_id: number
+  name: string
+  format: "pdf" | "docx"
+  size: number
+  visibility: ReportVisibility
+  uploaded_at: string
+  status?: ReportStatus
+  use_ai?: boolean
+  send_confirmed_at?: string | null
+  error_message?: string | null
+}
+
+export type ProposalStatus = "pending" | "approved" | "modified" | "rejected"
+export type ProposalBasis = "explicit" | "inferred" | "manual"
+
+export interface AccommodationProposal {
+  id: number
+  report_document_id: number
+  type: string
+  category: AccommodationCategory
+  description: string
+  focus_area: string | null
+  basis: ProposalBasis
+  source_page: number | null
+  source_fragment: string | null
+  /** Subjects the report points to (empty = every subject). */
+  subject_ids: number[]
+  /** Whether the subjects are stated in the report or inferred; null when none were proposed. */
+  subjects_basis: "explicit" | "inferred" | null
+  status: ProposalStatus
+  accommodation_id: number | null
+  reviewed_at: string | null
+}
+
+export interface ReportDocumentDetail extends ReportDocument {
+  anonymized_pages: string[] | null
+  /** Whether the AI may read this report right now (all three switches on). */
+  ai_available: boolean
+  proposals: AccommodationProposal[]
+}
+
+export interface AiReportSetting {
+  /** The school's own switch. */
+  enabled: boolean
+  /** False when Aula+ has the feature off for every school or the provider is not configured. */
+  available: boolean
 }

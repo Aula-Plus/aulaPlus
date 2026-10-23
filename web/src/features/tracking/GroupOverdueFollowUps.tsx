@@ -6,6 +6,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
 import type { ScheduledFollowUp } from "@/types"
 import { fetchGroupScheduledFollowUps } from "./scheduledFollowUpsApi"
+import { followUpTitle } from "./followUpTitle"
 
 interface GroupOverdueFollowUpsProps {
   groupId: number
@@ -56,7 +57,7 @@ export function GroupOverdueFollowUps({ groupId }: GroupOverdueFollowUpsProps) {
               className="flex items-start justify-between gap-4 rounded-md border p-3 text-sm"
             >
               <div>
-                <p className="whitespace-pre-wrap">{followUp.description}</p>
+                <p className="whitespace-pre-wrap">{followUpTitle(followUp)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Plazo: {formatShortDate(followUp.due_date)}
                 </p>

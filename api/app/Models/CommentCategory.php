@@ -22,7 +22,7 @@ class CommentCategory extends Model
 
     public function comments(): BelongsToMany
     {
-        return $this->belongsToMany(Comment::class, 'comment_comment_category');
+        return $this->belongsToMany(Comment::class, 'comment_comment_category')->withPivot('signal');
     }
 
     /**

@@ -4,16 +4,22 @@ namespace App\Http\Requests;
 
 use App\Enums\AlertOutcome;
 use App\Models\Alert;
+use App\Models\User;
+use App\Support\AlertCirculation;
 use App\Support\Tenancy;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
  * Choose one of the three ways out of an alert (ClickUp 86e3jpzdp). Every way
  * out names a deadline; handing it off also names the staff member who
- * becomes responsible (same school, active, not the actor). The note is
- * optional and bounded: it is an operational note for whoever receives the
- * case, not a place for clinical detail.
+ * becomes responsible — someone who can receive it from the actor per
+ * {@see AlertCirculation} (already sees the student, never teacher-to-teacher,
+ * never a teacher for a «Señal de dificultad» alert). A crafted request naming
+ * anyone else fails validation. The note is optional and bounded: it is an
+ * operational note for whoever receives the case, not a place for clinical
+ * detail.
  */
 class ChooseAlertOutcomeRequest extends FormRequest
 {
@@ -45,5 +51,25 @@ class ChooseAlertOutcomeRequest extends FormRequest
             ],
             'note' => ['nullable', 'string', 'max:2000'],
         ];
+    }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty() || $this->input('outcome') !== AlertOutcome::HandedOff->value) {
+                return;
+            }
+
+            /** @var Alert $alert */
+            $alert = $this->route('alert');
+            $assignee = User::query()->find((int) $this->input('assignee_id'));
+
+            if ($assignee === null || ! app(AlertCirculation::class)->canReceive($this->user(), $assignee, $alert)) {
+                $validator->errors()->add('assignee_id', 'The selected person cannot receive this alert.');
+            }
+        }];
     }
 }

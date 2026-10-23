@@ -10,7 +10,13 @@ function result(overrides: Partial<ScreeningTestResult> = {}): ScreeningTestResu
     screening_test_application_id: 1,
     code: "A1",
     score: null,
+    screening_test_design_id: null,
+    band: null,
     color: null,
+    current_design_id: null,
+    current_band: null,
+    current_color: null,
+    band_changed: false,
     loaded_by_id: null,
     loaded_at: null,
     ...overrides,
@@ -45,7 +51,9 @@ describe("ScreeningTestResultsEditor", () => {
       .spyOn(screeningApi, "updateScreeningTestResult")
       // A score of 8 with cutoffs {4,7} would be "green"; we return "red" on
       // purpose to prove the UI trusts the backend colour rather than deriving it.
-      .mockResolvedValue(result({ id: 100, score: 8, color: "red" }))
+      .mockResolvedValue(
+        result({ id: 100, score: 8, band: "Descendido", color: "red", current_band: "Descendido", current_color: "red" }),
+      )
 
     render(<ScreeningTestResultsEditor applicationId={1} />)
 
@@ -54,7 +62,29 @@ describe("ScreeningTestResultsEditor", () => {
     fireEvent.blur(input)
 
     await waitFor(() => expect(update).toHaveBeenCalledWith(100, 8))
-    expect(await screen.findByText("Rojo")).toBeInTheDocument()
+    expect(await screen.findByText("Descendido")).toBeInTheDocument()
+  })
+
+  it("shows the reading with the previous design when the band changed, and can hide it", async () => {
+    vi.spyOn(screeningApi, "fetchScreeningTestResults").mockResolvedValue([
+      result({
+        id: 100,
+        score: "55.00",
+        band: "En proceso",
+        color: "yellow",
+        current_band: "Descendido",
+        current_color: "red",
+        band_changed: true,
+      }),
+    ])
+
+    render(<ScreeningTestResultsEditor applicationId={1} />)
+
+    expect(await screen.findByText("Descendido")).toBeInTheDocument()
+    expect(screen.getByText("Con el diseño anterior era En proceso.")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText("Mostrar la lectura con el diseño anterior"))
+    expect(screen.queryByText("Con el diseño anterior era En proceso.")).not.toBeInTheDocument()
   })
 
   it("does not PATCH when the input is left empty", async () => {

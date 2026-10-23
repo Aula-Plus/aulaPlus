@@ -19,8 +19,10 @@ class AlertRuleResource extends JsonResource
         return [
             'id' => $this->id,
             'condition' => $this->condition->value,
-            'threshold' => (float) $this->threshold,
+            // Null on a «Señal de dificultad» condition (no score threshold).
+            'threshold' => $this->threshold === null ? null : (float) $this->threshold,
             'consecutive_count' => $this->consecutive_count,
+            'signal_count' => $this->signal_count,
             'period_days' => $this->period_days,
             'subject_id' => $this->subject_id,
             'active' => $this->active,

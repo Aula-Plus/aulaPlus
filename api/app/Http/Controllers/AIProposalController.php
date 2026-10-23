@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Actions\AI\ApplyProposal;
 use App\Enums\AIProposalStatus;
+use App\Enums\JourneyStep;
 use App\Http\Requests\GenerateAIProposalRequest;
 use App\Http\Resources\AIProposalResource;
 use App\Jobs\GenerateAIProposalJob;
 use App\Models\AIProposal;
 use App\Models\Group;
 use App\Support\AiProvider;
+use App\Support\UsageJourney;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,13 +33,24 @@ class AIProposalController extends Controller
     {
         abort_unless(AiProvider::isConfigured(), Response::HTTP_SERVICE_UNAVAILABLE, AiProvider::UNAVAILABLE);
 
+        $referenceId = $request->input('parameters.reference_proposal_id');
+
         $proposal = AIProposal::create([
             'group_id' => $group->id,
             'requested_by_id' => $request->user()->id,
+            'journey_id' => UsageJourney::forNewProposal(
+                $request->validated('journey_id'),
+                $referenceId === null ? null : AIProposal::find($referenceId),
+                $request->user()->id,
+            ),
             'type' => $request->input('type'),
             'input_parameters' => $request->input('parameters'),
             'status' => AIProposalStatus::Pending,
         ]);
+
+        // The journey's attempt (or, inside an existing journey, a retry /
+        // change request) — ClickUp 86e3qkxtc.
+        UsageJourney::recordGenerationRequest($proposal);
 
         GenerateAIProposalJob::dispatch($proposal);
 
@@ -81,6 +94,17 @@ class AIProposalController extends Controller
         );
 
         $aiProposal->update(['status' => AIProposalStatus::Discarded]);
+
+        if ($aiProposal->journey_id !== null) {
+            UsageJourney::record(
+                $aiProposal->requested_by_id,
+                $aiProposal->journey_id,
+                JourneyStep::DraftDiscarded,
+                $aiProposal->type->value,
+                $aiProposal->group_id,
+                metadata: ['ai_proposal_id' => $aiProposal->id],
+            );
+        }
 
         return new AIProposalResource($aiProposal);
     }

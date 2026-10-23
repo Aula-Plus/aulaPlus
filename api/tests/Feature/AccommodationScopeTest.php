@@ -201,8 +201,8 @@ it('lets psychopedagogy create an accommodation scoped to subjects and assessmen
 
 it('stores a general accommodation when no subjects or assessment types are sent', function () {
     ['school' => $school, 'lucia' => $lucia] = scopeScenario();
-    $director = User::factory()->forSchool($school)->director()->create();
-    Sanctum::actingAs($director);
+    $psycho = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psycho);
 
     $response = $this->postJson("/api/v1/students/{$lucia->id}/accommodations", [
         'category' => 'access',
@@ -278,8 +278,8 @@ it('lets psychopedagogy re-scope an accommodation, including back to general', f
 
 it('leaves the subjects untouched when an edit does not send them', function () {
     ['school' => $school, 'spelling' => $spelling] = scopeScenario();
-    $director = User::factory()->forSchool($school)->director()->create();
-    Sanctum::actingAs($director);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
 
     $this->patchJson("/api/v1/accommodations/{$spelling->id}", ['category' => 'criteria'])
         ->assertOk()
@@ -332,8 +332,8 @@ it('rejects deactivating, for one assessment, an accommodation scoped to another
 it('keeps accepting, on edit, a subject already attached that was soft-deleted since', function () {
     ['school' => $school, 'calculator' => $calculator, 'math' => $math, 'science' => $science] = scopeScenario();
     $math->delete();
-    $director = User::factory()->forSchool($school)->director()->create();
-    Sanctum::actingAs($director);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
 
     // The edit form resends every attached subject, the deleted one included.
     $this->patchJson("/api/v1/accommodations/{$calculator->id}", [
@@ -357,8 +357,8 @@ it('still rejects, on edit, a deleted subject that was not attached', function (
     ['school' => $school, 'spelling' => $spelling] = scopeScenario();
     $deleted = Subject::factory()->create(['school_id' => $school->id]);
     $deleted->delete();
-    $director = User::factory()->forSchool($school)->director()->create();
-    Sanctum::actingAs($director);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
 
     $this->patchJson("/api/v1/accommodations/{$spelling->id}", [
         'category' => 'criteria',
@@ -376,8 +376,8 @@ it('refuses to hard-delete a subject an accommodation is scoped to', function ()
 
 it('rejects assessment types sent as a keyed object instead of a list', function () {
     ['school' => $school, 'lucia' => $lucia, 'calculator' => $calculator] = scopeScenario();
-    $director = User::factory()->forSchool($school)->director()->create();
-    Sanctum::actingAs($director);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
 
     // Stored as a JSON object it would break the JSON-array queries on
     // PostgreSQL (jsonb_array_length) and the SPA, which expects a list.

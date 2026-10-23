@@ -29,10 +29,16 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * also carry the subject they were met in, the rule that produced them and a
  * `recipients` snapshot of who they reach first — see
  * {@see self::scopeVisibleTo()}.
+ *
+ * «Señal de dificultad» alerts (ClickUp 86e3qkwpn, `alerts:difficulty-signals`)
+ * carry the comment category the signals were counted in
+ * (`comment_category_id`) and only the count in `description` — never any
+ * observation text, author or id. They never reach a teacher.
  */
 #[Fillable([
     'student_id',
     'subject_id',
+    'comment_category_id',
     'alert_rule_id',
     'source_alert_id',
     'type',
@@ -45,7 +51,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
     'due_on',
     'outcome_by_id',
     'outcome_at',
-    'escalated_at',
+    'overdue_at',
     'resolved',
     'resolved_by_id',
     'resolved_at',
@@ -75,7 +81,7 @@ class Alert extends Model
             'outcome' => AlertOutcome::class,
             'due_on' => 'date',
             'outcome_at' => 'datetime',
-            'escalated_at' => 'datetime',
+            'overdue_at' => 'datetime',
             'resolved' => 'boolean',
             'resolved_at' => 'datetime',
         ];
@@ -89,6 +95,12 @@ class Alert extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class)->withTrashed();
+    }
+
+    /** «Señal de dificultad» alerts: the category the signals were counted in. */
+    public function commentCategory(): BelongsTo
+    {
+        return $this->belongsTo(CommentCategory::class);
     }
 
     public function rule(): BelongsTo
@@ -112,7 +124,10 @@ class Alert extends Model
         return $this->belongsTo(User::class, 'outcome_by_id');
     }
 
-    /** For an "escalated, deadline passed" alert: the alert it escalates. */
+    /**
+     * For a legacy "escalated, deadline passed" alert (no longer created —
+     * review of 14/10): the alert it escalates.
+     */
     public function source(): BelongsTo
     {
         return $this->belongsTo(self::class, 'source_alert_id');
@@ -131,7 +146,8 @@ class Alert extends Model
 
     /**
      * People the alert reaches individually, on top of the role-based
-     * `recipients` snapshot: whoever it was handed to and whoever handed it.
+     * `recipients` snapshot: whoever has it now and whoever had it before
+     * (they keep read access — see {@see self::scopeVisibleTo()}).
      */
     public function people(): BelongsToMany
     {
@@ -139,24 +155,71 @@ class Alert extends Model
     }
 
     /**
+     * Scheduled follow-ups created from this alert ("Crear seguimiento
+     * vinculado", review of 14/10). Separate records: creating, sharing or
+     * resolving one never changes the alert's state or deadline, and vice
+     * versa.
+     */
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(ScheduledFollowUp::class);
+    }
+
+    /**
+     * Whether the user has the alert now: the one person responsible once a
+     * way out was chosen. Handing it off transfers it to exactly one person;
+     * whoever had it keeps reading it, with no actions.
+     */
+    public function isInChargeBy(User $user): bool
+    {
+        return $this->assignee_id !== null && $this->assignee_id === $user->id;
+    }
+
+    /**
      * Whether the user may choose one of the three ways out now: someone it
-     * reaches while nobody has chosen yet, and afterwards only the person
-     * currently responsible. An escalated alert takes no way out of its own —
-     * it closes when the escalated alert moves.
+     * reaches while nobody has chosen yet, and afterwards only whoever has
+     * it. An escalated alert (legacy, no longer created) takes no way out of
+     * its own — it closes when the escalated alert moves.
      */
     public function canBeActedOnBy(User $user): bool
     {
         return ! $this->resolved
             && $this->type !== AlertType::EscalatedOverdue
-            && ($this->outcome === null || $this->assignee_id === $user->id)
+            && ($this->outcome === null || $this->isInChargeBy($user))
             && $this->isVisibleTo($user);
+    }
+
+    /**
+     * Whether the user may leave a note in the alert's thread: only whoever
+     * has it, so only once a way out was chosen. Before that the alert
+     * reaches people but nobody has it yet; the first step is choosing a way
+     * out (which takes its own note). Never on a closed or an escalated alert.
+     */
+    public function canBeNotedBy(User $user): bool
+    {
+        return ! $this->resolved
+            && $this->type !== AlertType::EscalatedOverdue
+            && $this->outcome !== null
+            && $this->isInChargeBy($user)
+            && $this->isVisibleTo($user);
+    }
+
+    /**
+     * Whether the user may create a follow-up linked to this alert ("Crear
+     * seguimiento vinculado"): whoever may act on it — so not whoever handed
+     * it off, nor anyone on a closed alert. Seeing the student is checked as
+     * well by ScheduledFollowUpPolicy::create on the follow-up itself.
+     */
+    public function canLinkFollowUpBy(User $user): bool
+    {
+        return $this->canBeActedOnBy($user);
     }
 
     /**
      * Whether the user may mark the alert resolved. Legacy alerts (no
      * recipients snapshot) keep the original rule — any school-wide role that
      * sees them. Any other alert closes only after a way out was chosen, and
-     * only by the person responsible: never with a bare "ya me encargué".
+     * only by whoever has it: never with a bare "ya me encargué".
      */
     public function canBeResolvedBy(User $user): bool
     {
@@ -169,7 +232,7 @@ class Alert extends Model
         }
 
         return $this->outcome !== null
-            && $this->assignee_id === $user->id
+            && $this->isInChargeBy($user)
             && $this->isVisibleTo($user);
     }
 
@@ -184,9 +247,13 @@ class Alert extends Model
      *   the snapshot ("dirección no la ve al principio"), and a teacher only
      *   when `teacher` is in the snapshot AND they teach the alert's subject in
      *   one of the student's groups (any subject, for an alert with none).
-     * - Anyone listed in `alert_user` sees it too: the person it was handed
-     *   to "la ve desde ese momento" (ClickUp 86e3jpzdp), and whoever handed
-     *   it keeps seeing it.
+     *   Never for a «Señal de dificultad» alert (ClickUp 86e3qkwpn), whatever
+     *   its snapshot says — defence in depth over AlertRouting.
+     * - Anyone listed in `alert_user` sees it too, while they still see the
+     *   student (always, for psychopedagogy/direction; a teacher only while
+     *   they teach the student): the person it was handed to "la ve desde ese
+     *   momento" (ClickUp 86e3jpzdp), and whoever handed it keeps reading it
+     *   (review of 14/10) — read only, see {@see self::isInChargeBy()}.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -203,15 +270,31 @@ class Alert extends Model
                 $query->orWhereJsonContains('alerts.recipients', AlertRecipient::Director->value);
             }
 
-            // Reached individually (handed to them, handed by them, or an
-            // escalated alert addressed to them) — ClickUp 86e3jpzdp.
-            $query->orWhereExists(fn (QueryBuilder $exists) => $exists
+            // Reached individually (has it, had it, or a legacy escalated
+            // alert addressed to them) — ClickUp 86e3jpzdp — but only while
+            // they still see the student: an alert never outlives the
+            // access to the student it is about.
+            $individually = fn (QueryBuilder $exists) => $exists
                 ->selectRaw('1')
                 ->from('alert_user')
                 ->whereColumn('alert_user.alert_id', 'alerts.id')
-                ->where('alert_user.user_id', $user->id));
+                ->where('alert_user.user_id', $user->id);
+
+            if ($user->hasAnyRole(Role::schoolWideValues())) {
+                $query->orWhereExists($individually);
+            } else {
+                $query->orWhere(fn (Builder $query) => $query
+                    ->whereExists($individually)
+                    ->whereExists(fn (QueryBuilder $exists) => $exists
+                        ->selectRaw('1')
+                        ->from('group_teacher')
+                        ->join('group_student', 'group_student.group_id', '=', 'group_teacher.group_id')
+                        ->whereColumn('group_student.student_id', 'alerts.student_id')
+                        ->where('group_teacher.teacher_id', $user->id)));
+            }
 
             $query->orWhere(fn (Builder $query) => $query
+                ->where('alerts.type', '!=', AlertType::DifficultySignal->value)
                 ->whereJsonContains('alerts.recipients', AlertRecipient::Teacher->value)
                 ->whereExists(fn (QueryBuilder $exists) => $exists
                     ->selectRaw('1')

@@ -49,6 +49,7 @@ use Illuminate\Support\Facades\Gate;
  *     comments: iterable,
  *     alerts: iterable,
  *     comment_trends: array<int, array<string, mixed>>,
+ *     private_notes_signal: bool,
  *     by_subject: array<int, array<string, mixed>>,
  *     overall_average: float|null,
  *     grades: array<int, array<string, mixed>>,
@@ -79,7 +80,11 @@ class StudentTrackingResource extends JsonResource
         $alerts = $openAlerts
             ->filter(fn ($alert) => $alert->isVisibleTo($user))
             ->values()
-            ->load(AlertResource::RELATIONS);
+            ->load(AlertResource::RELATIONS)
+            // Just checked: spare AlertResource's `can` flags re-running the
+            // visibility query per alert. These are fresh instances hydrated
+            // per request, so the mark never outlives it.
+            ->each(fn ($alert) => $alert->markVisibleTo($user));
         // Same rule as Alert::scopeCountableFor(): legacy alerts are still
         // counted for everyone, new ones only once they reach this viewer.
         $openAlertsCount = $openAlerts
@@ -91,7 +96,11 @@ class StudentTrackingResource extends JsonResource
             'recent_assessments' => AssessmentSummaryResource::collection($this->resource['assessments']),
             'accommodations' => $this->when(
                 $canViewClinicalProfile,
-                fn () => AccommodationResource::collection($accommodations)
+                // «Propuesta de …» / «Confirmó …» names in one query each,
+                // not one per row.
+                fn () => AccommodationResource::collection(
+                    EloquentCollection::make($accommodations)->load(['proposedBy', 'reviewedBy'])
+                )
             ),
             'accommodations_count' => $accommodations->count(),
             'barriers' => $this->when(
@@ -118,6 +127,11 @@ class StudentTrackingResource extends JsonResource
                 $user->hasAnyRole(Role::schoolWideValues()),
                 fn () => $this->resource['comment_trends'] ?? []
             ),
+            // The viewer's own private signal (ClickUp 86e3qkwnv): true only
+            // when THEIR "solo quien escribe" notes on this student reached the
+            // school's trend threshold. Computed per viewer, so it is never
+            // true for anyone but the author; no count, no categories.
+            'private_notes_signal' => (bool) ($this->resource['private_notes_signal'] ?? false),
             'alerts' => $this->when(
                 $canViewClinicalProfile || $alerts->isNotEmpty(),
                 fn () => AlertResource::collection($alerts)

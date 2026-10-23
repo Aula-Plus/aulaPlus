@@ -41,7 +41,12 @@ class PerformanceAlertGenerator
     {
         $today = CarbonImmutable::parse($today ?? now())->startOfDay();
 
-        $rules = AlertRule::query()->where('active', true)->orderBy('id')->get();
+        // «Señal de dificultad» rules are evaluated by DifficultySignalAlertGenerator.
+        $rules = AlertRule::query()
+            ->where('active', true)
+            ->whereIn('condition', AlertCondition::performanceValues())
+            ->orderBy('id')
+            ->get();
 
         if ($rules->isEmpty()) {
             return 0;

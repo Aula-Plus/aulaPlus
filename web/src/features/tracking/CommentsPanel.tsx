@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { MessageSquare } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,31 +9,22 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { formatShortDate } from "@/lib/utils"
-import { roleLabels, type Comment, type CommentCategory } from "@/types"
+import {
+  commentSignalLabels,
+  roleLabels,
+  type Comment,
+  type CommentCategory,
+  type CommentSignal,
+  type Role,
+  type StaffMember,
+} from "@/types"
 import type { CommentInput } from "./trackingApi"
-
-/**
- * The four preset scopes the product thinks a comment's visibility in
- * (docs/prompts/19-comentarios-alcance.md §3). Purely a UI state — never sent
- * to the backend as-is; {@link buildScopeFields} translates it at submit time.
- * The backend's fourth scope, `author_only`, is orthogonal to `visible_to` and
- * mutually exclusive with it, so free role combinations are not offered.
- */
-type CommentScopeOption = "everyone" | "director" | "psychopedagogue" | "author_only"
-
-const COMMENT_SCOPE_OPTIONS: CommentScopeOption[] = [
-  "everyone",
-  "director",
-  "psychopedagogue",
-  "author_only",
-]
-
-const COMMENT_SCOPE_LABELS: Record<CommentScopeOption, string> = {
-  everyone: "Todos los que ven este registro",
-  director: "Solo dirección",
-  psychopedagogue: "Solo psicopedagogía",
-  author_only: "Solo quien escribe",
-}
+import {
+  COMMENT_SCOPE_ROLES,
+  CommentScopeSelector,
+  type CommentScopeOption,
+  type PickedPeople,
+} from "./CommentScopeSelector"
 
 /**
  * Translate the UI-only scope choice into the real payload fields. `everyone`
@@ -47,13 +38,93 @@ function buildScopeFields(
   switch (option) {
     case "everyone":
       return {}
-    case "director":
-      return { visible_to: ["director"] }
+    case "direction_and_psychopedagogy":
+      return { visible_to: ["director", "psychopedagogue"] }
     case "psychopedagogue":
       return { visible_to: ["psychopedagogue"] }
     case "author_only":
       return { author_only: true }
   }
+}
+
+/** Only the roles where someone was picked; nothing at all for «Solo quien escribe». */
+function buildPeopleField(
+  option: CommentScopeOption,
+  picked: PickedPeople,
+): Pick<CommentInput, "visible_to_users"> {
+  if (option === "author_only") return {}
+  const entries = Object.entries(picked).filter(([, ids]) => ids && ids.length > 0)
+  return entries.length > 0 ? { visible_to_users: Object.fromEntries(entries) } : {}
+}
+
+const SIGNALS: CommentSignal[] = ["improvement", "difficulty", "no_change"]
+
+/**
+ * One signal per marked category (ClickUp 86e3qkwpn): «Señal de mejora»,
+ * «Señal de dificultad» or «Sin cambio observado», each counting only in its
+ * category. «Sin cambio observado» never adds to a trend, so the form says
+ * so. Required — also enforced by the backend (422).
+ */
+function CategorySignalPicker({
+  category,
+  value,
+  onChange,
+}: {
+  category: CommentCategory
+  value: CommentSignal | undefined
+  onChange: (signal: CommentSignal) => void
+}) {
+  const legendId = `comment-signal-${category.id}`
+  return (
+    <fieldset className="grid gap-1.5" aria-labelledby={legendId}>
+      <legend id={legendId} className="text-sm font-medium">
+        Señal en {category.name}
+      </legend>
+      <div className="flex flex-wrap gap-4">
+        {SIGNALS.map((signal) => {
+          const id = `comment-signal-${category.id}-${signal}`
+          return (
+            <div key={signal} className="flex items-center gap-2">
+              <input
+                id={id}
+                type="radio"
+                name={legendId}
+                className="size-4"
+                checked={value === signal}
+                onChange={() => onChange(signal)}
+              />
+              <Label htmlFor={id}>{commentSignalLabels[signal]}</Label>
+            </div>
+          )
+        })}
+      </div>
+      {value === "no_change" && (
+        <p className="text-sm text-muted-foreground">
+          Esta observación no va a contar para posibles tendencias en {category.name}.
+        </p>
+      )}
+    </fieldset>
+  )
+}
+
+/** How a whole role is named in the warning. */
+const ROLE_AUDIENCE_NAMES: Record<Role, string> = {
+  teacher: "Docentes",
+  psychopedagogue: "Psicopedagogía",
+  director: "Dirección",
+}
+
+/**
+ * «Elegir personas» narrows only the roles where someone was picked: a role of
+ * the option left with nobody picked still sees the comment in full (ClickUp
+ * 86e3qkwnv, 21/10 answer). When that mix happens, the author is warned before
+ * publishing. Returns the roles left whole, or none when there is no mix.
+ */
+function rolesLeftWhole(option: CommentScopeOption, picked: PickedPeople): Role[] {
+  const roles = COMMENT_SCOPE_ROLES[option]
+  const hasPicks = (role: Role) => (picked[role] ?? []).length > 0
+  if (!roles.some(hasPicks)) return []
+  return roles.filter((role) => !hasPicks(role))
 }
 
 export interface CommentsPanelProps {
@@ -70,6 +141,10 @@ export interface CommentsPanelProps {
   title?: string
   /** The school's categories for the optional "De qué trata" picker. */
   categories?: CommentCategory[]
+  /** Per-comment actions, e.g. psychopedagogy's «Compartir con» button. */
+  renderCommentActions?: (comment: Comment) => ReactNode
+  /** Rendered above the comment list, e.g. the extracts shared with the viewer. */
+  beforeList?: ReactNode
   /**
    * Observations bank mode (student profile): shows who wrote each comment and
    * adds author/category filters. Off for group comments.
@@ -79,6 +154,11 @@ export interface CommentsPanelProps {
   currentUserId?: number
   /** Only psychopedagogy/direction see the total; teachers never do. */
   showCount?: boolean
+  /**
+   * People who see the student: enables «Elegir personas» in the scope
+   * selector (student observations only).
+   */
+  scopeCandidates?: StaffMember[]
 }
 
 const ALL = "all"
@@ -89,25 +169,44 @@ export function CommentsPanel({
   canComment = true,
   title = "Comentarios",
   categories = [],
+  renderCommentActions,
+  beforeList,
   showAuthors = false,
   currentUserId,
   showCount = false,
+  scopeCandidates,
 }: CommentsPanelProps) {
   const [authorFilter, setAuthorFilter] = useState<string>(ALL)
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
   const [content, setContent] = useState("")
   const [categoryIds, setCategoryIds] = useState<number[]>([])
+  const [signals, setSignals] = useState<Record<number, CommentSignal>>({})
   const [scope, setScope] = useState<CommentScopeOption>("everyone")
+  const [pickedPeople, setPickedPeople] = useState<PickedPeople>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // The roles a mixed «Elegir personas» leaves whole, while the author
+  // decides whether to publish as is or go back to pick people.
+  const [wholeRolesWarning, setWholeRolesWarning] = useState<Role[] | null>(null)
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
+    await publish(false)
+  }
+
+  async function publish(confirmedWholeRoles: boolean) {
     setError(null)
 
     const trimmed = content.trim()
     if (!trimmed) {
       setError("Escribí un comentario.")
+      return
+    }
+
+    // Only the categories still marked; every one needs its signal.
+    const selectedCategories = categories.filter((category) => categoryIds.includes(category.id))
+    if (selectedCategories.some((category) => !signals[category.id])) {
+      setError("Elegí una señal para cada categoría.")
       return
     }
 
@@ -117,16 +216,33 @@ export function CommentsPanel({
     // that "nothing selected" means visible to everyone, never `[]`).
     const input: CommentInput = {
       content: trimmed,
-      ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
+      ...(selectedCategories.length > 0
+        ? {
+            category_ids: selectedCategories.map((category) => category.id),
+            category_signals: Object.fromEntries(
+              selectedCategories.map((category) => [category.id, signals[category.id]]),
+            ),
+          }
+        : {}),
       ...buildScopeFields(scope),
+      ...buildPeopleField(scope, pickedPeople),
     }
+
+    const wholeRoles = rolesLeftWhole(scope, pickedPeople)
+    if (!confirmedWholeRoles && wholeRoles.length > 0) {
+      setWholeRolesWarning(wholeRoles)
+      return
+    }
+    setWholeRolesWarning(null)
 
     setSubmitting(true)
     try {
       await onCreate(input)
       setContent("")
       setCategoryIds([])
+      setSignals({})
       setScope("everyone")
+      setPickedPeople({})
     } catch {
       setError("No pudimos guardar el comentario.")
     } finally {
@@ -184,18 +300,53 @@ export function CommentsPanel({
             </div>
           )}
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="comment-scope">Visible para</Label>
-            <SingleSelect
-              id="comment-scope"
-              value={scope}
-              onChange={(value) => setScope(value as CommentScopeOption)}
-              options={COMMENT_SCOPE_OPTIONS.map((option) => ({
-                value: option,
-                label: COMMENT_SCOPE_LABELS[option],
-              }))}
-            />
-          </div>
+          {categories
+            .filter((category) => categoryIds.includes(category.id))
+            .map((category) => (
+              <CategorySignalPicker
+                key={category.id}
+                category={category}
+                value={signals[category.id]}
+                onChange={(signal) => setSignals((current) => ({ ...current, [category.id]: signal }))}
+              />
+            ))}
+
+          <CommentScopeSelector
+            value={scope}
+            onChange={(next) => {
+              setScope(next)
+              setWholeRolesWarning(null)
+            }}
+            people={scopeCandidates?.filter((person) => person.id !== currentUserId)}
+            pickedPeople={pickedPeople}
+            onPickedPeopleChange={(next) => {
+              setPickedPeople(next)
+              setWholeRolesWarning(null)
+            }}
+          />
+
+          {wholeRolesWarning && (
+            <div role="alert" className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+              {/* Provisional text: product has not defined it yet (ClickUp 86e3qkwnv). */}
+              <p>
+                En {wholeRolesWarning.map((role) => ROLE_AUDIENCE_NAMES[role]).join(" y ")} no elegiste a
+                nadie, así que la van a ver todos los de ese rol.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" disabled={submitting} onClick={() => publish(true)}>
+                  Publicar igual
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setWholeRolesWarning(null)}
+                >
+                  Volver a elegir personas
+                </Button>
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -207,6 +358,7 @@ export function CommentsPanel({
         </form>
       )}
 
+      {beforeList}
       {showAuthors && comments.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
@@ -260,6 +412,7 @@ export function CommentsPanel({
                 {(comment.categories ?? []).map((category) => (
                   <Badge key={category.id} tone="neutral">
                     {category.name}
+                    {category.signal && ` · ${commentSignalLabels[category.signal]}`}
                   </Badge>
                 ))}
                 {comment.author_only && <Badge tone="neutral">Privado</Badge>}
@@ -278,6 +431,7 @@ export function CommentsPanel({
                   Visible para: {comment.visible_to.map((role) => roleLabels[role]).join(", ")}
                 </p>
               )}
+              {renderCommentActions?.(comment)}
             </li>
           ))}
         </ul>
