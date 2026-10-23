@@ -14,10 +14,11 @@ use Laravel\Sanctum\Sanctum;
 
 // docs/prompts/04-seguimiento-institucional.md §3 and §7: the group tracking
 // view must never expose clinical detail, only counts — verified here for
-// BOTH a teacher and a director/psychopedagogue, since the per-student
-// summary here is counts-only for every role (full detail lives behind
-// /students/{id}/tracking, which does its own per-role gating).
-it('exposes only counts/booleans per student, never clinical detail, to a teacher leading the group', function () {
+// BOTH a teacher and a director/psychopedagogue (full detail lives behind
+// /students/{id}/tracking, which does its own per-role gating). ClickUp
+// 1dfd3mc2wwy: a teacher doesn't even get the per-student accommodation flag —
+// a yes/no per name is a roster ("agregado por tipo, nunca nómina").
+it('exposes only the open alerts count per student to a teacher leading the group, no accommodation flag', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
@@ -33,12 +34,13 @@ it('exposes only counts/booleans per student, never clinical detail, to a teache
     $studentSummary = collect($response->json('data.students'))->firstWhere('id', $student->id);
 
     expect($studentSummary)
-        ->toHaveKeys(['id', 'full_name', 'open_alerts_count', 'has_active_accommodations'])
+        ->toHaveKeys(['id', 'full_name', 'open_alerts_count'])
         ->and($studentSummary['open_alerts_count'])->toBe(1)
-        ->and($studentSummary['has_active_accommodations'])->toBeTrue()
+        ->and($studentSummary)->not->toHaveKey('has_active_accommodations')
         ->and($studentSummary)->not->toHaveKey('accommodations')
         ->and($studentSummary)->not->toHaveKey('alerts')
-        ->and(json_encode($studentSummary))->not->toContain('description');
+        ->and(json_encode($studentSummary))->not->toContain('description')
+        ->and(json_encode($studentSummary))->not->toContain('accommodation');
 });
 
 it('exposes the same counts-only shape to a director', function () {
@@ -58,7 +60,9 @@ it('exposes the same counts-only shape to a director', function () {
         ->and($studentSummary)->not->toHaveKey('alerts');
 });
 
-it('reports the group trend: assessments and comments count within the period', function () {
+// ClickUp 1dfd3mc2wwy: the "Evaluaciones tomadas" counter is gone (it counted
+// by upload date and across every subject), so the key is no longer sent.
+it('reports the group comments count within the period and no assessments counter', function () {
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
@@ -68,8 +72,8 @@ it('reports the group trend: assessments and comments count within the period', 
 
     $response = $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk();
 
-    $response->assertJsonPath('data.trend.assessments_count', 1)
-        ->assertJsonPath('data.trend.comments_count', 1);
+    $response->assertJsonPath('data.trend.comments_count', 1)
+        ->assertJsonMissingPath('data.trend.assessments_count');
 });
 
 // docs/prompts/21-perfil-de-grupo.md §3: the student list is ordered
@@ -106,7 +110,7 @@ it('forbids a teacher who does not lead the group from viewing its tracking page
 
 // docs/prompts/19-comentarios-alcance.md §2: the group comments count ("el
 // número ancla") is exclusive to psychopedagogue/director. A teacher leading
-// the group still sees the page and the assessments count, but the
+// the group still sees the page and the trend period, but the
 // comments_count KEY is omitted entirely — not a 0, not a null.
 it('omits the comments_count key for a teacher leading the group', function () {
     $school = School::factory()->create();
@@ -120,7 +124,7 @@ it('omits the comments_count key for a teacher leading the group', function () {
 
     $trend = $response->json('data.trend');
     expect($trend)
-        ->toHaveKey('assessments_count')
+        ->toHaveKey('period_days')
         ->and($trend)->not->toHaveKey('comments_count');
 });
 
@@ -165,25 +169,22 @@ it('includes the group teachers in the tracking payload', function () {
         ->toContain($teacher->id);
 });
 
-// ClickUp 86e3dpbwy follow-up: the flag follows Accommodation::scopeVisibleTo —
-// a teacher of another subject must not learn that a subject-specific
-// accommodation exists — and the effectiveness rule (active + approved when
-// approval is required), in one query for the whole group.
-it('flags only effective accommodations the viewer may see, in a single query', function () {
+// ClickUp 86e3dpbwy follow-up: the flag follows the effectiveness rule (active +
+// approved when approval is required), in one query for the whole group.
+// ClickUp 1dfd3mc2wwy: only psychopedagogy and direction get it at all.
+it('flags only effective accommodations, for school-wide roles only, in a single query', function () {
     $school = School::factory()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
     $math = Subject::factory()->create(['school_id' => $school->id]);
-    $science = Subject::factory()->create(['school_id' => $school->id]);
     $mathTeacher = User::factory()->forSchool($school)->teacher()->create();
     leadGroup($group, $mathTeacher, $math);
-    $scienceTeacher = User::factory()->forSchool($school)->teacher()->create();
-    leadGroup($group, $scienceTeacher, $science);
     $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
 
     $scoped = Student::factory()->create(['school_id' => $school->id]);
     $pending = Student::factory()->create(['school_id' => $school->id]);
-    $general = Student::factory()->create(['school_id' => $school->id]);
-    foreach ([$scoped, $pending, $general] as $student) {
+    $none = Student::factory()->create(['school_id' => $school->id]);
+    foreach ([$scoped, $pending, $none] as $student) {
         $student->groups()->attach($group, ['school_year' => now()->year]);
     }
     Accommodation::factory()->create(['student_id' => $scoped->id])->subjects()->attach($math);
@@ -192,23 +193,33 @@ it('flags only effective accommodations the viewer may see, in a single query', 
         'requires_external_approval' => true,
         'approved' => null,
     ]);
-    Accommodation::factory()->create(['student_id' => $general->id]);
 
-    $flags = function (User $viewer) use ($group): array {
+    $students = function (User $viewer) use ($group): array {
         Sanctum::actingAs($viewer);
 
-        return collect($this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()->json('data.students'))
-            ->mapWithKeys(fn (array $student) => [$student['id'] => $student['has_active_accommodations']])
-            ->all();
+        return $this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()->json('data.students');
     };
+    $flags = fn (User $viewer): array => collect($students($viewer))
+        ->mapWithKeys(fn (array $student) => [$student['id'] => $student['has_active_accommodations']])
+        ->all();
 
-    expect($flags($mathTeacher))->toEqual([$scoped->id => true, $pending->id => false, $general->id => true])
-        ->and($flags($scienceTeacher))->toEqual([$scoped->id => false, $pending->id => false, $general->id => true])
-        ->and($flags($director))->toEqual([$scoped->id => true, $pending->id => false, $general->id => true]);
+    expect($flags($director))->toEqual([$scoped->id => true, $pending->id => false, $none->id => false])
+        ->and($flags($psychopedagogue))->toEqual([$scoped->id => true, $pending->id => false, $none->id => false]);
+
+    foreach ($students($mathTeacher) as $student) {
+        expect($student)->not->toHaveKey('has_active_accommodations');
+    }
 
     DB::enableQueryLog();
     $flags($director);
     $accommodationQueries = collect(DB::getQueryLog())
         ->filter(fn (array $query) => str_contains($query['query'], 'from "accommodations"'));
     expect($accommodationQueries)->toHaveCount(1);
+
+    // A teacher doesn't get the flag, so no accommodation query runs for them.
+    DB::flushQueryLog();
+    $students($mathTeacher);
+    $accommodationQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], 'from "accommodations"'));
+    expect($accommodationQueries)->toHaveCount(0);
 });

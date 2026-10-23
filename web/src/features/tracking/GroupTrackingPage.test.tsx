@@ -21,7 +21,7 @@ function tracking(): GroupTracking {
       { id: 3, full_name: "Juan Pérez", open_alerts_count: 2, has_active_accommodations: true },
       { id: 4, full_name: "Ana Gómez", open_alerts_count: 0, has_active_accommodations: false },
     ],
-    trend: { period_days: 30, assessments_count: 5, comments_count: 8 },
+    trend: { period_days: 30, comments_count: 8 },
   }
 }
 
@@ -49,16 +49,15 @@ describe("GroupTrackingPage", () => {
     vi.restoreAllMocks()
   })
 
-  it("renders the trend, per-student summary rows and a per-student tracking link", async () => {
+  it("renders per-student summary rows with the accommodation flag for psychopedagogy", async () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(tracking())
     vi.spyOn(trackingApi, "fetchGroupComments").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([])
 
-    renderPage()
+    renderPage("psychopedagogue")
 
     expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
-    // Assessments count.
-    expect(screen.getByText("5")).toBeInTheDocument()
+    expect(screen.getByRole("columnheader", { name: "Ajustes activos" })).toBeInTheDocument()
 
     const juanRow = screen.getByText("Juan Pérez").closest("tr")
     expect(juanRow).not.toBeNull()
@@ -71,7 +70,22 @@ describe("GroupTrackingPage", () => {
     expect(link).toHaveAttribute("href", "/alumnos/3/seguimiento")
   })
 
-  it("no longer shows the 'Comentarios cargados' card", async () => {
+  it("does not show the accommodations column to a teacher", async () => {
+    const data = tracking()
+    data.students = data.students.map(({ has_active_accommodations: _omitted, ...rest }) => rest)
+    vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(data)
+    vi.spyOn(trackingApi, "fetchGroupComments").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([])
+
+    renderPage("teacher")
+
+    expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
+    expect(screen.queryByRole("columnheader", { name: "Ajustes activos" })).not.toBeInTheDocument()
+    expect(screen.getByText("Juan Pérez").closest("tr")!.textContent).not.toMatch(/Sí|No/)
+    expect(screen.getByRole("columnheader", { name: "Alertas abiertas" })).toBeInTheDocument()
+  })
+
+  it("no longer shows the trend counter nor the 'Comentarios cargados' card", async () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(tracking())
     vi.spyOn(trackingApi, "fetchGroupComments").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([])
@@ -79,7 +93,8 @@ describe("GroupTrackingPage", () => {
     renderPage("psychopedagogue")
 
     expect(await screen.findByText("Perfil del grupo — 3° A")).toBeInTheDocument()
-    expect(screen.getByText("Evaluaciones tomadas")).toBeInTheDocument()
+    expect(screen.queryByText("Evaluaciones tomadas")).not.toBeInTheDocument()
+    expect(screen.queryByText(/Tendencia de los últimos/)).not.toBeInTheDocument()
     expect(screen.queryByText("Comentarios cargados")).not.toBeInTheDocument()
     expect(screen.queryByText("Alertas del grupo")).not.toBeInTheDocument()
   })
