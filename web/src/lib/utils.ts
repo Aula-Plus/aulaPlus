@@ -19,3 +19,18 @@ export function formatShortDate(iso: string | null | undefined): string {
     ? "—"
     : date.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })
 }
+
+/** Format an ISO date-time as a short Spanish date plus hour and minute, or "—". */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleString("es", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+}

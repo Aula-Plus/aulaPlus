@@ -4,13 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CommentCategoryRequest;
 use App\Models\CommentCategory;
+use App\Models\Student;
+use App\Support\StudentFileHistory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 /**
  * School-editable comment categories. Reads: any staff member (the comment
  * form needs them). Writes: director only (CommentCategoryRequest/Policy).
- * Deleting a category leaves its comments without it ("Sin categoría").
+ * Deleting a category leaves its comments without it ("Sin categoría"), and
+ * that change is recorded in each affected student's change history.
  */
 class CommentCategoryController extends Controller
 {
@@ -44,7 +48,25 @@ class CommentCategoryController extends Controller
     {
         $this->authorize('delete', $category);
 
-        $category->delete();
+        // Removing a category changes the categories of every observation
+        // that had it (the pivot rows cascade). On a student's file that is a
+        // modification of the observation, recorded in its change history
+        // (ClickUp 86e3qkwmc) as before → after, under whoever deleted it.
+        $affected = $category->comments()
+            ->where('commentable_type', Student::class)
+            ->with('categories')
+            ->get();
+
+        DB::transaction(function () use ($category, $affected): void {
+            $category->delete();
+
+            foreach ($affected as $comment) {
+                $before = StudentFileHistory::categoryNamesOf($comment);
+                $comment->setRelation('categories', $comment->categories->except([$category->id]));
+
+                StudentFileHistory::recordCommentCategoriesChange($comment, $before, StudentFileHistory::categoryNamesOf($comment));
+            }
+        });
 
         return response()->noContent();
     }

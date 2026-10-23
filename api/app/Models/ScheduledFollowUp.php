@@ -36,6 +36,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'student_id',
     'title',
+    'alert_id',
     'description',
     'due_date',
     'created_by_id',
@@ -75,6 +76,12 @@ class ScheduledFollowUp extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    /** The alert this follow-up was created from, if any. */
+    public function alert(): BelongsTo
+    {
+        return $this->belongsTo(Alert::class);
     }
 
     public function createdBy(): BelongsTo

@@ -43,6 +43,9 @@ class GenerateAIProposalRequest extends FormRequest
         return array_merge([
             'type' => ['required', new Enum(AIProposalType::class)],
             'parameters' => ['required', 'array'],
+            // The creation journey this request belongs to (ClickUp
+            // 86e3qkxtc). Retries and change requests reuse the same id.
+            'journey_id' => ['nullable', 'uuid'],
             'parameters.reference_proposal_id' => [
                 'nullable',
                 Rule::exists('ai_proposals', 'id')->where('school_id', $this->user()->school_id),

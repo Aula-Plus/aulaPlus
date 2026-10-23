@@ -9,10 +9,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Loading a score onto a result (docs/prompts/11-pruebas-de-sondeo.md §3).
- * Psychopedagogy only (authorized in the Form Request). The `color` is
- * computed against the type's CURRENT approved design and persisted here — it
- * is never re-derived on read, so approving a later design does not change
- * this already-loaded color.
+ * Psychopedagogy only (authorized in the Form Request). The band is read with
+ * the design in force and persisted together with that design version, so a
+ * later change of cutoffs never rewrites it: the result is then shown with
+ * the current design and "con el diseño anterior era X" (decided 15/10).
  */
 class ScreeningTestResultController extends Controller
 {
@@ -20,22 +20,26 @@ class ScreeningTestResultController extends Controller
     {
         $design = $result->application->type->currentApprovedDesign();
 
-        // The design may have been rejected after the application was created
-        // (spec §3): a score cannot be loaded without an approved design.
+        // A score cannot be loaded without a design in force (spec §3).
         abort_if(
             $design === null,
             Response::HTTP_UNPROCESSABLE_ENTITY,
-            'This screening test type has no approved design in force.',
+            'This screening has no design in force.',
         );
 
         $score = (float) $request->validated('score');
+        $band = $design->bandFor($score);
 
         $result->update([
             'score' => $score,
-            'color' => $design->colorFor($score),
+            'screening_test_design_id' => $design->id,
+            'color' => $band['color'],
+            'band' => $band['name'],
             'loaded_by_id' => $request->user()->id,
             'loaded_at' => now(),
         ]);
+
+        $result->setRelation('inForceDesign', $design);
 
         return new ScreeningTestResultResource($result);
     }

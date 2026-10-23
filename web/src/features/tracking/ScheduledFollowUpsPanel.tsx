@@ -113,12 +113,30 @@ export function ScheduledFollowUpsPanel({ studentId }: ScheduledFollowUpsPanelPr
   )
 }
 
-function NewFollowUpForm({
+/**
+ * The "new follow-up" form. Also reused from an alert («Crear seguimiento
+ * vinculado», ClickUp 86e3jpzdp review of 14/10) with `alertId`: same fields
+ * and the same assignment rules (anyone who already sees the student, as many
+ * as needed); the server links it to the alert and checks the user may act on
+ * it. Creating it never changes the alert.
+ */
+export function NewFollowUpForm({
   studentId,
   onCreated,
+  alertId,
+  idPrefix = "follow-up",
+  heading = "Nuevo seguimiento",
+  onCancel,
 }: {
   studentId: number
   onCreated: (created: ScheduledFollowUp) => void
+  /** Links the follow-up to the alert it is created from. */
+  alertId?: number
+  /** Keeps field ids unique when several forms are on the same page. */
+  idPrefix?: string
+  /** The form's heading (e.g. when it is created from an alert). */
+  heading?: string
+  onCancel?: () => void
 }) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -192,6 +210,7 @@ function NewFollowUpForm({
         due_date: dueDate,
         ...(assigneeId ? { assigned_to_id: Number(assigneeId) } : {}),
         ...(shared.length > 0 ? { shared_with_ids: shared } : {}),
+        ...(alertId !== undefined ? { alert_id: alertId } : {}),
       })
       onCreated(created)
       setTitle("")
@@ -207,20 +226,20 @@ function NewFollowUpForm({
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border p-4">
-      <p className="font-medium">Nuevo seguimiento</p>
+      <p className="font-medium">{heading}</p>
       <div className="grid gap-1.5">
-        <Label htmlFor="follow-up-title">Título</Label>
+        <Label htmlFor={`${idPrefix}-title`}>Título</Label>
         <Input
-          id="follow-up-title"
+          id={`${idPrefix}-title`}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           maxLength={150}
         />
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="follow-up-description">Qué hay que hacer y por qué</Label>
+        <Label htmlFor={`${idPrefix}-description`}>Qué hay que hacer y por qué</Label>
         <Textarea
-          id="follow-up-description"
+          id={`${idPrefix}-description`}
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="Qué hay que hacer y por qué…"
@@ -228,9 +247,9 @@ function NewFollowUpForm({
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor="follow-up-due-date">Fecha límite</Label>
+        <Label htmlFor={`${idPrefix}-due-date`}>Fecha límite</Label>
         <Input
-          id="follow-up-due-date"
+          id={`${idPrefix}-due-date`}
           type="date"
           value={dueDate}
           onChange={(event) => setDueDate(event.target.value)}
@@ -242,9 +261,9 @@ function NewFollowUpForm({
         <div className="grid gap-3 rounded-md border p-3">
           <div className="flex flex-wrap gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="follow-up-role">Rol</Label>
+              <Label htmlFor={`${idPrefix}-role`}>Rol</Label>
               <SingleSelect
-                id="follow-up-role"
+                id={`${idPrefix}-role`}
                 options={roleOptions}
                 value={roleFilter}
                 onChange={(value) => {
@@ -256,9 +275,9 @@ function NewFollowUpForm({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="follow-up-assignee">Responsable</Label>
+              <Label htmlFor={`${idPrefix}-assignee`}>Responsable</Label>
               <SingleSelect
-                id="follow-up-assignee"
+                id={`${idPrefix}-assignee`}
                 options={personOptions}
                 value={assigneeId}
                 onChange={setAssigneeId}
@@ -268,9 +287,9 @@ function NewFollowUpForm({
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="follow-up-shared">Compartir con</Label>
+            <Label htmlFor={`${idPrefix}-shared`}>Compartir con</Label>
             <MultiSelect
-              id="follow-up-shared"
+              id={`${idPrefix}-shared`}
               options={sharedOptions}
               selected={sharedIds}
               onChange={setSharedIds}
@@ -293,10 +312,15 @@ function NewFollowUpForm({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div>
+      <div className="flex gap-2">
         <Button type="submit" disabled={submitting}>
           {submitting ? "Guardando…" : "Programar seguimiento"}
         </Button>
+        {onCancel && (
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+        )}
       </div>
     </form>
   )
@@ -312,6 +336,11 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
           <p className="mt-1 text-xs text-muted-foreground">
             Plazo: {formatShortDate(followUp.due_date)}
           </p>
+          {followUp.alert_id != null && (
+            // The alert keeps its own state and deadline: this only says
+            // where the follow-up came from.
+            <p className="text-xs text-muted-foreground">Surgió de una alerta</p>
+          )}
           {responsiblesLine(followUp) && (
             <p className="text-xs text-muted-foreground">{responsiblesLine(followUp)}</p>
           )}

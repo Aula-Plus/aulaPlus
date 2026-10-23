@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 #[Fillable([
     'group_id',
     'requested_by_id',
+    'journey_id',
     'type',
     'input_parameters',
     'context_sent',

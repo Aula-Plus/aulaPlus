@@ -14,9 +14,10 @@ import { responsiblesLine } from "./followUpDetailUtils"
 
 /**
  * The «Mis seguimientos» section of «Alertas y seguimientos» (`/alertas`): the
- * caller's pending follow-ups (responsible for, or shared with them) plus the
- * notices of follow-ups assigned to them. A notice is read and dismissed — it
- * is not an alert and asks for nothing.
+ * caller's pending follow-ups (responsible for, or shared with them) plus their
+ * notices: follow-ups assigned to them, and alerts they have that reached their
+ * deadline without a way out («Llegó a su fecha sin salida»). A notice is read
+ * and dismissed — it is not a new alert and asks for nothing.
  *
  * Wording (PO review 14/10): "Pendientes" is every open follow-up; one past
  * its date is still pending and only carries a "Fuera de fecha" badge —
@@ -89,16 +90,42 @@ export function FollowUpsSection() {
           <ul className="grid gap-2">
             {notifications.map((notice) => (
               <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                <span>
-                  Te asignaron un seguimiento
-                  {studentNameByFollowUp.get(notice.data.follow_up_id)
-                    ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
-                    : ""}{" "}
-                  con fecha {formatShortDate(notice.data.due_date)}.{" "}
-                  <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                    Ver ficha del alumno
-                  </Link>
-                </span>
+                {notice.data.type === "alert_overdue" ? (
+                  <span>
+                    Una alerta que tenés llegó a su fecha sin salida (plazo al{" "}
+                    {formatShortDate(notice.data.due_date)}).{" "}
+                    <Link className="underline" to="/alertas">
+                      Ver alertas
+                    </Link>
+                  </span>
+                ) : notice.data.type === "follow_up_assigned" ? (
+                  <span>
+                    Te asignaron un seguimiento
+                    {studentNameByFollowUp.get(notice.data.follow_up_id)
+                      ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
+                      : ""}{" "}
+                    con fecha {formatShortDate(notice.data.due_date)}.{" "}
+                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
+                      Ver ficha del alumno
+                    </Link>
+                  </span>
+                ) : (
+                  <span>
+                    {notice.data.type === "screening_design_changed"
+                      ? "Cambiaron las franjas"
+                      : "Dirección volvió atrás tu cambio en las franjas"}
+                    {notice.data.screening_test_type_name
+                      ? ` del screening «${notice.data.screening_test_type_name}»`
+                      : " de un screening"}
+                    .{" "}
+                    <Link
+                      className="underline"
+                      to={`/pruebas-de-sondeo/tipos?abrir=${notice.data.screening_test_type_id}`}
+                    >
+                      Ver diseño
+                    </Link>
+                  </span>
+                )}
                 <Button type="button" size="sm" variant="outline" onClick={() => dismiss(notice.id)}>
                   Entendido
                 </Button>

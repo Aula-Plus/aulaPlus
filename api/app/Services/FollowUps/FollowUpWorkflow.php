@@ -42,7 +42,7 @@ use Illuminate\Support\Facades\DB;
 class FollowUpWorkflow
 {
     /**
-     * @param  array{title: string, description: string, due_date: string, assigned_to_id?: int|null, shared_with_ids?: array<int, int>|null}  $data
+     * @param  array{title: string, description: string, due_date: string, alert_id?: int|null, assigned_to_id?: int|null, shared_with_ids?: array<int, int>|null}  $data
      */
     public function create(Student $student, User $creator, array $data): ScheduledFollowUp
     {
@@ -52,6 +52,9 @@ class FollowUpWorkflow
             $followUp = ScheduledFollowUp::create([
                 'student_id' => $student->id,
                 'title' => $data['title'],
+                // «Seguimiento vinculado» (ClickUp 86e3jpzdp): linking never
+                // touches the alert — its state, holder and deadline stay.
+                'alert_id' => $data['alert_id'] ?? null,
                 'description' => $data['description'],
                 'due_date' => $data['due_date'],
                 'created_by_id' => $creator->id,
