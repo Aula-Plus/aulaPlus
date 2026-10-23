@@ -2,103 +2,129 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AccommodationReviewStatus;
-use App\Http\Requests\AccommodationProposals\ConfirmAccommodationProposalRequest;
-use App\Http\Requests\AccommodationProposals\RejectAccommodationProposalRequest;
-use App\Http\Requests\AccommodationProposals\ResubmitAccommodationProposalRequest;
-use App\Http\Requests\AccommodationProposals\ReturnAccommodationProposalRequest;
-use App\Http\Requests\AccommodationProposals\WithdrawAccommodationProposalRequest;
-use App\Http\Resources\AccommodationResource;
-use App\Http\Resources\AccommodationReviewEventResource;
+use App\Enums\ProposalBasis;
+use App\Enums\ProposalStatus;
+use App\Http\Requests\ReviewAccommodationProposalRequest;
+use App\Http\Requests\StoreAccommodationProposalRequest;
+use App\Http\Resources\AccommodationProposalResource;
 use App\Models\Accommodation;
-use App\Models\Student;
-use App\Services\Accommodations\AccommodationProposalWorkflow;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use App\Models\AccommodationProposal;
+use App\Models\ReportDocument;
+use App\Models\Subject;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 /**
- * The review steps of a direction accommodation proposal (ClickUp 86e3qkwkk).
- * Authorization lives in the Form Requests (AccommodationPolicy); the
- * workflow checks the proposal's state (422) and writes it. Route-model
- * binding runs through the SchoolScope, so another tenant's {accommodation}
- * 404s first.
+ * Accommodations proposed from a student report (ClickUp 86e3jujgx). Only
+ * psychopedagogy reviews them (ReportDocumentPolicy::manage). Nothing is in
+ * force until it approves one: approving (as is or modified) creates the
+ * accommodation with the same fields a manual one has; rejecting only closes
+ * the proposal. A proposal is reviewed once.
  */
 class AccommodationProposalController extends Controller
 {
-    public function __construct(protected AccommodationProposalWorkflow $workflow) {}
-
-    /**
-     * GET /students/{student}/accommodation-proposals — the student's direction
-     * proposals not confirmed yet, open ones first, then the closed ones
-     * (withdrawn/rejected) kept for the record. A confirmed proposal is an
-     * ordinary accommodation and shows with the rest. Not cached (unlike the
-     * tracking aggregate), so a step shows at once. {student} resolves through
-     * the SchoolScope (another tenant's 404s).
-     */
-    public function index(Student $student): AnonymousResourceCollection
+    /** An adjustment the AI missed, added by hand. */
+    public function store(StoreAccommodationProposalRequest $request, ReportDocument $report): JsonResponse
     {
-        $this->authorize('viewProposals', Accommodation::class);
+        $this->authorize('manage', $report);
 
-        $proposals = $student->accommodations()
-            ->whereIn('review_status', [
-                AccommodationReviewStatus::Pending->value,
-                AccommodationReviewStatus::Returned->value,
-                AccommodationReviewStatus::Withdrawn->value,
-                AccommodationReviewStatus::Rejected->value,
-            ])
-            // Everything AccommodationResource reads, so no query per row.
-            ->with(['subjects', 'proposedBy', 'reviewedBy', 'latestReviewEvent'])
-            ->latest('id')
-            ->get()
-            ->sortBy(fn (Accommodation $proposal): int => $proposal->isOpenProposal() ? 0 : 1)
-            ->values();
+        $proposal = AccommodationProposal::create([
+            ...$request->validated(),
+            'report_document_id' => $report->id,
+            'student_id' => $report->student_id,
+            'basis' => ProposalBasis::Manual,
+            'status' => ProposalStatus::Pending,
+        ]);
 
-        return AccommodationResource::collection($proposals);
+        return (new AccommodationProposalResource($proposal))->response()->setStatusCode(201);
     }
 
-    public function confirm(ConfirmAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource
+    public function review(ReviewAccommodationProposalRequest $request, AccommodationProposal $proposal): JsonResponse|AccommodationProposalResource
     {
-        return $this->respond($this->workflow->confirm(
-            $accommodation,
-            $request->user(),
-            $request->validated('starts_on'),
-            $request->safe()->only(['origin']),
-        ));
-    }
+        $this->authorize('manage', $proposal->reportDocument);
 
-    public function returnProposal(ReturnAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource
-    {
-        return $this->respond($this->workflow->returnToDirection($accommodation, $request->user(), $request->validated('note')));
-    }
+        $validated = $request->validated();
 
-    public function resubmit(ResubmitAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource
-    {
-        return $this->respond($this->workflow->resubmit($accommodation, $request->user(), $request->validated('note')));
-    }
+        return DB::transaction(function () use ($validated, $proposal, $request): JsonResponse|AccommodationProposalResource {
+            // Locked read: two simultaneous reviews must not create two accommodations.
+            $locked = AccommodationProposal::query()->lockForUpdate()->findOrFail($proposal->id);
 
-    public function withdraw(WithdrawAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource
-    {
-        return $this->respond($this->workflow->withdraw($accommodation, $request->user(), $request->validated('reason')));
-    }
+            if ($locked->status !== ProposalStatus::Pending) {
+                return response()->json(['message' => 'Esta propuesta ya fue revisada.'], 422);
+            }
 
-    public function reject(RejectAccommodationProposalRequest $request, Accommodation $accommodation): AccommodationResource
-    {
-        return $this->respond($this->workflow->reject($accommodation, $request->user(), $request->validated('reason')));
-    }
+            if ($validated['decision'] === 'reject') {
+                $locked->forceFill([
+                    'status' => ProposalStatus::Rejected,
+                    'reviewed_by_id' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ])->save();
 
-    /**
-     * The whole back-and-forth of the proposal, oldest first.
-     */
-    public function history(Accommodation $accommodation): AnonymousResourceCollection
-    {
-        $this->authorize('viewReviewHistory', $accommodation);
+                return new AccommodationProposalResource($locked);
+            }
 
-        return AccommodationReviewEventResource::collection(
-            $accommodation->reviewEvents()->with('user.roles')->get()
-        );
-    }
+            $fields = array_intersect_key($validated, array_flip(['type', 'category', 'description', 'focus_area']));
+            $focusArea = $fields['focus_area'] ?? $locked->focus_area;
 
-    protected function respond(Accommodation $accommodation): AccommodationResource
-    {
-        return new AccommodationResource($accommodation->refresh()->load('subjects'));
+            // An accommodation always has a focus area (StoreAccommodationRequest);
+            // the AI may have left it empty, and then the reviewer has to fill it.
+            if (blank($focusArea)) {
+                return response()->json([
+                    'message' => 'Falta el área de enfoque.',
+                    'errors' => ['focus_area' => ['Completá el área de enfoque antes de aprobar.']],
+                ], 422);
+            }
+
+            $sortedIds = function (array $ids): array {
+                $ids = array_map('intval', $ids);
+                sort($ids);
+
+                return $ids;
+            };
+            $modified = collect($fields)->contains(
+                fn ($value, string $key): bool => (string) ($key === 'category' ? $locked->category->value : $locked->{$key}) !== (string) $value,
+            ) || isset($validated['starts_on'])
+                || (isset($validated['subject_ids']) && $sortedIds($validated['subject_ids']) !== $sortedIds($locked->subject_ids ?? []))
+                || isset($validated['assessment_types']);
+
+            // The reviewer's list was validated against the school's live
+            // subjects; the preloaded one comes from the AI reading and a
+            // subject may have been removed since. Never attach a deleted one,
+            // and never silently widen the scope (dropping the only subject
+            // would turn it into "every subject"): the reviewer re-checks it.
+            $subjectIds = $validated['subject_ids'] ?? $locked->subject_ids ?? [];
+
+            if (! isset($validated['subject_ids'])
+                && Subject::query()->whereIn('id', $subjectIds)->count() !== count($subjectIds)) {
+                return response()->json([
+                    'message' => 'Una de las materias propuestas ya no existe.',
+                    'errors' => ['subject_ids' => ['Revisá las materias antes de aprobar.']],
+                ], 422);
+            }
+
+            $accommodation = Accommodation::create([
+                'student_id' => $locked->student_id,
+                'type' => $fields['type'] ?? $locked->type,
+                'category' => $fields['category'] ?? $locked->category->value,
+                'description' => $fields['description'] ?? $locked->description,
+                'focus_area' => $focusArea,
+                'starts_on' => $validated['starts_on'] ?? null,
+                'assessment_types' => ($validated['assessment_types'] ?? []) === [] ? null : $validated['assessment_types'],
+                'active' => true,
+                'requires_external_approval' => false,
+            ]);
+            // Subjects the report points to are pre-loaded in the review; the
+            // reviewer's own list (even empty = every subject) wins when sent.
+            $accommodation->subjects()->sync($subjectIds);
+
+            $locked->forceFill([
+                'status' => $modified ? ProposalStatus::Modified : ProposalStatus::Approved,
+                'accommodation_id' => $accommodation->id,
+                'reviewed_by_id' => $request->user()->id,
+                'reviewed_at' => now(),
+            ])->save();
+
+            return new AccommodationProposalResource($locked);
+        });
     }
 }

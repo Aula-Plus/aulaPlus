@@ -3,17 +3,16 @@
 namespace App\Models\Concerns;
 
 use App\Enums\AuditAction;
-use App\Enums\AuditOrigin;
 use App\Models\AuditLog;
-use App\Support\Tenancy;
+use App\Support\StudentFileHistory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Auth;
 
 /**
  * Adopt this trait on any model that needs a durable "who did what, when"
  * trail. Writes one row to `audit_logs` on created/updated/deleted (via
  * `booted()`) — application code never has to remember to log anything by
- * hand.
+ * hand. Rows for models that belong to a student's file are written by
+ * {@see StudentFileHistory}, which adds the change-history annotations.
  *
  * A model may exclude specific fields from the stored diff — e.g. long free
  * text holding sensitive content about a minor (CLAUDE.md security rule 11)
@@ -39,18 +38,16 @@ trait Auditable
 
     protected static function recordAuditLog(Model $model, AuditAction $action): void
     {
-        $user = static::auditableCurrentUser();
+        $base = StudentFileHistory::baseAttributes($model, $action);
+        $changes = static::auditableChanges($model, $action);
 
-        AuditLog::create([
-            'school_id' => $model->getAttribute('school_id') ?? Tenancy::schoolId(),
-            'auditable_type' => $model::class,
-            'auditable_id' => $model->getKey(),
-            'action' => $action,
-            'user_id' => $user?->id,
-            'origin' => $user !== null ? AuditOrigin::User : AuditOrigin::System,
-            'changes' => static::auditableChanges($model, $action),
-            'created_at' => now(),
-        ]);
+        // Part of a student's file: annotated (student/section/readable
+        // details) and possibly split per section by the history registry.
+        if (StudentFileHistory::recordModelChange($model, $action, $base, $changes)) {
+            return;
+        }
+
+        AuditLog::create([...$base, 'changes' => $changes]);
     }
 
     /**
@@ -89,15 +86,5 @@ trait Auditable
         }
 
         return $snapshot;
-    }
-
-    /**
-     * Same multi-guard resolution as Tenancy's (session/web guard for the SPA,
-     * "sanctum" guard for token clients) — duplicated here rather than
-     * exposed publicly on Tenancy, which has no other caller for it.
-     */
-    protected static function auditableCurrentUser(): mixed
-    {
-        return Auth::user() ?? Auth::guard('sanctum')->user();
     }
 }

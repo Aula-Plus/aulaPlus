@@ -25,6 +25,9 @@ class ScheduledFollowUpResource extends JsonResource
                 'id' => $this->student->id,
                 'full_name' => $this->student->full_name,
             ]),
+            'title' => $this->title,
+            // The alert it was created from («seguimiento vinculado»), if any.
+            'alert_id' => $this->alert_id,
             // Set only on the review task of a direction accommodation proposal
             // (ClickUp 86e3qkwkk); the client renders its title from it.
             'accommodation_id' => $this->accommodation_id,
@@ -37,6 +40,11 @@ class ScheduledFollowUpResource extends JsonResource
             'assigned_to_id' => $this->assigned_to_id,
             'assigned_to' => $this->whenLoaded('assignedTo', fn () => $this->assignedTo ? new StaffMemberResource($this->assignedTo) : null),
             'shared_with' => StaffMemberResource::collection($this->whenLoaded('sharedWith')),
+            // Active general responsibles (ClickUp 86e3qkwna); needs
+            // `members.user.roles` loaded.
+            'general_responsibles' => $this->whenLoaded('members', fn () => StaffMemberResource::collection(
+                $this->members->filter->isGeneralResponsible()->pluck('user')->filter()->values()
+            )),
             'resolved' => $this->resolved,
             'resolved_by_id' => $this->resolved_by_id,
             'resolved_at' => $this->resolved_at?->toIso8601String(),

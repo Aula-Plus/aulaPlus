@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'grades_visibility',
     'grades_cutoff_months',
     'grades_cutoff_anchor',
+    'ai_report_interpretation_enabled',
     'comment_trend_min_count',
     'comment_trend_days',
 ])]
@@ -51,6 +52,7 @@ class School extends Model
             'instruction_languages' => 'array',
             'grades_visibility' => GradesVisibility::class,
             'grades_cutoff_anchor' => 'date',
+            'ai_report_interpretation_enabled' => 'boolean',
         ];
     }
 

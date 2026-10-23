@@ -273,25 +273,37 @@ describe("StudentTrackingPage", () => {
     expect(screen.queryByRole("button", { name: /resolver/i })).not.toBeInTheDocument()
   })
 
-  it("does not show the audit-history link to a teacher (no clinical access)", async () => {
+  it("does not show the change-history links to a teacher", async () => {
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("teacher")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
-    expect(screen.queryByRole("link", { name: /historial de auditoría/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /historial de cambios/i })).not.toBeInTheDocument()
+
+    await openTab("Documentos")
+    expect(screen.queryByRole("link", { name: /historial de cambios/i })).not.toBeInTheDocument()
   })
 
-  it("shows the audit-history link to a school-wide viewer", async () => {
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+  it.each(["director", "psychopedagogue"] as const)(
+    "shows «Ver historial de cambios» (not the old «quién abrió») in Documentos to a %s",
+    async (role) => {
+      vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+      vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("director")
+      renderPage(role)
 
-    const link = await screen.findByRole("link", { name: /historial de auditoría/i })
-    expect(link).toHaveAttribute("href", "/alumnos/3/historial")
-  })
+      const headerLink = await screen.findByRole("link", { name: /ver historial de cambios/i })
+      expect(headerLink).toHaveAttribute("href", "/alumnos/3/historial")
+
+      await openTab("Documentos")
+      const links = screen.getAllByRole("link", { name: /ver historial de cambios/i })
+      expect(links).toHaveLength(2)
+      expect(links.every((link) => link.getAttribute("href") === "/alumnos/3/historial")).toBe(true)
+      expect(screen.queryByText(/quién abrió esta ficha/i)).not.toBeInTheDocument()
+    },
+  )
 
   it("links and validates a barrier↔accommodation, updating the panel in place", async () => {
     const tracking = baseTracking()

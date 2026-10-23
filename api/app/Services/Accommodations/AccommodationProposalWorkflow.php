@@ -4,10 +4,12 @@ namespace App\Services\Accommodations;
 
 use App\Enums\AccommodationReviewAction;
 use App\Enums\AccommodationReviewStatus;
+use App\Enums\FollowUpMemberRole;
 use App\Enums\Role;
 use App\Http\Controllers\StudentTrackingController;
 use App\Models\Accommodation;
 use App\Models\AccommodationReviewEvent;
+use App\Models\FollowUpMember;
 use App\Models\ScheduledFollowUp;
 use App\Models\User;
 use App\Notifications\AccommodationProposalReturnedNotification;
@@ -92,7 +94,17 @@ class AccommodationProposalWorkflow
             // answer): every reviewer gets it in their pending list.
             'assigned_to_id' => null,
         ]);
-        $followUp->sharedWith()->sync($reviewers->modelKeys());
+        // Every reviewer takes part as a participant (follow_up_members,
+        // ClickUp 86e3qkwna), so it is in their pending list; the task has no
+        // stages and is closed by the circuit, not by hand.
+        foreach ($reviewers as $reviewer) {
+            FollowUpMember::create([
+                'school_id' => $followUp->school_id,
+                'scheduled_follow_up_id' => $followUp->id,
+                'user_id' => $reviewer->id,
+                'role' => FollowUpMemberRole::Participant,
+            ]);
+        }
 
         foreach ($reviewers as $reviewer) {
             $reviewer->notify(new FollowUpAssignedNotification($followUp));

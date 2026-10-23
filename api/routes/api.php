@@ -3,11 +3,14 @@
 use App\Http\Controllers\AccommodationController;
 use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AccommodationProposalController;
+use App\Http\Controllers\AccommodationReviewController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
+use App\Http\Controllers\AiReportSettingsController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AlertOutcomeController;
 use App\Http\Controllers\AlertSettingsController;
+use App\Http\Controllers\AlertThreadController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
@@ -15,6 +18,8 @@ use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\FollowUpMemberController;
+use App\Http\Controllers\FollowUpStageController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
 use App\Http\Controllers\GroupAccommodationNarrativeController;
 use App\Http\Controllers\GroupCommentController;
@@ -24,9 +29,9 @@ use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
-use App\Http\Controllers\ScreeningTestDesignApprovalController;
 use App\Http\Controllers\ScreeningTestDesignController;
 use App\Http\Controllers\ScreeningTestResultController;
 use App\Http\Controllers\ScreeningTestTypeController;
@@ -41,6 +46,7 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\UsageJourneyStepController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -85,13 +91,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // (ClickUp 86e3qkwkk). The external-approval approve/reject routes
         // were removed in the same task («Requiere aprobación externa» is no
         // longer part of the API).
-        Route::post('/accommodations/{accommodation}/proposal/confirm', [AccommodationProposalController::class, 'confirm']);
-        Route::post('/accommodations/{accommodation}/proposal/return', [AccommodationProposalController::class, 'returnProposal']);
-        Route::post('/accommodations/{accommodation}/proposal/resubmit', [AccommodationProposalController::class, 'resubmit']);
-        Route::post('/accommodations/{accommodation}/proposal/withdraw', [AccommodationProposalController::class, 'withdraw']);
-        Route::post('/accommodations/{accommodation}/proposal/reject', [AccommodationProposalController::class, 'reject']);
-        Route::get('/students/{student}/accommodation-proposals', [AccommodationProposalController::class, 'index']);
-        Route::get('/accommodations/{accommodation}/proposal/history', [AccommodationProposalController::class, 'history']);
+        Route::post('/accommodations/{accommodation}/proposal/confirm', [AccommodationReviewController::class, 'confirm']);
+        Route::post('/accommodations/{accommodation}/proposal/return', [AccommodationReviewController::class, 'returnProposal']);
+        Route::post('/accommodations/{accommodation}/proposal/resubmit', [AccommodationReviewController::class, 'resubmit']);
+        Route::post('/accommodations/{accommodation}/proposal/withdraw', [AccommodationReviewController::class, 'withdraw']);
+        Route::post('/accommodations/{accommodation}/proposal/reject', [AccommodationReviewController::class, 'reject']);
+        Route::get('/students/{student}/accommodation-proposals', [AccommodationReviewController::class, 'index']);
+        Route::get('/accommodations/{accommodation}/proposal/history', [AccommodationReviewController::class, 'history']);
 
         Route::get('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'index']);
         Route::post('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'store']);
@@ -111,6 +117,23 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/grades-visibility', [GradesVisibilitySettingsController::class, 'show']);
         Route::put('/grades-visibility', [GradesVisibilitySettingsController::class, 'update']);
         Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
+
+        // Student reports (ClickUp 86e3jujgx): upload, anonymized-text review,
+        // AI proposals reviewed one by one, and direction's school switch.
+        Route::get('/students/{student}/reports', [ReportDocumentController::class, 'index']);
+        Route::post('/students/{student}/reports', [ReportDocumentController::class, 'store']);
+        Route::get('/reports/{report}', [ReportDocumentController::class, 'show']);
+        Route::get('/reports/{report}/download', [ReportDocumentController::class, 'download']);
+        Route::patch('/reports/{report}', [ReportDocumentController::class, 'update']);
+        Route::delete('/reports/{report}', [ReportDocumentController::class, 'destroy']);
+        Route::put('/reports/{report}/anonymized-text', [ReportDocumentController::class, 'updateText']);
+        // Each confirmation is a paid AI call (cost control, like the other AI endpoints).
+        Route::post('/reports/{report}/confirm-send', [ReportDocumentController::class, 'confirmSend'])
+            ->middleware('throttle:5,1');
+        Route::post('/reports/{report}/proposals', [AccommodationProposalController::class, 'store']);
+        Route::post('/accommodation-proposals/{proposal}/review', [AccommodationProposalController::class, 'review']);
+        Route::get('/ai-report-setting', [AiReportSettingsController::class, 'show']);
+        Route::put('/ai-report-setting', [AiReportSettingsController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
 
         Route::get('/students/{student}/alerts', [AlertController::class, 'forStudent']);
@@ -133,6 +156,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and deadline; plus who it can be handed to.
         Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
         Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
+        // Notes in an alert's thread, by whoever has it (ClickUp 86e3jpzdp
+        // follow-up). Working a case with several people happens on a
+        // follow-up linked to the alert, not on the alert itself.
+        Route::post('/alerts/{alert}/notes', [AlertThreadController::class, 'note']);
 
         // Comment categories (replace the old comment "tone"): a school-
         // editable catalog (director writes) plus the school's recurrence
@@ -150,6 +177,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/schools/{school}/adoption-dashboard', [AdoptionDashboardController::class, 'show']);
         Route::get('/schools/{school}/adoption-dashboard/teachers', [AdoptionDashboardController::class, 'teachers']);
         Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/usage', [AdoptionDashboardController::class, 'teacherUsage']);
+        // Creation journeys (ClickUp 86e3qkxtc): the browser reports the steps
+        // only it observes; Dirección reads each teacher's journeys.
+        Route::get('/schools/{school}/adoption-dashboard/teachers/{teacher}/journeys', [AdoptionDashboardController::class, 'teacherJourneys']);
+        Route::post('/usage/journey-steps', [UsageJourneyStepController::class, 'store'])
+            ->middleware('throttle:usage-journey-steps');
 
         // Session 7: scheduled follow-ups (docs/prompts/17-seguimiento-
         // programado.md). A person schedules a follow-up on a student for a
@@ -163,6 +195,23 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
         Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
+
+        // Follow-ups with stages and several people (ClickUp 86e3qkwna),
+        // managed from "Mis seguimientos" or the student file alike.
+        Route::get('/scheduled-follow-ups/{followUp}', [ScheduledFollowUpController::class, 'show'])->whereNumber('followUp');
+        Route::post('/scheduled-follow-ups/{followUp}/stages', [FollowUpStageController::class, 'store']);
+        Route::patch('/follow-up-stages/{stage}', [FollowUpStageController::class, 'update']);
+        Route::post('/follow-up-stages/{stage}/split', [FollowUpStageController::class, 'split']);
+        Route::post('/follow-up-stages/{stage}/close', [FollowUpStageController::class, 'close']);
+        Route::post('/follow-up-stages/{stage}/notes', [FollowUpStageController::class, 'storeNote']);
+        Route::post('/scheduled-follow-ups/{followUp}/participants', [FollowUpMemberController::class, 'storeParticipant'])
+            ->name('follow-ups.participants.store');
+        Route::post('/scheduled-follow-ups/{followUp}/participants/{user}/remove', [FollowUpMemberController::class, 'removeParticipant']);
+        Route::post('/scheduled-follow-ups/{followUp}/general-responsibles', [FollowUpMemberController::class, 'storeGeneralResponsible'])
+            ->name('follow-ups.general-responsibles.store');
+        Route::post('/scheduled-follow-ups/{followUp}/general-responsibles/{user}/remove', [FollowUpMemberController::class, 'removeGeneralResponsible']);
+        Route::post('/scheduled-follow-ups/{followUp}/withdraw', [FollowUpMemberController::class, 'withdraw']);
+        Route::post('/scheduled-follow-ups/{followUp}/hide', [FollowUpMemberController::class, 'hide']);
 
         // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-
         // grupo.md). All read-only and strictly aggregate — accommodations
@@ -201,14 +250,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Session 13: screening tests ("pruebas de sondeo", docs/prompts/
         // 11-pruebas-de-sondeo.md). School-wide, psychopedagogy-led module;
-        // teachers see nothing here. Catalog + versioned design with the same
-        // draft/approval pattern as Accommodation, then application to a group
-        // with anonymous per-application codes and score-driven color bands.
+        // teachers see nothing here. Catalog + versioned design (a saved design
+        // rules at once and Dirección can revert it, screen 08), then
+        // application to a group with anonymous per-application codes and
+        // score-driven bands.
         Route::get('/screening-test-types', [ScreeningTestTypeController::class, 'index']);
         Route::post('/screening-test-types', [ScreeningTestTypeController::class, 'store']);
+        Route::patch('/screening-test-types/{type}', [ScreeningTestTypeController::class, 'update']);
+        Route::get('/screening-test-types/{type}/designs', [ScreeningTestDesignController::class, 'index']);
         Route::post('/screening-test-types/{type}/designs', [ScreeningTestDesignController::class, 'store']);
-        Route::post('/screening-test-designs/{design}/approve', [ScreeningTestDesignApprovalController::class, 'approve']);
-        Route::post('/screening-test-designs/{design}/reject', [ScreeningTestDesignApprovalController::class, 'reject']);
+        Route::post('/screening-test-types/{type}/impact', [ScreeningTestDesignController::class, 'impact']);
+        Route::post('/screening-test-designs/{design}/revert', [ScreeningTestDesignController::class, 'revert']);
 
         Route::get('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'index']);
         Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store']);

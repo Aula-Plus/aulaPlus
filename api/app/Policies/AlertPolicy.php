@@ -40,8 +40,26 @@ class AlertPolicy
     }
 
     /**
+     * Create a scheduled follow-up linked to the alert ("Crear seguimiento
+     * vinculado") — see {@see Alert::canLinkFollowUpBy()}. Whoever handed the
+     * alert off keeps reading it but cannot do this.
+     */
+    public function linkFollowUp(User $user, Alert $alert): bool
+    {
+        return $alert->canLinkFollowUpBy($user);
+    }
+
+    /**
+     * Leave a note in the alert's thread — see {@see Alert::canBeNotedBy()}.
+     */
+    public function note(User $user, Alert $alert): bool
+    {
+        return $alert->canBeNotedBy($user);
+    }
+
+    /**
      * See {@see Alert::canBeResolvedBy()}: a new alert closes only after a way
-     * out was chosen, and only by the person responsible.
+     * out was chosen, and only by whoever has it.
      */
     public function resolve(User $user, Alert $alert): bool
     {

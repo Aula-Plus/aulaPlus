@@ -2,6 +2,10 @@
 
 namespace Database\Factories;
 
+use App\Enums\FollowUpMemberRole;
+use App\Enums\FollowUpStageStatus;
+use App\Models\FollowUpMember;
+use App\Models\FollowUpStage;
 use App\Models\ScheduledFollowUp;
 use App\Models\Student;
 use App\Models\User;
@@ -18,6 +22,33 @@ class ScheduledFollowUpFactory extends Factory
             // Keep the tenant consistent with the target student when the
             // caller didn't set it explicitly (mirrors AlertFactory).
             $followUp->school_id ??= $followUp->student?->school_id;
+            $followUp->assigned_to_id ??= $followUp->created_by_id;
+        })->afterCreating(function (ScheduledFollowUp $followUp): void {
+            // Same shape the API creates (ClickUp 86e3qkwna): the assignee is
+            // the general responsible, the creator a participant, and one
+            // stage carries the description and date.
+            foreach (array_unique([$followUp->assigned_to_id, $followUp->created_by_id]) as $userId) {
+                FollowUpMember::create([
+                    'school_id' => $followUp->school_id,
+                    'scheduled_follow_up_id' => $followUp->id,
+                    'user_id' => $userId,
+                    'role' => $userId === $followUp->assigned_to_id
+                        ? FollowUpMemberRole::GeneralResponsible
+                        : FollowUpMemberRole::Participant,
+                ]);
+            }
+
+            FollowUpStage::create([
+                'school_id' => $followUp->school_id,
+                'scheduled_follow_up_id' => $followUp->id,
+                'description' => $followUp->description,
+                'responsible_id' => $followUp->assigned_to_id,
+                'due_date' => $followUp->due_date,
+                'status' => $followUp->resolved ? FollowUpStageStatus::Done : FollowUpStageStatus::Pending,
+                'conclusion' => $followUp->resolved ? $followUp->resolution_note : null,
+                'closed_at' => $followUp->resolved ? $followUp->resolved_at : null,
+                'created_by_id' => $followUp->created_by_id,
+            ]);
         });
     }
 
@@ -26,6 +57,7 @@ class ScheduledFollowUpFactory extends Factory
         return [
             'student_id' => Student::factory(),
             'created_by_id' => User::factory(),
+            'title' => fake()->sentence(4),
             'description' => fake()->sentence(),
             'due_date' => fake()->dateTimeBetween('-1 week', '+1 month')->format('Y-m-d'),
             'resolved' => false,

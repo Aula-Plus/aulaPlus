@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import {
   canEditConfirmedAccommodations,
   canManageAccommodations,
+  canManageReports,
   canResolveAlert,
   canViewStudentHistory,
   createsAccommodationProposals,
@@ -37,6 +38,7 @@ import { AccommodationInstanceOverrideForm } from "./AccommodationInstanceOverri
 import { AccommodationProposalsSection } from "./AccommodationProposalsSection"
 import { BarrierAccommodationsPanel } from "./BarrierAccommodationsPanel"
 import { CommentsPanel } from "./CommentsPanel"
+import { StudentReportsSection } from "@/features/reports/StudentReportsSection"
 import { TeamSummaryCard } from "./TeamSummaryCard"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import { StudentPerformanceChart } from "./StudentPerformanceChart"
@@ -163,7 +165,7 @@ export function StudentTrackingPage() {
             className="text-sm text-primary underline-offset-4 hover:underline"
             to={`/alumnos/${studentId}/historial`}
           >
-            Ver historial de auditoría →
+            Ver historial de cambios →
           </Link>
         )}
       </PageHeader>
@@ -554,19 +556,24 @@ export function StudentTrackingPage() {
         )}
 
         {tab === "documents" && (
-          <SectionCard title="Documentos">
-            <EmptyState icon={FileText} message="Todavía no hay documentos para mostrar." />
+          <>
+            <StudentReportsSection
+              studentId={studentId}
+              canManage={canManageReports(user)}
+              canSeeContent={canManageReports(user)}
+              onAccommodationCreated={loadTracking}
+            />
             {showHistoryLink && (
-              <p className="mt-3 text-sm">
+              <p className="text-sm">
                 <Link
                   className="text-primary underline-offset-4 hover:underline"
                   to={`/alumnos/${studentId}/historial`}
                 >
-                  Ver registro de quién abrió esta ficha →
+                  Ver historial de cambios →
                 </Link>
               </p>
             )}
-          </SectionCard>
+          </>
         )}
       </div>
 

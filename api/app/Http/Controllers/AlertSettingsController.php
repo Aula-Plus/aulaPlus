@@ -56,6 +56,8 @@ class AlertSettingsController extends Controller
 
     public function updateRouting(UpdateAlertRoutingRequest $request, AlertType $type): JsonResponse
     {
+        // Only configurable types get here: UpdateAlertRoutingRequest rejects
+        // the rest (ClickUp 86e3qkyrn, 86e3jpzdp).
         AlertRoutingSetting::query()->updateOrCreate(
             ['type' => $type->value],
             ['recipients' => array_values($request->validated('recipients'))],

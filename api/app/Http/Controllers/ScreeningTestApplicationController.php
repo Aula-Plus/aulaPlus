@@ -42,12 +42,12 @@ class ScreeningTestApplicationController extends Controller
         // Tenant-scoped: a type from another school never resolves here.
         $type = ScreeningTestType::query()->findOrFail($request->validated('screening_test_type_id'));
 
-        // A screening test cannot be applied without an approved design in
-        // force (spec §2) — business-state precondition, 422 not 403.
+        // A screening cannot be applied without a design in force (spec §2) —
+        // business-state precondition, 422 not 403.
         abort_if(
             $type->currentApprovedDesign() === null,
             Response::HTTP_UNPROCESSABLE_ENTITY,
-            'This screening test type has no approved design in force.',
+            'This screening has no design in force.',
         );
 
         $application = $createApplication(
@@ -91,7 +91,9 @@ class ScreeningTestApplicationController extends Controller
     {
         $this->authorize('viewResults', $application);
 
-        $results = $application->results()->orderBy('code')->get();
+        $inForce = $application->type->currentApprovedDesign();
+        $results = $application->results()->orderBy('code')->get()
+            ->each(fn ($result) => $result->setRelation('inForceDesign', $inForce));
 
         return ScreeningTestResultResource::collection($results);
     }
