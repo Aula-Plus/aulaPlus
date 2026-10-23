@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -18,8 +19,21 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * A class group (e.g. "3° A"). Owned by the school; teachers and students are
  * linked via the group_teacher / group_student pivots (M:N, historical per
  * school year for students).
+ *
+ * `education_level_id` is the group's level (null = "Sin nivel") and
+ * `school_grade_id` its optional grade (ClickUp 86e3t4qjh); `level` is the old
+ * free text, kept as it was and never used to deduce the level. Changes to the
+ * level are recorded by Auditable (who, when, before → after).
  */
-#[Fillable(['name', 'level', 'school_year', 'group_profile', 'related_documents'])]
+#[Fillable([
+    'name',
+    'level',
+    'education_level_id',
+    'school_grade_id',
+    'school_year',
+    'group_profile',
+    'related_documents',
+])]
 class Group extends Model
 {
     /** @use HasFactory<GroupFactory> */
@@ -33,6 +47,16 @@ class Group extends Model
             'group_profile' => 'array',
             'related_documents' => 'array',
         ];
+    }
+
+    public function educationLevel(): BelongsTo
+    {
+        return $this->belongsTo(EducationLevel::class);
+    }
+
+    public function schoolGrade(): BelongsTo
+    {
+        return $this->belongsTo(SchoolGrade::class);
     }
 
     /**

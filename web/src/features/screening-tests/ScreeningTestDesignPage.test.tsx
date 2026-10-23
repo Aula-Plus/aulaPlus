@@ -151,7 +151,7 @@ describe("ScreeningTestDesignPage", () => {
       type({ current_design: design(10, bandsBefore) }),
     ])
     const preview = vi.spyOn(screeningApi, "previewScreeningTestImpact").mockResolvedValue({
-      students: 94,
+      students: 94, groups_without_level: 0,
       current: [
         { name: "Descendido", color: "red", max: 34, count: 1 },
         { name: "En proceso", color: "yellow", max: 59, count: 35 },
@@ -195,7 +195,7 @@ describe("ScreeningTestDesignPage", () => {
       }),
     ])
     vi.spyOn(screeningApi, "previewScreeningTestImpact").mockResolvedValue({
-      students: 94,
+      students: 94, groups_without_level: 0,
       current: [
         { name: "Descendido", color: "red", max: 34, count: 1 },
         { name: "En proceso", color: "yellow", max: 64, count: 50 },
@@ -231,7 +231,7 @@ describe("ScreeningTestDesignPage", () => {
       ])
       .mockResolvedValue([type({ current_design: design(10, bandsBefore) })])
     vi.spyOn(screeningApi, "previewScreeningTestImpact").mockResolvedValue({
-      students: 0,
+      students: 0, groups_without_level: 0,
       current: [],
       proposed: [],
     })

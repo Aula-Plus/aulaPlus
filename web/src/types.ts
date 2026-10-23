@@ -38,10 +38,40 @@ export interface User {
   school?: School
 }
 
+/** A level or grade from the fixed list: `key` is stable, `label` is only shown. */
+export interface LevelRef {
+  id: number
+  key: string
+  label: string
+}
+
+/** `GET /api/v1/education-levels`: each level with the grades it suggests. */
+export interface EducationLevelOption extends LevelRef {
+  grades: LevelRef[]
+}
+
+export interface EducationLevels {
+  data: EducationLevelOption[]
+  /** How many of the viewer's groups still have no level. */
+  groups_without_level: number
+}
+
+/** `GET /api/v1/group-level-setting`. */
+export interface GroupLevelSetting {
+  psychopedagogue_can_set_group_level: boolean
+  /** Whether the viewer may choose a group's level (direction, or delegated psychopedagogy). */
+  can_set_level: boolean
+}
+
 export interface Group {
   id: number
   name: string
+  /** Old free text, kept as it was. The level that counts is `education_level`. */
   level: string | null
+  /** Chosen from the fixed list; `null` = "Sin nivel" (groups created before levels existed). */
+  education_level: LevelRef | null
+  /** Optional grade; only suggests a level, never forces it. */
+  school_grade: LevelRef | null
   school_year: number
   group_profile: unknown | null
   related_documents: unknown | null
@@ -1441,6 +1471,8 @@ export interface ScreeningImpactBand {
 /** `POST /screening-test-types/{type}/impact`. */
 export interface ScreeningImpact {
   students: number
+  /** Groups of the school without a level: they count in no screening's impact view. */
+  groups_without_level: number
   current: ScreeningImpactBand[] | null
   proposed: ScreeningImpactBand[]
 }
