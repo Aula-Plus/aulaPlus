@@ -15,6 +15,7 @@ import type { Role, ScheduledFollowUp, StaffMember } from "@/types"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
 import { responsiblesLine } from "./followUpDetailUtils"
+import { followUpTitle } from "./followUpTitle"
 
 interface ScheduledFollowUpsPanelProps {
   studentId: number
@@ -331,8 +332,11 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
     <li className="grid gap-2 rounded-md border p-3 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          {followUp.title && <p className="text-base font-semibold">{followUp.title}</p>}
-          <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
+          <p className="text-base font-semibold">{followUpTitle(followUp)}</p>
+          {/* Without a title the description is already the heading. */}
+          {followUp.title && followUp.description && (
+            <p className="whitespace-pre-wrap text-muted-foreground">{followUp.description}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             Plazo: {formatShortDate(followUp.due_date)}
           </p>
@@ -355,7 +359,7 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
         {followUp.is_overdue && <Badge tone="danger">Fuera de fecha</Badge>}
       </div>
 
-      {followUp.resolved && (
+      {followUp.resolved ? (
         <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
           <p>
             Resuelto el {formatShortDate(followUp.resolved_at)}
@@ -365,7 +369,12 @@ function FollowUpRow({ followUp, onOpen }: { followUp: ScheduledFollowUp; onOpen
             <p className="mt-1 whitespace-pre-wrap">Nota: {followUp.resolution_note}</p>
           )}
         </div>
-      )}
+      ) : followUp.accommodation_id ? (
+        // Closed by the proposal itself (confirm, withdraw or reject), never by hand.
+        <p className="text-xs text-muted-foreground">
+          Se cierra cuando Psicopedagogía confirma o rechaza la propuesta, o Dirección la retira.
+        </p>
+      ) : null}
 
       <div>
         <Button type="button" size="sm" variant="outline" onClick={onOpen}>

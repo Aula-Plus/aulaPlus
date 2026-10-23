@@ -13,6 +13,7 @@ import { personLabel, type RunAction } from "./followUpDetailUtils"
 import { FollowUpPeopleSection } from "./FollowUpPeopleSection"
 import { FollowUpStagesSection } from "./FollowUpStagesSection"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
+import { followUpTitle } from "./followUpTitle"
 
 interface FollowUpDetailDialogProps {
   /** The follow-up to open; `null` keeps the dialog closed. */
@@ -99,7 +100,7 @@ export function FollowUpDetailDialog({ followUpId, onClose, onChanged }: FollowU
           <div className="grid gap-5">
             <DialogHeader>
               <div className="flex flex-wrap items-center gap-2">
-                <DialogTitle className="text-xl">{detail.title || "Seguimiento sin título"}</DialogTitle>
+                <DialogTitle className="text-xl">{followUpTitle(detail) || "Seguimiento sin título"}</DialogTitle>
                 {detail.resolved ? (
                   <Badge tone="success">Resuelto</Badge>
                 ) : detail.is_overdue ? (

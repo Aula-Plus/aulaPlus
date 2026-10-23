@@ -28,6 +28,9 @@ class ScheduledFollowUpResource extends JsonResource
             'title' => $this->title,
             // The alert it was created from («seguimiento vinculado»), if any.
             'alert_id' => $this->alert_id,
+            // Set only on the review task of a direction accommodation proposal
+            // (ClickUp 86e3qkwkk); the client renders its title from it.
+            'accommodation_id' => $this->accommodation_id,
             'description' => $this->description,
             'due_date' => $this->due_date?->toDateString(),
             // Computed server-side (app timezone) so no client re-derives the

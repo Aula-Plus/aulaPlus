@@ -1,9 +1,9 @@
 <?php
 
-use App\Http\Controllers\AccommodationApprovalController;
 use App\Http\Controllers\AccommodationController;
 use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AccommodationProposalController;
+use App\Http\Controllers\AccommodationReviewController;
 use App\Http\Controllers\AdoptionDashboardController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AiReportSettingsController;
@@ -87,8 +87,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // audit-log-backed traceability. Existing unversioned routes above are
     // untouched.
     Route::prefix('v1')->group(function (): void {
-        Route::post('/accommodations/{accommodation}/approve', [AccommodationApprovalController::class, 'approve']);
-        Route::post('/accommodations/{accommodation}/reject', [AccommodationApprovalController::class, 'reject']);
+        // Direction proposes accommodations, psychopedagogy confirms them
+        // (ClickUp 86e3qkwkk). The external-approval approve/reject routes
+        // were removed in the same task («Requiere aprobación externa» is no
+        // longer part of the API).
+        Route::post('/accommodations/{accommodation}/proposal/confirm', [AccommodationReviewController::class, 'confirm']);
+        Route::post('/accommodations/{accommodation}/proposal/return', [AccommodationReviewController::class, 'returnProposal']);
+        Route::post('/accommodations/{accommodation}/proposal/resubmit', [AccommodationReviewController::class, 'resubmit']);
+        Route::post('/accommodations/{accommodation}/proposal/withdraw', [AccommodationReviewController::class, 'withdraw']);
+        Route::post('/accommodations/{accommodation}/proposal/reject', [AccommodationReviewController::class, 'reject']);
+        Route::get('/students/{student}/accommodation-proposals', [AccommodationReviewController::class, 'index']);
+        Route::get('/accommodations/{accommodation}/proposal/history', [AccommodationReviewController::class, 'history']);
 
         Route::get('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'index']);
         Route::post('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'store']);

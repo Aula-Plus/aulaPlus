@@ -8,7 +8,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * The full accommodation record — only ever returned to psychopedagogy and
- * direction (the student profile gates it behind view-clinical-profile). A
+ * direction (the student profile gates it behind view-clinical-profile).
+ * `requires_external_approval`/`approved` are no longer exposed (ClickUp
+ * 86e3qkwkk): the stored values are kept, not shown. A
  * teacher gets {@see AccommodationSupportChipResource} instead.
  *
  * @mixin Accommodation
@@ -37,12 +39,41 @@ class AccommodationResource extends JsonResource
             'active' => $this->active,
             'description' => $this->description,
             'focus_area' => $this->focus_area,
-            'requires_external_approval' => $this->requires_external_approval,
-            'approved' => $this->approved,
+            // «Origen» (ClickUp 86e3qkwkk): this resource only ever reaches
+            // psychopedagogy and direction; the teacher's chip never carries it.
+            'origin' => $this->origin,
             'is_effective' => $this->resource->isEffective(),
+            // Direction proposal circuit (ClickUp 86e3qkwkk): null when
+            // psychopedagogy created it directly. `review_note` is the comment
+            // or reason of the step that put it in its current state (returned,
+            // withdrawn, rejected); the full history has its own endpoint.
+            'review_status' => $this->review_status?->value,
+            'proposed_by_id' => $this->proposed_by_id,
+            // Names only, for «Propuesta de …» and «Confirmó …».
+            'proposed_by_name' => $this->proposed_by_id !== null ? $this->proposedBy?->name : null,
+            'reviewed_by_id' => $this->reviewed_by_id,
+            'reviewed_by_name' => $this->reviewed_by_id !== null ? $this->reviewedBy?->name : null,
+            'reviewed_at' => $this->reviewed_at?->toIso8601String(),
+            'review_note' => $this->reviewNote(),
             'created_by_id' => $this->created_by_id,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * The note of the latest step, while the proposal sits in a state that
+     * step put it in with a note (returned, withdrawn, rejected).
+     */
+    protected function reviewNote(): ?string
+    {
+        if (! in_array($this->review_status?->value, ['returned', 'withdrawn', 'rejected'], true)) {
+            return null;
+        }
+
+        // Eager-loaded on lists (no query per row); queried for a single one.
+        return $this->resource->relationLoaded('latestReviewEvent')
+            ? $this->resource->latestReviewEvent?->note
+            : $this->resource->reviewEvents()->reorder('id', 'desc')->value('note');
     }
 }

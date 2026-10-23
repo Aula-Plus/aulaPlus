@@ -179,11 +179,30 @@ export function canManageAlertSettings(user: User | null): boolean {
 }
 
 /**
- * Approve/reject an accommodation. Director or psychopedagogue.
- * Mirror of `AccommodationPolicy::approve`.
+ * Direction proposes accommodations instead of creating them (ClickUp
+ * 86e3qkwkk): what it saves goes to psychopedagogy's review. Mirror of
+ * `AccommodationProposalWorkflow::createsProposals` (someone holding both
+ * roles creates directly).
  */
-export function canApproveAccommodation(user: User | null): boolean {
-  return isSchoolWideStaff(user)
+export function createsAccommodationProposals(user: User | null): boolean {
+  return isDirector(user) && !isPsychopedagogue(user)
+}
+
+/**
+ * Edit or switch off an accommodation already in force. Mirror of the
+ * confirmed-accommodation half of `AccommodationPolicy::update`:
+ * psychopedagogy only (direction reads; it edits only its open proposals).
+ */
+export function canEditConfirmedAccommodations(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}
+
+/**
+ * Confirm, return or reject a direction proposal. Mirror of
+ * `AccommodationPolicy::confirm`/`returnProposal`/`reject`: psychopedagogy only.
+ */
+export function canReviewAccommodationProposals(user: User | null): boolean {
+  return isPsychopedagogue(user)
 }
 
 /**

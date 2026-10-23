@@ -38,6 +38,12 @@ use Illuminate\Auth\Access\Response;
  *
  * Business-rule denials carry a message (Response::deny) so the client can
  * show why, e.g. "pending stages" on resolve/withdraw.
+ *
+ * The review task of a direction accommodation proposal (ClickUp 86e3qkwkk)
+ * is school-wide only — a proposal psychopedagogy has not confirmed never
+ * reaches a teacher, not even as a task — and is managed by the proposal
+ * circuit (confirm, withdraw, reject close it), never by hand: no resolving,
+ * stages or people changes on it.
  */
 class ScheduledFollowUpPolicy
 {
@@ -51,7 +57,8 @@ class ScheduledFollowUpPolicy
 
     public function view(User $user, ScheduledFollowUp $followUp): bool
     {
-        return $this->canAccessStudent($user, $followUp->student);
+        return $this->canAccessStudent($user, $followUp->student)
+            && (! $followUp->isAccommodationReview() || $user->hasAnyRole(Role::schoolWideValues()));
     }
 
     /**
@@ -71,6 +78,9 @@ class ScheduledFollowUpPolicy
 
     public function resolve(User $user, ScheduledFollowUp $followUp): Response
     {
+        if ($followUp->isAccommodationReview()) {
+            return Response::deny('This review task closes with the accommodation proposal.');
+        }
         if (! $this->canAccessStudent($user, $followUp->student) || ! $this->isGeneralResponsible($user, $followUp)) {
             return Response::deny('Only a general responsible can resolve this follow-up.');
         }
@@ -87,7 +97,8 @@ class ScheduledFollowUpPolicy
     /** Add a stage: any responsible (general or of some stage). */
     public function addStage(User $user, ScheduledFollowUp $followUp): bool
     {
-        return $this->canAccessStudent($user, $followUp->student) && $this->isResponsible($user, $followUp);
+        return ! $followUp->isAccommodationReview()
+            && $this->canAccessStudent($user, $followUp->student) && $this->isResponsible($user, $followUp);
     }
 
     /** Add participants and stage responsibles: any responsible. */
@@ -122,7 +133,8 @@ class ScheduledFollowUpPolicy
     /** Add (or promote to) a general responsible: only general responsibles. */
     public function addGeneralResponsible(User $user, ScheduledFollowUp $followUp): bool
     {
-        return $this->canAccessStudent($user, $followUp->student) && $this->isGeneralResponsible($user, $followUp);
+        return ! $followUp->isAccommodationReview()
+            && $this->canAccessStudent($user, $followUp->student) && $this->isGeneralResponsible($user, $followUp);
     }
 
     /**
@@ -151,6 +163,9 @@ class ScheduledFollowUpPolicy
      */
     public function withdraw(User $user, ScheduledFollowUp $followUp): Response
     {
+        if ($followUp->isAccommodationReview()) {
+            return Response::deny('This review task closes with the accommodation proposal.');
+        }
         $member = $followUp->loadMissing('members')->memberFor($user);
         if (! $this->canAccessStudent($user, $followUp->student) || $member === null || ! $member->isActive()) {
             return Response::deny('You are not taking part in this follow-up.');

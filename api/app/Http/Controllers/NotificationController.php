@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\AlertOverdueNotification;
 use App\Notifications\FollowUpAssignedNotification;
 use App\Notifications\ScreeningDesignChangedNotification;
@@ -64,12 +65,14 @@ class NotificationController extends Controller
     /**
      * The notice types "Mis seguimientos" renders: a follow-up assigned to
      * you, an alert you have that reached its deadline without a way out
-     * («Llegó a su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), and
+     * («Llegó a su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), an
+     * accommodation proposal returned to you for corrections (86e3qkwkk), and
      * the screening design changed/reverted notices (screen 08).
      */
     public const LISTED_TYPES = [
         FollowUpAssignedNotification::class,
         AlertOverdueNotification::class,
+        AccommodationProposalReturnedNotification::class,
         ScreeningDesignChangedNotification::class,
         ScreeningDesignRevertedNotification::class,
     ];

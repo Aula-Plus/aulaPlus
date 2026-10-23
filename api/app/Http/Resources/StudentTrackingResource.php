@@ -95,7 +95,11 @@ class StudentTrackingResource extends JsonResource
             'recent_assessments' => AssessmentSummaryResource::collection($this->resource['assessments']),
             'accommodations' => $this->when(
                 $canViewClinicalProfile,
-                fn () => AccommodationResource::collection($accommodations)
+                // «Propuesta de …» / «Confirmó …» names in one query each,
+                // not one per row.
+                fn () => AccommodationResource::collection(
+                    EloquentCollection::make($accommodations)->load(['proposedBy', 'reviewedBy'])
+                )
             ),
             'accommodations_count' => $accommodations->count(),
             'barriers' => $this->when(

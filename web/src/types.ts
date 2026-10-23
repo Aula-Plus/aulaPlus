@@ -436,6 +436,61 @@ export interface StudentPerformanceTimeline {
  */
 export type AccommodationCategory = "access" | "content" | "criteria"
 
+/** Where a direction accommodation proposal stands (`App\Enums\AccommodationReviewStatus`). */
+export type AccommodationReviewStatus = "pending" | "returned" | "confirmed" | "withdrawn" | "rejected"
+
+export const accommodationReviewStatusLabels: Record<AccommodationReviewStatus, string> = {
+  pending: "Pendiente de confirmación de Psicopedagogía",
+  returned: "Devuelta para corregir",
+  confirmed: "Confirmada por Psicopedagogía",
+  withdrawn: "Retirada por Dirección",
+  rejected: "Rechazada por Psicopedagogía",
+}
+
+/** One step of a proposal's review (`AccommodationReviewEventResource`). */
+export type AccommodationReviewAction =
+  | "submitted"
+  | "edited"
+  | "returned"
+  | "resubmitted"
+  | "confirmed"
+  | "withdrawn"
+  | "rejected"
+
+export const accommodationReviewActionLabels: Record<AccommodationReviewAction, string> = {
+  submitted: "Envió la propuesta a revisión",
+  edited: "Editó la propuesta",
+  returned: "La devolvió para corregir",
+  resubmitted: "La reenvió a revisión",
+  confirmed: "La confirmó",
+  withdrawn: "La retiró",
+  rejected: "La rechazó",
+}
+
+export interface AccommodationReviewEvent {
+  id: number
+  action: AccommodationReviewAction
+  note: string | null
+  /** `edited` only: the API names of the fields changed (never their content). */
+  changed_fields: string[] | null
+  user: StaffMember | null
+  created_at: string | null
+}
+
+/** Spanish names of the accommodation fields an `edited` step may list. */
+export const accommodationFieldLabels: Record<string, string> = {
+  type: "Nombre del ajuste",
+  description: "Descripción",
+  focus_area: "Área de enfoque",
+  category: "Tipo de ajuste",
+  starts_on: "Vigente desde",
+  subject_ids: "Materias donde aplica",
+  assessment_types: "Evaluaciones",
+  origin: "Origen",
+  active: "Activa",
+  llm_rule: "Regla para el asistente",
+}
+
 export const accommodationCategoryLabels: Record<AccommodationCategory, string> = {
   access: "Acceso",
   content: "Contenido",
@@ -599,17 +654,26 @@ export interface Accommodation extends AccommodationScope {
   deactivated_on: string | null
   description: string | null
   focus_area: string | null
-  requires_external_approval: boolean
   /**
-   * Approval state for accommodations that require external approval:
-   *   - `null` → pending an approve/reject decision (only meaningful when
-   *     `requires_external_approval` is true).
-   *   - `true` → approved, `false` → rejected.
-   * When `requires_external_approval` is false, `approved` is not part of
-   * the effective vigency test — use `is_effective` instead.
+   * «Origen» (ClickUp 86e3qkwkk): free text psychopedagogy writes. Only this
+   * full record (psychopedagogy and direction) carries it; never a teacher.
    */
-  approved: boolean | null
+  origin: string | null
   is_effective: boolean
+  /**
+   * Direction proposal circuit (ClickUp 86e3qkwkk): `null` when psychopedagogy
+   * created it directly; otherwise where the proposal stands. Only `null` or
+   * `confirmed` ever reach a teacher or count as in force.
+   */
+  review_status: AccommodationReviewStatus | null
+  proposed_by_id: number | null
+  proposed_by_name: string | null
+  /** Who confirmed, withdrew or rejected the proposal, and when. */
+  reviewed_by_id: number | null
+  reviewed_by_name: string | null
+  reviewed_at: string | null
+  /** Comment/reason of the step that left it returned, withdrawn or rejected. */
+  review_note: string | null
   created_by_id: number | null
   created_at: string | null
   updated_at: string | null
@@ -626,17 +690,26 @@ export interface AccommodationInput {
   description: string
   focus_area: string
   category: AccommodationCategory
-  requires_external_approval: boolean
-  active: boolean
+  /** Psychopedagogy only on edit; direction never switches one on or off. */
+  active?: boolean
   /**
-   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form always sends it (today
+   * «Vigente desde», ISO date (`YYYY-MM-DD`). The form sends it (today
    * by default); the backend also defaults it to today when absent.
    */
-  starts_on: string
+  starts_on?: string
   /** Empty = a general accommodation (every subject). */
   subject_ids: number[]
   /** Empty = every assessment type (stored as null). */
   assessment_types: AssessmentType[]
+  /** «Origen»: psychopedagogy only (the server rejects it from direction). */
+  origin?: string | null
+  /**
+   * Direction proposals only (ClickUp 86e3qkwkk): the review deadline and who
+   * reviews it — the whole psychopedagogy role or the people picked.
+   */
+  review_due_date?: string
+  review_recipients?: "role" | "people"
+  reviewer_ids?: number[]
 }
 
 export interface Barrier {
@@ -1016,12 +1089,13 @@ export interface StaffMember {
 
 /**
  * One unread notice: a follow-up assigned to you, an alert of yours that
- * reached its deadline without a way out, or a screening design change. Ids,
- * names and dates only.
+ * reached its deadline without a way out, an accommodation proposal returned
+ * to you for corrections, or a screening design change. Ids, names and dates
+ * only.
  */
 export interface AppNotification {
   id: string
-  data: FollowUpAssignedNotice | AlertOverdueNotice | ScreeningDesignNotice
+  data: FollowUpAssignedNotice | AlertOverdueNotice | AccommodationProposalReturnedNotice | ScreeningDesignNotice
   created_at: string | null
 }
 
@@ -1033,6 +1107,13 @@ export interface FollowUpAssignedNotice {
   /** Made general responsible of the follow-up or responsible of one stage. */
   assigned_as?: "general_responsible" | "stage_responsible"
   stage_id?: number | null
+}
+
+/** Psychopedagogy returned my accommodation proposal for corrections (ClickUp 86e3qkwkk). */
+export interface AccommodationProposalReturnedNotice {
+  type: "accommodation_proposal_returned"
+  accommodation_id: number
+  student_id: number
 }
 
 /** An alert you have reached its deadline without a way out («Llegó a su fecha sin salida»). */
@@ -1065,6 +1146,12 @@ export interface ScheduledFollowUp {
   title?: string | null
   /** The alert it was created from («seguimiento vinculado»), if any. */
   alert_id?: number | null
+  /**
+   * Set only on psychopedagogy's review task for a direction accommodation
+   * proposal (ClickUp 86e3qkwkk): its title is rendered from this, its
+   * description is empty, and it closes with the proposal (never by hand).
+   */
+  accommodation_id?: number | null
   description: string
   /** General deadline: the latest due date among the stages (server-computed). */
   due_date: string
