@@ -16,6 +16,8 @@ function group(): Group {
     school_year: 2026,
     group_profile: null,
     related_documents: null,
+    education_level: null,
+    school_grade: null,
     teachers: [],
   }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\EducationLevel;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Subject;
@@ -11,7 +12,8 @@ it('lets a director list, create, update and delete groups in their school', fun
     $director = User::factory()->forSchool($school)->director()->create();
     Sanctum::actingAs($director);
 
-    $create = $this->postJson('/api/groups', ['name' => '3° A', 'level' => 'Primaria', 'school_year' => 2026]);
+    $primary = EducationLevel::query()->where('key', 'primary')->value('id');
+    $create = $this->postJson('/api/groups', ['name' => '3° A', 'education_level_id' => $primary, 'school_year' => 2026]);
     $create->assertCreated()->assertJsonPath('data.name', '3° A');
     $groupId = $create->json('data.id');
 

@@ -12,11 +12,14 @@ import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageGroups } from "@/lib/permissions"
 import { GroupTeacherAssignments } from "@/features/subjects/GroupTeacherAssignments"
+import type { EducationLevelOption } from "@/types"
+import { GroupLevelFields } from "./GroupLevelFields"
 import * as groupsApi from "./groupsApi"
 
 const groupSchema = z.object({
   name: z.string().min(1, "Ingresá un nombre"),
-  level: z.string().optional(),
+  education_level_id: z.string().min(1, "Elegí el nivel"),
+  school_grade_id: z.string(),
   school_year: z.string().min(1, "Ingresá el año lectivo"),
 })
 
@@ -34,27 +37,41 @@ export function GroupFormPage() {
   const outletContext = useOutletContext<GroupFormOutletContext | null>()
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [levels, setLevels] = useState<EducationLevelOption[]>([])
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<GroupValues>({
     resolver: zodResolver(groupSchema),
     defaultValues: {
       name: "",
-      level: "",
+      education_level_id: "",
+      school_grade_id: "",
       school_year: String(getCurrentSchoolYear()),
     },
   })
+
+  useEffect(() => {
+    groupsApi
+      .fetchEducationLevels()
+      .then((data) => setLevels(data.data))
+      .catch(() => setFormError("No pudimos cargar la lista de niveles."))
+  }, [])
 
   useEffect(() => {
     if (!id) return
     groupsApi.fetchGroup(Number(id)).then((group) => {
       reset({
         name: group.name,
-        level: group.level ?? "",
+        // A group created before levels existed stays "Sin nivel" until one is
+        // chosen here; it is never deduced from the old free text.
+        education_level_id: group.education_level ? String(group.education_level.id) : "",
+        school_grade_id: group.school_grade ? String(group.school_grade.id) : "",
         school_year: String(group.school_year),
       })
     })
@@ -67,7 +84,8 @@ export function GroupFormPage() {
       // below (backend Sesión 2) — never through this form.
       const input = {
         name: values.name,
-        level: values.level,
+        education_level_id: Number(values.education_level_id),
+        school_grade_id: values.school_grade_id ? Number(values.school_grade_id) : null,
         school_year: Number(values.school_year),
       }
       if (isEdit) {
@@ -112,10 +130,15 @@ export function GroupFormPage() {
             <Input id="name" {...register("name")} />
             {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="level">Nivel</Label>
-            <Input id="level" {...register("level")} />
-          </div>
+          <GroupLevelFields
+            levels={levels}
+            value={{ levelId: watch("education_level_id"), gradeId: watch("school_grade_id") }}
+            onChange={({ levelId, gradeId }) => {
+              setValue("school_grade_id", gradeId)
+              setValue("education_level_id", levelId, { shouldValidate: Boolean(errors.education_level_id) })
+            }}
+            levelError={errors.education_level_id?.message}
+          />
           <div className="grid gap-2">
             <Label htmlFor="school_year">Año lectivo</Label>
             <Input id="school_year" type="number" {...register("school_year")} />

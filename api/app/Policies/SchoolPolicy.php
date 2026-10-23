@@ -56,4 +56,13 @@ class SchoolPolicy
         return $user->school_id === $school->id
             && $user->hasRole(Role::Director->value);
     }
+
+    /**
+     * Only direction decides whether psychopedagogy may also set group levels.
+     */
+    public function updateGroupLevelDelegation(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
 }

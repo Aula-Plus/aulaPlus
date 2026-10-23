@@ -377,6 +377,7 @@ function LastChangeCard({
         </Table>
         <p className="text-xs text-muted-foreground">
           {impact && `Alumnos con resultado: ${impact.students}; cuenta la última toma de cada uno. `}
+          {impact && impact.groups_without_level > 0 && `${groupsWithoutLevelText(impact.groups_without_level)}. `}
           {current.reason && `Motivo: «${current.reason}». `}
           {current.created_by_name && `Lo cambió ${current.created_by_name}`}
           {current.created_at && ` · ${formatShortDate(current.created_at)}`}
@@ -781,7 +782,26 @@ function ImpactTable({ impact, currentSince }: { impact: ScreeningImpact; curren
         Alumnos con resultado: {impact.students}; cuenta la última toma de cada uno. El corte no lo
         calcula Aula+: lo fija el colegio según cuántos casos puede seguir de cerca.
       </p>
+      <GroupsWithoutLevelNote count={impact.groups_without_level} />
     </div>
+  )
+}
+
+function groupsWithoutLevelText(count: number) {
+  return count === 1 ? "1 grupo sin nivel no cuenta" : `${count} grupos sin nivel no cuentan`
+}
+
+/**
+ * Groups without a level count in no screening's impact view (ClickUp
+ * 86e3t4qjh): say how many, so a low count isn't read as the whole school.
+ */
+function GroupsWithoutLevelNote({ count }: { count: number }) {
+  if (count === 0) return null
+  return (
+    <p role="note" className="text-xs text-muted-foreground">
+      {count === 1 ? "1 grupo sin nivel" : `${count} grupos sin nivel`}: no cuentan acá hasta que se les elija
+      uno.
+    </p>
   )
 }
 

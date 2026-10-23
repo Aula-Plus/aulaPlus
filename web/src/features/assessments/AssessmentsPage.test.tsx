@@ -24,6 +24,8 @@ function groupTracking(teacherIds: number[]): GroupTracking {
       school_year: 2026,
       group_profile: null,
       related_documents: null,
+      education_level: null,
+      school_grade: null,
       teachers: teacherIds.map((teacherId) => ({ id: teacherId, name: `Docente ${teacherId}` })),
     },
     students: [
