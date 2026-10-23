@@ -3,10 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Enums\AlertOutcome;
-use App\Enums\Role;
 use App\Models\Alert;
 use App\Models\User;
-use App\Support\AlertRouting;
+use App\Support\AlertCirculation;
 use App\Support\Tenancy;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -15,13 +14,12 @@ use Illuminate\Validation\Rule;
 /**
  * Choose one of the three ways out of an alert (ClickUp 86e3jpzdp). Every way
  * out names a deadline; handing it off also names the staff member who
- * becomes responsible (same school, active, not the actor). The note is
- * optional and bounded: it is an operational note for whoever receives the
- * case, not a place for clinical detail.
- *
- * An alert type that never reaches teachers (the «Señal de dificultad» alert,
- * ClickUp 86e3qkwpn) cannot be handed to a teacher either: the assignee must
- * hold a school-wide role.
+ * becomes responsible — someone who can receive it from the actor per
+ * {@see AlertCirculation} (already sees the student, never teacher-to-teacher,
+ * never a teacher for a «Señal de dificultad» alert). A crafted request naming
+ * anyone else fails validation. The note is optional and bounded: it is an
+ * operational note for whoever receives the case, not a place for clinical
+ * detail.
  */
 class ChooseAlertOutcomeRequest extends FormRequest
 {
@@ -61,18 +59,16 @@ class ChooseAlertOutcomeRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator): void {
-            /** @var Alert $alert */
-            $alert = $this->route('alert');
-            $assigneeId = $this->input('assignee_id');
-
-            if ($validator->errors()->has('assignee_id') || $assigneeId === null || AlertRouting::allowsTeachers($alert->type)) {
+            if ($validator->errors()->isNotEmpty() || $this->input('outcome') !== AlertOutcome::HandedOff->value) {
                 return;
             }
 
-            $assignee = User::query()->where('school_id', Tenancy::schoolId())->find((int) $assigneeId);
+            /** @var Alert $alert */
+            $alert = $this->route('alert');
+            $assignee = User::query()->find((int) $this->input('assignee_id'));
 
-            if ($assignee === null || ! $assignee->hasAnyRole(Role::schoolWideValues())) {
-                $validator->errors()->add('assignee_id', 'This alert can only be handed to psychopedagogy or direction.');
+            if ($assignee === null || ! app(AlertCirculation::class)->canReceive($this->user(), $assignee, $alert)) {
+                $validator->errors()->add('assignee_id', 'The selected person cannot receive this alert.');
             }
         }];
     }

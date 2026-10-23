@@ -277,28 +277,25 @@ it('does not let a difficulty alert be handed to a teacher', function () {
         ->assertOk();
 });
 
-it('never escalates a handed-off difficulty alert to teachers, even when escalations reach them', function () {
+it('keeps an overdue handed-off difficulty alert away from teachers', function () {
     ($this->rule)(2, 30);
     ($this->observe)(['Social' => 'difficulty'], 2);
     ($this->observe)(['Social' => 'difficulty'], 1);
     $this->artisan('alerts:difficulty-signals')->assertSuccessful();
     $alert = ($this->alerts)()->sole();
 
-    // The school routes overdue escalations to teachers too.
-    Sanctum::actingAs($this->director);
-    $this->putJson('/api/v1/alert-routing/escalated_overdue', ['recipients' => ['teacher', 'director']])->assertOk();
-
     Sanctum::actingAs($this->psico);
     $this->postJson("/api/v1/alerts/{$alert->id}/outcome", [
         'outcome' => 'handed_off', 'assignee_id' => $this->director->id, 'due_on' => now()->addDay()->toDateString(),
     ])->assertOk();
 
+    // A missed deadline marks the same alert (ClickUp 86e3jpzdp, 14/10): no
+    // second alert is created that could reach anyone else.
     $this->travel(3)->days();
-    $this->artisan('alerts:escalate')->assertSuccessful();
+    $this->artisan('alerts:overdue')->assertSuccessful();
 
-    $escalation = Alert::query()->withoutGlobalScopes()->where('type', AlertType::EscalatedOverdue->value)->sole();
-    expect($escalation->source_alert_id)->toBe($alert->id)
-        ->and($escalation->recipients)->toBe(['director']);
+    expect($alert->fresh()->overdue_at)->not->toBeNull()
+        ->and(($this->alerts)()->count())->toBe(1);
 
     // The teacher who teaches the student learns nothing about the case.
     Sanctum::actingAs($this->teacher);

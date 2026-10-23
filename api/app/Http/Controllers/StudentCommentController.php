@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreStudentCommentRequest;
 use App\Http\Resources\CommentResource;
 use App\Models\Comment;
+use App\Models\CommentCategory;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Comments on a Student (docs/prompts/04-seguimiento-institucional.md §1).
@@ -32,7 +34,7 @@ class StudentCommentController extends Controller
 
     public function store(StoreStudentCommentRequest $request, Student $student): JsonResponse
     {
-        $comment = Comment::create([
+        $comment = new Comment([
             'author_id' => $request->user()->id,
             'commentable_type' => Student::class,
             'commentable_id' => $student->id,
@@ -42,7 +44,20 @@ class StudentCommentController extends Controller
             'author_only' => $request->boolean('author_only'),
         ]);
 
-        $comment->categories()->sync($request->categoriesWithSignals());
+        // Loaded before saving so the change history's "alta" entry lists the
+        // categories too (StudentFileHistory) — the pivot rows only exist
+        // after the `created` event. One transaction: an observation never
+        // stays saved without the categories (and their signal) its entry
+        // says it has.
+        $categoriesWithSignals = $request->categoriesWithSignals();
+        $categories = CommentCategory::whereKey(array_keys($categoriesWithSignals))->get();
+        $comment->setRelation('categories', $categories);
+
+        DB::transaction(function () use ($comment, $categoriesWithSignals): void {
+            $comment->save();
+            $comment->categories()->sync($categoriesWithSignals);
+        });
+
         $comment->load('categories');
 
         return (new CommentResource($comment))->response()->setStatusCode(201);

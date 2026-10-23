@@ -47,4 +47,13 @@ class SchoolPolicy
         return $user->school_id === $school->id
             && $user->hasRole(Role::Director->value);
     }
+
+    /**
+     * Direction switches the AI reading of student reports on or off for its school.
+     */
+    public function updateAiReportInterpretation(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
 }

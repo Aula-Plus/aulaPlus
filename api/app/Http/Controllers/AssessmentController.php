@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateAssessmentRequest;
 use App\Http\Resources\AssessmentResource;
 use App\Models\Assessment;
 use App\Models\Group;
+use App\Support\UsageJourney;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -36,11 +37,13 @@ class AssessmentController extends Controller
 
     public function store(StoreAssessmentRequest $request, Group $group): JsonResponse
     {
-        $assessment = Assessment::create([
-            ...$request->validated(),
+        // The `assessment.created` usage event written on create is the
+        // journey's confirmed-creation step (LogsUsageEvents).
+        $assessment = UsageJourney::within($request->validated('journey_id'), fn () => Assessment::create([
+            ...$request->safe()->except('journey_id'),
             'group_id' => $group->id,
             'teacher_id' => $request->user()->id,
-        ]);
+        ]));
 
         return (new AssessmentResource($assessment->load('subject')))
             ->response()

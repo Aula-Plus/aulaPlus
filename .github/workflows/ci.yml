@@ -25,7 +25,7 @@ jobs:
         with:
           php-version: '8.4'
           # Tests run on in-memory SQLite (see phpunit.xml) — no DB service needed.
-          extensions: mbstring, pdo, pdo_sqlite, sqlite3, bcmath, intl
+          extensions: mbstring, pdo, pdo_sqlite, sqlite3, bcmath, intl, zip
           coverage: none
           tools: composer:v2
 

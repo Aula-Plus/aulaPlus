@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Alert;
 use App\Models\AlertAction;
+use App\Models\ScheduledFollowUp;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,7 +15,7 @@ class AlertResource extends JsonResource
 {
     /**
      * Relations every alert list eager-loads so the resource renders without
-     * N+1 queries (subject, responsible person, thread).
+     * N+1 queries (subject, responsible person, thread, linked follow-ups).
      */
     public const RELATIONS = [
         'subject:id,name',
@@ -23,6 +24,7 @@ class AlertResource extends JsonResource
         'outcomeBy:id,name',
         'actions.actor:id,name',
         'actions.assignee:id,name',
+        'followUps:id,alert_id,student_id,due_date,resolved',
     ];
 
     /**
@@ -59,18 +61,46 @@ class AlertResource extends JsonResource
             'outcome_at' => $this->outcome_at?->toIso8601String(),
             'due_on' => $this->due_on?->toDateString(),
             'is_overdue' => ! $this->resolved && $this->due_on !== null && $this->due_on->lt(today()),
+            // «Llegó a su fecha sin salida» (review of 14/10): when the daily
+            // run found the current deadline passed with the alert pending.
+            // The same alert — no second one is created.
+            'overdue_at' => $this->overdue_at?->toIso8601String(),
             'actions' => $this->whenLoaded('actions', fn () => $this->actions->map(fn (AlertAction $action) => [
                 'id' => $action->id,
-                'outcome' => $action->outcome->value,
-                'actor' => ['id' => $action->actor_id, 'name' => $action->actor?->name],
-                'assignee' => ['id' => $action->assignee_id, 'name' => $action->assignee?->name],
+                'kind' => $action->kind->value,
+                'outcome' => $action->outcome?->value,
+                // `null` on an `overdue` step: written by the daily run.
+                'actor' => $action->actor_id !== null
+                    ? ['id' => $action->actor_id, 'name' => $action->actor?->name]
+                    : null,
+                'assignee' => $action->assignee_id !== null
+                    ? ['id' => $action->assignee_id, 'name' => $action->assignee?->name]
+                    : null,
                 'due_on' => $action->due_on?->toDateString(),
                 'note' => $action->note,
                 'created_at' => $action->created_at?->toIso8601String(),
             ])->values()),
+            // Follow-ups created from this alert («Crear seguimiento
+            // vinculado»): state and deadline only — their content is read
+            // through the follow-up endpoints. Everyone who sees an alert sees
+            // its student (Alert::scopeVisibleTo), so they may see these too.
+            'follow_ups' => $this->whenLoaded('followUps', fn () => $this->followUps
+                ->sortBy('due_date')
+                ->map(fn (ScheduledFollowUp $followUp) => [
+                    'id' => $followUp->id,
+                    'due_date' => $followUp->due_date?->toDateString(),
+                    'resolved' => $followUp->resolved,
+                    'is_overdue' => $followUp->isOverdue(),
+                ])->values()),
+            // Whether the viewer has the alert now (decision of 21/10, option
+            // A: each one reads their own situation): for whoever received it
+            // it is «a tu cargo», never «pasada a otro rol».
+            'is_in_charge' => $this->when($user !== null, fn () => $this->resource->isInChargeBy($user)),
             'can' => $this->when($user !== null, fn () => [
                 'act' => $this->resource->canBeActedOnBy($user),
+                'note' => $this->resource->canBeNotedBy($user),
                 'resolve' => $this->resource->canBeResolvedBy($user),
+                'link_follow_up' => $this->resource->canLinkFollowUpBy($user),
             ]),
             'resolved' => $this->resolved,
             'resolved_by_id' => $this->resolved_by_id,

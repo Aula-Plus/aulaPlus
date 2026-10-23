@@ -13,9 +13,11 @@ use Laravel\Sanctum\Sanctum;
  */
 it('lets a staff member create an accommodation with a category', function () {
     $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
+    // Psychopedagogy creates directly (direction proposes instead — its
+    // circuit is covered by AccommodationProposalTest).
+    $psycho = User::factory()->forSchool($school)->psychopedagogue()->create();
     $student = Student::factory()->create(['school_id' => $school->id]);
-    Sanctum::actingAs($director);
+    Sanctum::actingAs($psycho);
 
     $response = $this->postJson("/api/v1/students/{$student->id}/accommodations", [
         'category' => 'criteria',
@@ -32,7 +34,7 @@ it('lets a staff member create an accommodation with a category', function () {
         'student_id' => $student->id,
         'category' => 'criteria',
         'school_id' => $school->id,
-        'created_by_id' => $director->id,
+        'created_by_id' => $psycho->id,
     ]);
 });
 
@@ -69,12 +71,12 @@ it('rejects an invalid category value (422)', function () {
 
 it('lets a staff member edit an accommodation category', function () {
     $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $accommodation = Accommodation::factory()->create([
         'school_id' => $school->id,
         'category' => 'access',
     ]);
-    Sanctum::actingAs($director);
+    Sanctum::actingAs($psychopedagogue);
 
     $this->patchJson("/api/v1/accommodations/{$accommodation->id}", [
         'category' => 'content',
@@ -88,9 +90,9 @@ it('lets a staff member edit an accommodation category', function () {
 
 it('rejects editing an accommodation without a category (422)', function () {
     $school = School::factory()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
     $accommodation = Accommodation::factory()->create(['school_id' => $school->id]);
-    Sanctum::actingAs($director);
+    Sanctum::actingAs($psychopedagogue);
 
     $this->patchJson("/api/v1/accommodations/{$accommodation->id}", [
         'description' => 'Descripción actualizada.',

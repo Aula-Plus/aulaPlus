@@ -17,9 +17,9 @@ vi.mock("@/features/auth/AuthContext", () => ({
 const routing = [
   { type: "performance" as const, recipients: ["teacher" as const], is_default: true },
   {
-    type: "planning_attendance" as const,
+    type: "escalated_overdue" as const,
     recipients: ["teacher" as const, "psychopedagogue" as const],
-    is_default: true,
+    is_default: false,
   },
 ]
 
@@ -106,6 +106,44 @@ describe("AlertSettingsPage", () => {
         "psychopedagogue",
       ]),
     )
+  })
+
+  it("warns before saving Direction as the only recipient and still lets the school save", async () => {
+    vi.mocked(alertSettingsApi.updateAlertRouting).mockResolvedValue([
+      { type: "performance", recipients: ["director"], is_default: false },
+      routing[1],
+    ])
+    render(<AlertSettingsPage />)
+    const warning = "Esta alerta llegará solo a Dirección. El docente y Psicopedagogía no recibirán este aviso."
+
+    const row = await screen.findByRole("group", { name: /Desempeño bajo sostenido/ })
+    await userEvent.click(within(row).getByRole("checkbox", { name: "Dirección" }))
+    expect(screen.queryByText(warning)).not.toBeInTheDocument()
+
+    // Unchecking the teacher leaves Direction alone: the warning shows before saving.
+    await userEvent.click(within(row).getByRole("checkbox", { name: "Docente de la materia" }))
+    expect(within(row).getByText(warning)).toBeInTheDocument()
+
+    await userEvent.click(within(row).getByRole("button", { name: "Guardar igual" }))
+    await waitFor(() =>
+      expect(alertSettingsApi.updateAlertRouting).toHaveBeenCalledWith("performance", ["director"]),
+    )
+    // The saved state is still Direction only, so the notice stays.
+    expect(await screen.findByText(warning)).toBeInTheDocument()
+  })
+
+  it("drops the warning as soon as another recipient is added", async () => {
+    vi.mocked(alertSettingsApi.fetchAlertSettings).mockResolvedValue({
+      rules: [],
+      routing: [{ type: "performance", recipients: ["director"], is_default: false }],
+    })
+    render(<AlertSettingsPage />)
+    const warning = /Esta alerta llegará solo a Dirección/
+
+    expect(await screen.findByText(warning)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("checkbox", { name: "Psicopedagogía", checked: false }))
+    expect(screen.queryByText(warning)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeInTheDocument()
   })
 
   it("does not load anything for a teacher", () => {

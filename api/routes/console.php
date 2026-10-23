@@ -16,6 +16,7 @@ Schedule::command('alerts:performance')->daily();
 // the performance alerts, from each school's configured conditions.
 Schedule::command('alerts:difficulty-signals')->daily();
 
-// "Alerta escalada con plazo vencido" (ClickUp 86e3jpzdp): handed-off alerts
-// whose deadline passed without a way out.
-Schedule::command('alerts:escalate')->daily();
+// «Llegó a su fecha sin salida» (ClickUp 86e3jpzdp, review of 14/10): marks
+// the same alert when its deadline passed while still pending — no second
+// alert is created.
+Schedule::command('alerts:overdue')->daily();

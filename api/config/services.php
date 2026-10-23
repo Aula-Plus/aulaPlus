@@ -49,4 +49,11 @@ return [
         'model' => env('ANTHROPIC_MODEL'),
     ],
 
+    // Global brake for the AI reading of student reports (ClickUp 86e3jujgx):
+    // when false no school can use it, whatever its own switch says (e.g. the
+    // provider is failing or anonymization has a bug).
+    'ai_report' => [
+        'enabled' => (bool) env('AI_REPORT_INTERPRETATION_ENABLED', true),
+    ],
+
 ];

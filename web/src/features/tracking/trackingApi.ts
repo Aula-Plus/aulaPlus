@@ -1,10 +1,10 @@
 import { api } from "@/lib/api"
 import type {
   Accommodation,
+  AccommodationReviewEvent,
   AccommodationNarrativeView,
   AccommodationInput,
   Alert,
-  AuditLogEntry,
   BarrierAccommodationLink,
   Comment,
   CommentCategory,
@@ -12,8 +12,9 @@ import type {
   CommentSignal,
   GroupAccommodationSummaryEntry,
   GroupTracking,
-  Paginated,
   Role,
+  StudentHistoryFilters,
+  StudentHistoryPage,
   StudentTracking,
   TeamSummary,
 } from "@/types"
@@ -173,21 +174,38 @@ export async function resolveAlert(alertId: number): Promise<Alert> {
   return data.data
 }
 
-// ── Accommodation approval (Sesión 9) ─────────────────────────────────────
-// Both endpoints return the updated AccommodationResource wrapped in `{ data }`.
-// The 422 business-state precondition (docs/prompts/03 §3) is checked by the
-// server; callers should only invoke these when the UI shows the buttons.
+// ── Direction accommodation proposals (ClickUp 86e3qkwkk) ─────────────────
+// Every step returns the updated AccommodationResource wrapped in `{ data }`.
+// Whether the proposal's state allows the step is checked by the server (422);
+// who may take it by AccommodationPolicy (403).
 
-export async function approveAccommodation(accommodationId: number): Promise<Accommodation> {
+export type AccommodationProposalStep = "confirm" | "return" | "resubmit" | "withdraw" | "reject"
+
+export async function reviewAccommodationProposal(
+  accommodationId: number,
+  step: AccommodationProposalStep,
+  body: { note?: string; reason?: string; starts_on?: string; origin?: string } = {},
+): Promise<Accommodation> {
   const { data } = await api.post<{ data: Accommodation }>(
-    `/api/v1/accommodations/${accommodationId}/approve`,
+    `/api/v1/accommodations/${accommodationId}/proposal/${step}`,
+    body,
   )
   return data.data
 }
 
-export async function rejectAccommodation(accommodationId: number): Promise<Accommodation> {
-  const { data } = await api.post<{ data: Accommodation }>(
-    `/api/v1/accommodations/${accommodationId}/reject`,
+/** The student's direction proposals not confirmed yet (school-wide roles only). */
+export async function fetchAccommodationProposals(studentId: number): Promise<Accommodation[]> {
+  const { data } = await api.get<{ data: Accommodation[] }>(
+    `/api/v1/students/${studentId}/accommodation-proposals`,
+  )
+  return data.data
+}
+
+export async function fetchAccommodationProposalHistory(
+  accommodationId: number,
+): Promise<AccommodationReviewEvent[]> {
+  const { data } = await api.get<{ data: AccommodationReviewEvent[] }>(
+    `/api/v1/accommodations/${accommodationId}/proposal/history`,
   )
   return data.data
 }
@@ -267,19 +285,21 @@ export async function validateBarrierAccommodation(
   return data.data
 }
 
-// ── Student audit history (Sesión 9) ─────────────────────────────────────
+// ── Student change history (ClickUp 86e3qkwmc) ─────────────────────────────
 // The only paginated endpoint in the frontend so far — return the whole
 // Paginated<T> envelope (docs/prompts/09 §2), never just the data array, so
-// callers do not have to re-implement pagination on top of `meta`.
+// callers do not have to re-implement pagination on top of `meta`. `actors`
+// (the people in the history) feeds the "Persona" filter. Filtering happens
+// server-side, where the per-entry permission check also runs.
 
 export async function fetchStudentHistory(
   studentId: number,
   page = 1,
-): Promise<Paginated<AuditLogEntry>> {
-  const { data } = await api.get<Paginated<AuditLogEntry>>(
-    `/api/v1/students/${studentId}/history`,
-    { params: { page } },
-  )
+  filters: StudentHistoryFilters = {},
+): Promise<StudentHistoryPage> {
+  const { data } = await api.get<StudentHistoryPage>(`/api/v1/students/${studentId}/history`, {
+    params: { page, ...filters },
+  })
   return data
 }
 

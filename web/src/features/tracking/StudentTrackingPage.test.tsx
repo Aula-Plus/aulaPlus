@@ -56,9 +56,15 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     deactivated_on: null,
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
-    requires_external_approval: true,
-    approved: null,
+    origin: null,
     is_effective: false,
+    review_status: null,
+    proposed_by_id: null,
+    proposed_by_name: null,
+    reviewed_by_id: null,
+    reviewed_by_name: null,
+    reviewed_at: null,
+    review_note: null,
     created_by_id: 5,
     created_at: "2026-08-05T10:00:00+00:00",
     updated_at: "2026-08-05T10:00:00+00:00",
@@ -99,6 +105,7 @@ describe("StudentTrackingPage", () => {
     vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchCommentCategories").mockResolvedValue([])
     vi.spyOn(trackingApi, "fetchStudentCommentShares").mockResolvedValue([])
+    vi.spyOn(trackingApi, "fetchAccommodationProposals").mockResolvedValue([])
     vi.spyOn(subjectsApi, "fetchSubjects").mockResolvedValue([
       { id: 4, name: "Matemática", short_code: null, color: null },
       { id: 5, name: "Ciencias", short_code: null, color: null },
@@ -268,90 +275,37 @@ describe("StudentTrackingPage", () => {
     expect(screen.queryByRole("button", { name: /resolver/i })).not.toBeInTheDocument()
   })
 
-  it("approves a pending accommodation in place using the response, without a full refetch", async () => {
-    const tracking = baseTracking()
-    tracking.accommodations = [pendingAccommodation()]
-    const fetchTracking = vi
-      .spyOn(trackingApi, "fetchStudentTracking")
-      .mockResolvedValue(tracking)
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
-    const approve = vi.spyOn(trackingApi, "approveAccommodation").mockResolvedValue(
-      pendingAccommodation({ approved: true, is_effective: true }),
-    )
-
-    renderPage("psychopedagogue")
-    await openTab("Ajustes")
-
-    await screen.findByText("Perfil del alumno — Juan Pérez")
-    // Pending badge visible before, approved badge after — checks the in-place update.
-    expect(screen.getByText(/pendiente de aprobación/i)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole("button", { name: /aprobar/i }))
-    expect(approve).toHaveBeenCalledWith(77)
-    expect(await screen.findByText(/aprobada/i)).toBeInTheDocument()
-    // No approve/reject buttons remain once the decision is in.
-    expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument()
-    // The tracking aggregate is server-cached (~60s); a refetch could return
-    // the stale value. §3 of the spec forbids a refetch, so we assert the
-    // initial mount call is the only one.
-    expect(fetchTracking).toHaveBeenCalledTimes(1)
-  })
-
-  it("rejects a pending accommodation in place using the response, without a full refetch", async () => {
-    const tracking = baseTracking()
-    tracking.accommodations = [pendingAccommodation()]
-    const fetchTracking = vi
-      .spyOn(trackingApi, "fetchStudentTracking")
-      .mockResolvedValue(tracking)
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
-    const reject = vi.spyOn(trackingApi, "rejectAccommodation").mockResolvedValue(
-      pendingAccommodation({ approved: false }),
-    )
-
-    renderPage("director")
-    await openTab("Ajustes")
-
-    await screen.findByText("Perfil del alumno — Juan Pérez")
-    await userEvent.click(screen.getByRole("button", { name: /rechazar/i }))
-    expect(reject).toHaveBeenCalledWith(77)
-    expect(await screen.findByText(/rechazada/i)).toBeInTheDocument()
-    expect(fetchTracking).toHaveBeenCalledTimes(1)
-  })
-
-  it("does not render approve/reject buttons for an accommodation with a decision already recorded", async () => {
-    const tracking = baseTracking()
-    tracking.accommodations = [pendingAccommodation({ approved: true, is_effective: true })]
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
-
-    renderPage("psychopedagogue")
-    await openTab("Ajustes")
-
-    await screen.findByText("Perfil del alumno — Juan Pérez")
-    expect(screen.getByText(/aprobada/i)).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /aprobar/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /rechazar/i })).not.toBeInTheDocument()
-  })
-
-  it("does not show the audit-history link to a teacher (no clinical access)", async () => {
+  it("does not show the change-history links to a teacher", async () => {
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("teacher")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
-    expect(screen.queryByRole("link", { name: /historial de auditoría/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /historial de cambios/i })).not.toBeInTheDocument()
+
+    await openTab("Documentos")
+    expect(screen.queryByRole("link", { name: /historial de cambios/i })).not.toBeInTheDocument()
   })
 
-  it("shows the audit-history link to a school-wide viewer", async () => {
-    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
-    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+  it.each(["director", "psychopedagogue"] as const)(
+    "shows «Ver historial de cambios» (not the old «quién abrió») in Documentos to a %s",
+    async (role) => {
+      vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+      vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
-    renderPage("director")
+      renderPage(role)
 
-    const link = await screen.findByRole("link", { name: /historial de auditoría/i })
-    expect(link).toHaveAttribute("href", "/alumnos/3/historial")
-  })
+      const headerLink = await screen.findByRole("link", { name: /ver historial de cambios/i })
+      expect(headerLink).toHaveAttribute("href", "/alumnos/3/historial")
+
+      await openTab("Documentos")
+      const links = screen.getAllByRole("link", { name: /ver historial de cambios/i })
+      expect(links).toHaveLength(2)
+      expect(links.every((link) => link.getAttribute("href") === "/alumnos/3/historial")).toBe(true)
+      expect(screen.queryByText(/quién abrió esta ficha/i)).not.toBeInTheDocument()
+    },
+  )
 
   it("links and validates a barrier↔accommodation, updating the panel in place", async () => {
     const tracking = baseTracking()
@@ -360,7 +314,7 @@ describe("StudentTrackingPage", () => {
     // to exercise both the link form and the validate action against a link
     // that a DIFFERENT user proposed.
     tracking.accommodations = [
-      { ...pendingAccommodation(), id: 91, requires_external_approval: false, approved: null, active: true },
+      { ...pendingAccommodation(), id: 91, active: true },
     ]
     tracking.barriers = [
       { id: 55, description: "Dificultad de atención sostenida", coping_strategy: null, active: true },
@@ -463,37 +417,35 @@ describe("StudentTrackingPage", () => {
       ...pendingAccommodation(),
       id: 200,
       category: "content",
-      requires_external_approval: false,
-      approved: null,
       is_effective: true,
     })
 
-    renderPage("director")
+    renderPage("psychopedagogue")
     await openTab("Ajustes")
 
     await screen.findByText("Perfil del alumno — Juan Pérez")
     await userEvent.click(screen.getByRole("button", { name: /nuevo ajuste/i }))
 
     // Fill everything except the category, then try to save.
-    await userEvent.type(screen.getByLabelText(/^tipo$/i), "Lectura en voz alta")
+    await userEvent.type(screen.getByLabelText(/nombre del ajuste/i), "Lectura en voz alta")
     await userEvent.type(screen.getByLabelText(/descripción/i), "El docente lee la consigna")
     await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Comprensión")
     await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
 
     // Exact match (not a substring regex) so it hits the error message, not the
-    // "Elegí una categoría…" placeholder option.
-    expect(await screen.findByText("Elegí una categoría")).toBeInTheDocument()
+    // "Elegí el tipo de ajuste…" placeholder option.
+    expect(await screen.findByText("Elegí el tipo de ajuste")).toBeInTheDocument()
     expect(create).not.toHaveBeenCalled()
 
     // Now choose a category and the write goes through with it.
-    await userEvent.click(screen.getByLabelText(/categoría/i))
+    await userEvent.click(screen.getByLabelText(/^tipo de ajuste$/i))
     await userEvent.click(await screen.findByRole("button", { name: "Contenido" }))
 
     // Scope: since when, which subjects, which assessment types.
     const startsOn = screen.getByLabelText(/vigente desde/i)
     await userEvent.clear(startsOn)
     await userEvent.type(startsOn, "2026-04-02")
-    await userEvent.click(screen.getByLabelText(/materias/i))
+    await userEvent.click(screen.getByLabelText(/materias donde aplica/i))
     await userEvent.click(await screen.findByRole("button", { name: "Matemática" }))
     await userEvent.click(screen.getByRole("checkbox", { name: "Escrita" }))
     await userEvent.click(screen.getByRole("button", { name: /^guardar$/i }))
@@ -503,12 +455,100 @@ describe("StudentTrackingPage", () => {
       description: "El docente lee la consigna",
       focus_area: "Comprensión",
       category: "content",
-      requires_external_approval: false,
       active: true,
       starts_on: "2026-04-02",
       subject_ids: [4],
       assessment_types: ["written"],
+      // «Origen» comes prefilled for what psychopedagogy registers itself.
+      origin: "Registrado por Psicopedagogía",
     })
+  })
+
+  // ClickUp 86e3qkwkk: direction proposes; psychopedagogy confirms.
+  it("lets direction propose an accommodation for psychopedagogy's review", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [pendingAccommodation({ id: 5, is_effective: true })]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const create = vi
+      .spyOn(trackingApi, "createAccommodation")
+      .mockResolvedValue(pendingAccommodation({ id: 201, review_status: "pending" }))
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([
+      { id: 30, name: "Laura Ferrando", role: "psychopedagogue" },
+      { id: 31, name: "Marta Psico", role: "psychopedagogue" },
+    ])
+
+    renderPage("director")
+    await openTab("Ajustes")
+
+    await screen.findByText("Perfil del alumno — Juan Pérez")
+    // Direction never edits an accommodation in force.
+    expect(screen.queryByRole("button", { name: /^editar$/i })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: /proponer ajuste/i }))
+
+    expect(screen.getByText(/se envía a revisión de psicopedagogía/i)).toBeInTheDocument()
+    // «Vigente desde» is set by psychopedagogy when it confirms; no switch-off either.
+    expect(screen.queryByLabelText(/vigente desde/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/requiere aprobación externa/i)).not.toBeInTheDocument()
+    // «Origen» is psychopedagogy's to write.
+    expect(screen.queryByLabelText(/^origen$/i)).not.toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText(/nombre del ajuste/i), "Más tiempo en escritos")
+    await userEvent.type(screen.getByLabelText(/descripción/i), "Media hora extra")
+    await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Escritura")
+    await userEvent.click(screen.getByLabelText(/^tipo de ajuste$/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Acceso" }))
+
+    // Direction picks the review deadline and who reviews it.
+    await userEvent.click(screen.getByLabelText(/personas de psicopedagogía/i))
+    await userEvent.click(screen.getByRole("button", { name: /enviar a revisión de psicopedagogía/i }))
+    expect(await screen.findByText(/elegí hasta cuándo tiene para revisarla/i)).toBeInTheDocument()
+    expect(screen.getByText(/elegí al menos una persona/i)).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+
+    await userEvent.type(screen.getByLabelText(/plazo para la revisión/i), "2099-01-15")
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Marta Psico" }))
+    await userEvent.click(screen.getByRole("button", { name: /enviar a revisión de psicopedagogía/i }))
+
+    expect(create).toHaveBeenCalledWith(3, {
+      type: "Más tiempo en escritos",
+      description: "Media hora extra",
+      focus_area: "Escritura",
+      category: "access",
+      active: true,
+      subject_ids: [],
+      assessment_types: [],
+      review_due_date: "2099-01-15",
+      review_recipients: "people",
+      reviewer_ids: [31],
+    })
+  })
+
+  it("tells direction when nobody in psychopedagogy can review the proposal", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [pendingAccommodation({ id: 5, is_effective: true })]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    vi.spyOn(scheduledFollowUpsApi, "fetchFollowUpCandidates").mockResolvedValue([])
+    vi.spyOn(trackingApi, "createAccommodation").mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 422, data: { errors: { review_recipients: ["No active psychopedagogue."] } } },
+    })
+
+    renderPage("director")
+    await openTab("Ajustes")
+    await userEvent.click(await screen.findByRole("button", { name: /proponer ajuste/i }))
+    await userEvent.type(screen.getByLabelText(/nombre del ajuste/i), "Más tiempo en escritos")
+    await userEvent.type(screen.getByLabelText(/descripción/i), "Media hora extra")
+    await userEvent.type(screen.getByLabelText(/área de enfoque/i), "Escritura")
+    await userEvent.click(screen.getByLabelText(/^tipo de ajuste$/i))
+    await userEvent.click(await screen.findByRole("button", { name: "Acceso" }))
+    await userEvent.type(screen.getByLabelText(/plazo para la revisión/i), "2099-01-15")
+    await userEvent.click(screen.getByRole("button", { name: /enviar a revisión de psicopedagogía/i }))
+
+    expect(
+      await screen.findByText("No hay personas de Psicopedagogía activas para revisar la propuesta."),
+    ).toBeInTheDocument()
   })
 
   it("hides 'Nuevo ajuste' and 'Editar' from a viewer without clinical access", async () => {
@@ -530,11 +570,9 @@ describe("StudentTrackingPage", () => {
     tracking.accommodations = [
       pendingAccommodation({
         id: 1,
-        requires_external_approval: false,
-        approved: null,
         is_effective: true,
       }),
-      // Pending approval → not effective → no deactivation action.
+      // Not effective (switched off) → no deactivation action.
       pendingAccommodation({ id: 2, is_effective: false }),
     ]
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
@@ -554,8 +592,6 @@ describe("StudentTrackingPage", () => {
     tracking.accommodations = [
       pendingAccommodation({
         id: 1,
-        requires_external_approval: false,
-        approved: null,
         is_effective: true,
       }),
     ]
@@ -583,8 +619,6 @@ describe("StudentTrackingPage", () => {
     tracking.accommodations = [
       pendingAccommodation({
         id: 1,
-        requires_external_approval: false,
-        approved: null,
         is_effective: true,
       }),
     ]
@@ -842,7 +876,6 @@ describe("StudentTrackingPage", () => {
     const tracking = baseTracking()
     tracking.accommodations = [
       pendingAccommodation({
-        requires_external_approval: false,
         is_effective: true,
         starts_on: "2024-04-02",
         subjects: [{ id: 7, name: "Idioma Español", deleted: false }],
@@ -860,7 +893,6 @@ describe("StudentTrackingPage", () => {
   it("shows a soft-deleted subject of the edited accommodation as «(eliminada)» and lets it be removed", async () => {
     const tracking = baseTracking()
     const accommodation = pendingAccommodation({
-      requires_external_approval: false,
       is_effective: true,
       focus_area: "Cálculo",
       subjects: [
@@ -896,7 +928,6 @@ describe("StudentTrackingPage", () => {
   it("edits «Vigente desde» and deactivates without any end date typed in (the server records the day)", async () => {
     const tracking = baseTracking()
     const accommodation = pendingAccommodation({
-      requires_external_approval: false,
       is_effective: true,
       focus_area: "Cálculo",
       starts_on: "2026-03-15",
@@ -938,7 +969,6 @@ describe("StudentTrackingPage", () => {
     ]
     tracking.accommodations = [
       pendingAccommodation({
-        requires_external_approval: false,
         is_effective: true,
         subjects: [{ id: 4, name: "Matemática", deleted: false }],
         assessment_types: ["written"],
