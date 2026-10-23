@@ -4,9 +4,18 @@ import { RowLink } from "@/components/ui/row-link"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
 import { alertTypeLabels, type Alert } from "@/types"
+import { alertHolderPhrase } from "@/features/alerts/alertHolder"
 import { fetchGroupAlerts } from "./trackingApi"
 
 const VISIBLE_LIMIT = 5
+
+/** «La tiene X desde el dd/mm», once someone chose a way out. */
+function HolderLine({ alert }: { alert: Alert }) {
+  const phrase = alertHolderPhrase(alert)
+  if (!phrase) return null
+  const sentence = `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`
+  return <p className="text-xs text-muted-foreground">{sentence}</p>
+}
 
 interface GroupOpenAlertsProps {
   groupId: number
@@ -16,14 +25,17 @@ interface GroupOpenAlertsProps {
 
 /**
  * Perfil de grupo — "Alertas del grupo" card. Lists the group's open alerts
- * (student, alert type, since when) with a link to each student, at most five;
- * past that, "Ver todas" leads to «Alertas y seguimientos» (`/alertas`), where
- * every open alert that reaches the viewer is listed with its ways out.
+ * (student, alert type, since when, and — once someone chose a way out — who
+ * has it: «la tiene X desde el dd/mm», ClickUp 86e3jpzdp) with a link to each
+ * student, at most five; past that, "Ver todas" leads to «Alertas y
+ * seguimientos» (`/alertas`), where every open alert that reaches the viewer
+ * is listed with its ways out.
  *
  * Permissions are exactly the alerts endpoint's (`AlertPolicy::viewForGroup`):
  * a viewer who cannot read them gets a 403, and the card simply does not
  * render. It also does not render when there are no open alerts — never a
- * "0 alertas" placeholder.
+ * "0 alertas" placeholder. Who has an alert comes with the alert itself, so it
+ * is shown only to whoever may see that alert (`Alert::scopeVisibleTo`).
  */
 export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps) {
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -62,6 +74,7 @@ export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps)
                   Desde el {formatShortDate(alert.created_at)}
                 </p>
               )}
+              <HolderLine alert={alert} />
             </div>
             <RowLink to={`/alumnos/${alert.student_id}/seguimiento`} className="shrink-0">
               Ver alumno

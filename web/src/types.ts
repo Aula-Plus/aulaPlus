@@ -162,15 +162,37 @@ export interface AlertPerson {
   name: string | null
 }
 
+/**
+ * Mirror of `App\Enums\AlertActionKind`: a way out chosen, a note by whoever
+ * has the alert, or the deadline arriving with the alert still pending
+ * («Llegó a su fecha sin salida»).
+ */
+export type AlertActionKind = "outcome" | "note" | "overdue"
+
 /** One step of an alert's thread. */
 export interface AlertActionEntry {
   id: number
-  outcome: AlertOutcome
-  actor: AlertPerson
-  assignee: AlertPerson
+  kind: AlertActionKind
+  /** Only on `outcome` steps. */
+  outcome: AlertOutcome | null
+  /** `null` on an `overdue` step: written by the daily run, not by a person. */
+  actor: AlertPerson | null
+  /** Who became responsible (`outcome`) or who had it (`overdue`); `null` on a note. */
+  assignee: AlertPerson | null
   due_on: string | null
   note: string | null
   created_at: string | null
+}
+
+/**
+ * A follow-up linked to an alert, as the alert lists it: state and deadline
+ * only; its content is read through the follow-up endpoints.
+ */
+export interface AlertFollowUpLink {
+  id: number
+  due_date: string | null
+  resolved: boolean
+  is_overdue: boolean
 }
 
 /** Mirror of `App\Enums\AlertSeverity`. */
@@ -197,7 +219,7 @@ export interface Alert {
   condition_met_on?: string | null
   /** Who the alert reached first; `null` on alerts created before 86e3jpzcv. */
   recipients?: AlertRecipient[] | null
-  /** Escalated alerts: the alert whose deadline passed. */
+  /** Legacy escalated alerts (no longer created): the alert whose deadline passed. */
   source_alert_id?: number | null
   /** The way out chosen (ClickUp 86e3jpzdp), `null` while none was. */
   outcome?: AlertOutcome | null
@@ -207,9 +229,22 @@ export interface Alert {
   outcome_at?: string | null
   due_on?: string | null
   is_overdue?: boolean
+  /**
+   * «Llegó a su fecha sin salida»: when the daily run found the current
+   * deadline passed with the alert still pending. The same alert — no second
+   * one is created.
+   */
+  overdue_at?: string | null
   actions?: AlertActionEntry[]
+  /** Follow-ups created from this alert («seguimiento vinculado»). */
+  follow_ups?: AlertFollowUpLink[]
+  /**
+   * Whether the current user has the alert now (they are the one responsible
+   * once a way out was chosen): it is «a tu cargo» for them.
+   */
+  is_in_charge?: boolean
   /** What the current user may do, decided by `AlertPolicy`. */
-  can?: { act: boolean; resolve: boolean }
+  can?: { act: boolean; note?: boolean; resolve: boolean; link_follow_up?: boolean }
   resolved: boolean
   resolved_by_id: number | null
   resolved_at: string | null
@@ -979,10 +1014,14 @@ export interface StaffMember {
   role: Role | null
 }
 
-/** Unread notice (e.g. a follow-up was assigned to me); payload holds ids only. */
+/**
+ * One unread notice: a follow-up assigned to you, an alert of yours that
+ * reached its deadline without a way out, or a screening design change. Ids,
+ * names and dates only.
+ */
 export interface AppNotification {
   id: string
-  data: FollowUpAssignedNotice | ScreeningDesignNotice
+  data: FollowUpAssignedNotice | AlertOverdueNotice | ScreeningDesignNotice
   created_at: string | null
 }
 
@@ -991,6 +1030,14 @@ export interface FollowUpAssignedNotice {
   follow_up_id: number
   student_id: number
   due_date: string
+}
+
+/** An alert you have reached its deadline without a way out («Llegó a su fecha sin salida»). */
+export interface AlertOverdueNotice {
+  type: "alert_overdue"
+  alert_id: number
+  student_id: number
+  due_date: string | null
 }
 
 /** A screening's design changed (to Dirección) or was reverted (to its author). */
@@ -1011,6 +1058,8 @@ export interface ScheduledFollowUp {
   student_id: number
   /** Only on the caller's own pending list (`GET /scheduled-follow-ups/mine`). */
   student?: { id: number; full_name: string }
+  /** The alert it was created from («seguimiento vinculado»), if any. */
+  alert_id?: number | null
   description: string
   due_date: string
   created_by_id: number

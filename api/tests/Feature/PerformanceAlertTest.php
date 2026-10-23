@@ -347,10 +347,10 @@ it('does not offer routing for an alert type nothing generates yet', function ()
     Sanctum::actingAs($this->director);
 
     $types = collect($this->getJson('/api/v1/alert-settings')->assertOk()->json('data.routing'))->pluck('type');
-    expect($types->all())->toBe(['performance', 'escalated_overdue']);
+    expect($types->all())->toBe(['performance']);
 
     $this->putJson('/api/v1/alert-routing/planning_attendance', ['recipients' => ['director']])
-        ->assertNotFound();
+        ->assertJsonValidationErrors('type');
     expect(AlertRoutingSetting::query()->withoutGlobalScopes()->count())->toBe(0);
 });
 

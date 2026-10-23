@@ -88,6 +88,85 @@ eso nunca es la barrera de seguridad.
   Ver `GroupPolicy` / `StudentPolicy` como patrón de referencia.
 - Alumnos = registros (tabla `students`), sin login.
 
+## Alertas: circulación entre roles
+
+Reglas de quién puede pasar una alerta y a quién (ClickUp 86e3jpzdp;
+documento vivo, pantalla 11), actualizadas por la revisión de producto del
+14/10. Fuente única en el backend: `App\Support\AlertCirculation` (la usan el
+endpoint de candidatos y `ChooseAlertOutcomeRequest`).
+
+- **La alerta pide una salida**: «Me ocupo yo» / «Se la paso a otro rol» /
+  «La dejo en observación», siempre con responsable y plazo
+  (`POST /alerts/{alert}/outcome`).
+- **Solo a quien ya ve al alumno**: misma regla que el responsable de un
+  seguimiento programado (`ScheduledFollowUpPolicy::canFollow`: da clase al
+  alumno, o es psicopedagogía/dirección del colegio). Además: misma escuela,
+  activo, invitación aceptada, distinto de quien actúa.
+- **Nunca docente → docente**: un docente solo pasa la alerta a
+  psicopedagogía o dirección; a un docente solo le llegan alertas pasadas por
+  psicopedagogía o dirección. Un pedido armado a mano con otro destinatario
+  falla validación (422).
+- **Pasar es transferir a una sola persona** (`alerts.assignee_id`): desde ahí
+  solo esa persona actúa (salidas, notas, cierre). Quien la pasó conserva
+  **lectura**, sin acciones ni nuevos avisos, mientras conserve acceso al
+  alumno y según su rol (`alert_user` en `Alert::scopeVisibleTo`: un docente
+  la deja de ver si deja de darle clase al alumno).
+- **No se comparte la alerta**: no hay endpoint de compartir ni
+  co-responsables (se quitó lo que había asumido #130). La colaboración se
+  organiza en un **seguimiento vinculado**.
+- **Seguimiento vinculado** («Crear seguimiento vinculado»): se crea con el
+  mismo formulario y las mismas reglas de asignación que cualquier seguimiento
+  programado (`POST /students/{student}/scheduled-follow-ups` con `alert_id`),
+  con responsable y tantas personas como haga falta (sin el límite de dos).
+  Lo puede crear quien puede actuar sobre la alerta (`AlertPolicy::
+  linkFollowUp`) y ve al alumno (`ScheduledFollowUpPolicy::create`); la alerta
+  tiene que ser del mismo alumno y colegio. Son registros distintos
+  (`scheduled_follow_ups.alert_id`): crear, compartir o resolver el
+  seguimiento no cierra la alerta ni cambia su plazo, y resolver o pasar la
+  alerta no toca participantes ni responsables del seguimiento. El vínculo se
+  ve en ambos lados (`AlertResource.follow_ups` con estado y plazo;
+  `ScheduledFollowUpResource.alert_id`). Las instancias de un seguimiento son
+  otra tarea.
+- **«Llegó a su fecha sin salida»** (`alerts:overdue`, diario): si el plazo de
+  cualquiera de las tres salidas pasó y la alerta sigue pendiente, se marca la
+  **misma** alerta (`alerts.overdue_at`) y se agrega un paso al hilo
+  (`kind = overdue`, sin actor, con quién la tenía y el plazo). No se crea
+  otra alerta; responsable, plazo, movimientos y notas quedan como estaban. Es
+  un pendiente del circuito, no un empeoramiento del alumno. Una nueva salida
+  pone un plazo nuevo y limpia la marca.
+- **A quién se avisa**: a quien tiene la alerta, si sigue activo y con permiso
+  vigente (ve la alerta). Hoy es el único participante de la alerta en sí —
+  quienes trabajan el caso en un seguimiento vinculado se gestionan en ese
+  seguimiento. Quien la transfirió no recibe avisos. El aviso es una
+  notificación de base de datos (`alert_overdue`, solo ids y fecha) y se ve en
+  «Mis seguimientos».
+- **Dirección no se suma por plazo**: está desde el inicio si la
+  configuración del colegio la incluye en los destinatarios del tipo (la ve
+  por rol, sin tenerla ni recibir el aviso de plazo), o se incorpora
+  explícitamente cuando alguien le pasa la alerta (pasa a tenerla). La marca de
+  plazo no cambia destinatarios ni `alert_user`.
+- **Alertas escaladas anteriores** (`type = escalated_overdue`): ya no se
+  crean ni se configuran (no aparecen en la pantalla de configuración). Las
+  que ya existen quedan como estaban y se cierran cuando la alerta que escalan
+  se mueve o se cierra. La columna `escalated_at` pasó a ser `overdue_at`
+  (migración `2026_10_15_000001`).
+- El hilo (`alert_actions.kind`: `outcome` / `note` / `overdue`) es
+  operativo: qué se hizo con el caso, nunca un diagnóstico; las notas quedan
+  fuera del diff de auditoría. Solo deja notas quien tiene la alerta, así que
+  no antes de elegir una salida, ni en una alerta cerrada o escalada.
+- Elegir una salida, dejar una nota y cerrar bloquean la fila
+  (`lockForUpdate`) y vuelven a verificar que quien actúa siga teniéndola.
+- **Cada uno lee su propia situación** (decisión del 21/10, opción A):
+  `AlertResource.is_in_charge` dice si quien mira tiene la alerta. En
+  «Alertas y seguimientos» las alertas se agrupan en «Te toca elegir una
+  salida» (nadie la tiene todavía), «A tu cargo» (la tenés vos) y «En curso»
+  (solo lectura). Quien recibe una alerta pasada ve «A tu cargo desde el dd/mm
+  · plazo al dd/mm», nunca «Pasada a otro rol»; quien la pasó sigue viendo
+  «Pasada a otro rol».
+- **Alumno dado de baja** (soft delete): su alerta no le llega a nadie nuevo
+  (sin candidatos; pasarla da 422). Quien la tiene puede igual tomarla,
+  dejarla en observación, anotarla y cerrarla.
+
 ## Autenticación (SPA + Sanctum)
 
 - Login por cookies (no tokens). Flujo: `GET /sanctum/csrf-cookie` →

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\AlertOverdueNotification;
 use App\Notifications\FollowUpAssignedNotification;
 use App\Notifications\ScreeningDesignChangedNotification;
 use App\Notifications\ScreeningDesignRevertedNotification;
@@ -10,7 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The caller's own unread notices (e.g. "a follow-up was assigned to you").
+ * The caller's own unread notices ("a follow-up was assigned to you", "an
+ * alert you have reached its deadline without a way out").
  * Always scoped to the authenticated user's notifications, so no further
  * policy is needed; payloads hold ids only (see FollowUpAssignedNotification).
  */
@@ -24,7 +26,7 @@ class NotificationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $notifications = $this->unreadFollowUpNotices($request)
+        $notifications = $this->unreadListedNotices($request)
             ->latest()
             ->limit(self::LIST_LIMIT)
             ->get()
@@ -48,7 +50,7 @@ class NotificationController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         return response()->json([
-            'data' => ['count' => $this->unreadFollowUpNotices($request)->count()],
+            'data' => ['count' => $this->unreadListedNotices($request)->count()],
         ]);
     }
 
@@ -60,25 +62,27 @@ class NotificationController extends Controller
     }
 
     /**
-     * The notification classes the "Mis seguimientos" section of "Alertas y
-     * seguimientos" knows how to render: follow-up assignments and the
-     * screening design changed/reverted notices (screen 08).
+     * The notice types "Mis seguimientos" renders: a follow-up assigned to
+     * you, an alert you have that reached its deadline without a way out
+     * («Llegó a su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), and
+     * the screening design changed/reverted notices (screen 08).
      */
-    private const RENDERED_TYPES = [
+    public const LISTED_TYPES = [
         FollowUpAssignedNotification::class,
+        AlertOverdueNotification::class,
         ScreeningDesignChangedNotification::class,
         ScreeningDesignRevertedNotification::class,
     ];
 
     /**
-     * The caller's unread notices of a kind the page renders. Both `index` and
-     * `unreadCount` read from here so the list and the sidebar count share one
-     * definition — a future database notification type will not inflate the
-     * count with notices the page cannot show.
+     * The caller's unread notices of the kinds "Mis seguimientos" renders.
+     * Both `index` and `unreadCount` read from here so the list and the
+     * sidebar count share one definition — a future database notification
+     * type will not inflate the count with notices the page cannot show.
      */
-    private function unreadFollowUpNotices(Request $request): MorphMany
+    private function unreadListedNotices(Request $request): MorphMany
     {
         return $request->user()->unreadNotifications()
-            ->whereIn('type', self::RENDERED_TYPES);
+            ->whereIn('type', self::LISTED_TYPES);
     }
 }

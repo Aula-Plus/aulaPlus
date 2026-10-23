@@ -25,6 +25,8 @@ class ScheduledFollowUpResource extends JsonResource
                 'id' => $this->student->id,
                 'full_name' => $this->student->full_name,
             ]),
+            // The alert it was created from («seguimiento vinculado»), if any.
+            'alert_id' => $this->alert_id,
             'description' => $this->description,
             'due_date' => $this->due_date?->toDateString(),
             // Computed server-side (app timezone) so no client re-derives the

@@ -37,12 +37,6 @@ const routingTypeLabels: Partial<Record<AlertType, string>> = {
   performance: "Desempeño bajo sostenido",
 }
 
-/** Extra context per type on the routing card. */
-const routingTypeHints: Partial<Record<AlertType, string>> = {
-  escalated_overdue:
-    "Siempre le llega a quien pasó la alerta y a quien la tenía que resolver. Acá podés sumar roles.",
-}
-
 const ruleSchema = z
   .object({
     condition: z.enum(["consecutive_below", "average_below"]),
@@ -216,12 +210,9 @@ function RoutingRow({
   }
 
   const label = routingTypeLabels[entry.type] ?? alertTypeLabels[entry.type]
-  // The escalated alert always reaches the two people involved (ClickUp 86e3jpzdp).
-  const allowsEmpty = entry.type === "escalated_overdue"
   // Direction as the only recipient is allowed, but the school is told who
-  // stops hearing about it before saving (ClickUp 86e3qkyrn). Not for the
-  // escalated alert, which still reaches the two people involved.
-  const onlyDirector = !allowsEmpty && selected.length === 1 && selected[0] === "director"
+  // stops hearing about it before saving (ClickUp 86e3qkyrn).
+  const onlyDirector = selected.length === 1 && selected[0] === "director"
 
   return (
     <fieldset className="grid gap-3 rounded-md border p-4">
@@ -245,10 +236,7 @@ function RoutingRow({
           )
         })}
       </div>
-      {routingTypeHints[entry.type] && (
-        <p className="text-sm text-muted-foreground">{routingTypeHints[entry.type]}</p>
-      )}
-      {selected.length === 0 && !allowsEmpty && (
+      {selected.length === 0 && (
         <p className="text-sm text-destructive">Elegí al menos a quién le llega.</p>
       )}
       {onlyDirector && (
@@ -266,7 +254,7 @@ function RoutingRow({
           <Button
             type="button"
             size="sm"
-            disabled={saving || (selected.length === 0 && !allowsEmpty)}
+            disabled={saving || selected.length === 0}
             onClick={save}
           >
             {saving ? "Guardando…" : onlyDirector ? "Guardar igual" : "Guardar"}

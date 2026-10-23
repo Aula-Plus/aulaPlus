@@ -56,9 +56,8 @@ class AlertSettingsController extends Controller
 
     public function updateRouting(UpdateAlertRoutingRequest $request, AlertType $type): JsonResponse
     {
-        // A type nothing generates yet isn't routable (ClickUp 86e3qkyrn).
-        abort_unless(AlertRouting::isConfigurable($type), 404);
-
+        // Only configurable types get here: UpdateAlertRoutingRequest rejects
+        // the rest (ClickUp 86e3qkyrn, 86e3jpzdp).
         AlertRoutingSetting::query()->updateOrCreate(
             ['type' => $type->value],
             ['recipients' => array_values($request->validated('recipients'))],
