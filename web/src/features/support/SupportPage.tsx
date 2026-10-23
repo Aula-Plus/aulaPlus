@@ -79,7 +79,9 @@ export function SupportPage() {
       <SectionCard title="Tu mensaje">
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">¿Qué querés contarnos?</legend>
+            {/* A legend is not a grid item, so the fieldset gap doesn't apply to it:
+                mb-2 gives it the same 8px the gap-2 puts between the options. */}
+            <legend className="mb-2 text-sm font-medium">¿Qué querés contarnos?</legend>
             {kindOptions.map((option) => (
               <label key={option.value} className="flex items-center gap-2 text-sm">
                 <input type="radio" value={option.value} {...register("kind")} />
