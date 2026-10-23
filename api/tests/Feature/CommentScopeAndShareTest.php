@@ -321,6 +321,36 @@ it('notifies each recipient of a shared extract and names the student only at re
     expect($psico->unreadNotifications()->count())->toBe(0);
 });
 
+it('names the students of shared-extract notices with a fixed number of queries', function () {
+    ['student' => $student, 'psico' => $psico, 'director' => $director] = scopeFixture();
+    $original = Comment::factory()->forSubject($student)->visibleTo(Comment::SCOPE_PSYCHOPEDAGOGY_ONLY)
+        ->create(['author_id' => $psico->id, 'content' => 'Original reservado']);
+    $share = fn () => $this->postJson("/api/v1/comments/{$original->id}/shares", [
+        'content' => 'Extracto', 'recipient_ids' => [$director->id],
+    ])->assertCreated();
+    $queries = function () use ($director): int {
+        Sanctum::actingAs($director);
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/notifications')->assertOk();
+        DB::disableQueryLog();
+        $count = count(DB::getQueryLog());
+        DB::flushQueryLog();
+
+        return $count;
+    };
+
+    Sanctum::actingAs($psico);
+    $share();
+    $queries(); // warm-up: the first request also loads the viewer's roles
+    $one = $queries();
+
+    Sanctum::actingAs($psico);
+    $share();
+    $share();
+
+    expect($queries())->toBe($one);
+});
+
 it('lets the author narrow each role of the scope to specific people («Elegir personas»)', function () {
     ['school' => $school, 'student' => $student, 'teacher' => $teacher, 'psico' => $psico, 'director' => $director] = scopeFixture();
     $colleague = User::factory()->forSchool($school)->teacher()->create();

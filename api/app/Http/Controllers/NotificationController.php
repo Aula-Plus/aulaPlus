@@ -75,7 +75,7 @@ class NotificationController extends Controller
      * StudentPolicy).
      *
      * @param  Collection<int, array<string, mixed>>  $payloads
-     * @return array<int, string>  student id => name
+     * @return array<int, string> student id => name
      */
     private function sharedStudentNames(Request $request, Collection $payloads): array
     {
