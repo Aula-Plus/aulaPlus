@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\Role;
+use App\Http\Requests\Concerns\ValidatesCommentCategorySignals;
 use App\Models\Comment;
 use App\Models\Student;
 use App\Models\User;
@@ -22,6 +23,8 @@ use Illuminate\Validation\Rule;
  */
 class StoreStudentCommentRequest extends FormRequest
 {
+    use ValidatesCommentCategorySignals;
+
     public function authorize(): bool
     {
         /** @var Student $student */
@@ -90,6 +93,8 @@ class StoreStudentCommentRequest extends FormRequest
                 'integer', 'distinct',
                 Rule::exists('comment_categories', 'id')->where('school_id', Tenancy::schoolId()),
             ],
+            // One signal per category (ClickUp 86e3qkwpn) — see the trait.
+            ...$this->categorySignalRules(),
             'author_only' => ['sometimes', 'boolean'],
             'visible_to' => ['nullable', 'array', function (string $attribute, mixed $value, Closure $fail): void {
                 // Only the four selector presets are storable; free role
@@ -117,7 +122,7 @@ class StoreStudentCommentRequest extends FormRequest
      */
     public function after(): array
     {
-        return [function (Validator $validator): void {
+        return [fn (Validator $validator) => $this->validateCategorySignals($validator), function (Validator $validator): void {
             $people = $this->input('visible_to_users');
             if ($validator->errors()->isNotEmpty() || ! is_array($people)) {
                 return;

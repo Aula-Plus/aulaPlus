@@ -369,6 +369,7 @@ it('lists an observation’s categories in its alta entry', function () {
     $this->postJson("/api/v1/students/{$this->student->id}/comments", [
         'content' => 'Trabaja mejor en grupo',
         'category_ids' => [$social->id, $academic->id],
+        'category_signals' => [$social->id => 'difficulty', $academic->id => 'no_change'],
     ])->assertCreated()->assertJsonCount(2, 'data.categories');
 
     Sanctum::actingAs($this->director);
@@ -385,6 +386,7 @@ it('records a change of an observation’s categories as a modification, with wh
     $family = CommentCategory::create(['name' => 'Mudanza', 'position' => 20]);
     $commentId = $this->postJson("/api/v1/students/{$this->student->id}/comments", [
         'content' => 'Habla de la mudanza', 'category_ids' => [$social->id, $family->id],
+        'category_signals' => [$social->id => 'difficulty', $family->id => 'no_change'],
     ])->assertCreated()->json('data.id');
 
     // A comment on a group is not part of any student's file.
@@ -413,6 +415,7 @@ it('keeps a restricted observation’s category change out of the director’s h
     $family = CommentCategory::create(['name' => 'Mudanza', 'position' => 10]);
     $this->postJson("/api/v1/students/{$this->student->id}/comments", [
         'content' => 'Reservada', 'visible_to' => ['psychopedagogue'], 'category_ids' => [$family->id],
+        'category_signals' => [$family->id => 'no_change'],
     ])->assertCreated();
 
     Sanctum::actingAs($this->director);

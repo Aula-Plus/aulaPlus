@@ -19,6 +19,26 @@ async function chooseScope(label: string) {
   await userEvent.click(scopeRadio(label))
 }
 
+/** Picks the signal for one category (ClickUp 86e3qkwpn). */
+async function chooseSignal(category: string, signal: string) {
+  const group = screen.getByRole("group", { name: `Señal en ${category}` })
+  await userEvent.click(within(group).getByRole("radio", { name: signal }))
+}
+
+async function pickCategories(names: string[]) {
+  await userEvent.click(screen.getByLabelText(/de qué trata/i))
+  for (const name of names) {
+    await userEvent.click(await screen.findByRole("button", { name }))
+  }
+  await userEvent.keyboard("{Escape}")
+}
+
+const signalCategories = [
+  { id: 1, name: "Social", position: 0 },
+  { id: 2, name: "Académico", position: 1 },
+  { id: 3, name: "Emocional", position: 2 },
+]
+
 const sampleComment: Comment = {
   id: 1,
   author_id: 7,
@@ -137,12 +157,15 @@ describe("CommentsPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Emocional" }))
     await userEvent.click(await screen.findByRole("button", { name: "Académico" }))
     await userEvent.keyboard("{Escape}")
+    await chooseSignal("Emocional", "Señal de dificultad")
+    await chooseSignal("Académico", "Señal de mejora")
     await chooseScope("Dirección y Psicopedagogía")
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(onCreate).toHaveBeenCalledWith({
       content: "Dirección y psico",
       category_ids: [1, 2],
+      category_signals: { 1: "difficulty", 2: "improvement" },
       visible_to: ["director", "psychopedagogue"],
     })
     expect(onCreate.mock.calls[0][0]).not.toHaveProperty("author_only")
@@ -418,5 +441,93 @@ describe("CommentsPanel observations bank", () => {
     await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
 
     expect(onCreate).toHaveBeenCalledWith({ content: "Privada", author_only: true })
+  })
+
+  describe("signal per category (ClickUp 86e3qkwpn)", () => {
+    it("shows one signal selector per marked category and none without categories", async () => {
+      render(<CommentsPanel comments={[]} onCreate={vi.fn()} categories={signalCategories} />)
+      expect(screen.queryByRole("group", { name: /^Señal en/ })).not.toBeInTheDocument()
+
+      await pickCategories(["Social"])
+      expect(screen.getAllByRole("group", { name: /^Señal en/ })).toHaveLength(1)
+      const social = screen.getByRole("group", { name: "Señal en Social" })
+      for (const label of ["Señal de mejora", "Señal de dificultad", "Sin cambio observado"]) {
+        expect(within(social).getByRole("radio", { name: label })).not.toBeChecked()
+      }
+
+      await pickCategories(["Académico"])
+      expect(screen.getAllByRole("group", { name: /^Señal en/ })).toHaveLength(2)
+    })
+
+    it("requires a signal for every category before publishing", async () => {
+      const onCreate = vi.fn().mockResolvedValue(undefined)
+      render(<CommentsPanel comments={[]} onCreate={onCreate} categories={signalCategories} />)
+
+      await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Observación")
+      await pickCategories(["Social", "Académico"])
+      await chooseSignal("Social", "Señal de dificultad")
+      await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+
+      expect(screen.getByText("Elegí una señal para cada categoría.")).toBeInTheDocument()
+      expect(onCreate).not.toHaveBeenCalled()
+
+      await chooseSignal("Académico", "Sin cambio observado")
+      await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+      expect(onCreate).toHaveBeenCalledWith({
+        content: "Observación",
+        category_ids: [1, 2],
+        category_signals: { 1: "difficulty", 2: "no_change" },
+      })
+    })
+
+    it("warns that «Sin cambio observado» won't count toward trends in that category", async () => {
+      render(<CommentsPanel comments={[]} onCreate={vi.fn()} categories={signalCategories} />)
+      await pickCategories(["Social", "Emocional"])
+
+      await chooseSignal("Emocional", "Sin cambio observado")
+      expect(
+        screen.getByText("Esta observación no va a contar para posibles tendencias en Emocional."),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/posibles tendencias en Social/)).not.toBeInTheDocument()
+
+      await chooseSignal("Emocional", "Señal de mejora")
+      expect(screen.queryByText(/no va a contar para posibles tendencias/)).not.toBeInTheDocument()
+    })
+
+    it("sends no signals for an observation without category, and drops those of unmarked categories", async () => {
+      const onCreate = vi.fn().mockResolvedValue(undefined)
+      render(<CommentsPanel comments={[]} onCreate={onCreate} categories={signalCategories} />)
+
+      await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Con y sin")
+      await pickCategories(["Social", "Académico"])
+      await chooseSignal("Social", "Señal de mejora")
+      await chooseSignal("Académico", "Señal de dificultad")
+      // Unmark Académico: its signal is not sent.
+      await pickCategories(["Académico"])
+      await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+      expect(onCreate).toHaveBeenLastCalledWith({
+        content: "Con y sin",
+        category_ids: [1],
+        category_signals: { 1: "improvement" },
+      })
+
+      // After the reset, an observation without category sends neither field.
+      await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Sin categoría")
+      await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+      const last = onCreate.mock.calls.at(-1)?.[0]
+      expect(last).not.toHaveProperty("category_ids")
+      expect(last).not.toHaveProperty("category_signals")
+    })
+
+    it("shows the signal next to each category of a listed observation", () => {
+      render(
+        <CommentsPanel
+          comments={[{ ...sampleComment, categories: [{ id: 1, name: "Social", signal: "difficulty" }] }]}
+          onCreate={vi.fn()}
+          canComment={false}
+        />,
+      )
+      expect(screen.getByText("Social · Señal de dificultad")).toBeInTheDocument()
+    })
   })
 })

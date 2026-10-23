@@ -47,13 +47,15 @@ class StudentCommentController extends Controller
         // Loaded before saving so the change history's "alta" entry lists the
         // categories too (StudentFileHistory) — the pivot rows only exist
         // after the `created` event. One transaction: an observation never
-        // stays saved without the categories its entry says it has.
-        $categories = CommentCategory::whereKey($request->validated('category_ids') ?? [])->get();
+        // stays saved without the categories (and their signal) its entry
+        // says it has.
+        $categoriesWithSignals = $request->categoriesWithSignals();
+        $categories = CommentCategory::whereKey(array_keys($categoriesWithSignals))->get();
         $comment->setRelation('categories', $categories);
 
-        DB::transaction(function () use ($comment, $categories): void {
+        DB::transaction(function () use ($comment, $categoriesWithSignals): void {
             $comment->save();
-            $comment->categories()->sync($categories->modelKeys());
+            $comment->categories()->sync($categoriesWithSignals);
         });
 
         $comment->load('categories');

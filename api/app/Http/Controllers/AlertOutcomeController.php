@@ -85,8 +85,9 @@ class AlertOutcomeController extends Controller
     /**
      * GET /api/v1/alerts/{alert}/handoff-candidates — the people the caller
      * may hand the alert to ({@see AlertCirculation}: active
-     * colleagues who already see the student, never teacher-to-teacher), with
-     * their roles so the UI can show them. Names and roles only.
+     * colleagues who already see the student, never teacher-to-teacher, and
+     * never a teacher for a «Señal de dificultad» alert), with their roles so
+     * the UI can show them. Names and roles only.
      */
     public function candidates(Request $request, Alert $alert, AlertCirculation $circulation): JsonResponse
     {

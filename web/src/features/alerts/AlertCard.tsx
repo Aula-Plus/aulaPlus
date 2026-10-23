@@ -180,6 +180,17 @@ function statusLine(alert: Alert): string | null {
   return `${holder.charAt(0).toUpperCase()}${holder.slice(1)} · plazo al ${due}.`
 }
 
+/** The alert's kind, with the subject or category it was met in. */
+function alertHeading(alert: Alert): string {
+  if (alert.type === "performance") {
+    return `Desempeño bajo sostenido${alert.subject_name ? ` — ${alert.subject_name}` : ""}`
+  }
+  if (alert.type === "difficulty_signal") {
+    return `${alertTypeLabels[alert.type]}${alert.comment_category_name ? ` — ${alert.comment_category_name}` : ""}`
+  }
+  return alertTypeLabels[alert.type]
+}
+
 function NoteForm({
   alert,
   onDone,
@@ -315,11 +326,7 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           </Link>
         ) : null}
         <span className="text-sm text-muted-foreground">
-          {escalated
-            ? alertTypeLabels[alert.type]
-            : alert.type === "performance"
-              ? `Desempeño bajo sostenido${alert.subject_name ? ` — ${alert.subject_name}` : ""}`
-              : alertTypeLabels[alert.type]}
+          {alertHeading(alert)}
           {alert.condition_met_on && !escalated && ` — desde el ${formatShortDate(alert.condition_met_on)}`}
         </span>
         {receivedByViewer ? (

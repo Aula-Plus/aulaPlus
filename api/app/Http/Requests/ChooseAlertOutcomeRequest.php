@@ -15,10 +15,11 @@ use Illuminate\Validation\Rule;
  * Choose one of the three ways out of an alert (ClickUp 86e3jpzdp). Every way
  * out names a deadline; handing it off also names the staff member who
  * becomes responsible — someone who can receive it from the actor per
- * {@see AlertCirculation} (already sees the student, never teacher-to-teacher).
- * A crafted request naming anyone else fails validation. The note is optional
- * and bounded: it is an operational note for whoever receives the case, not a
- * place for clinical detail.
+ * {@see AlertCirculation} (already sees the student, never teacher-to-teacher,
+ * never a teacher for a «Señal de dificultad» alert). A crafted request naming
+ * anyone else fails validation. The note is optional and bounded: it is an
+ * operational note for whoever receives the case, not a place for clinical
+ * detail.
  */
 class ChooseAlertOutcomeRequest extends FormRequest
 {

@@ -3,19 +3,26 @@
 namespace App\Http\Requests;
 
 use App\Enums\Role;
+use App\Http\Requests\Concerns\ValidatesCommentCategorySignals;
 use App\Models\Comment;
 use App\Models\Group;
 use App\Support\Tenancy;
 use Closure;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
  * Authorization for commenting on a Group reuses GroupPolicy::view — same
  * pattern as StoreStudentCommentRequest (no parallel authorization rule).
+ * Group comments take categories too, so the same signal-per-category rule
+ * applies (ClickUp 86e3qkwpn), for consistency; group comments never feed a
+ * student's trend marks or the «Señal de dificultad» alert.
  */
 class StoreGroupCommentRequest extends FormRequest
 {
+    use ValidatesCommentCategorySignals;
+
     public function authorize(): bool
     {
         /** @var Group $group */
@@ -73,6 +80,8 @@ class StoreGroupCommentRequest extends FormRequest
                 'integer', 'distinct',
                 Rule::exists('comment_categories', 'id')->where('school_id', Tenancy::schoolId()),
             ],
+            // One signal per category (ClickUp 86e3qkwpn) — see the trait.
+            ...$this->categorySignalRules(),
             'author_only' => ['sometimes', 'boolean'],
             'visible_to' => ['nullable', 'array', function (string $attribute, mixed $value, Closure $fail): void {
                 // Only the four selector presets are storable; free role
@@ -83,5 +92,13 @@ class StoreGroupCommentRequest extends FormRequest
             }],
             'visible_to.*' => [Rule::in(Role::values())],
         ];
+    }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [fn (Validator $validator) => $this->validateCategorySignals($validator)];
     }
 }

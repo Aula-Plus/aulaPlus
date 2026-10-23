@@ -10,14 +10,18 @@ import type {
 
 /**
  * Data layer for the alert settings screen (ClickUp 86e3jpzcv): the school's
- * sustained-low-performance conditions and who each alert type reaches first.
+ * sustained-low-performance and «Señal de dificultad» conditions, and who
+ * each alert type reaches first.
  * Direction and psychopedagogy only (`AlertRulePolicy`).
  */
 
 export interface AlertRuleInput {
   condition: AlertCondition
-  threshold: number
+  /** Omitted for «Señal de dificultad», which has no score threshold. */
+  threshold?: number | null
   consecutive_count?: number | null
+  /** «Señal de dificultad» (ClickUp 86e3qkwpn): signals in one category. */
+  signal_count?: number | null
   period_days?: number | null
   subject_id?: number | null
   active?: boolean

@@ -115,13 +115,15 @@ class Comment extends Model
 
     /**
      * Optional, several per comment; none = "Sin categoría" (also every
-     * comment written before categories existed).
+     * comment written before categories existed). Each one carries the
+     * author's signal for it in `pivot->signal` (App\Enums\CommentSignal,
+     * ClickUp 86e3qkwpn) — `null` on rows written before signals existed.
      *
      * @return BelongsToMany<CommentCategory, $this>
      */
     public function categories(): BelongsToMany
     {
-        return $this->belongsToMany(CommentCategory::class, 'comment_comment_category');
+        return $this->belongsToMany(CommentCategory::class, 'comment_comment_category')->withPivot('signal');
     }
 
     public function commentable(): MorphTo

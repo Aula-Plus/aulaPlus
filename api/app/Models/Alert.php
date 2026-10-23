@@ -29,10 +29,16 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * also carry the subject they were met in, the rule that produced them and a
  * `recipients` snapshot of who they reach first — see
  * {@see self::scopeVisibleTo()}.
+ *
+ * «Señal de dificultad» alerts (ClickUp 86e3qkwpn, `alerts:difficulty-signals`)
+ * carry the comment category the signals were counted in
+ * (`comment_category_id`) and only the count in `description` — never any
+ * observation text, author or id. They never reach a teacher.
  */
 #[Fillable([
     'student_id',
     'subject_id',
+    'comment_category_id',
     'alert_rule_id',
     'source_alert_id',
     'type',
@@ -89,6 +95,12 @@ class Alert extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class)->withTrashed();
+    }
+
+    /** «Señal de dificultad» alerts: the category the signals were counted in. */
+    public function commentCategory(): BelongsTo
+    {
+        return $this->belongsTo(CommentCategory::class);
     }
 
     public function rule(): BelongsTo
@@ -235,6 +247,8 @@ class Alert extends Model
      *   the snapshot ("dirección no la ve al principio"), and a teacher only
      *   when `teacher` is in the snapshot AND they teach the alert's subject in
      *   one of the student's groups (any subject, for an alert with none).
+     *   Never for a «Señal de dificultad» alert (ClickUp 86e3qkwpn), whatever
+     *   its snapshot says — defence in depth over AlertRouting.
      * - Anyone listed in `alert_user` sees it too, while they still see the
      *   student (always, for psychopedagogy/direction; a teacher only while
      *   they teach the student): the person it was handed to "la ve desde ese
@@ -280,6 +294,7 @@ class Alert extends Model
             }
 
             $query->orWhere(fn (Builder $query) => $query
+                ->where('alerts.type', '!=', AlertType::DifficultySignal->value)
                 ->whereJsonContains('alerts.recipients', AlertRecipient::Teacher->value)
                 ->whereExists(fn (QueryBuilder $exists) => $exists
                     ->selectRaw('1')

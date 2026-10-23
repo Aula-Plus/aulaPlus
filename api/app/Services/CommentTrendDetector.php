@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CommentSignal;
 use App\Enums\Role;
 use App\Models\Comment;
 use App\Models\School;
@@ -22,6 +23,12 @@ use App\Models\User;
  * (ClickUp 86e3qkwnv): they feed only the author's private signal
  * ({@see self::hasPrivateNotesSignal()}). Psychopedagogy's «Compartir con»
  * extracts are separate rows and never count either.
+ *
+ * Both marks count, per category, only the observations whose signal in that
+ * category is «Señal de mejora» or «Señal de dificultad» (ClickUp 86e3qkwpn):
+ * «Sin cambio observado» and legacy rows with no signal count nowhere.
+ * Improvement and difficulty are counted together on purpose — splitting
+ * them is pending a product decision ({@see CommentSignal::trendValues()}).
  */
 class CommentTrendDetector
 {
@@ -49,6 +56,10 @@ class CommentTrendDetector
         $byCategory = [];
         foreach ($comments as $comment) {
             foreach ($comment->categories as $category) {
+                if (! CommentSignal::countsTowardTrend($category->pivot->signal)) {
+                    continue;
+                }
+
                 $byCategory[$category->id]['name'] = $category->name;
                 $byCategory[$category->id]['comments'][$comment->id] = $comment->author_id;
             }
@@ -76,7 +87,8 @@ class CommentTrendDetector
      * school's trend threshold (same `comment_trend_min_count` within
      * `comment_trend_days`) in one same category. Any role gets it; nobody
      * else's notes count — so only the author can ever receive `true` — and a
-     * note without a category counts nowhere. The mark never says which
+     * note without a category, or whose signal in a category is «Sin cambio
+     * observado» (or missing, on legacy rows), counts nowhere in it. The mark never says which
      * category it was. A mark, never a notification.
      */
     public function hasPrivateNotesSignal(Student $student, User $user): bool
@@ -87,7 +99,7 @@ class CommentTrendDetector
         }
 
         $comments = $student->comments()
-            ->with('categories:id')
+            ->with('categories')
             ->where('author_only', true)
             ->where('author_id', $user->id)
             ->where('created_at', '>=', now()->subDays($school->comment_trend_days))
@@ -96,6 +108,10 @@ class CommentTrendDetector
         $byCategory = [];
         foreach ($comments as $comment) {
             foreach ($comment->categories as $category) {
+                if (! CommentSignal::countsTowardTrend($category->pivot->signal)) {
+                    continue;
+                }
+
                 $byCategory[$category->id] = ($byCategory[$category->id] ?? 0) + 1;
             }
         }

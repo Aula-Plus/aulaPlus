@@ -29,7 +29,10 @@ use Illuminate\Support\Collection;
  * - never teacher-to-teacher: "un docente solo puede pasarla a
  *   Psicopedagogía o Dirección" and "a un docente solo le pueden llegar
  *   alertas de Psicopedagogía o de Dirección". So unless the actor is
- *   psychopedagogy/direction, the receiver must be.
+ *   psychopedagogy/direction, the receiver must be;
+ * - for a type that never reaches teachers (the «Señal de dificultad» alert,
+ *   ClickUp 86e3qkwpn, {@see AlertRouting::allowsTeachers()}), never a
+ *   teacher at all: only psychopedagogy or direction.
  *
  * An alert whose student was removed (soft-deleted) reaches nobody new: there
  * is no student left to see, so nobody can receive it. Whoever has it can
@@ -49,6 +52,7 @@ class AlertCirculation
             && $candidate->disabled_at === null
             && $candidate->password !== null
             && ($this->isSchoolWide($actor) || $this->isSchoolWide($candidate))
+            && (AlertRouting::allowsTeachers($alert->type) || $this->isSchoolWide($candidate))
             && $this->studentAccess->canFollow($candidate, $student);
     }
 
@@ -71,17 +75,19 @@ class AlertCirculation
             return collect();
         }
 
-        $actorIsSchoolWide = $this->isSchoolWide($actor);
+        // A teacher can receive it only from psychopedagogy/direction, and
+        // never an alert type that doesn't reach teachers.
+        $teachersQualify = $this->isSchoolWide($actor) && AlertRouting::allowsTeachers($alert->type);
 
         return User::query()
             ->where('school_id', $alert->school_id)
             ->whereKeyNot($actor->id)
             ->whereNull('disabled_at')
             ->whereNotNull('password')
-            ->where(function (Builder $query) use ($actorIsSchoolWide, $student): void {
+            ->where(function (Builder $query) use ($teachersQualify, $student): void {
                 $query->whereHas('roles', fn (Builder $roles) => $roles->whereIn('name', Role::schoolWideValues()));
 
-                if ($actorIsSchoolWide) {
+                if ($teachersQualify) {
                     $query->orWhereExists(fn (QueryBuilder $exists) => $exists
                         ->selectRaw('1')
                         ->from('group_teacher')

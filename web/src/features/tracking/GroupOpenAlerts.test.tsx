@@ -88,4 +88,14 @@ describe("GroupOpenAlerts", () => {
     await vi.waitFor(() => expect(spy).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
   })
+
+  it("names a «Señal de dificultad» alert with its category", async () => {
+    vi.spyOn(trackingApi, "fetchGroupAlerts").mockResolvedValue([
+      alert(1, { type: "difficulty_signal", comment_category_id: 4, comment_category_name: "Social" }),
+    ])
+    renderCard()
+
+    expect(await screen.findByText("Señal de dificultad — Social")).toBeInTheDocument()
+  })
 })
+
