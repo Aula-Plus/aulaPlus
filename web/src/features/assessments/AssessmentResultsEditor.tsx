@@ -58,7 +58,7 @@ export function AssessmentResultsEditor({
         }
         setRows(next)
       })
-      .catch(() => setError("No pudimos cargar las notas de esta evaluación."))
+      .catch(() => setError("No pudimos cargar las calificaciones de esta evaluación."))
       .finally(() => setLoading(false))
   }, [assessment.id, students])
 
@@ -94,11 +94,11 @@ export function AssessmentResultsEditor({
   async function handleSave() {
     setError(null)
     if (payload.length === 0) {
-      setError("Cargá al menos una nota antes de guardar.")
+      setError("Cargá al menos una calificación antes de guardar.")
       return
     }
     if (hasInvalidScore) {
-      setError("Las notas deben ser números entre 0 y 999,99.")
+      setError("Las calificaciones deben ser números entre 0 y 999,99.")
       return
     }
     setSaving(true)
@@ -107,7 +107,7 @@ export function AssessmentResultsEditor({
       setSavedAt(Date.now())
       await loadResults()
     } catch {
-      setError("No pudimos guardar las notas.")
+      setError("No pudimos guardar las calificaciones.")
     } finally {
       setSaving(false)
     }
@@ -118,7 +118,7 @@ export function AssessmentResultsEditor({
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Cargando notas…</p>
+    return <p className="text-sm text-muted-foreground">Cargando calificaciones…</p>
   }
 
   return (
@@ -127,7 +127,7 @@ export function AssessmentResultsEditor({
         <TableHeader>
           <TableRow>
             <TableHead>Alumno</TableHead>
-            <TableHead className="w-32">Nota</TableHead>
+            <TableHead className="w-32">Calificación</TableHead>
             <TableHead>Devolución</TableHead>
           </TableRow>
         </TableHeader>
@@ -145,7 +145,7 @@ export function AssessmentResultsEditor({
                       min={0}
                       max={999.99}
                       value={row.score}
-                      aria-label={`Nota de ${student.full_name}`}
+                      aria-label={`Calificación de ${student.full_name}`}
                       onChange={(event) => updateRow(student.id, { score: event.target.value })}
                     />
                   ) : (
@@ -179,10 +179,10 @@ export function AssessmentResultsEditor({
       {canManage && (
         <div className="flex items-center gap-3">
           <Button type="button" onClick={handleSave} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar notas"}
+            {saving ? "Guardando…" : "Guardar calificaciones"}
           </Button>
           {savedAt && !saving && (
-            <span className="text-sm text-muted-foreground">Notas guardadas.</span>
+            <span className="text-sm text-muted-foreground">Calificaciones guardadas.</span>
           )}
         </div>
       )}
