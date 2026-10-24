@@ -211,9 +211,9 @@ describe("AssessmentsPage", () => {
 
     // Assessment cards start collapsed; expand it to reach the results editor.
     await userEvent.click(await screen.findByRole("button", { name: /escrita/i }))
-    await userEvent.type(await screen.findByLabelText(/nota de juan pérez/i), "8.5")
-    await userEvent.type(screen.getByLabelText(/nota de ana gómez/i), "9")
-    await userEvent.click(screen.getByRole("button", { name: /guardar notas/i }))
+    await userEvent.type(await screen.findByLabelText(/calificación de juan pérez/i), "8.5")
+    await userEvent.type(screen.getByLabelText(/calificación de ana gómez/i), "9")
+    await userEvent.click(screen.getByRole("button", { name: /guardar calificaciones/i }))
 
     // Exactly one request, with both students in one array — never N requests.
     expect(saveAssessmentResults).toHaveBeenCalledTimes(1)
@@ -251,7 +251,7 @@ describe("AssessmentsPage", () => {
 
     expect(screen.queryByText(/nueva evaluación/i)).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /crear evaluación/i })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/nota de juan pérez/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /guardar notas/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/calificación de juan pérez/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /guardar calificaciones/i })).not.toBeInTheDocument()
   })
 })

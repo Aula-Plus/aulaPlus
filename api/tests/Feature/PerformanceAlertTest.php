@@ -85,7 +85,7 @@ it('generates the alert with its subject when the last N scores are all below th
         ->and($alert->student_id)->toBe($this->student->id)
         ->and($alert->recipients)->toBe(['teacher'])
         ->and($alert->condition_met_on->toDateString())->toBe(now()->subDays(10)->toDateString())
-        ->and($alert->description)->toContain('3 notas seguidas por debajo de 5')
+        ->and($alert->description)->toContain('3 calificaciones seguidas por debajo de 5')
         ->and($alert->description)->toContain('Matemática')
         ->and($alert->description)->toContain('4, 3 y 4');
 });
@@ -190,7 +190,7 @@ it('supports the period-average condition', function () {
     $this->artisan('alerts:performance')->assertSuccessful();
 
     $alert = Alert::query()->withoutGlobalScopes()->sole();
-    expect($alert->description)->toContain('promedio 5 en 3 notas');
+    expect($alert->description)->toContain('promedio 5 en 3 calificaciones');
 });
 
 it('limits a subject-specific rule to that subject', function () {

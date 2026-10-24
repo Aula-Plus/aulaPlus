@@ -7,14 +7,14 @@ function formatNumber(value: number): string {
   return value.toLocaleString("es-UY", { maximumFractionDigits: 2 })
 }
 
-/** Spanish sentence for a condition, e.g. «3 notas seguidas por debajo de 5». */
+/** Spanish sentence for a condition, e.g. «3 calificaciones seguidas por debajo de 5». */
 export function describeAlertRule(rule: RuleShape): string {
   if (rule.condition === "difficulty_signals") {
     return `${rule.signal_count ?? "?"} señales de dificultad en una misma categoría en ${rule.period_days ?? "?"} días`
   }
   const threshold = rule.threshold === null ? "?" : formatNumber(rule.threshold)
   if (rule.condition === "consecutive_below") {
-    return `${rule.consecutive_count ?? "?"} notas seguidas por debajo de ${threshold}`
+    return `${rule.consecutive_count ?? "?"} calificaciones seguidas por debajo de ${threshold}`
   }
   return `Promedio de los últimos ${rule.period_days ?? "?"} días por debajo de ${threshold}`
 }

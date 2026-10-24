@@ -161,7 +161,7 @@ class PerformanceAlertGenerator
 
             return [
                 'on' => end($last)['on'],
-                'detail' => 'notas: '.$this->joinList(array_map(
+                'detail' => 'calificaciones: '.$this->joinList(array_map(
                     fn (array $entry) => $this->formatNumber($entry['score']),
                     $last,
                 )),
@@ -187,7 +187,7 @@ class PerformanceAlertGenerator
                 'promedio %s en %d %s',
                 $this->formatNumber(round($average, 2)),
                 count($window),
-                count($window) === 1 ? 'nota' : 'notas',
+                count($window) === 1 ? 'calificación' : 'calificaciones',
             ),
         ];
     }
