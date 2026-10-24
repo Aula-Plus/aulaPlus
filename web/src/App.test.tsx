@@ -31,4 +31,22 @@ describe("App routes", () => {
     ).toBeInTheDocument()
     expect(window.location.pathname).toBe("/alertas")
   })
+
+  it("shows «No encontramos esa página» for an unknown address instead of home", async () => {
+    vi.spyOn(authApi, "fetchCurrentUser").mockResolvedValue({
+      id: 1,
+      name: "Ana",
+      email: "ana@escuela.test",
+      roles: ["director"],
+    })
+    window.history.replaceState(null, "", "/esto-no-existe")
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "No encontramos esa página" }),
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/esto-no-existe")
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+  })
 })
