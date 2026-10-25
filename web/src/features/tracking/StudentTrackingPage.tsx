@@ -45,6 +45,7 @@ import { PrivateNotesSignal } from "./PrivateNotesSignal"
 import { ShareCommentDialog } from "./ShareCommentDialog"
 import { SharedExtractsList } from "./SharedExtractsList"
 import { StudentReportsSection } from "@/features/reports/StudentReportsSection"
+import * as reportsApi from "@/features/reports/reportsApi"
 import { TeamSummaryCard } from "./TeamSummaryCard"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import { StudentPerformanceChart } from "./StudentPerformanceChart"
@@ -387,6 +388,20 @@ export function StudentTrackingPage() {
                                 ]
                                   .filter(Boolean)
                                   .join(" · ")}
+                                {accommodation.origin_report_id !== null && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="link"
+                                    className="h-auto px-1 py-0 text-xs"
+                                    onClick={() => {
+                                      setError(null)
+                                      reportsApi.openReportFile(accommodation.origin_report_id as number, setError)
+                                    }}
+                                  >
+                                    Abrir archivo
+                                  </Button>
+                                )}
                               </p>
                             )}
                           </div>

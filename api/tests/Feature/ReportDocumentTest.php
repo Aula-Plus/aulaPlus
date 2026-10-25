@@ -5,6 +5,7 @@ use App\Enums\ReportDocumentStatus;
 use App\Enums\ReportVisibility;
 use App\Jobs\ExtractReportDocumentText;
 use App\Jobs\InterpretReportDocument;
+use App\Support\SchoolTime;
 use App\Models\Accommodation;
 use App\Models\AccommodationProposal;
 use App\Models\Group;
@@ -357,7 +358,10 @@ it('creates the accommodation only when psychopedagogy approves a proposal', fun
         ->and($accommodation->type)->toBe('Lectura en voz alta')
         ->and($accommodation->active)->toBeTrue()
         ->and($accommodation->requires_external_approval)->toBeFalse()
-        ->and($proposal->fresh()->accommodation_id)->toBe($accommodation->id);
+        ->and($proposal->fresh()->accommodation_id)->toBe($accommodation->id)
+        // «Origen» points at the report by date, never by file name (it may carry the student's name).
+        ->and($accommodation->origin)->toBe('Informe cargado el '.SchoolTime::today()->format('d/m/Y'))
+        ->and($accommodation->origin_report_id)->toBe($report->id);
 
     $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])->assertUnprocessable();
     expect(Accommodation::count())->toBe(1);

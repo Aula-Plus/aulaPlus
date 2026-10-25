@@ -236,6 +236,9 @@ export function StudentReportsSection({
                         </option>
                       ))}
                     </select>
+                    {report.visibility === "teachers" && (
+                      <span className="text-muted-foreground">{reportTeachersVisibilityWarning}</span>
+                    )}
                   </div>
                 ) : (
                   <span className="text-muted-foreground">{reportVisibilityLabels[report.visibility]}</span>

@@ -57,6 +57,7 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     description: "Doble tiempo en pruebas escritas.",
     focus_area: null,
     origin: null,
+    origin_report_id: null,
     is_effective: false,
     review_status: null,
     proposed_by_id: null,
