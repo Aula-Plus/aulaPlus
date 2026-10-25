@@ -238,3 +238,77 @@ it('keeps an applied screening where it was when the group level or the correspo
     expect(ScreeningTestApplication::query()->orderBy('id')->pluck('education_level_id')->all())
         ->toBe([levelId('primary'), levelId('upper_secondary')]);
 });
+
+it('does not let a screening without population be applied', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+    $type = primaryScreening($school, []);
+    $group = Group::factory()->atLevel('primary')->create(['school_id' => $school->id]);
+
+    $this->postJson("/api/v1/groups/{$group->id}/screening-test-applications", ['screening_test_type_id' => $type->id])
+        ->assertUnprocessable();
+
+    expect(ScreeningTestApplication::query()->count())->toBe(0);
+});
+
+it('counts nobody for an application taken while the screening had no population', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+    $type = primaryScreening($school);
+    applyWithScore(Group::factory()->atLevel('primary')->create(['school_id' => $school->id]), $type, 30);
+    // As if it had been taken before a population was required.
+    ScreeningTestApplication::query()->update(['population_levels' => json_encode([])]);
+
+    expect(impactStudents($type)['students'])->toBe(0);
+});
+
+it('recalculates an application with the current level only when a person asks, and records who and when', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
+    $type = primaryScreening($school);
+    $group = Group::factory()->atLevel('upper_secondary')->create(['school_id' => $school->id]);
+    applyWithScore($group, $type, 30);
+    $application = ScreeningTestApplication::query()->firstOrFail();
+    expect(impactStudents($type)['students'])->toBe(0);
+
+    // The group was really Primaria: direction fixes the level…
+    Sanctum::actingAs($director);
+    $this->putJson("/api/v1/groups/{$group->id}/level", ['education_level_id' => levelId('primary')])->assertOk();
+    // …and the applied screening stays where it was until someone recalculates.
+    expect(impactStudents($type)['students'])->toBe(0);
+
+    $this->postJson("/api/v1/screening-test-applications/{$application->id}/recalculate")
+        ->assertOk()
+        ->assertJsonPath('data.counts_in_impact', true)
+        ->assertJsonPath('data.recalculated_by_name', $director->name);
+
+    $application->refresh();
+    expect($application->education_level_id)->toBe(levelId('primary'))
+        ->and($application->recalculated_by_id)->toBe($director->id)
+        ->and($application->recalculated_at)->not->toBeNull()
+        ->and(impactStudents($type)['students'])->toBe(1);
+
+    // Psychopedagogy may recalculate too.
+    Sanctum::actingAs($psychopedagogue);
+    $this->postJson("/api/v1/screening-test-applications/{$application->id}/recalculate")
+        ->assertOk()
+        ->assertJsonPath('data.recalculated_by_name', $psychopedagogue->name);
+});
+
+it('does not let a teacher or another school recalculate an application', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+    $type = primaryScreening($school);
+    applyWithScore(Group::factory()->atLevel('primary')->create(['school_id' => $school->id]), $type, 30);
+    $application = ScreeningTestApplication::query()->firstOrFail();
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+    $this->postJson("/api/v1/screening-test-applications/{$application->id}/recalculate")->assertForbidden();
+
+    Sanctum::actingAs(User::factory()->director()->create());
+    $this->postJson("/api/v1/screening-test-applications/{$application->id}/recalculate")->assertNotFound();
+
+    expect($application->refresh()->recalculated_at)->toBeNull();
+});

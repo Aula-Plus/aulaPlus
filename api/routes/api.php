@@ -275,6 +275,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         Route::get('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'index']);
         Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store']);
+        Route::post('/screening-test-applications/{application}/recalculate', [ScreeningTestApplicationController::class, 'recalculate']);
         Route::get('/screening-test-applications/{application}/roster', [ScreeningTestApplicationController::class, 'roster']);
         Route::get('/screening-test-applications/{application}/results', [ScreeningTestApplicationController::class, 'results']);
 

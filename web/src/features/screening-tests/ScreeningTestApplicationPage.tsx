@@ -5,9 +5,11 @@ import { z } from "zod"
 import { useParams } from "react-router-dom"
 import { ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageScreeningTests } from "@/lib/permissions"
+import { canManageScreeningTests, canRecalculateScreeningTestApplication } from "@/lib/permissions"
+import { formatShortDate } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,6 +20,7 @@ import * as groupsApi from "@/features/groups/groupsApi"
 import * as screeningApi from "./screeningTestsApi"
 import { ScreeningTestRosterSheet } from "./ScreeningTestRosterSheet"
 import { ScreeningTestResultsEditor } from "./ScreeningTestResultsEditor"
+import { hasPopulation } from "./screeningPopulation"
 
 const applicationSchema = z.object({
   screening_test_type_id: z.string().min(1, "Elegí un screening"),
@@ -46,6 +49,7 @@ export function ScreeningTestApplicationPage() {
   const groupId = Number(id)
   const { user } = useAuth()
   const canManage = canManageScreeningTests(user)
+  const canRecalculate = canRecalculateScreeningTestApplication(user)
 
   const [group, setGroup] = useState<Group | null>(null)
   const [types, setTypes] = useState<ScreeningTestType[] | null>(null)
@@ -54,6 +58,8 @@ export function ScreeningTestApplicationPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [openSheetId, setOpenSheetId] = useState<number | null>(null)
   const [openResultsId, setOpenResultsId] = useState<number | null>(null)
+  const [recalculatingId, setRecalculatingId] = useState<number | null>(null)
+  const [recalculateError, setRecalculateError] = useState<string | null>(null)
 
   const loadApplications = useCallback(() => {
     return screeningApi
@@ -86,9 +92,11 @@ export function ScreeningTestApplicationPage() {
   })
 
   // A screening test cannot be applied without an approved design in force
-  // (spec §5): only offer types whose `current_design` is non-null, so the UI
-  // never presents an option the backend would 422.
-  const applicableTypes = (types ?? []).filter((type) => type.current_design !== null)
+  // (spec §5) nor without a population (ClickUp 86e3t4qjh): only offer types
+  // that have both, so the UI never presents an option the backend would 422.
+  const typesWithDesign = (types ?? []).filter((type) => type.current_design !== null)
+  const applicableTypes = typesWithDesign.filter(hasPopulation)
+  const typesWithoutPopulation = typesWithDesign.filter((type) => !hasPopulation(type))
 
   const typeName = useCallback(
     (typeId: number) => types?.find((type) => type.id === typeId)?.name ?? `Screening #${typeId}`,
@@ -106,6 +114,19 @@ export function ScreeningTestApplicationPage() {
       await loadApplications()
     } catch {
       setFormError("No pudimos crear la aplicación.")
+    }
+  }
+
+  async function recalculate(applicationId: number) {
+    setRecalculatingId(applicationId)
+    setRecalculateError(null)
+    try {
+      await screeningApi.recalculateScreeningTestApplication(applicationId)
+      await loadApplications()
+    } catch {
+      setRecalculateError("No pudimos recalcular la aplicación.")
+    } finally {
+      setRecalculatingId(null)
     }
   }
 
@@ -131,11 +152,20 @@ export function ScreeningTestApplicationPage() {
             <CardTitle>Nueva aplicación</CardTitle>
           </CardHeader>
           <CardContent>
-            {applicableTypes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No hay screenings con franjas vigentes. Definí las franjas en el diseño antes de
-                aplicar uno.
+            {typesWithoutPopulation.length > 0 && (
+              <p role="note" className="mb-4 text-sm text-muted-foreground">
+                {typesWithoutPopulation.map((type) => `«${type.name}»`).join(", ")}{" "}
+                {typesWithoutPopulation.length === 1 ? "no tiene" : "no tienen"} población
+                seleccionada: elegí a qué niveles se aplica en el diseño antes de aplicarlo.
               </p>
+            )}
+            {applicableTypes.length === 0 ? (
+              typesWithDesign.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No hay screenings con franjas vigentes. Definí las franjas en el diseño antes de
+                  aplicar uno.
+                </p>
+              )
             ) : (
               <form
                 onSubmit={handleSubmit(onCreate)}
@@ -191,6 +221,11 @@ export function ScreeningTestApplicationPage() {
       ) : (
         <section className="grid gap-4">
           <h2 className="text-lg font-semibold">Aplicaciones</h2>
+          {recalculateError && (
+            <p role="alert" className="text-sm text-destructive">
+              {recalculateError}
+            </p>
+          )}
           {applications.map((application) => (
             <Card key={application.id}>
               <CardHeader>
@@ -202,35 +237,71 @@ export function ScreeningTestApplicationPage() {
                       {application.results_count !== undefined &&
                         ` · ${application.results_count} códigos`}
                     </p>
+                    {application.counts_in_impact === false && (
+                      <p className="text-xs text-muted-foreground">
+                        No cuenta en la vista de impacto: el grupo no tenía nivel o no estaba en la
+                        población del screening cuando se aplicó.
+                      </p>
+                    )}
+                    {application.recalculated_at && (
+                      <p className="text-xs text-muted-foreground">
+                        Recalculado con el nivel actual
+                        {application.recalculated_by_name && ` por ${application.recalculated_by_name}`}{" "}
+                        el {formatShortDate(application.recalculated_at)}.
+                      </p>
+                    )}
                   </div>
-                  {canManage && (
+                  {(canManage || canRecalculate) && (
                     <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setOpenSheetId((current) =>
-                            current === application.id ? null : application.id,
-                          )
-                        }
-                      >
-                        {openSheetId === application.id ? "Ocultar hoja" : "Hoja para aplicar"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setOpenResultsId((current) =>
-                            current === application.id ? null : application.id,
-                          )
-                        }
-                      >
-                        {openResultsId === application.id
-                          ? "Ocultar resultados"
-                          : "Cargar resultados"}
-                      </Button>
+                      {canRecalculate && (
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={recalculatingId === application.id}
+                            >
+                              Recalcular con el nivel actual
+                            </Button>
+                          }
+                          title="Recalcular con el nivel actual"
+                          description="La aplicación toma el nivel que el grupo tiene hoy y la población actual del screening, y la vista de impacto se actualiza con eso. Queda registrado quién lo hizo y cuándo."
+                          confirmLabel="Recalcular"
+                          isConfirming={recalculatingId === application.id}
+                          onConfirm={() => recalculate(application.id)}
+                        />
+                      )}
+                      {canManage && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setOpenSheetId((current) =>
+                                current === application.id ? null : application.id,
+                              )
+                            }
+                          >
+                            {openSheetId === application.id ? "Ocultar hoja" : "Hoja para aplicar"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setOpenResultsId((current) =>
+                                current === application.id ? null : application.id,
+                              )
+                            }
+                          >
+                            {openResultsId === application.id
+                              ? "Ocultar resultados"
+                              : "Cargar resultados"}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

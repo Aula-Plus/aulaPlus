@@ -87,6 +87,29 @@ describe("ScreeningTestDesignPage", () => {
     expect(screen.getByText("Psicopedagogía y Dirección")).toBeInTheDocument()
   })
 
+  it("marks a screening without population in the list and in its impact view", async () => {
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type({ levels: [], current_design: design(10, bandsBefore) }),
+    ])
+    vi.spyOn(screeningApi, "previewScreeningTestImpact").mockResolvedValue({
+      students: 0,
+      groups_without_level: 1,
+      current: [{ name: "Descendido", color: "red", max: 34, count: 0 }],
+      proposed: [{ name: "Descendido", color: "red", max: 34, count: 0 }],
+    })
+
+    renderPage("psychopedagogue", "/pruebas-de-sondeo/tipos?abrir=1")
+
+    expect(await screen.findByText("Sin población seleccionada")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Ver cómo queda el grupo con este corte" }))
+    expect(
+      await screen.findByText(
+        "Sin población seleccionada: este screening no aplica a ningún grupo hasta que se elija a qué niveles se aplica.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText("1 grupo sin nivel: no cuenta acá hasta que se le elija uno.")).toBeInTheDocument()
+  })
+
   it("lets psychopedagogy create a screening with the new naming", async () => {
     vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([])
     const create = vi.spyOn(screeningApi, "createScreeningTestType").mockResolvedValue(type())

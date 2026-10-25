@@ -1490,6 +1490,14 @@ export interface ScreeningTestApplication {
   applied_by_id: number | null
   application_date: string | null
   results_count?: number
+  /**
+   * Whether it counts in its screening's impact view, from the level and
+   * population stored when it was applied (or last recalculated).
+   */
+  counts_in_impact?: boolean
+  /** Last «Recalcular con el nivel actual»: when and by whom (null if never). */
+  recalculated_at?: string | null
+  recalculated_by_name?: string | null
   created_at?: string | null
   updated_at?: string | null
 }

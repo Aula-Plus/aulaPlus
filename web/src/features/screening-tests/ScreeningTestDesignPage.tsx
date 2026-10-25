@@ -11,6 +11,7 @@ import {
   canRevertScreeningTestDesign,
 } from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -35,6 +36,7 @@ import type {
 } from "@/types"
 import * as screeningApi from "./screeningTestsApi"
 import { bandRanges, ScreeningBandList, screeningColorDot } from "./ScreeningBandList"
+import { hasPopulation, NO_POPULATION_LABEL, NO_POPULATION_NOTE } from "./screeningPopulation"
 
 const MIN_BANDS = 2
 const MAX_BANDS = 5
@@ -120,7 +122,13 @@ export function ScreeningTestDesignPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{type.area ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{levelsText(type)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {hasPopulation(type) ? (
+                        levelsText(type)
+                      ) : (
+                        <Badge tone="warning">{NO_POPULATION_LABEL}</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>{type.current_design ? "Vigente" : "Sin franjas"}</TableCell>
                     <TableCell className="text-sm">
                       {type.current_design ? lastUpdateText(type) : "—"}
@@ -166,7 +174,7 @@ function frequencyText(type: ScreeningTestType): string {
 }
 
 function levelsText(type: ScreeningTestType): string {
-  return type.levels.length > 0 ? type.levels.map((level) => schoolLevelLabels[level]).join(", ") : "—"
+  return type.levels.map((level) => schoolLevelLabels[level]).join(", ")
 }
 
 function viewersText(type: ScreeningTestType): string {
@@ -382,6 +390,7 @@ function LastChangeCard({
           {current.created_by_name && `Lo cambió ${current.created_by_name}`}
           {current.created_at && ` · ${formatShortDate(current.created_at)}`}
         </p>
+        {!hasPopulation(type) && <NoPopulationNote />}
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
     </SectionCard>
@@ -742,7 +751,13 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
             {previewing ? "Calculando…" : "Ver cómo queda el grupo con este corte"}
           </Button>
         </div>
-        {impact && <ImpactTable impact={impact} currentSince={type.current_design?.created_at ?? null} />}
+        {impact && (
+          <ImpactTable
+            impact={impact}
+            currentSince={type.current_design?.created_at ?? null}
+            withPopulation={hasPopulation(type)}
+          />
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isSubmitting}>
@@ -768,7 +783,15 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
  * "actual" column names the version it is computed with (decided 15/10:
  * comparisons and impact say which design version they use).
  */
-function ImpactTable({ impact, currentSince }: { impact: ScreeningImpact; currentSince: string | null }) {
+function ImpactTable({
+  impact,
+  currentSince,
+  withPopulation,
+}: {
+  impact: ScreeningImpact
+  currentSince: string | null
+  withPopulation: boolean
+}) {
   const currentTitle = currentSince
     ? `Con el corte actual (vigente desde ${formatShortDate(currentSince)})`
     : "Con el corte actual"
@@ -782,8 +805,21 @@ function ImpactTable({ impact, currentSince }: { impact: ScreeningImpact; curren
         Alumnos con resultado: {impact.students}; cuenta la última toma de cada uno. El corte no lo
         calcula Aula+: lo fija el colegio según cuántos casos puede seguir de cerca.
       </p>
+      {!withPopulation && <NoPopulationNote />}
       <GroupsWithoutLevelNote count={impact.groups_without_level} />
     </div>
+  )
+}
+
+/**
+ * A screening without a population applies to nobody (ClickUp 86e3t4qjh):
+ * say so where its impact is read, so an empty count isn't taken as "no cases".
+ */
+function NoPopulationNote() {
+  return (
+    <p role="note" className="rounded-md bg-muted p-2 text-sm">
+      {NO_POPULATION_NOTE}
+    </p>
   )
 }
 
@@ -799,8 +835,9 @@ function GroupsWithoutLevelNote({ count }: { count: number }) {
   if (count === 0) return null
   return (
     <p role="note" className="text-xs text-muted-foreground">
-      {count === 1 ? "1 grupo sin nivel" : `${count} grupos sin nivel`}: no cuentan acá hasta que se les elija
-      uno.
+      {count === 1
+        ? "1 grupo sin nivel: no cuenta acá hasta que se le elija uno."
+        : `${count} grupos sin nivel: no cuentan acá hasta que se les elija uno.`}
     </p>
   )
 }

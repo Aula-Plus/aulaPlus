@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, Outlet } from "react-router-dom"
 import { Search, Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageGroups, canManageScreeningTests, isDirector, isSchoolWideStaff } from "@/lib/permissions"
+import { canManageGroups, canManageScreeningTests, canRecalculateScreeningTestApplication, isDirector, isSchoolWideStaff } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
@@ -26,7 +26,8 @@ type SortKey = "name" | "level" | "year" | "teachers" | "tracking"
 export function GroupsListPage() {
   const { user } = useAuth()
   const canManage = canManageGroups(user)
-  const canScreen = canManageScreeningTests(user)
+  // Dirección reaches the applications too, to «Recalcular con el nivel actual».
+  const canScreen = canManageScreeningTests(user) || canRecalculateScreeningTestApplication(user)
   const [groups, setGroups] = useState<Group[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
@@ -141,8 +142,9 @@ export function GroupsListPage() {
 
       {schoolWide && withoutLevel > 0 && (
         <p role="note" className="rounded-md bg-muted p-3 text-sm">
-          {withoutLevel === 1 ? "1 grupo sin nivel" : `${withoutLevel} grupos sin nivel`}: no cuentan en la
-          vista de impacto de ningún screening hasta que se les elija uno.
+          {withoutLevel === 1
+            ? "1 grupo sin nivel: no cuenta en la vista de impacto de ningún screening hasta que se le elija uno."
+            : `${withoutLevel} grupos sin nivel: no cuentan en la vista de impacto de ningún screening hasta que se les elija uno.`}
         </p>
       )}
 

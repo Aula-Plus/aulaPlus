@@ -20,7 +20,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * snapshot taken when it is applied (ClickUp 86e3t4qjh): the group's level, the
  * screening population that level corresponded to, and the screening's
  * population. Later changes to any of them apply forward only — this
- * application's place in the impact view never moves by itself.
+ * application's place in the impact view never moves by itself; only
+ * «Recalcular con el nivel actual» (RecalculateScreeningTestApplication), an
+ * explicit step of a person, takes the values in force again.
  */
 #[Fillable([
     'screening_test_type_id',
@@ -30,6 +32,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'population_levels',
     'applied_by_id',
     'application_date',
+    'recalculated_by_id',
+    'recalculated_at',
 ])]
 class ScreeningTestApplication extends Model
 {
@@ -41,6 +45,7 @@ class ScreeningTestApplication extends Model
         return [
             'application_date' => 'date',
             'population_levels' => 'array',
+            'recalculated_at' => 'datetime',
         ];
     }
 
@@ -52,8 +57,8 @@ class ScreeningTestApplication extends Model
     /**
      * Whether this application counts in its screening's impact view, read
      * from the snapshot: the group had a level, that level corresponded to a
-     * population, and the screening's population covered it (or the screening
-     * had no population set, i.e. it applied to every level).
+     * population, and the screening's population covered it. A screening
+     * without a population applies to nobody until one is chosen.
      */
     public function countsInImpact(): bool
     {
@@ -70,7 +75,7 @@ class ScreeningTestApplication extends Model
         }
 
         if ($populationLevels === null || $populationLevels === []) {
-            return true;
+            return false;
         }
 
         return $screeningPopulation !== null && in_array($screeningPopulation, $populationLevels, true);
@@ -84,6 +89,11 @@ class ScreeningTestApplication extends Model
     public function appliedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'applied_by_id');
+    }
+
+    public function recalculatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recalculated_by_id');
     }
 
     public function results(): HasMany

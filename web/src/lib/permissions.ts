@@ -298,6 +298,15 @@ export function canEditScreeningTestDesign(user: User | null): boolean {
 }
 
 /**
+ * «Recalcular con el nivel actual» on an applied screening. Mirror of
+ * `ScreeningTestApplicationPolicy::recalculate` (role portion): Psicopedagogía
+ * and Dirección.
+ */
+export function canRecalculateScreeningTestApplication(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
+}
+
+/**
  * "Volver atrás" on the design in force. Mirror of
  * `ScreeningTestDesignPolicy::revert` (role portion): Dirección only.
  */
