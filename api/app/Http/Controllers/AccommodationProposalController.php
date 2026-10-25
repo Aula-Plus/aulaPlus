@@ -9,9 +9,9 @@ use App\Http\Requests\StoreAccommodationProposalRequest;
 use App\Http\Resources\AccommodationProposalResource;
 use App\Models\Accommodation;
 use App\Models\AccommodationProposal;
-use App\Support\SchoolTime;
 use App\Models\ReportDocument;
 use App\Models\Subject;
+use App\Support\SchoolTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
