@@ -11,7 +11,7 @@ import { StudentFormPage } from "@/features/students/StudentFormPage"
 import { StudentTrackingPage } from "@/features/tracking/StudentTrackingPage"
 import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
-import { AiReportSettingPage } from "@/features/reports/AiReportSettingPage"
+import { LimitsPage } from "@/features/users/LimitsPage"
 import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { SupportPage } from "@/features/support/SupportPage"
@@ -140,6 +140,14 @@ function App() {
             <Route path=":id" element={<UserFormPage />} />
           </Route>
           <Route
+            path="/usuarios/limites"
+            element={
+              <ProtectedLayout>
+                <LimitsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
             path="/ajustes/notas"
             element={
               <ProtectedLayout>
@@ -149,11 +157,7 @@ function App() {
           />
           <Route
             path="/ajustes/informes-ia"
-            element={
-              <ProtectedLayout>
-                <AiReportSettingPage />
-              </ProtectedLayout>
-            }
+            element={<Navigate to="/usuarios/limites" replace />}
           />
           <Route
             path="/alertas"

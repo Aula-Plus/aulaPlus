@@ -5,7 +5,6 @@ import {
   ClipboardList,
   GraduationCap,
   Eye,
-  FileText,
   MessageSquare,
   Home,
   TriangleAlert,
@@ -17,7 +16,6 @@ import {
 import type { User } from "@/types"
 import {
   canEditScreeningTestDesign,
-  canManageAiReportSetting,
   canManageGradesVisibility,
   canManageAlertSettings,
   canManageCommentSettings,
@@ -92,7 +90,7 @@ export function buildNavSections(
       items: [
         // Staff management is director-only (mirror of UserPolicy).
         ...(canManageUsers(user)
-          ? [{ to: "/usuarios", label: "Usuarios", icon: UserCog }]
+          ? [{ to: "/usuarios", label: "Usuarios y permisos", icon: UserCog }]
           : []),
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
@@ -101,10 +99,6 @@ export function buildNavSections(
         // Grade visibility for teachers is director-only.
         ...(canManageGradesVisibility(user)
           ? [{ to: "/ajustes/notas", label: "Visibilidad de notas", icon: Eye }]
-          : []),
-        // Switch for the AI reading of student reports: director-only.
-        ...(canManageAiReportSetting(user)
-          ? [{ to: "/ajustes/informes-ia", label: "IA en informes", icon: FileText }]
           : []),
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.
