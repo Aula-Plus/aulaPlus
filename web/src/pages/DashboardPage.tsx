@@ -1,39 +1,28 @@
 import { useAuth } from "@/features/auth/AuthContext"
-import { roleLabels } from "@/types"
+import { AlertsSection } from "@/features/alerts/AlertsSection"
 import { PageHeader } from "@/components/ui/page-header"
-import { SectionCard } from "@/components/ui/section-card"
+import { FollowUpsSection } from "@/features/tracking/FollowUpsSection"
 
+/**
+ * Inicio (route `/`, documento vivo screen 01 «¿Qué tenés que hacer hoy?»;
+ * ClickUp 1dfd3mc2wwz). One screen for the three roles: the alerts that reach
+ * the user, each with its three ways out, and their pending follow-ups with
+ * their deadline. Both lists come from the same records and endpoints as
+ * «Alertas y seguimientos», so what each role sees is decided server-side and
+ * a row leaves as soon as the alert or follow-up is resolved (P01-DEC-02).
+ * The greeting stays small, above what there is to do. The teacher's classes
+ * of the day wait for the planner.
+ */
 export function DashboardPage() {
   const { user } = useAuth()
 
   if (!user) return null
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title={`Hola, ${user.name}`}
-        description={user.school?.name ?? "Sin escuela asignada"}
-      />
-
-      <SectionCard title="Tu cuenta">
-        <div className="grid gap-2 text-sm">
-          <Row label="Email" value={user.email} />
-          <Row label="Escuela" value={user.school?.name ?? "—"} />
-          <Row
-            label="Roles"
-            value={user.roles.map((role) => roleLabels[role]).join(", ") || "—"}
-          />
-        </div>
-      </SectionCard>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between border-b py-1 last:border-b-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
+    <div className="grid gap-10">
+      <PageHeader title="¿Qué tenés que hacer hoy?" description={`Hola, ${user.name}`} />
+      <AlertsSection compact />
+      <FollowUpsSection compact />
     </div>
   )
 }

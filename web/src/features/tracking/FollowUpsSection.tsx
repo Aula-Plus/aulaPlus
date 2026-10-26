@@ -30,8 +30,11 @@ import { followUpTitle } from "./followUpTitle"
  *
  * "Ver detalle" opens FollowUpDetailDialog to manage the follow-up right here
  * (stages, notes, people, withdrawing, resolving).
+ *
+ * The Inicio (ClickUp 1dfd3mc2wwz) reuses it as «Seguimientos», without the
+ * explanatory line (`compact`).
  */
-export function FollowUpsSection() {
+export function FollowUpsSection({ compact = false }: { compact?: boolean } = {}) {
   const headingId = useId()
   const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
@@ -79,9 +82,11 @@ export function FollowUpsSection() {
     <section aria-labelledby={headingId} className="grid gap-6">
       <div>
         <h2 id={headingId} className="text-xl font-semibold">
-          Mis seguimientos
+          {compact ? "Seguimientos" : "Mis seguimientos"}
         </h2>
-        <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
+        {!compact && (
+          <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
