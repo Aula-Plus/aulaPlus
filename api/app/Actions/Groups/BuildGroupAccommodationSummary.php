@@ -8,8 +8,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Active accommodations of a group's students aggregated by `type`. Strictly
- * aggregate: no student identifier. Shared by the group-profile table and the
- * AI summary so both read exactly the same data.
+ * aggregate: no student identifier.
  *
  * Grouped by the free-text `type` (not `category`: two accommodations may share
  * a category yet be different concrete adjustments); `student_count` counts
@@ -42,16 +41,5 @@ class BuildGroupAccommodationSummary
             ->sortBy('type')
             ->values()
             ->all();
-    }
-
-    /**
-     * Stable hash of the summary, to tell whether it changed since a text was
-     * generated.
-     *
-     * @param  list<array<string, mixed>>  $summary
-     */
-    public function fingerprint(array $summary): string
-    {
-        return hash('sha256', json_encode($summary, JSON_UNESCAPED_UNICODE));
     }
 }
