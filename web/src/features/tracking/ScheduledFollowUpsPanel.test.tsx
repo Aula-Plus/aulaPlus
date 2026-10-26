@@ -168,7 +168,7 @@ describe("ScheduledFollowUpsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /asignar a otra persona/i }))
 
     await userEvent.click(await screen.findByLabelText(/rol/i))
-    await userEvent.click(await screen.findByRole("button", { name: "Psicopedagogo" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Psicopedagogía" }))
     await userEvent.click(screen.getByLabelText(/responsable/i))
     await userEvent.click(await screen.findByRole("button", { name: "Paula Psico" }))
     await userEvent.click(screen.getByLabelText(/compartir con/i))

@@ -3,8 +3,8 @@ export type Role = "teacher" | "director" | "psychopedagogue"
 /** User-facing Spanish labels for roles (the app UI is in Spanish). */
 export const roleLabels: Record<Role, string> = {
   teacher: "Docente",
-  director: "Director",
-  psychopedagogue: "Psicopedagogo",
+  director: "Dirección",
+  psychopedagogue: "Psicopedagogía",
 }
 
 export type UserStatus = "pending" | "active" | "disabled"

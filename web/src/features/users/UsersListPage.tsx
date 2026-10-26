@@ -30,8 +30,8 @@ const statusTone: Record<ManagedUser["status"], BadgeTone> = {
 }
 
 /**
- * Surfaces a server-provided guardrail message (e.g. "no podés desactivar al
- * único director activo") for 422s, falling back to a generic message for
+ * Surfaces a server-provided guardrail message (e.g. "no podés desactivar a la
+ * única persona activa de Dirección") for 422s, falling back to a generic message for
  * anything else — mirrors the pattern in `LoginPage`/`UserFormPage`.
  */
 function extractErrorMessage(error: unknown, fallback: string): string {
