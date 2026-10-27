@@ -2,7 +2,6 @@ import { api } from "@/lib/api"
 import type {
   Accommodation,
   AccommodationReviewEvent,
-  AccommodationNarrativeView,
   AccommodationInput,
   Alert,
   BarrierAccommodationLink,
@@ -301,21 +300,6 @@ export async function fetchStudentHistory(
     params: { page, ...filters },
   })
   return data
-}
-
-export async function fetchAccommodationNarrative(groupId: number): Promise<AccommodationNarrativeView> {
-  const { data } = await api.get<AccommodationNarrativeView>(
-    `/api/v1/groups/${groupId}/accommodation-narrative`,
-  )
-  return data
-}
-
-export async function generateAccommodationNarrative(groupId: number): Promise<void> {
-  await api.post(`/api/v1/groups/${groupId}/accommodation-narrative/generate`)
-}
-
-export async function publishAccommodationNarrative(groupId: number, narrativeId: number): Promise<void> {
-  await api.post(`/api/v1/groups/${groupId}/accommodation-narrative/${narrativeId}/publish`)
 }
 
 // ── Comment categories (replace the old comment "tone") ──────────────────────

@@ -1,7 +1,6 @@
 <?php
 
 use App\Actions\AI\BuildProposalContext;
-use App\Enums\AccommodationNarrativeStatus;
 use App\Enums\AIProposalType;
 use App\Models\Accommodation;
 use App\Models\AIProposal;
@@ -9,7 +8,6 @@ use App\Models\AnnualPlan;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\Group;
-use App\Models\GroupAccommodationNarrative;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\Subject;
@@ -220,26 +218,13 @@ it('only sends the accommodations that cover the requested assessment type', fun
         ->and(focusAreas($written))->toBe(['approved', 'general', 'math', 'written']);
 });
 
-function narrativeFor(array $scenario, AccommodationNarrativeStatus $status, string $content, ?string $publishedAt = null): void
-{
-    Tenancy::forSchool($scenario['school'], fn () => GroupAccommodationNarrative::create([
-        'group_id' => $scenario['group']->id,
-        'status' => $status,
-        'content' => $content,
-        'fingerprint' => str_repeat('0', 64),
-        'generated_by_id' => $scenario['teacher']->id,
-        'published_at' => $publishedAt,
-    ]));
-}
-
-it('sends neither the published accommodation narrative nor past results of other units', function () {
+it('sends no past results of other units', function () {
     // PO, ClickUp 86e3jpzdr (latest decision): the AI no longer receives the
     // narrative psychopedagogy publishes — it states how many students have
     // each accommodation, which identifies someone in a small group. Group
     // performance may only come from assessments of the unit being planned,
     // and assessments are not tied to a unit yet, so none qualifies.
     $scenario = contextScopeScenario();
-    narrativeFor($scenario, AccommodationNarrativeStatus::Published, 'Cinco alumnos tienen tiempo extendido.', now()->subDay()->toDateTimeString());
     $assessment = Assessment::factory()->create([
         'school_id' => $scenario['school']->id,
         'group_id' => $scenario['group']->id,
@@ -265,7 +250,6 @@ it('sends neither the published accommodation narrative nor past results of othe
         $sent = json_encode($context);
 
         expect($context)->not->toHaveKeys(['group_accommodation_summary', 'recent_performance'])
-            ->and($sent)->not->toContain('Cinco alumnos')
             ->and($sent)->not->toContain('3.75');
     }
 });

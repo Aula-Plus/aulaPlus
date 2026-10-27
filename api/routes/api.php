@@ -23,7 +23,6 @@ use App\Http\Controllers\EducationLevelController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
-use App\Http\Controllers\GroupAccommodationNarrativeController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupLevelController;
@@ -230,10 +229,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // count-by-(type,date) marks (never a student identifier), and the
         // group's scheduled follow-ups filtered per-student by policy.
         Route::get('/groups/{group}/accommodations-summary', [GroupProfileController::class, 'accommodationsSummary']);
-        Route::get('/groups/{group}/accommodation-narrative', [GroupAccommodationNarrativeController::class, 'show']);
-        Route::post('/groups/{group}/accommodation-narrative/generate', [GroupAccommodationNarrativeController::class, 'generate'])
-            ->middleware('throttle:5,1');
-        Route::post('/groups/{group}/accommodation-narrative/{narrative}/publish', [GroupAccommodationNarrativeController::class, 'publish']);
         Route::get('/groups/{group}/performance-timeline', [GroupProfileController::class, 'performanceTimeline']);
         Route::get('/groups/{group}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'indexForGroup']);
 
