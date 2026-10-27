@@ -521,10 +521,10 @@ export function StudentTrackingPage() {
           {tracking.grades_view.restricted && (
             <p role="note" className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               {tracking.grades_view.mode === "all_periodic" && tracking.grades_view.cutoff_at
-                ? `Notas de otras materias cargadas antes del corte del ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
+                ? `Calificaciones de otras materias cargadas antes del corte del ${formatShortDate(tracking.grades_view.cutoff_at)}. Las de tu materia están al día.`
                 : tracking.grades_view.mode === "all_periodic"
-                  ? "Todavía no hay un corte: por ahora ves solo las notas de tu materia."
-                  : "Ves solo las notas de las materias que dictás."}
+                  ? "Todavía no hay un corte: por ahora ves solo las calificaciones de tu materia."
+                  : "Ves solo las calificaciones de las materias que dictás."}
             </p>
           )}
 
@@ -560,9 +560,9 @@ export function StudentTrackingPage() {
             )}
           </SectionCard>
 
-          <SectionCard title="Notas" bare={tracking.grades.length > 0}>
+          <SectionCard title="Calificaciones" bare={tracking.grades.length > 0}>
             {tracking.grades.length === 0 ? (
-              <EmptyState icon={FileText} message="Sin notas para mostrar." />
+              <EmptyState icon={FileText} message="Sin calificaciones para mostrar." />
             ) : (
               <Table>
                 <TableHeader>
@@ -570,7 +570,7 @@ export function StudentTrackingPage() {
                     <TableHead className="pl-6">Materia</TableHead>
                     <TableHead>Instancia</TableHead>
                     <TableHead>Fecha</TableHead>
-                    <TableHead>Nota</TableHead>
+                    <TableHead>Calificación</TableHead>
                     <TableHead className="pr-6">Ajustes activos ese día</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -591,7 +591,7 @@ export function StudentTrackingPage() {
             )}
             {tracking.grades_truncated && (
               <p className="px-6 py-3 text-xs text-muted-foreground">
-                Se muestran las {tracking.grades.length} notas más recientes. Los promedios incluyen todas.
+                Se muestran las {tracking.grades.length} calificaciones más recientes. Los promedios incluyen todas.
               </p>
             )}
           </SectionCard>

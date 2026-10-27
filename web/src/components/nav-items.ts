@@ -100,7 +100,7 @@ export function buildNavSections(
           : []),
         // Grade visibility for teachers is director-only.
         ...(canManageGradesVisibility(user)
-          ? [{ to: "/ajustes/notas", label: "Visibilidad de notas", icon: Eye }]
+          ? [{ to: "/ajustes/calificaciones", label: "Visibilidad de calificaciones", icon: Eye }]
           : []),
         // Switch for the AI reading of student reports: director-only.
         ...(canManageAiReportSetting(user)

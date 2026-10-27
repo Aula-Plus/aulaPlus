@@ -174,7 +174,7 @@ describe("StudentTrackingPage", () => {
     await openTab("Evaluaciones")
 
     expect(await screen.findByRole("note")).toHaveTextContent(
-      /notas de otras materias cargadas antes del corte del/i,
+      /calificaciones de otras materias cargadas antes del corte del/i,
     )
   })
 
@@ -246,7 +246,7 @@ describe("StudentTrackingPage", () => {
     renderPage("teacher")
     await openTab("Evaluaciones")
 
-    expect(await screen.findByText(/se muestran las 1 notas más recientes/i)).toBeInTheDocument()
+    expect(await screen.findByText(/se muestran las 1 calificaciones más recientes/i)).toBeInTheDocument()
   })
 
   it("shows an empty state for per-subject performance when there are no scores", async () => {
