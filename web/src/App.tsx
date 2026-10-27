@@ -140,13 +140,14 @@ function App() {
             <Route path=":id" element={<UserFormPage />} />
           </Route>
           <Route
-            path="/ajustes/notas"
+            path="/ajustes/calificaciones"
             element={
               <ProtectedLayout>
                 <GradesVisibilityPage />
               </ProtectedLayout>
             }
           />
+          <Route path="/ajustes/notas" element={<Navigate to="/ajustes/calificaciones" replace />} />
           <Route
             path="/ajustes/informes-ia"
             element={

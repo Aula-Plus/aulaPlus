@@ -36,7 +36,8 @@ function localToday(): string {
 }
 
 /**
- * School-wide setting, route `/ajustes/notas`: how much of the grades in other
+ * School-wide setting, route `/ajustes/calificaciones` (the old
+ * `/ajustes/notas` redirects here): how much of the grades in other
  * subjects a teacher sees. Director-only (UX gate; the server enforces it).
  */
 export function GradesVisibilityPage() {
