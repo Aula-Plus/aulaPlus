@@ -232,7 +232,7 @@ describe("AccommodationProposalsSection", () => {
     expect(screen.queryByRole("button", { name: /retirar propuesta/i })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: /ver historial/i }))
-    expect(await screen.findByText(/directora \(director\): envió la propuesta a revisión/i)).toBeInTheDocument()
+    expect(await screen.findByText(/directora \(dirección\): envió la propuesta a revisión/i)).toBeInTheDocument()
     expect(screen.getByText(/la rechazó/i)).toBeInTheDocument()
     // Who changed what: the fields an edit touched, never their content.
     expect(screen.getByText(/editó la propuesta \(descripción, materias donde aplica\)/i)).toBeInTheDocument()

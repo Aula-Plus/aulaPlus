@@ -63,7 +63,7 @@ describe("CommentsPanel", () => {
 
     expect(screen.getByText("Avanzó mucho este mes.")).toBeInTheDocument()
     expect(screen.getByText("Académico")).toBeInTheDocument()
-    expect(screen.getByText(/visible para: psicopedagogo, director/i)).toBeInTheDocument()
+    expect(screen.getByText(/visible para: psicopedagogía, dirección/i)).toBeInTheDocument()
     // A non-private comment shows no "Privado" badge.
     expect(screen.queryByText("Privado")).not.toBeInTheDocument()
   })
@@ -264,7 +264,7 @@ describe("CommentsPanel observations bank", () => {
 
     expect(screen.getByText("Vos")).toBeInTheDocument()
     expect(screen.getByText("Lucía")).toBeInTheDocument()
-    expect(screen.getByText(/^·\s*Psicopedagogo$/)).toBeInTheDocument()
+    expect(screen.getByText(/^·\s*Psicopedagogía$/)).toBeInTheDocument()
   })
 
   it("filters by author", async () => {
@@ -272,7 +272,7 @@ describe("CommentsPanel observations bank", () => {
       <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} showAuthors currentUserId={7} />,
     )
 
-    await choose(/filtrar por autor/i, "Lucía · Psicopedagogo")
+    await choose(/filtrar por autor/i, "Lucía · Psicopedagogía")
 
     expect(screen.getByText("Trabaja mejor en grupo.")).toBeInTheDocument()
     expect(screen.queryByText("Avanzó mucho este mes.")).not.toBeInTheDocument()
@@ -300,9 +300,9 @@ describe("CommentsPanel observations bank", () => {
     await userEvent.click(screen.getByLabelText(/filtrar por autor/i))
     expect(await screen.findByRole("button", { name: "Vos" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /mariana/i })).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Lucía · Psicopedagogo" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Lucía · Psicopedagogía" })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: "Lucía · Director" }))
+    await userEvent.click(screen.getByRole("button", { name: "Lucía · Dirección" }))
 
     expect(screen.getByText("Mejoró la convivencia.")).toBeInTheDocument()
     expect(screen.queryByText("Trabaja mejor en grupo.")).not.toBeInTheDocument()

@@ -29,8 +29,8 @@ class SupportMessageNotification extends Notification implements ShouldQueue
      */
     private const ROLE_LABELS = [
         Role::Teacher->value => 'Docente',
-        Role::Director->value => 'Director',
-        Role::Psychopedagogue->value => 'Psicopedagogo',
+        Role::Director->value => 'Dirección',
+        Role::Psychopedagogue->value => 'Psicopedagogía',
     ];
 
     /**

@@ -61,7 +61,7 @@ describe("StudentHistoryPage", () => {
     expect(within(item).getByText("Modificación")).toBeInTheDocument()
     expect(within(item).getByText("Ajustes")).toBeInTheDocument()
     expect(within(item).getByText("Ajuste: Tiempo extra")).toBeInTheDocument()
-    expect(within(item).getByText("Paula Psico · Psicopedagogo")).toBeInTheDocument()
+    expect(within(item).getByText("Paula Psico · Psicopedagogía")).toBeInTheDocument()
     expect(within(item).getByText("Descripción")).toBeInTheDocument()
     expect(within(item).getByText("Texto anterior")).toBeInTheDocument()
     expect(within(item).getByText("Texto nuevo")).toBeInTheDocument()
@@ -100,7 +100,7 @@ describe("StudentHistoryPage", () => {
     expect(within(added).getByText("Alta")).toBeInTheDocument()
     expect(within(added).getByText("Se agregó")).toBeInTheDocument()
     expect(within(added).getByText("Observación: Participa más")).toBeInTheDocument()
-    expect(within(added).getByText("Psicopedagogo, Director")).toBeInTheDocument()
+    expect(within(added).getByText("Psicopedagogía, Dirección")).toBeInTheDocument()
 
     expect(within(removed).getByText("Baja")).toBeInTheDocument()
     expect(within(removed).getByText("Se quitó")).toBeInTheDocument()
@@ -136,7 +136,7 @@ describe("StudentHistoryPage", () => {
     expect(fetchSpy).toHaveBeenLastCalledWith(3, 1, {})
 
     await userEvent.click(triggers()[0])
-    await userEvent.click(await screen.findByRole("button", { name: "Dora Directora (Director)" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Dora Directora (Dirección)" }))
     expect(fetchSpy).toHaveBeenLastCalledWith(3, 1, { user_id: 7 })
 
     await userEvent.click(triggers()[1])

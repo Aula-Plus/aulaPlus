@@ -112,7 +112,7 @@ export function GroupAccommodationNarrative({ groupId, canSummarise }: GroupAcco
 
       {canGenerate && draft && (
         <div className="rounded-md border border-dashed p-3 text-sm">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Borrador (solo lo ve psicopedagogía)</p>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Borrador (solo lo ve Psicopedagogía)</p>
           {draft.status === "pending" &&
             (waiting ? (
               <p className="text-muted-foreground">Generando resumen…</p>

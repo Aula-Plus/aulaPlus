@@ -84,14 +84,14 @@ export function GradesVisibilityPage() {
   }
 
   if (!canManage) {
-    return <p className="text-muted-foreground">Esta sección es solo para dirección.</p>
+    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
   }
 
   return (
     <div className="grid gap-6">
       <PageHeader
         title="Visibilidad de calificaciones"
-        description="Elegí qué ve un docente de las calificaciones de las materias que no dicta. Psicopedagogía y dirección ven todas las calificaciones siempre."
+        description="Elegí qué ve un docente de las calificaciones de las materias que no dicta. Psicopedagogía y Dirección ven todas las calificaciones siempre."
       />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <SectionCard title="Para todo el colegio">

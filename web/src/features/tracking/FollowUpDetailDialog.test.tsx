@@ -123,7 +123,7 @@ describe("FollowUpDetailDialog", () => {
     await userEvent.click(await screen.findByRole("button", { name: /agregar etapa/i }))
     await userEvent.type(screen.getByLabelText(/qué hay que hacer/i), "Reunión con la familia")
     await userEvent.click(screen.getByLabelText(/responsable de la etapa/i))
-    await userEvent.click(await screen.findByRole("button", { name: "Diana Directora (Director)" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Diana Directora (Dirección)" }))
     await userEvent.type(screen.getByLabelText(/fecha de la etapa/i), "2026-11-15")
     await userEvent.click(screen.getByRole("button", { name: /guardar etapa/i }))
 
@@ -196,7 +196,7 @@ describe("FollowUpDetailDialog", () => {
     )
 
     expect(
-      await screen.findByText(/Responsables: Paula Psico \(Psicopedagogo\), Diana Directora \(Director\)/),
+      await screen.findByText(/Responsables: Paula Psico \(Psicopedagogía\), Diana Directora \(Dirección\)/),
     ).toBeInTheDocument()
   })
 
