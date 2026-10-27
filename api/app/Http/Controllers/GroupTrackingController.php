@@ -64,16 +64,21 @@ class GroupTrackingController extends Controller
                 ->flip()
             : null;
 
+        // Alert::scopeCountableFor: a role that isn't a recipient of a new
+        // alert yet must not learn it exists. One grouped query for the whole
+        // group rather than a COUNT per student.
+        $openAlertsCounts = Alert::query()
+            ->whereIn('alerts.student_id', $students->modelKeys())
+            ->where('alerts.resolved', false)
+            ->countableFor($user)
+            ->groupBy('alerts.student_id')
+            ->selectRaw('alerts.student_id, count(*) as open_alerts_count')
+            ->pluck('open_alerts_count', 'student_id');
+
         $students = $students->map(fn ($student) => [
             'id' => $student->id,
             'full_name' => $student->full_name,
-            // Alert::scopeCountableFor: a role that isn't a recipient of a new
-            // alert yet must not learn it exists.
-            'open_alerts_count' => Alert::query()
-                ->where('student_id', $student->id)
-                ->where('resolved', false)
-                ->countableFor($user)
-                ->count(),
+            'open_alerts_count' => (int) ($openAlertsCounts[$student->id] ?? 0),
             'has_active_accommodations' => $withActiveAccommodations?->has($student->id),
         ]);
 

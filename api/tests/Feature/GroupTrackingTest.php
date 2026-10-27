@@ -223,3 +223,29 @@ it('flags only effective accommodations, for school-wide roles only, in a single
         ->filter(fn (array $query) => str_contains($query['query'], 'from "accommodations"'));
     expect($accommodationQueries)->toHaveCount(0);
 });
+
+// One grouped query for the open alerts of the whole group, not a COUNT per
+// student (N+1); resolved alerts and students without any still come out right.
+it('counts the open alerts of every student in a single query', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $students = Student::factory()->count(3)->create(['school_id' => $school->id]);
+    foreach ($students as $student) {
+        $student->groups()->attach($group, ['school_year' => now()->year]);
+    }
+    Alert::factory()->count(2)->create(['student_id' => $students[0]->id, 'resolved' => false]);
+    Alert::factory()->create(['student_id' => $students[1]->id, 'resolved' => false]);
+    Alert::factory()->create(['student_id' => $students[1]->id, 'resolved' => true]);
+    Sanctum::actingAs($director);
+
+    DB::enableQueryLog();
+    $counts = collect($this->getJson("/api/v1/groups/{$group->id}/tracking")->assertOk()->json('data.students'))
+        ->pluck('open_alerts_count', 'id')
+        ->all();
+    $alertQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], 'from "alerts"'));
+
+    expect($counts)->toEqual([$students[0]->id => 2, $students[1]->id => 1, $students[2]->id => 0])
+        ->and($alertQueries)->toHaveCount(1);
+});

@@ -34,12 +34,14 @@ class BuildGroupAccommodationSummary
 
         return Accommodation::query()
             ->when($viewer, fn ($query) => $query->visibleTo($viewer))
+            // Query twin of isEffective(): don't hydrate inactive rows only to
+            // drop them in PHP.
+            ->effective()
             ->whereIn('accommodations.student_id', $studentIds)
             // Fixed row order, so "the first" category below is always the
             // same one and the fingerprint does not change between requests.
             ->orderBy('accommodations.id')
-            ->get()
-            ->filter->isEffective()
+            ->get(['accommodations.id', 'accommodations.student_id', 'accommodations.type', 'accommodations.category'])
             ->groupBy('type')
             ->map(fn (Collection $rows, string $type): array => [
                 'type' => $type,
