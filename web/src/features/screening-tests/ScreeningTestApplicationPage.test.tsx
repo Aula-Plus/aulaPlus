@@ -16,6 +16,8 @@ function group(): Group {
     school_year: 2026,
     group_profile: null,
     related_documents: null,
+    education_level: null,
+    school_grade: null,
     teachers: [],
   }
 }
@@ -36,12 +38,17 @@ function design(typeId: number): ScreeningTestDesign {
   }
 }
 
-function type(id: number, name: string, withDesign: boolean): ScreeningTestType {
+function type(
+  id: number,
+  name: string,
+  withDesign: boolean,
+  levels: ScreeningTestType["levels"] = ["primary"],
+): ScreeningTestType {
   return {
     id,
     name,
     area: null,
-    levels: [],
+    levels,
     frequency: null,
     frequency_years: null,
     teacher_visible: false,
@@ -153,5 +160,78 @@ describe("ScreeningTestApplicationPage", () => {
     expect(screen.queryByText(/nueva aplicación/i)).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /hoja para aplicar/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /cargar resultados/i })).not.toBeInTheDocument()
+  })
+
+  it("does not offer a screening without population and says it has to be chosen first", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue(group())
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type(1, "Comprensión lectora", true),
+      type(2, "Cálculo", true, []),
+    ])
+    vi.spyOn(screeningApi, "fetchGroupScreeningTestApplications").mockResolvedValue([])
+
+    renderPage()
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      "«Cálculo» no tiene población seleccionada: elegí a qué niveles se aplica en el diseño antes de aplicarlo.",
+    )
+    await userEvent.click(screen.getByLabelText(/^screening$/i))
+    expect(await screen.findByRole("button", { name: "Comprensión lectora" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Cálculo" })).not.toBeInTheDocument()
+  })
+
+  it("agrees in plural when several screenings have no population", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue(group())
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type(1, "Comprensión lectora", true, []),
+      type(2, "Cálculo", true, []),
+    ])
+    vi.spyOn(screeningApi, "fetchGroupScreeningTestApplications").mockResolvedValue([])
+
+    renderPage()
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      "«Comprensión lectora», «Cálculo» no tienen población seleccionada: elegí a qué niveles se aplican en el diseño antes de aplicarlos.",
+    )
+  })
+
+  it("lets direction recalculate an application with the current level", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue(group())
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type(1, "Comprensión lectora", true),
+    ])
+    const application = {
+      id: 50,
+      screening_test_type_id: 1,
+      group_id: 1,
+      applied_by_id: 1,
+      application_date: "2026-09-15",
+      counts_in_impact: false,
+      recalculated_at: null,
+      recalculated_by_name: null,
+    }
+    vi.spyOn(screeningApi, "fetchGroupScreeningTestApplications")
+      .mockResolvedValueOnce([application])
+      .mockResolvedValueOnce([
+        {
+          ...application,
+          counts_in_impact: true,
+          recalculated_at: "2026-10-25T10:00:00+00:00",
+          recalculated_by_name: "Dora Directora",
+        },
+      ])
+    const recalculate = vi
+      .spyOn(screeningApi, "recalculateScreeningTestApplication")
+      .mockResolvedValue(application)
+
+    renderPage("director")
+
+    expect(await screen.findByText(/no cuenta en la vista de impacto/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: /recalcular con el nivel actual/i }))
+    await userEvent.click(await screen.findByRole("button", { name: /^recalcular$/i }))
+
+    expect(recalculate).toHaveBeenCalledWith(50)
+    expect(await screen.findByText(/recalculado con el nivel actual por dora directora/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no cuenta en la vista de impacto/i)).not.toBeInTheDocument()
   })
 })

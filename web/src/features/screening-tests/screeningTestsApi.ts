@@ -134,6 +134,21 @@ export async function createScreeningTestApplication(
 }
 
 /**
+ * «Recalcular con el nivel actual» (Psicopedagogía and Dirección): the
+ * application takes the group's current level and the screening's current
+ * population again. Until then it keeps what it had when it was applied.
+ */
+export async function recalculateScreeningTestApplication(
+  applicationId: number,
+): Promise<ScreeningTestApplication> {
+  const { data } = await api.post<{ data: ScreeningTestApplication }>(
+    `/api/v1/screening-test-applications/${applicationId}/recalculate`,
+    {},
+  )
+  return data.data
+}
+
+/**
  * The printable code→student roster. Psychopedagogy only (403 otherwise) — the
  * single place code and full name are ever crossed.
  */

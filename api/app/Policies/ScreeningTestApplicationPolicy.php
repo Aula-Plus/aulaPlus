@@ -43,6 +43,16 @@ class ScreeningTestApplicationPolicy
     }
 
     /**
+     * «Recalcular con el nivel actual» (ClickUp 86e3t4qjh): psychopedagogy and
+     * direction, the two roles that look after the impact view.
+     */
+    public function recalculate(User $user, ScreeningTestApplication $application): bool
+    {
+        return $user->school_id === $application->school_id
+            && $user->hasAnyRole([Role::Psychopedagogue->value, Role::Director->value]);
+    }
+
+    /**
      * The code -> student roster: psychopedagogy only (spec §2). This is the
      * single endpoint that de-anonymises results.
      */
