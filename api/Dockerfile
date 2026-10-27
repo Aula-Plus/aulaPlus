@@ -1,9 +1,13 @@
-FROM serversideup/php:8.3-fpm-nginx AS production
+# Pinned to an exact patch release so a cached base layer can't silently keep
+# an older PHP: 8.3.36 fixes PHP2Shell (CVE-2026-109618, CVE-2026-109619).
+FROM serversideup/php:8.3.36-fpm-nginx AS production
 
 USER root
 
 # pdo_pgsql/pgsql for Postgres, redis for cache/queue/session drivers.
 RUN install-php-extensions pgsql pdo_pgsql redis
+
+COPY docker/php/zz-security.ini /usr/local/etc/php/conf.d/zz-security.ini
 
 WORKDIR /var/www/html
 
