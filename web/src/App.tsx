@@ -4,6 +4,7 @@ import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { AcceptInvitationPage } from "@/features/auth/AcceptInvitationPage"
 import { DashboardPage } from "@/pages/DashboardPage"
+import { NotFoundPage } from "@/pages/NotFoundPage"
 import { GroupsListPage } from "@/features/groups/GroupsListPage"
 import { GroupFormPage } from "@/features/groups/GroupFormPage"
 import { StudentsListPage } from "@/features/students/StudentsListPage"
@@ -140,13 +141,14 @@ function App() {
             <Route path=":id" element={<UserFormPage />} />
           </Route>
           <Route
-            path="/ajustes/notas"
+            path="/ajustes/calificaciones"
             element={
               <ProtectedLayout>
                 <GradesVisibilityPage />
               </ProtectedLayout>
             }
           />
+          <Route path="/ajustes/notas" element={<Navigate to="/ajustes/calificaciones" replace />} />
           <Route
             path="/ajustes/informes-ia"
             element={
@@ -187,7 +189,14 @@ function App() {
               </ProtectedLayout>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="*"
+            element={
+              <ProtectedLayout>
+                <NotFoundPage />
+              </ProtectedLayout>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

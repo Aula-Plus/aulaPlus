@@ -47,7 +47,7 @@ export function AiReportSettingPage() {
     <div className="grid gap-6">
       <PageHeader
         title="IA en los informes"
-        description="Decidí si Aula+ puede usar IA para proponer ajustes a partir de los informes de los alumnos."
+        description="Decidí si Aula+ puede usar IA para identificar automáticamente los ajustes que indica el informe de cada alumno."
       />
       {error && (
         <p role="alert" className="text-sm text-destructive">

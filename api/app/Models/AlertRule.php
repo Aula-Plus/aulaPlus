@@ -56,7 +56,7 @@ class AlertRule extends Model
 
         return match ($this->condition) {
             AlertCondition::ConsecutiveBelow => sprintf(
-                '%d notas seguidas por debajo de %s en la misma materia',
+                '%d calificaciones seguidas por debajo de %s en la misma materia',
                 $this->consecutive_count,
                 $threshold,
             ),

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import { Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageScreeningTests, isSchoolWideStaff } from "@/lib/permissions"
+import {
+  canManageScreeningTests,
+  canRecalculateScreeningTestApplication,
+  isSchoolWideStaff,
+} from "@/lib/permissions"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
@@ -22,7 +26,8 @@ export function GroupTrackingPage() {
   const { id } = useParams<{ id: string }>()
   const groupId = Number(id)
   const { user } = useAuth()
-  const canScreen = canManageScreeningTests(user)
+  // Dirección reaches the applications too, to «Recalcular con el nivel actual».
+  const canScreen = canManageScreeningTests(user) || canRecalculateScreeningTestApplication(user)
   // Teachers don't get the per-student accommodation flag (the API omits it):
   // a yes/no per name is a roster. They read the aggregate table below.
   const showAccommodations = isSchoolWideStaff(user)

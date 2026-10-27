@@ -15,7 +15,9 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Support\Reports\ReportAnonymizer;
 use App\Support\Reports\ReportTextExtractor;
+use App\Support\SchoolTime;
 use App\Support\Tenancy;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -277,7 +279,15 @@ it('sends only the confirmed anonymized text to the provider and stores pending 
     Http::assertSent(function ($request) {
         $payload = json_encode($request->data());
 
-        return str_contains($payload, 'lee con dificultad textos largos')
+        $system = (string) $request->data()['system'];
+
+        // The AI identifies what the report states; it never deduces adjustments
+        // or subjects from the difficulties it describes (ClickUp 86e3jujgx).
+        return str_contains($system, 'no sugieras ajustes que el informe no plantea')
+            && str_contains($system, 'Nunca deduzcas materias')
+            && ! str_contains($system, 'deduzcan')
+            && ! str_contains($system, 'razonables para el aula')
+            && str_contains($payload, 'lee con dificultad textos largos')
             && ! str_contains($payload, 'Pereyra')
             && ! str_contains($payload, 'Lucía')
             && ! str_contains($payload, (string) $this->student->id.'"');
@@ -357,10 +367,68 @@ it('creates the accommodation only when psychopedagogy approves a proposal', fun
         ->and($accommodation->type)->toBe('Lectura en voz alta')
         ->and($accommodation->active)->toBeTrue()
         ->and($accommodation->requires_external_approval)->toBeFalse()
-        ->and($proposal->fresh()->accommodation_id)->toBe($accommodation->id);
+        ->and($proposal->fresh()->accommodation_id)->toBe($accommodation->id)
+        // «Origen» points at the report by date, never by file name (it may carry the student's name).
+        ->and($accommodation->origin)->toBe('Informe cargado el '.SchoolTime::today()->format('d/m/Y'))
+        ->and($accommodation->origin_report_id)->toBe($report->id);
 
     $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])->assertUnprocessable();
     expect(Accommodation::count())->toBe(1);
+});
+
+it('dates the report origin on the school calendar, not in UTC', function () {
+    // 01:30 UTC on 25/10 is still 24/10 in Montevideo (UTC-3).
+    $this->travelTo(CarbonImmutable::parse('2026-10-25 01:30:00', 'UTC'));
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)(['status' => ReportDocumentStatus::Proposed]);
+    $proposal = ($this->proposal)($report);
+
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])->assertOk();
+
+    expect(Accommodation::firstOrFail()->origin)->toBe('Informe cargado el 24/10/2026');
+});
+
+it('links the report to psychopedagogy and direction only, and never lets a client set it', function () {
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)(['status' => ReportDocumentStatus::Proposed]);
+    $other = ($this->readyReport)();
+    $proposal = ($this->proposal)($report);
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])->assertOk();
+    $accommodation = Accommodation::firstOrFail();
+
+    // The origin text stays editable; the link is server-set only.
+    $this->patchJson("/api/v1/accommodations/{$accommodation->id}", ['category' => 'access', 'origin' => 'Informe de la psicóloga', 'origin_report_id' => $other->id])
+        ->assertOk()
+        ->assertJsonPath('data.origin', 'Informe de la psicóloga')
+        ->assertJsonPath('data.origin_report_id', $report->id);
+
+    foreach ([$this->psycho, $this->director] as $user) {
+        Sanctum::actingAs($user);
+        $this->getJson("/api/v1/students/{$this->student->id}/tracking")
+            ->assertOk()
+            ->assertJsonPath('data.accommodations.0.origin_report_id', $report->id);
+        $this->getJson("/api/v1/reports/{$report->id}/download")->assertOk();
+    }
+
+    Sanctum::actingAs($this->teacher);
+    $tracking = $this->getJson("/api/v1/students/{$this->student->id}/tracking")->assertOk();
+    expect($tracking->json('data'))->not->toHaveKey('accommodations')
+        ->and(json_encode($tracking->json()))->not->toContain('origin_report_id')
+        ->and(json_encode($tracking->json()))->not->toContain('Informe de la psic');
+});
+
+it('keeps the origin text but drops the link when the report is deleted', function () {
+    Sanctum::actingAs($this->psycho);
+    $report = ($this->readyReport)(['status' => ReportDocumentStatus::Proposed]);
+    $proposal = ($this->proposal)($report);
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])->assertOk();
+    $accommodation = Accommodation::firstOrFail();
+
+    $this->deleteJson("/api/v1/reports/{$report->id}")->assertNoContent();
+
+    $accommodation->refresh();
+    expect($accommodation->origin)->toStartWith('Informe cargado el ')
+        ->and($accommodation->origin_report_id)->toBeNull();
 });
 
 it('records a modified approval with the edited fields', function () {

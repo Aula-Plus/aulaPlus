@@ -29,6 +29,9 @@ use Illuminate\Support\Facades\DB;
  * per school year (unique on student_id + school_year), so an unscoped query
  * would return a prior-year enrolment of the same student as a second row and
  * assign it a second `code`. Scoping by year keeps one code per student.
+ *
+ * The application also stores the group's level, its screening population and
+ * the screening's population at this moment (see ScreeningTestApplication).
  */
 class CreateScreeningTestApplication
 {
@@ -39,9 +42,18 @@ class CreateScreeningTestApplication
         ?string $applicationDate = null,
     ): ScreeningTestApplication {
         return DB::transaction(function () use ($group, $type, $appliedBy, $applicationDate): ScreeningTestApplication {
+            // Snapshot of the level and population as they are today (ClickUp
+            // 86e3t4qjh): a later change of the group's level, the level ↔
+            // population correspondence or the screening's population applies
+            // forward only and never moves this application in the impact view.
+            $level = $group->educationLevel;
+
             $application = ScreeningTestApplication::create([
                 'screening_test_type_id' => $type->id,
                 'group_id' => $group->id,
+                'education_level_id' => $level?->id,
+                'screening_population' => $level?->screening_population,
+                'population_levels' => $type->levels ?? [],
                 'applied_by_id' => $appliedBy->id,
                 'application_date' => $applicationDate ?? now()->toDateString(),
             ]);

@@ -62,6 +62,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
     'description',
     'focus_area',
     'origin',
+    'origin_report_id',
     'llm_rule',
     'requires_external_approval',
     'approved',

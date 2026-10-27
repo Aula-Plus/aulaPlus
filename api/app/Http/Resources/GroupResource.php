@@ -20,6 +20,18 @@ class GroupResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'level' => $this->level,
+            // The level chosen from the fixed list (null = "Sin nivel") and the
+            // optional grade, as {id, key, label} (ClickUp 86e3t4qjh).
+            'education_level' => $this->educationLevel ? [
+                'id' => $this->educationLevel->id,
+                'key' => $this->educationLevel->key,
+                'label' => $this->educationLevel->label,
+            ] : null,
+            'school_grade' => $this->schoolGrade ? [
+                'id' => $this->schoolGrade->id,
+                'key' => $this->schoolGrade->key,
+                'label' => $this->schoolGrade->label,
+            ] : null,
             'school_year' => $this->school_year,
             'group_profile' => $this->group_profile,
             'related_documents' => $this->related_documents,

@@ -20,6 +20,7 @@ function proposal(overrides: Partial<Accommodation> = {}): Accommodation {
     description: "Media hora extra.",
     focus_area: "Escritura",
     origin: null,
+    origin_report_id: null,
     is_effective: false,
     review_status: "pending",
     proposed_by_id: 9,
@@ -60,11 +61,70 @@ describe("AccommodationProposalsSection", () => {
     vi.restoreAllMocks()
   })
 
-  it("renders nothing when there are no proposals", async () => {
-    const fetch = vi.spyOn(trackingApi, "fetchAccommodationProposals").mockResolvedValue([])
+  it("says it is loading until the list arrives, then shows the proposal", async () => {
+    let resolve: (data: Accommodation[]) => void = () => {}
+    vi.spyOn(trackingApi, "fetchAccommodationProposals").mockReturnValue(
+      new Promise((done) => {
+        resolve = done
+      }),
+    )
     renderSection("psychopedagogue")
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(3))
-    expect(screen.queryByText("Propuestas de ajuste")).not.toBeInTheDocument()
+
+    expect(screen.getByText("Propuestas de ajuste")).toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando…")
+
+    resolve([proposal()])
+    expect(await screen.findByText("Pendiente de confirmación de Psicopedagogía")).toBeInTheDocument()
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument()
+  })
+
+  it("says there are no proposals once the empty list arrives", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationProposals").mockResolvedValue([])
+    renderSection("psychopedagogue")
+    expect(await screen.findByText("No hay propuestas de ajuste.")).toBeInTheDocument()
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument()
+  })
+
+  it("shows an error, not the empty text, when the list fails to load", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationProposals").mockRejectedValue(new Error("boom"))
+    renderSection("director")
+    expect(
+      await screen.findByText("No pudimos cargar las propuestas de ajuste."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("No hay propuestas de ajuste.")).not.toBeInTheDocument()
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument()
+  })
+
+  it("keeps the previous list visible while it refetches", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationProposals")
+      .mockResolvedValueOnce([proposal()])
+      .mockReturnValueOnce(new Promise(() => {}))
+    const value: AuthContextValue = {
+      user: { id: 1, name: "Ana", email: "ana@escuela.test", roles: ["psychopedagogue"] },
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+    }
+    const section = (refreshKey: number) => (
+      <AuthContext value={value}>
+        <AccommodationProposalsSection
+          studentId={3}
+          refreshKey={refreshKey}
+          onEdit={vi.fn()}
+          onConfirmed={vi.fn()}
+        />
+      </AuthContext>
+    )
+    const { rerender } = render(section(0))
+    expect(await screen.findByText("Pendiente de confirmación de Psicopedagogía")).toBeInTheDocument()
+
+    rerender(section(1))
+
+    await vi.waitFor(() =>
+      expect(trackingApi.fetchAccommodationProposals).toHaveBeenCalledTimes(2),
+    )
+    expect(screen.getByText("Pendiente de confirmación de Psicopedagogía")).toBeInTheDocument()
+    expect(screen.queryByText("Cargando…")).not.toBeInTheDocument()
   })
 
   it("lets psychopedagogy confirm a pending proposal with «Vigente desde» and «Origen»", async () => {

@@ -127,6 +127,15 @@ function rolesLeftWhole(option: CommentScopeOption, picked: PickedPeople): Role[
   return roles.filter((role) => !hasPicks(role))
 }
 
+/** The roles of the option where the author did pick people. */
+function rolesWithPicks(option: CommentScopeOption, picked: PickedPeople): Role[] {
+  return COMMENT_SCOPE_ROLES[option].filter((role) => (picked[role] ?? []).length > 0)
+}
+
+function audienceNames(roles: Role[]): string {
+  return roles.map((role) => ROLE_AUDIENCE_NAMES[role]).join(" y ")
+}
+
 export interface CommentsPanelProps {
   comments: Comment[]
   onCreate: (input: CommentInput) => Promise<void>
@@ -327,10 +336,11 @@ export function CommentsPanel({
 
           {wholeRolesWarning && (
             <div role="alert" className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-              {/* Provisional text: product has not defined it yet (ClickUp 86e3qkwnv). */}
+              {/* Text decided by product on 24/10 (ClickUp 86e3qkwnv). */}
               <p>
-                En {wholeRolesWarning.map((role) => ROLE_AUDIENCE_NAMES[role]).join(" y ")} no elegiste a
-                nadie, así que la van a ver todos los de ese rol.
+                Elegiste personas en {audienceNames(rolesWithPicks(scope, pickedPeople))}, pero en{" "}
+                {audienceNames(wholeRolesWarning)} no: la van a ver todos los de{" "}
+                {audienceNames(wholeRolesWarning)}. ¿Querés elegir personas también ahí?
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" disabled={submitting} onClick={() => publish(true)}>

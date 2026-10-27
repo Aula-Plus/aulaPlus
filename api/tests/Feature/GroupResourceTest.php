@@ -27,6 +27,12 @@ it('serializes a group with its teachers', function () {
         'id' => $group->id,
         'name' => '3° A',
         'level' => 'Primaria',
+        'education_level' => [
+            'id' => $group->education_level_id,
+            'key' => 'primary',
+            'label' => 'Primaria',
+        ],
+        'school_grade' => null,
         'school_year' => 2026,
         'group_profile' => null,
         'related_documents' => null,

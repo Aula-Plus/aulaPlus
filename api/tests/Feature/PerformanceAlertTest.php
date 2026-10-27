@@ -1,7 +1,9 @@
 <?php
 
+use App\Enums\AlertActionKind;
 use App\Enums\AlertType;
 use App\Models\Alert;
+use App\Models\AlertAction;
 use App\Models\AlertRoutingSetting;
 use App\Models\AlertRule;
 use App\Models\Assessment;
@@ -85,7 +87,7 @@ it('generates the alert with its subject when the last N scores are all below th
         ->and($alert->student_id)->toBe($this->student->id)
         ->and($alert->recipients)->toBe(['teacher'])
         ->and($alert->condition_met_on->toDateString())->toBe(now()->subDays(10)->toDateString())
-        ->and($alert->description)->toContain('3 notas seguidas por debajo de 5')
+        ->and($alert->description)->toContain('3 calificaciones seguidas por debajo de 5')
         ->and($alert->description)->toContain('Matemática')
         ->and($alert->description)->toContain('4, 3 y 4');
 });
@@ -190,7 +192,7 @@ it('supports the period-average condition', function () {
     $this->artisan('alerts:performance')->assertSuccessful();
 
     $alert = Alert::query()->withoutGlobalScopes()->sole();
-    expect($alert->description)->toContain('promedio 5 en 3 notas');
+    expect($alert->description)->toContain('promedio 5 en 3 calificaciones');
 });
 
 it('limits a subject-specific rule to that subject', function () {
@@ -370,4 +372,46 @@ it('isolates alert settings between schools', function () {
         'condition' => 'consecutive_below', 'threshold' => 5, 'consecutive_count' => 3,
         'subject_id' => $foreignSubject->id,
     ])->assertUnprocessable()->assertJsonValidationErrors('subject_id');
+});
+
+it('rewords alerts stored before the «notas» → «calificaciones» rename, and nothing else', function () {
+    $otherSchool = School::factory()->create();
+    $otherStudent = Student::factory()->create(['school_id' => $otherSchool->id]);
+    $alert = fn (string $description, AlertType $type = AlertType::Performance, ?Student $student = null) => Alert::factory()->create([
+        'school_id' => ($student ?? $this->student)->school_id,
+        'student_id' => ($student ?? $this->student)->id,
+        'type' => $type,
+        'description' => $description,
+    ]);
+
+    $consecutive = $alert('Condición configurada por el colegio: 3 notas seguidas por debajo de 5 en la misma materia. Se cumplió en Matemática — notas: 4, 3,5 y 4.');
+    // Other school: the migration runs across every tenant.
+    $average = $alert('Condición configurada por el colegio: promedio de los últimos 30 días por debajo de 6 en una materia. Se cumplió en Inglés — promedio 4,67 en 3 notas.', student: $otherStudent);
+    $averageOne = $alert('Condición configurada por el colegio: promedio de los últimos 30 días por debajo de 6 en una materia. Se cumplió en Inglés — promedio 4 en 1 nota.');
+    // A school-written subject name in the middle is never touched.
+    $subjectName = $alert('Condición configurada por el colegio: 2 notas seguidas por debajo de 5 en la misma materia. Se cumplió en Taller — notas: musicales — notas: 3 y 2.');
+    $alreadyNew = $alert('Condición configurada por el colegio: 3 calificaciones seguidas por debajo de 5 en la misma materia. Se cumplió en Matemática — calificaciones: 4, 3 y 4.');
+    $otherType = $alert('Condición configurada por el colegio: 3 notas seguidas por debajo de 5 en la misma materia. Se cumplió en Matemática — notas: 4, 3 y 4.', AlertType::DifficultySignal);
+
+    $note = Tenancy::forSchool($this->school, fn () => AlertAction::create([
+        'alert_id' => $consecutive->id,
+        'actor_id' => $this->director->id,
+        'kind' => AlertActionKind::Note,
+        'note' => 'Revisé las notas con la familia: 3 notas seguidas por debajo de 5.',
+    ]));
+
+    $migration = require database_path('migrations/2026_10_27_000001_reword_grades_in_performance_alert_descriptions.php');
+    $migration->up();
+    $migration->up(); // idempotent
+
+    $description = fn (Alert $alert) => Alert::query()->withoutGlobalScopes()->findOrFail($alert->id)->description;
+
+    expect($description($consecutive))->toBe('Condición configurada por el colegio: 3 calificaciones seguidas por debajo de 5 en la misma materia. Se cumplió en Matemática — calificaciones: 4, 3,5 y 4.')
+        ->and($description($average))->toBe('Condición configurada por el colegio: promedio de los últimos 30 días por debajo de 6 en una materia. Se cumplió en Inglés — promedio 4,67 en 3 calificaciones.')
+        ->and($description($averageOne))->toBe('Condición configurada por el colegio: promedio de los últimos 30 días por debajo de 6 en una materia. Se cumplió en Inglés — promedio 4 en 1 calificación.')
+        ->and($description($subjectName))->toBe('Condición configurada por el colegio: 2 calificaciones seguidas por debajo de 5 en la misma materia. Se cumplió en Taller — notas: musicales — calificaciones: 3 y 2.')
+        ->and($description($alreadyNew))->toBe($alreadyNew->description)
+        ->and($description($otherType))->toBe($otherType->description)
+        ->and(AlertAction::query()->withoutGlobalScopes()->findOrFail($note->id)->note)
+        ->toBe('Revisé las notas con la familia: 3 notas seguidas por debajo de 5.');
 });

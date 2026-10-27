@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Screening\CreateScreeningTestApplication;
+use App\Actions\Screening\RecalculateScreeningTestApplication;
 use App\Http\Requests\StoreScreeningTestApplicationRequest;
 use App\Http\Resources\ScreeningTestApplicationResource;
 use App\Http\Resources\ScreeningTestResultResource;
@@ -10,6 +11,7 @@ use App\Models\Group;
 use App\Models\ScreeningTestApplication;
 use App\Models\ScreeningTestType;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -28,6 +30,7 @@ class ScreeningTestApplicationController extends Controller
         $applications = ScreeningTestApplication::query()
             ->where('group_id', $group->id)
             ->withCount('results')
+            ->with('recalculatedBy:id,name')
             ->orderByDesc('id')
             ->get();
 
@@ -50,6 +53,14 @@ class ScreeningTestApplicationController extends Controller
             'This screening has no design in force.',
         );
 
+        // Nor without a population (ClickUp 86e3t4qjh): it would apply to
+        // nobody, so «Aplicar» asks to choose one first.
+        abort_if(
+            ($type->levels ?? []) === [],
+            Response::HTTP_UNPROCESSABLE_ENTITY,
+            'This screening has no population selected.',
+        );
+
         $application = $createApplication(
             $group,
             $type,
@@ -60,6 +71,24 @@ class ScreeningTestApplicationController extends Controller
         return (new ScreeningTestApplicationResource($application->loadCount('results')))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    /**
+     * «Recalcular con el nivel actual» (ClickUp 86e3t4qjh): the explicit step
+     * that takes the group's current level, its population and the screening's
+     * current population again. Until someone uses it, an application keeps
+     * what it had when it was applied. Who and when stay on the application.
+     */
+    public function recalculate(
+        Request $request,
+        ScreeningTestApplication $application,
+        RecalculateScreeningTestApplication $recalculate,
+    ): ScreeningTestApplicationResource {
+        $this->authorize('recalculate', $application);
+
+        return new ScreeningTestApplicationResource(
+            $recalculate($application, $request->user())->loadCount('results')->load('recalculatedBy:id,name'),
+        );
     }
 
     /**

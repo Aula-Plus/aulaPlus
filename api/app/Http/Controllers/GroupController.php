@@ -23,7 +23,7 @@ class GroupController extends Controller
     {
         $groups = Group::query()
             ->visibleTo($request->user())
-            ->with('teachers')
+            ->with(['teachers', 'educationLevel', 'schoolGrade'])
             ->latest()
             ->get();
 

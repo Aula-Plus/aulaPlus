@@ -42,6 +42,9 @@ class AccommodationResource extends JsonResource
             // «Origen» (ClickUp 86e3qkwkk): this resource only ever reaches
             // psychopedagogy and direction; the teacher's chip never carries it.
             'origin' => $this->origin,
+            // Report the accommodation was approved from, when any: lets the
+            // reader open the file (ReportDocumentPolicy still decides).
+            'origin_report_id' => $this->origin_report_id,
             'is_effective' => $this->resource->isEffective(),
             // Direction proposal circuit (ClickUp 86e3qkwkk): null when
             // psychopedagogy created it directly. `review_note` is the comment
