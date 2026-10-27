@@ -1,39 +1,43 @@
 import { useAuth } from "@/features/auth/AuthContext"
-import { roleLabels } from "@/types"
+import { AlertsSection } from "@/features/alerts/AlertsSection"
 import { PageHeader } from "@/components/ui/page-header"
-import { SectionCard } from "@/components/ui/section-card"
+import { FollowUpNotices } from "@/features/tracking/FollowUpNotices"
+import { FollowUpsSectionView } from "@/features/tracking/FollowUpsSection"
+import { useFollowUpsInbox } from "@/features/tracking/useFollowUpsInbox"
+import { formatLongDate } from "@/lib/utils"
 
+/**
+ * Inicio (route `/`, documento vivo screen 01 «¿Qué tenés que hacer hoy?»;
+ * ClickUp 1dfd3mc2wwz). One screen for the three roles: the alerts that reach
+ * the user, each with its three ways out, and their pending follow-ups with
+ * their deadline. Both lists come from the same records and endpoints as
+ * «Alertas y seguimientos», so what each role sees is decided server-side and
+ * a row leaves as soon as the alert or follow-up is resolved (P01-DEC-02).
+ *
+ * Alerts and notices together, tasks apart (P01-DEC-03): the «Avisos» go in
+ * the «Alertas» block, below the alerts; «Seguimientos» is only the work with
+ * a deadline. The page owns the follow-ups/notices state so both blocks share
+ * one load, and an alert's way out (which may link a follow-up) reloads it.
+ *
+ * The greeting stays small, above what there is to do. The teacher's classes
+ * of the day wait for the planner.
+ */
 export function DashboardPage() {
   const { user } = useAuth()
+  const inbox = useFollowUpsInbox()
 
   if (!user) return null
 
   return (
-    <div className="grid gap-6">
-      <PageHeader
-        title={`Hola, ${user.name}`}
-        description={user.school?.name ?? "Sin escuela asignada"}
-      />
-
-      <SectionCard title="Tu cuenta">
-        <div className="grid gap-2 text-sm">
-          <Row label="Email" value={user.email} />
-          <Row label="Escuela" value={user.school?.name ?? "—"} />
-          <Row
-            label="Roles"
-            value={user.roles.map((role) => roleLabels[role]).join(", ") || "—"}
-          />
-        </div>
-      </SectionCard>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between border-b py-1 last:border-b-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
+    <div className="grid gap-10">
+      <div className="grid gap-1">
+        <p className="text-sm text-muted-foreground">Hola, {user.name}</p>
+        <PageHeader title="¿Qué tenés que hacer hoy?" description={formatLongDate(new Date())} />
+      </div>
+      <AlertsSection compact onAlertChanged={() => void inbox.reload()}>
+        <FollowUpNotices inbox={inbox} showError />
+      </AlertsSection>
+      <FollowUpsSectionView inbox={inbox} compact />
     </div>
   )
 }

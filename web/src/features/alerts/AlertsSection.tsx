@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useState, type ReactNode } from "react"
 import { CircleCheck } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
 import type { Alert } from "@/types"
@@ -16,8 +16,17 @@ import * as alertsApi from "./alertsApi"
  * A section, not a page: its heading is an <h2> under the page's <h1>, and it
  * is rendered before any loading/error state so the screen never shows a
  * loose «Cargando…» without saying what is loading.
+ *
+ * The Inicio (ClickUp 1dfd3mc2wwz) reuses it as is, minus the explanatory line
+ * and with its own empty message (`compact`). There the notices go with the
+ * alerts, below them (`children`; P01-DEC-03), and `onAlertChanged` lets the
+ * page refresh the follow-ups a way out may have linked.
  */
-export function AlertsSection() {
+export function AlertsSection({
+  compact = false,
+  onAlertChanged,
+  children,
+}: { compact?: boolean; onAlertChanged?: () => void; children?: ReactNode } = {}) {
   const headingId = useId()
   const [alerts, setAlerts] = useState<Alert[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +50,7 @@ export function AlertsSection() {
       .fetchMyAlerts()
       .then(setAlerts)
       .catch(() => undefined)
+    onAlertChanged?.()
   }
 
   return (
@@ -49,11 +59,19 @@ export function AlertsSection() {
         <h2 id={headingId} className="text-xl font-semibold">
           Alertas
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Una alerta no se cierra con «ya me encargué»: elegí una salida, con responsable y plazo.
-        </p>
+        {!compact && (
+          <p className="text-sm text-muted-foreground">
+            Una alerta no se cierra con «ya me encargué»: elegí una salida, con responsable y plazo.
+          </p>
+        )}
       </div>
-      <AlertsSectionBody alerts={alerts} error={error} onChange={replace} />
+      <AlertsSectionBody
+        alerts={alerts}
+        error={error}
+        onChange={replace}
+        emptyMessage={compact ? "No tenés alertas pendientes." : "No tenés alertas abiertas."}
+      />
+      {children}
     </section>
   )
 }
@@ -82,14 +100,16 @@ function AlertsSectionBody({
   alerts,
   error,
   onChange,
+  emptyMessage,
 }: {
   alerts: Alert[] | null
   error: string | null
   onChange: (updated: Alert) => void
+  emptyMessage: string
 }) {
   if (error) return <p className="text-sm text-destructive">{error}</p>
   if (!alerts) return <p className="text-muted-foreground">Cargando…</p>
-  if (alerts.length === 0) return <EmptyState icon={CircleCheck} message="No tenés alertas abiertas." />
+  if (alerts.length === 0) return <EmptyState icon={CircleCheck} message={emptyMessage} />
 
   // Grouped as in screen 11 (decision of 21/10, option A: each one reads their
   // own situation). An alert the viewer already has — a way out chosen and

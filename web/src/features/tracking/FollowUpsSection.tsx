@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react"
+import { useId, useState } from "react"
 import { Link } from "react-router-dom"
 import { CalendarClock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -6,12 +6,11 @@ import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
-import type { AppNotification, ScheduledFollowUp } from "@/types"
-import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
-import { refreshUnreadNoticeCount } from "./unreadNotices"
 import { FollowUpDetailDialog } from "./FollowUpDetailDialog"
+import { FollowUpNotices } from "./FollowUpNotices"
 import { responsiblesLine } from "./followUpDetailUtils"
 import { followUpTitle } from "./followUpTitle"
+import { useFollowUpsInbox, type FollowUpsInbox } from "./useFollowUpsInbox"
 
 /**
  * The «Mis seguimientos» section of «Alertas y seguimientos» (`/alertas`): the
@@ -30,126 +29,40 @@ import { followUpTitle } from "./followUpTitle"
  *
  * "Ver detalle" opens FollowUpDetailDialog to manage the follow-up right here
  * (stages, notes, people, withdrawing, resolving).
+ *
+ * The Inicio (ClickUp 1dfd3mc2wwz) renders FollowUpsSectionView `compact` over
+ * an inbox it shares with the alerts block.
  */
 export function FollowUpsSection() {
+  const inbox = useFollowUpsInbox()
+  return <FollowUpsSectionView inbox={inbox} />
+}
+
+/**
+ * The section over an inbox its page owns. `compact` (Inicio): titled
+ * «Seguimientos», without the explanatory line and without the notices — the
+ * Inicio shows those with the alerts (P01-DEC-03).
+ */
+export function FollowUpsSectionView({ inbox, compact = false }: { inbox: FollowUpsInbox; compact?: boolean }) {
   const headingId = useId()
-  const [followUps, setFollowUps] = useState<ScheduledFollowUp[] | null>(null)
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const [error, setError] = useState<string | null>(null)
-  // A failed load is not an empty list: the error says so, and «Pendientes»
-  // is not rendered rather than claiming there are none.
-  const [loadFailed, setLoadFailed] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
-
-  const load = useCallback(async () => {
-    try {
-      const [mine, notices] = await Promise.all([
-        scheduledFollowUpsApi.fetchMyFollowUps(),
-        scheduledFollowUpsApi.fetchNotifications(),
-      ])
-      setFollowUps(mine)
-      setNotifications(notices)
-    } catch {
-      setError("No pudimos cargar tus seguimientos.")
-      setLoadFailed(true)
-    }
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  async function dismiss(id: string) {
-    try {
-      await scheduledFollowUpsApi.markNotificationRead(id)
-      setNotifications((prev) => prev.filter((notice) => notice.id !== id))
-    } catch {
-      setError("No pudimos marcar el aviso como leído.")
-    }
-    // Re-sync the sidebar count with the server (it disappears at 0).
-    void refreshUnreadNoticeCount()
-  }
-
-  // Notices carry ids only; the student's name comes from the pending list.
-  const studentNameByFollowUp = new Map(
-    (followUps ?? []).map((followUp) => [followUp.id, followUp.student?.full_name]),
-  )
+  const { followUps, loadFailed, reload } = inbox
+  const error = inbox.loadError ?? (compact ? null : inbox.noticeError)
 
   return (
     <section aria-labelledby={headingId} className="grid gap-6">
       <div>
         <h2 id={headingId} className="text-xl font-semibold">
-          Mis seguimientos
+          {compact ? "Seguimientos" : "Mis seguimientos"}
         </h2>
-        <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
+        {!compact && (
+          <p className="text-sm text-muted-foreground">Los seguimientos que tenés a cargo o que te compartieron.</p>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {notifications.length > 0 && (
-        <SectionCard title="Avisos" headingLevel={3}>
-          <ul className="grid gap-2">
-            {notifications.map((notice) => (
-              <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                {notice.data.type === "comment_shared" ? (
-                  <span>
-                    Psicopedagogía te compartió un extracto
-                    {notice.data.student_name ? ` sobre ${notice.data.student_name}` : ""}.{" "}
-                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                      Ver ficha del alumno
-                    </Link>
-                  </span>
-                ) : notice.data.type === "alert_overdue" ? (
-                  <span>
-                    Una alerta que tenés llegó a su fecha sin salida (plazo al{" "}
-                    {formatShortDate(notice.data.due_date)}).{" "}
-                    <Link className="underline" to="/alertas">
-                      Ver alertas
-                    </Link>
-                  </span>
-                ) : notice.data.type === "accommodation_proposal_returned" ? (
-                  <span>
-                    Psicopedagogía te devolvió una propuesta de ajuste para corregir.{" "}
-                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                      Ver ficha del alumno
-                    </Link>
-                  </span>
-                ) : notice.data.type === "follow_up_assigned" ? (
-                  <span>
-                    Te asignaron un seguimiento
-                    {studentNameByFollowUp.get(notice.data.follow_up_id)
-                      ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
-                      : ""}{" "}
-                    con fecha {formatShortDate(notice.data.due_date)}.{" "}
-                    <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                      Ver ficha del alumno
-                    </Link>
-                  </span>
-                ) : (
-                  <span>
-                    {notice.data.type === "screening_design_changed"
-                      ? "Cambiaron las franjas"
-                      : "Dirección volvió atrás tu cambio en las franjas"}
-                    {notice.data.screening_test_type_name
-                      ? ` del screening «${notice.data.screening_test_type_name}»`
-                      : " de un screening"}
-                    .{" "}
-                    <Link
-                      className="underline"
-                      to={`/pruebas-de-sondeo/tipos?abrir=${notice.data.screening_test_type_id}`}
-                    >
-                      Ver diseño
-                    </Link>
-                  </span>
-                )}
-                <Button type="button" size="sm" variant="outline" onClick={() => dismiss(notice.id)}>
-                  Entendido
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-      )}
+      {!compact && <FollowUpNotices inbox={inbox} />}
 
       {!loadFailed && (
         <SectionCard title="Pendientes" headingLevel={3}>
@@ -190,7 +103,7 @@ export function FollowUpsSection() {
       )}
 
       {/* Reload the list on every change: a resolved/hidden follow-up leaves it. */}
-      <FollowUpDetailDialog followUpId={openId} onClose={() => setOpenId(null)} onChanged={() => load()} />
+      <FollowUpDetailDialog followUpId={openId} onClose={() => setOpenId(null)} onChanged={() => reload()} />
     </section>
   )
 }

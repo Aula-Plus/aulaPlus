@@ -34,3 +34,20 @@ export function formatDateTime(iso: string | null | undefined): string {
         minute: "2-digit",
       })
 }
+
+/**
+ * A day written out as on screen 01, e.g. «Viernes 20 de noviembre de 2026»:
+ * weekday capitalised, «de» between the parts, no comma. Built from the parts
+ * so it does not depend on how each ICU version punctuates the long format.
+ */
+export function formatLongDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("es-UY", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ""
+  const weekday = part("weekday")
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${part("day")} de ${part("month")} de ${part("year")}`
+}
