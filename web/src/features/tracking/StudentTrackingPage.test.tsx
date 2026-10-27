@@ -9,6 +9,7 @@ import * as trackingApi from "./trackingApi"
 import * as scheduledFollowUpsApi from "./scheduledFollowUpsApi"
 import * as performanceApi from "./performanceApi"
 import * as subjectsApi from "@/features/subjects/subjectsApi"
+import * as reportFiles from "@/features/reports/openReportFile"
 import type { Accommodation, Role, StudentTracking } from "@/types"
 
 function baseTracking(): StudentTracking {
@@ -987,5 +988,30 @@ describe("StudentTrackingPage", () => {
     expect(await screen.findByRole("button", { name: /escrita · /i })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /oral · /i })).not.toBeInTheDocument()
     expect(screen.getAllByRole("button", { name: / · / })).toHaveLength(1)
+  })
+
+  it("opens the report an accommodation came from, keeping the profile on screen if it fails", async () => {
+    const tracking = baseTracking()
+    tracking.accommodations = [
+      pendingAccommodation({ is_effective: true, origin: "Informe cargado el 24/10/2026", origin_report_id: 12 }),
+      pendingAccommodation({ id: 78, type: "Pausas", is_effective: true, origin: "Entrevista" }),
+    ]
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(tracking)
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    const open = vi.spyOn(reportFiles, "openReportFile").mockImplementation((_id, onError) => onError("No pudimos abrir el archivo."))
+
+    renderPage("director")
+    await openTab("Ajustes")
+
+    expect(await screen.findByText(/Origen: Informe cargado el 24\/10\/2026/)).toBeInTheDocument()
+    // Only the report-born one links to a file.
+    const buttons = screen.getAllByRole("button", { name: "Abrir archivo" })
+    expect(buttons).toHaveLength(1)
+    await userEvent.click(buttons[0])
+
+    expect(open).toHaveBeenCalledWith(12, expect.any(Function))
+    expect(await screen.findByRole("alert")).toHaveTextContent("No pudimos abrir el archivo.")
+    // The profile stays on screen (a load error would replace it).
+    expect(screen.getByRole("tab", { name: "Ajustes" })).toBeInTheDocument()
   })
 })

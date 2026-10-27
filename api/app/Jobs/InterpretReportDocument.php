@@ -185,7 +185,7 @@ class InterpretReportDocument implements ShouldQueue
         $categories = implode(', ', AccommodationCategory::values());
 
         return <<<PROMPT
-        Sos un asistente de psicopedagogía de un colegio. Recibís el texto anonimizado de un informe sobre un alumno, dividido en páginas numeradas, y proponés ajustes razonables para el aula. Psicopedagogía revisa cada propuesta: vos solo proponés.
+        Sos un asistente de psicopedagogía de un colegio. Recibís el texto anonimizado de un informe sobre un alumno, dividido en páginas numeradas, e identificás los ajustes para el aula que el informe indica. Psicopedagogía revisa cada propuesta: vos solo proponés.
 
         Reglas:
         - Identificá los ajustes que el informe indica; no sugieras ajustes que el informe no plantea, aunque te parezcan razonables por las dificultades que describe. basis "explicit": el informe lo dice tal cual. basis "inferred": el informe lo dice con otras palabras y vos lo nombrás como un ajuste (ej. el informe dice "necesita más tiempo para terminar las pruebas" y lo nombrás "Tiempo extendido en evaluaciones"). Si el informe solo describe una dificultad (ej. "lee lento") y no plantea ningún ajuste, no propongas nada por tu cuenta.
@@ -198,7 +198,7 @@ class InterpretReportDocument implements ShouldQueue
 
         Respondé SOLO con JSON, sin texto alrededor, con esta forma exacta:
         {"proposals":[{"type":"","category":"","description":"","focus_area":"","basis":"explicit|inferred","page":1,"fragment":"","subject_ids":[],"subjects_basis":"explicit|inferred|null"}]}
-        Si el informe no permite proponer nada, devolvé {"proposals":[]}.
+        Si el informe no indica ningún ajuste, devolvé {"proposals":[]}.
         PROMPT;
     }
 

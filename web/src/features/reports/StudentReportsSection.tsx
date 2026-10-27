@@ -16,6 +16,7 @@ import {
   type ReportVisibility,
 } from "@/types"
 import { ReportReviewPanel } from "./ReportReviewPanel"
+import { openReportFile } from "./openReportFile"
 import * as reportsApi from "./reportsApi"
 
 const statusTone: Record<ReportStatus, BadgeTone> = {
@@ -93,23 +94,7 @@ export function StudentReportsSection({
 
   function open(report: ReportDocument) {
     setError(null)
-    // Open the tab synchronously, inside the click: Safari/iOS block a
-    // window.open that only happens after an await. Point it at the
-    // short-lived URL once it arrives (same as SubjectSyllabus).
-    const tab = window.open("", "_blank")
-    // noopener semantics: the file's tab can't reach back into the app.
-    if (tab) tab.opener = null
-
-    reportsApi
-      .fetchReportDownloadUrl(report.id)
-      .then((url) => {
-        if (tab) tab.location.href = url
-        else setError("Tu navegador bloqueó la pestaña nueva. Permití las ventanas emergentes y volvé a intentar.")
-      })
-      .catch(() => {
-        tab?.close()
-        setError("No pudimos abrir el archivo.")
-      })
+    openReportFile(report.id, setError)
   }
 
   // The review panel polls the report; keep the badge of the list in step.
@@ -229,6 +214,7 @@ export function StudentReportsSection({
                       className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
                       value={report.visibility}
                       onChange={(event) => changeVisibility(report, event.target.value as ReportVisibility)}
+                      aria-describedby={report.visibility === "teachers" ? `visibility-warning-${report.id}` : undefined}
                     >
                       {(Object.keys(reportVisibilityLabels) as ReportVisibility[]).map((visibility) => (
                         <option key={visibility} value={visibility}>
@@ -237,7 +223,9 @@ export function StudentReportsSection({
                       ))}
                     </select>
                     {report.visibility === "teachers" && (
-                      <span className="text-muted-foreground">{reportTeachersVisibilityWarning}</span>
+                      <span id={`visibility-warning-${report.id}`} className="text-muted-foreground">
+                        {reportTeachersVisibilityWarning}
+                      </span>
                     )}
                   </div>
                 ) : (
