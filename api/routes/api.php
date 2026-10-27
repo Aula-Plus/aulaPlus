@@ -19,11 +19,13 @@ use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\EducationLevelController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupController;
+use App\Http\Controllers\GroupLevelController;
 use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
@@ -136,6 +138,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('throttle:5,1');
         Route::post('/reports/{report}/proposals', [AccommodationProposalController::class, 'store']);
         Route::post('/accommodation-proposals/{proposal}/review', [AccommodationProposalController::class, 'review']);
+        Route::get('/education-levels', [EducationLevelController::class, 'index']);
+        Route::put('/groups/{group}/level', [GroupLevelController::class, 'update']);
+        Route::get('/group-level-setting', [GroupLevelController::class, 'showSetting']);
+        Route::put('/group-level-setting', [GroupLevelController::class, 'updateSetting']);
         Route::get('/ai-report-setting', [AiReportSettingsController::class, 'show']);
         Route::put('/ai-report-setting', [AiReportSettingsController::class, 'update']);
         Route::get('/groups/{group}/tracking', [GroupTrackingController::class, 'show']);
@@ -264,6 +270,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         Route::get('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'index']);
         Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store']);
+        Route::post('/screening-test-applications/{application}/recalculate', [ScreeningTestApplicationController::class, 'recalculate']);
         Route::get('/screening-test-applications/{application}/roster', [ScreeningTestApplicationController::class, 'roster']);
         Route::get('/screening-test-applications/{application}/results', [ScreeningTestApplicationController::class, 'results']);
 

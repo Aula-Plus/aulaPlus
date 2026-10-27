@@ -74,6 +74,6 @@ describe("GradesVisibilityPage", () => {
 
   it("is not offered to teachers", () => {
     renderPage("teacher")
-    expect(screen.getByText(/solo para dirección/i)).toBeInTheDocument()
+    expect(screen.getByText(/solo para Dirección\./)).toBeInTheDocument()
   })
 })

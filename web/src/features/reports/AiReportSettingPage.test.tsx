@@ -3,21 +3,21 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
 import type { Role, User } from "@/types"
-import { AiReportSettingPage } from "./AiReportSettingPage"
+import { AiReportSettingPanel } from "./AiReportSettingPage"
 import * as reportsApi from "./reportsApi"
 
 function renderPage(role: Role) {
   const user = { id: 1, name: "U", email: "u@x.uy", school_id: 1, roles: [role] } as unknown as User
   return render(
     <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout: vi.fn() } as never}>
-      <AiReportSettingPage />
+      <AiReportSettingPanel />
     </AuthContext.Provider>,
   )
 }
 
 afterEach(() => vi.restoreAllMocks())
 
-describe("AiReportSettingPage", () => {
+describe("AiReportSettingPanel", () => {
   it("lets direction switch the AI on and explains what happens to the data", async () => {
     vi.spyOn(reportsApi, "fetchAiReportSetting").mockResolvedValue({ enabled: false, available: true })
     const update = vi
@@ -45,6 +45,6 @@ describe("AiReportSettingPage", () => {
   it("is for direction only", () => {
     renderPage("teacher")
 
-    expect(screen.getByText("Esta sección es solo para dirección.")).toBeInTheDocument()
+    expect(screen.getByText("Esta sección es solo para Dirección.")).toBeInTheDocument()
   })
 })

@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { roleLabels, userStatusLabels, type ManagedUser } from "@/types"
+import { UsersTabs } from "./UsersTabs"
 import type { UserFormOutletContext } from "./UserFormPage"
 import * as usersApi from "./usersApi"
 
@@ -30,8 +31,8 @@ const statusTone: Record<ManagedUser["status"], BadgeTone> = {
 }
 
 /**
- * Surfaces a server-provided guardrail message (e.g. "no podés desactivar al
- * único director activo") for 422s, falling back to a generic message for
+ * Surfaces a server-provided guardrail message (e.g. "no podés desactivar a la
+ * única persona activa de Dirección") for 422s, falling back to a generic message for
  * anything else — mirrors the pattern in `LoginPage`/`UserFormPage`.
  */
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -102,13 +103,15 @@ export function UsersListPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Usuarios">
+      <PageHeader title="Usuarios y permisos">
         {canManage && (
           <Button asChild>
             <Link to="/usuarios/nueva">Invitar usuario</Link>
           </Button>
         )}
       </PageHeader>
+
+      <UsersTabs />
 
       <form
         onSubmit={(event) => {

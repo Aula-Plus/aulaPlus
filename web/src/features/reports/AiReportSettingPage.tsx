@@ -2,17 +2,17 @@ import { useEffect, useState } from "react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageAiReportSetting } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
-import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
 import type { AiReportSetting } from "@/types"
 import * as reportsApi from "./reportsApi"
 
 /**
- * School-wide switch, route `/ajustes/informes-ia`: whether the AI may read
- * student reports to propose adjustments (ClickUp 86e3jujgx). Director-only
- * (UX gate; the server enforces it). Off by default.
+ * School-wide switch for the AI reading of student reports (ClickUp
+ * 86e3jujgx). Lives in «Usuarios y permisos › Límites» (`/usuarios/limites`);
+ * the old `/ajustes/informes-ia` address redirects there. Director-only (UX
+ * gate; the server enforces it). Off by default.
  */
-export function AiReportSettingPage() {
+export function AiReportSettingPanel() {
   const { user } = useAuth()
   const canManage = canManageAiReportSetting(user)
   const [setting, setSetting] = useState<AiReportSetting | null>(null)
@@ -40,15 +40,15 @@ export function AiReportSettingPage() {
   }
 
   if (!canManage) {
-    return <p className="text-muted-foreground">Esta sección es solo para dirección.</p>
+    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
   }
 
   return (
     <div className="grid gap-6">
-      <PageHeader
-        title="IA en los informes"
-        description="Decidí si Aula+ puede usar IA para proponer ajustes a partir de los informes de los alumnos."
-      />
+      <p className="text-sm text-muted-foreground">
+        Decidí si Aula+ puede usar IA para identificar automáticamente los ajustes que indica el informe de cada
+        alumno.
+      </p>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

@@ -41,7 +41,9 @@ class BuildProposalContext
         return [
             'group' => [
                 'name' => $group->name,
-                'level' => $group->level,
+                // The level chosen from the list when there is one; the old
+                // free text otherwise (groups still "Sin nivel").
+                'level' => $group->educationLevel?->label ?? $group->level,
                 'school_year' => $group->school_year,
                 'profile' => $group->group_profile,
             ],

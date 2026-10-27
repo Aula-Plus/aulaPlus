@@ -3,8 +3,8 @@ export type Role = "teacher" | "director" | "psychopedagogue"
 /** User-facing Spanish labels for roles (the app UI is in Spanish). */
 export const roleLabels: Record<Role, string> = {
   teacher: "Docente",
-  director: "Director",
-  psychopedagogue: "Psicopedagogo",
+  director: "Dirección",
+  psychopedagogue: "Psicopedagogía",
 }
 
 export type UserStatus = "pending" | "active" | "disabled"
@@ -38,10 +38,40 @@ export interface User {
   school?: School
 }
 
+/** A level or grade from the fixed list: `key` is stable, `label` is only shown. */
+export interface LevelRef {
+  id: number
+  key: string
+  label: string
+}
+
+/** `GET /api/v1/education-levels`: each level with the grades it suggests. */
+export interface EducationLevelOption extends LevelRef {
+  grades: LevelRef[]
+}
+
+export interface EducationLevels {
+  data: EducationLevelOption[]
+  /** How many of the viewer's groups still have no level. */
+  groups_without_level: number
+}
+
+/** `GET /api/v1/group-level-setting`. */
+export interface GroupLevelSetting {
+  psychopedagogue_can_set_group_level: boolean
+  /** Whether the viewer may choose a group's level (direction, or delegated psychopedagogy). */
+  can_set_level: boolean
+}
+
 export interface Group {
   id: number
   name: string
+  /** Old free text, kept as it was. The level that counts is `education_level`. */
   level: string | null
+  /** Chosen from the fixed list; `null` = "Sin nivel" (groups created before levels existed). */
+  education_level: LevelRef | null
+  /** Optional grade; only suggests a level, never forces it. */
+  school_grade: LevelRef | null
   school_year: number
   group_profile: unknown | null
   related_documents: unknown | null
@@ -653,6 +683,8 @@ export interface Accommodation extends AccommodationScope {
    * full record (psychopedagogy and direction) carries it; never a teacher.
    */
   origin: string | null
+  /** Report the accommodation was approved from, when any (opens the file). */
+  origin_report_id: number | null
   is_effective: boolean
   /**
    * Direction proposal circuit (ClickUp 86e3qkwkk): `null` when psychopedagogy
@@ -792,7 +824,8 @@ export interface GroupTrackingStudent {
   id: number
   full_name: string
   open_alerts_count: number
-  has_active_accommodations: boolean
+  /** Psychopedagogue/director only: omitted for a teacher (it would be a roster). */
+  has_active_accommodations?: boolean
 }
 
 /** Aggregated per-group tracking view (`GET /api/v1/groups/{id}/tracking`). */
@@ -801,7 +834,6 @@ export interface GroupTracking {
   students: GroupTrackingStudent[]
   trend: {
     period_days: number
-    assessments_count: number
     /**
      * Omitted entirely (not `0`, not `null`) for a viewer without a school-wide
      * role — the backend drops the key via `$this->when(...)`
@@ -1410,6 +1442,8 @@ export interface ScreeningImpactBand {
 /** `POST /screening-test-types/{type}/impact`. */
 export interface ScreeningImpact {
   students: number
+  /** Groups of the school without a level: they count in no screening's impact view. */
+  groups_without_level: number
   current: ScreeningImpactBand[] | null
   proposed: ScreeningImpactBand[]
 }
@@ -1427,6 +1461,14 @@ export interface ScreeningTestApplication {
   applied_by_id: number | null
   application_date: string | null
   results_count?: number
+  /**
+   * Whether it counts in its screening's impact view, from the level and
+   * population stored when it was applied (or last recalculated).
+   */
+  counts_in_impact?: boolean
+  /** Last «Recalcular con el nivel actual»: when and by whom (null if never). */
+  recalculated_at?: string | null
+  recalculated_by_name?: string | null
   created_at?: string | null
   updated_at?: string | null
 }

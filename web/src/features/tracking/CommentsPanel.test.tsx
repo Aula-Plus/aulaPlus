@@ -63,7 +63,7 @@ describe("CommentsPanel", () => {
 
     expect(screen.getByText("Avanzó mucho este mes.")).toBeInTheDocument()
     expect(screen.getByText("Académico")).toBeInTheDocument()
-    expect(screen.getByText(/visible para: psicopedagogo, director/i)).toBeInTheDocument()
+    expect(screen.getByText(/visible para: psicopedagogía, dirección/i)).toBeInTheDocument()
     // A non-private comment shows no "Privado" badge.
     expect(screen.queryByText("Privado")).not.toBeInTheDocument()
   })
@@ -264,7 +264,7 @@ describe("CommentsPanel observations bank", () => {
 
     expect(screen.getByText("Vos")).toBeInTheDocument()
     expect(screen.getByText("Lucía")).toBeInTheDocument()
-    expect(screen.getByText(/^·\s*Psicopedagogo$/)).toBeInTheDocument()
+    expect(screen.getByText(/^·\s*Psicopedagogía$/)).toBeInTheDocument()
   })
 
   it("filters by author", async () => {
@@ -272,7 +272,7 @@ describe("CommentsPanel observations bank", () => {
       <CommentsPanel comments={[mine, other]} onCreate={vi.fn()} canComment={false} showAuthors currentUserId={7} />,
     )
 
-    await choose(/filtrar por autor/i, "Lucía · Psicopedagogo")
+    await choose(/filtrar por autor/i, "Lucía · Psicopedagogía")
 
     expect(screen.getByText("Trabaja mejor en grupo.")).toBeInTheDocument()
     expect(screen.queryByText("Avanzó mucho este mes.")).not.toBeInTheDocument()
@@ -300,9 +300,9 @@ describe("CommentsPanel observations bank", () => {
     await userEvent.click(screen.getByLabelText(/filtrar por autor/i))
     expect(await screen.findByRole("button", { name: "Vos" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /mariana/i })).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Lucía · Psicopedagogo" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Lucía · Psicopedagogía" })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: "Lucía · Director" }))
+    await userEvent.click(screen.getByRole("button", { name: "Lucía · Dirección" }))
 
     expect(screen.getByText("Mejoró la convivencia.")).toBeInTheDocument()
     expect(screen.queryByText("Trabaja mejor en grupo.")).not.toBeInTheDocument()
@@ -379,7 +379,7 @@ describe("CommentsPanel observations bank", () => {
     // Psicopedagogía, with nobody picked, still sees it in full: warn first.
     expect(onCreate).not.toHaveBeenCalled()
     expect(screen.getByRole("alert")).toHaveTextContent(
-      /en psicopedagogía no elegiste a nadie, así que la van a ver todos los de ese rol/i,
+      "Elegiste personas en Dirección, pero en Psicopedagogía no: la van a ver todos los de Psicopedagogía. ¿Querés elegir personas también ahí?",
     )
     await userEvent.click(screen.getByRole("button", { name: /publicar igual/i }))
 
@@ -388,6 +388,33 @@ describe("CommentsPanel observations bank", () => {
       visible_to: ["director", "psychopedagogue"],
       visible_to_users: { director: [4] },
     })
+  })
+
+  it("names the roles the other way round when only psychopedagogy has people picked", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <CommentsPanel
+        comments={[]}
+        onCreate={onCreate}
+        currentUserId={1}
+        scopeCandidates={[
+          { id: 4, name: "Dora Directora", role: "director" },
+          { id: 6, name: "Paula Psico", role: "psychopedagogue" },
+        ]}
+      />,
+    )
+
+    await chooseScope("Dirección y Psicopedagogía")
+    await userEvent.click(screen.getByRole("button", { name: /elegir personas/i }))
+    const picker = screen.getByRole("group", { name: /elegir personas/i })
+    await userEvent.click(within(picker).getByRole("checkbox", { name: /paula psico/i }))
+    await userEvent.type(screen.getByLabelText(/nuevo comentario/i), "Para Paula")
+    await userEvent.click(screen.getByRole("button", { name: /comentar/i }))
+
+    expect(onCreate).not.toHaveBeenCalled()
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Elegiste personas en Psicopedagogía, pero en Dirección no: la van a ver todos los de Dirección. ¿Querés elegir personas también ahí?",
+    )
   })
 
   it("lets the author go back and pick people in the role left whole before publishing", async () => {

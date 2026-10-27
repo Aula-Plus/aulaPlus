@@ -96,6 +96,8 @@ describe("StudentFormPage", () => {
         school_year: currentYear,
         group_profile: null,
         related_documents: null,
+        education_level: null,
+        school_grade: null,
         teachers: [],
       },
       {
@@ -105,6 +107,8 @@ describe("StudentFormPage", () => {
         school_year: currentYear - 1,
         group_profile: null,
         related_documents: null,
+        education_level: null,
+        school_grade: null,
         teachers: [],
       },
     ])
@@ -191,6 +195,8 @@ describe("StudentFormPage", () => {
           school_year: currentYear,
           group_profile: null,
           related_documents: null,
+          education_level: null,
+          school_grade: null,
           teachers: [],
         },
       ])

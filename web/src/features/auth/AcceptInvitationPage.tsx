@@ -92,7 +92,7 @@ export function AcceptInvitationPage() {
             <CardHeader>
               <CardTitle className="text-2xl">Invitación no válida</CardTitle>
               <CardDescription>
-                Este enlace ya fue usado o venció. Pedile al director que te reenvíe la invitación.
+                Este enlace ya fue usado o venció. Pedile a Dirección que te reenvíe la invitación.
               </CardDescription>
             </CardHeader>
             <CardContent>

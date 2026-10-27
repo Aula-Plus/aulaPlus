@@ -14,17 +14,17 @@ const OPTIONS: { mode: GradesVisibilityMode; label: string; help: string }[] = [
   {
     mode: "own_subject",
     label: "Solo su materia",
-    help: "Cada docente ve las notas de las materias que dicta. Es la opción por defecto.",
+    help: "Cada docente ve las calificaciones de las materias que dicta. Es la opción por defecto.",
   },
   {
     mode: "all_live",
     label: "Todas las materias, en vivo",
-    help: "El docente ve las notas de todas las materias apenas se cargan.",
+    help: "El docente ve las calificaciones de todas las materias apenas se cargan.",
   },
   {
     mode: "all_periodic",
     label: "Todas las materias, con corte periódico",
-    help: "De otras materias se ven las notas cargadas hasta el último corte (las correcciones posteriores de esas notas se reflejan). Las de su materia siempre están al día.",
+    help: "De otras materias se ven las calificaciones cargadas hasta el último corte (las correcciones posteriores de esas calificaciones se reflejan). Las de su materia siempre están al día.",
   },
 ]
 
@@ -36,7 +36,8 @@ function localToday(): string {
 }
 
 /**
- * School-wide setting, route `/ajustes/notas`: how much of the grades in other
+ * School-wide setting, route `/ajustes/calificaciones` (the old
+ * `/ajustes/notas` redirects here): how much of the grades in other
  * subjects a teacher sees. Director-only (UX gate; the server enforces it).
  */
 export function GradesVisibilityPage() {
@@ -83,19 +84,19 @@ export function GradesVisibilityPage() {
   }
 
   if (!canManage) {
-    return <p className="text-muted-foreground">Esta sección es solo para dirección.</p>
+    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
   }
 
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Visibilidad de notas"
-        description="Elegí qué ve un docente de las notas de las materias que no dicta. Psicopedagogía y dirección ven todas las notas siempre."
+        title="Visibilidad de calificaciones"
+        description="Elegí qué ve un docente de las calificaciones de las materias que no dicta. Psicopedagogía y Dirección ven todas las calificaciones siempre."
       />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <SectionCard title="Para todo el colegio">
         <fieldset className="grid gap-3">
-          <legend className="sr-only">Visibilidad de notas para docentes</legend>
+          <legend className="sr-only">Visibilidad de calificaciones para docentes</legend>
           {OPTIONS.map((option) => (
             <label key={option.mode} className="flex items-start gap-3 rounded-md border p-3 text-sm">
               <input

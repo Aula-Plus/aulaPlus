@@ -168,7 +168,7 @@ it('falls back to whatever part of the screen is known', function (?string $path
 
     $mail = (new SupportMessageNotification($message, $name))->toMail(new AnonymousNotifiable);
 
-    expect(supportMailLines($mail))->toContain("Desde: {$expected} — Director — Ivy Thomas");
+    expect(supportMailLines($mail))->toContain("Desde: {$expected} — Dirección — Ivy Thomas");
 })->with([
     'path only' => ['/alumnos/3', null, '/alumnos/3'],
     'empty name' => ['/alumnos/3', '', '/alumnos/3'],

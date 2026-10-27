@@ -142,7 +142,7 @@ export function CommentSettingsPage() {
       <SectionCard title="Marca de tendencia">
         <form onSubmit={saveThreshold} className="grid gap-3">
           <p className="text-sm text-muted-foreground">
-            Psicopedagogía y dirección ven una marca en la ficha del alumno cuando junta esta
+            Psicopedagogía y Dirección ven una marca en la ficha del alumno cuando junta esta
             cantidad de comentarios de una misma categoría en ese plazo. Es una marca para mirar,
             no una alerta.
           </p>

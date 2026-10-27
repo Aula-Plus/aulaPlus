@@ -55,6 +55,25 @@ class GroupPolicy
             && $user->hasRole(Role::Director->value);
     }
 
+    /**
+     * Choose or change a group's level (ClickUp 86e3t4qjh): direction, and
+     * psychopedagogy only when direction has handed it that power for the
+     * school (`schools.psychopedagogue_can_set_group_level`).
+     */
+    public function setLevel(User $user, Group $group): bool
+    {
+        if (! $this->sharesSchool($user, $group)) {
+            return false;
+        }
+
+        if ($user->hasRole(Role::Director->value)) {
+            return true;
+        }
+
+        return $user->hasRole(Role::Psychopedagogue->value)
+            && (bool) $user->school?->psychopedagogue_can_set_group_level;
+    }
+
     protected function sharesSchool(User $user, Group $group): bool
     {
         return $user->school_id === $group->school_id;

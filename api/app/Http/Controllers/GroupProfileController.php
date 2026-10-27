@@ -33,8 +33,10 @@ class GroupProfileController extends Controller
      * GET /api/v1/groups/{group}/accommodations-summary — active accommodations
      * of the group's students, aggregated by `type` (§1).
      *
-     * No extra clinical gating: it never names a student, so it exposes nothing
-     * a teacher who can already see the group shouldn't see. Grouped by the
+     * Counted per viewer: a teacher only gets the general accommodations and
+     * those of the subjects they teach (Accommodation::scopeVisibleTo, as in the
+     * student file and the student list of GET /groups/{group}/tracking);
+     * psychopedagogy and direction get the whole group. Grouped by the
      * free-text `type` (not `category`: two accommodations may share a category
      * yet be different concrete adjustments); `student_count` counts DISTINCT
      * students, not rows, and only effective accommodations are counted.
@@ -43,9 +45,7 @@ class GroupProfileController extends Controller
     {
         $this->authorize('view', $group);
 
-        $summary = $summarize($group);
-
-        return response()->json($summary);
+        return response()->json($summarize($group, request()->user()));
     }
 
     /**

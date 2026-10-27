@@ -102,7 +102,7 @@ class UserController extends Controller
 
         if ($this->isLastActiveDirector($user)) {
             throw ValidationException::withMessages([
-                'user' => 'No podés desactivar al único director activo de la escuela.',
+                'user' => 'No podés desactivar a la única persona activa de Dirección de la escuela.',
             ]);
         }
 
