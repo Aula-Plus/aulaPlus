@@ -275,6 +275,18 @@ describe("StudentTrackingPage", () => {
     expect(screen.queryByRole("button", { name: /resolver/i })).not.toBeInTheDocument()
   })
 
+  it("never shows nor requests «Propuestas de ajuste» for a teacher", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    await screen.findByText("Perfil del alumno — Juan Pérez")
+    expect(screen.queryByText("Propuestas de ajuste")).not.toBeInTheDocument()
+    expect(trackingApi.fetchAccommodationProposals).not.toHaveBeenCalled()
+  })
+
   it("does not show the change-history links to a teacher", async () => {
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])

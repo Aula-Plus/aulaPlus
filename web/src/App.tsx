@@ -4,6 +4,7 @@ import { ProtectedLayout } from "@/components/ProtectedLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { AcceptInvitationPage } from "@/features/auth/AcceptInvitationPage"
 import { DashboardPage } from "@/pages/DashboardPage"
+import { NotFoundPage } from "@/pages/NotFoundPage"
 import { GroupsListPage } from "@/features/groups/GroupsListPage"
 import { GroupFormPage } from "@/features/groups/GroupFormPage"
 import { StudentsListPage } from "@/features/students/StudentsListPage"
@@ -188,7 +189,14 @@ function App() {
               </ProtectedLayout>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="*"
+            element={
+              <ProtectedLayout>
+                <NotFoundPage />
+              </ProtectedLayout>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
