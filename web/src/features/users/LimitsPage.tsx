@@ -13,7 +13,7 @@ export function LimitsPage() {
   const { user } = useAuth()
 
   if (!canManageAiReportSetting(user)) {
-    return <p className="text-muted-foreground">Esta sección es solo para dirección.</p>
+    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
   }
 
   return (

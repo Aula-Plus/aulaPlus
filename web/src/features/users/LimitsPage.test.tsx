@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react"
-import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom"
+import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
 import * as reportsApi from "@/features/reports/reportsApi"
@@ -13,7 +13,6 @@ function renderAt(path: string, role: Role) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/usuarios/limites" element={<LimitsPage />} />
-          <Route path="/ajustes/informes-ia" element={<Navigate to="/usuarios/limites" replace />} />
         </Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
@@ -35,18 +34,10 @@ describe("LimitsPage", () => {
     expect(screen.getByText(/No se envía nada que identifique al alumno/)).toBeInTheDocument()
   })
 
-  it("keeps the old address working by sending it to the tab", async () => {
-    vi.spyOn(reportsApi, "fetchAiReportSetting").mockResolvedValue({ enabled: false, available: true })
-
-    renderAt("/ajustes/informes-ia", "director")
-
-    expect(await screen.findByRole("button", { name: "Activar la IA en informes" })).toBeInTheDocument()
-  })
-
   it("is for direction only", () => {
     renderAt("/usuarios/limites", "psychopedagogue")
 
-    expect(screen.getByText("Esta sección es solo para dirección.")).toBeInTheDocument()
+    expect(screen.getByText("Esta sección es solo para Dirección.")).toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Límites" })).not.toBeInTheDocument()
   })
 })
