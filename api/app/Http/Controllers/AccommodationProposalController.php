@@ -11,6 +11,7 @@ use App\Models\Accommodation;
 use App\Models\AccommodationProposal;
 use App\Models\ReportDocument;
 use App\Models\Subject;
+use App\Support\SchoolTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -108,6 +109,12 @@ class AccommodationProposalController extends Controller
                 'category' => $fields['category'] ?? $locked->category->value,
                 'description' => $fields['description'] ?? $locked->description,
                 'focus_area' => $focusArea,
+                // Points at the report without naming the file, which may carry
+                // the student's name (ClickUp 86e3jujgx). Editable afterwards.
+                'origin' => $locked->reportDocument !== null
+                    ? 'Informe cargado el '.$locked->reportDocument->created_at->timezone(SchoolTime::timezone())->format('d/m/Y')
+                    : null,
+                'origin_report_id' => $locked->report_document_id,
                 'starts_on' => $validated['starts_on'] ?? null,
                 'assessment_types' => ($validated['assessment_types'] ?? []) === [] ? null : $validated['assessment_types'],
                 'active' => true,

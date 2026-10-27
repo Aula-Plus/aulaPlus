@@ -204,6 +204,25 @@ describe("StudentReportsSection", () => {
     expect(upload).toHaveBeenCalledWith(3, { file, useAi: true, visibility: "teachers" })
   })
 
+  it("warns next to «Quién lo ve» when an uploaded file is opened to everyone who sees the student", async () => {
+    vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([report])
+    const update = vi
+      .spyOn(reportsApi, "updateReport")
+      .mockResolvedValue({ ...report, visibility: "teachers" })
+
+    render(<StudentReportsSection studentId={3} canManage canSeeContent onAccommodationCreated={vi.fn()} />)
+    const select = await screen.findByRole("combobox", { name: "Quién lo ve" })
+    expect(select).not.toHaveAccessibleDescription()
+
+    await userEvent.selectOptions(select, "teachers")
+
+    expect(update).toHaveBeenCalledWith(7, { visibility: "teachers" })
+    // Only a warning: nothing else to confirm.
+    await waitFor(() =>
+      expect(select).toHaveAccessibleDescription("Elegí esta opción solo si el archivo no tiene información clínica"),
+    )
+  })
+
   it("uploads a file with the AI choice", async () => {
     vi.spyOn(reportsApi, "fetchReports").mockResolvedValue([])
     const upload = vi.spyOn(reportsApi, "uploadReport").mockResolvedValue(report)

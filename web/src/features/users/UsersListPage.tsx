@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { roleLabels, userStatusLabels, type ManagedUser } from "@/types"
+import { UsersTabs } from "./UsersTabs"
 import type { UserFormOutletContext } from "./UserFormPage"
 import * as usersApi from "./usersApi"
 
@@ -102,13 +103,15 @@ export function UsersListPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Usuarios">
+      <PageHeader title="Usuarios y permisos">
         {canManage && (
           <Button asChild>
             <Link to="/usuarios/nueva">Invitar usuario</Link>
           </Button>
         )}
       </PageHeader>
+
+      <UsersTabs />
 
       <form
         onSubmit={(event) => {

@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'ai_report_interpretation_enabled',
     'comment_trend_min_count',
     'comment_trend_days',
+    'psychopedagogue_can_set_group_level',
 ])]
 class School extends Model
 {
@@ -53,6 +54,7 @@ class School extends Model
             'grades_visibility' => GradesVisibility::class,
             'grades_cutoff_anchor' => 'date',
             'ai_report_interpretation_enabled' => 'boolean',
+            'psychopedagogue_can_set_group_level' => 'boolean',
         ];
     }
 

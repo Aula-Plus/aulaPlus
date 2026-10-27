@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import { FileText, Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageScreeningTests } from "@/lib/permissions"
+import { canManageScreeningTests, canRecalculateScreeningTestApplication } from "@/lib/permissions"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
@@ -23,7 +23,8 @@ export function GroupTrackingPage() {
   const { id } = useParams<{ id: string }>()
   const groupId = Number(id)
   const { user } = useAuth()
-  const canScreen = canManageScreeningTests(user)
+  // Dirección reaches the applications too, to «Recalcular con el nivel actual».
+  const canScreen = canManageScreeningTests(user) || canRecalculateScreeningTestApplication(user)
 
   const [tracking, setTracking] = useState<GroupTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)

@@ -38,7 +38,7 @@ describe("AlertsAndFollowUpsPage", () => {
         subject_name: "Matemática",
         type: "performance",
         severity: "medium",
-        description: "Condición configurada por el colegio: 3 notas seguidas por debajo de 5.",
+        description: "Condición configurada por el colegio: 3 calificaciones seguidas por debajo de 5.",
         condition_met_on: "2026-09-12",
         recipients: ["teacher"],
         outcome: null,
