@@ -23,6 +23,11 @@ class ScreeningTestApplicationResource extends JsonResource
             'applied_by_id' => $this->applied_by_id,
             'application_date' => $this->application_date?->toDateString(),
             'results_count' => $this->whenCounted('results'),
+            // Whether it counts in its screening's impact view, from the
+            // snapshot taken when it was applied (or last recalculated).
+            'counts_in_impact' => $this->countsInImpact(),
+            'recalculated_at' => $this->recalculated_at?->toIso8601String(),
+            'recalculated_by_name' => $this->recalculatedBy?->name,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

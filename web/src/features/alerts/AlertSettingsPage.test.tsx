@@ -51,7 +51,7 @@ describe("AlertSettingsPage", () => {
 
   it("creates a condition from an example, adjusted by the school", async () => {
     render(<AlertSettingsPage />)
-    await userEvent.click(await screen.findByRole("button", { name: "3 notas seguidas por debajo de 5" }))
+    await userEvent.click(await screen.findByRole("button", { name: "3 calificaciones seguidas por debajo de 5" }))
 
     const threshold = screen.getByLabelText("Por debajo de")
     await userEvent.clear(threshold)

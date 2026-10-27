@@ -114,13 +114,13 @@ function RuleForm({
           className="h-9 rounded-md border bg-background px-3 text-sm"
           {...register("condition")}
         >
-          <option value="consecutive_below">Notas seguidas por debajo de un valor</option>
+          <option value="consecutive_below">Calificaciones seguidas por debajo de un valor</option>
           <option value="average_below">Promedio del período por debajo de un valor</option>
         </select>
       </div>
       {condition === "consecutive_below" ? (
         <div className="grid gap-2">
-          <Label htmlFor="alert-rule-count">Cantidad de notas seguidas</Label>
+          <Label htmlFor="alert-rule-count">Cantidad de calificaciones seguidas</Label>
           <Input id="alert-rule-count" type="number" min={2} max={10} {...register("consecutive_count")} />
           {errors.consecutive_count && (
             <p className="text-sm text-destructive">{errors.consecutive_count.message}</p>

@@ -174,6 +174,14 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("link", { name: /IA en informes/i })).not.toBeInTheDocument()
   })
 
+  it("links a director to «Visibilidad de calificaciones» at /ajustes/calificaciones", () => {
+    renderSidebar("director")
+    expect(screen.getByRole("link", { name: "Visibilidad de calificaciones" })).toHaveAttribute(
+      "href",
+      "/ajustes/calificaciones",
+    )
+  })
+
   it("toggles collapsed state and persists the preference", async () => {
     renderSidebar()
 

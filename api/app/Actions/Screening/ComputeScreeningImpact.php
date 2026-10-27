@@ -2,6 +2,8 @@
 
 namespace App\Actions\Screening;
 
+use App\Models\Group;
+use App\Models\ScreeningTestApplication;
 use App\Models\ScreeningTestDesign;
 use App\Models\ScreeningTestResult;
 use App\Models\ScreeningTestType;
@@ -11,12 +13,19 @@ use App\Models\ScreeningTestType;
  * into each band with the bands in force and with the proposed ones, counting
  * the latest loaded take of each student of the screening. Counts only — no
  * names, codes or scores ever leave this action.
+ *
+ * Only takes from applications that count in the impact view are read
+ * (ClickUp 86e3t4qjh): the group had a level when the screening was applied
+ * and that level was in the screening's population, per the snapshot stored on
+ * the application — never the group's current level, so a later change never
+ * moves an already-applied screening by itself. `groups_without_level` is how
+ * many of the school's groups have no level yet (they count nowhere).
  */
 class ComputeScreeningImpact
 {
     /**
      * @param  list<array{name: string, color: string, max: float|null, meaning?: string|null}>  $proposed
-     * @return array{students: int, current: list<array{name: string, color: string, max: float|null, count: int}>|null, proposed: list<array{name: string, color: string, max: float|null, count: int}>}
+     * @return array{students: int, groups_without_level: int, current: list<array{name: string, color: string, max: float|null, count: int}>|null, proposed: list<array{name: string, color: string, max: float|null, count: int}>}
      */
     public function __invoke(ScreeningTestType $type, array $proposed, ?ScreeningTestDesign $current = null): array
     {
@@ -25,6 +34,7 @@ class ComputeScreeningImpact
 
         return [
             'students' => count($scores),
+            'groups_without_level' => Group::query()->whereNull('education_level_id')->count(),
             'current' => $current ? $this->count($current, $scores) : null,
             'proposed' => $this->count($proposedDesign, $scores),
         ];
@@ -46,12 +56,26 @@ class ComputeScreeningImpact
             ->whereNotNull('screening_test_results.score')
             ->orderByDesc('screening_test_applications.application_date')
             ->orderByDesc('screening_test_applications.id')
-            ->get(['screening_test_results.student_id', 'screening_test_results.score']);
+            ->get([
+                'screening_test_results.student_id',
+                'screening_test_results.score',
+                'screening_test_applications.education_level_id',
+                'screening_test_applications.screening_population',
+                'screening_test_applications.population_levels',
+            ]);
 
         $latest = [];
 
         foreach ($rows as $row) {
-            $latest[$row->student_id] ??= (float) $row->score;
+            $counts = ScreeningTestApplication::snapshotCountsInImpact(
+                $row->screening_population,
+                $row->population_levels === null ? null : json_decode($row->population_levels, true),
+                $row->education_level_id === null ? null : (int) $row->education_level_id,
+            );
+
+            if ($counts) {
+                $latest[$row->student_id] ??= (float) $row->score;
+            }
         }
 
         return $latest;

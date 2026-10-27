@@ -335,7 +335,7 @@ function AssessmentCard({
                 </Button>
               }
               title="Eliminar evaluación"
-              description="Se eliminarán también las notas cargadas. Esta acción no se puede deshacer."
+              description="Se eliminarán también las calificaciones cargadas. Esta acción no se puede deshacer."
               confirmLabel="Eliminar"
               onConfirm={() => onDelete(assessment.id)}
             />

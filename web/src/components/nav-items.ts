@@ -98,7 +98,7 @@ export function buildNavSections(
           : []),
         // Grade visibility for teachers is director-only.
         ...(canManageGradesVisibility(user)
-          ? [{ to: "/ajustes/notas", label: "Visibilidad de notas", icon: Eye }]
+          ? [{ to: "/ajustes/calificaciones", label: "Visibilidad de calificaciones", icon: Eye }]
           : []),
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.

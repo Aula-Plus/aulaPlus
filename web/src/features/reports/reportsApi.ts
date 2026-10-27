@@ -97,3 +97,4 @@ export async function updateAiReportSetting(enabled: boolean): Promise<AiReportS
   const { data } = await api.put<{ data: AiReportSetting }>("/api/v1/ai-report-setting", { enabled })
   return data.data
 }
+
