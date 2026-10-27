@@ -33,6 +33,52 @@ describe("App routes", () => {
     expect(window.location.pathname).toBe("/alertas")
   })
 
+  it("shows «No encontramos esa página» for an unknown address instead of home", async () => {
+    vi.spyOn(authApi, "fetchCurrentUser").mockResolvedValue({
+      id: 1,
+      name: "Ana",
+      email: "ana@escuela.test",
+      roles: ["director"],
+    })
+    window.history.replaceState(null, "", "/esto-no-existe")
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "No encontramos esa página" }),
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/esto-no-existe")
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+  })
+
+  it("also shows it for an unknown sub-path of an existing screen", async () => {
+    vi.spyOn(authApi, "fetchCurrentUser").mockResolvedValue({
+      id: 1,
+      name: "Ana",
+      email: "ana@escuela.test",
+      roles: ["teacher"],
+    })
+    window.history.replaceState(null, "", "/alumnos/1/esto-no-existe")
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "No encontramos esa página" }),
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/alumnos/1/esto-no-existe")
+  })
+
+  it("sends an unauthenticated visitor of an unknown address to login first", async () => {
+    vi.spyOn(authApi, "fetchCurrentUser").mockResolvedValue(null)
+    window.history.replaceState(null, "", "/esto-no-existe")
+
+    render(<App />)
+
+    expect(await screen.findByRole("button", { name: "Ingresar" })).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/login")
+    expect(screen.queryByText("No encontramos esa página")).not.toBeInTheDocument()
+  })
+
   it("sends the old «IA en informes» address to «Usuarios y permisos › Límites»", async () => {
     vi.spyOn(authApi, "fetchCurrentUser").mockResolvedValue({
       id: 1,

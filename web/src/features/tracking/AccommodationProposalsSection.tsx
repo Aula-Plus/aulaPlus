@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { isAxiosError } from "axios"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
@@ -53,6 +54,11 @@ interface AccommodationProposalsSectionProps {
  * comment or rejects them (mandatory reason). Which buttons show is UX only:
  * AccommodationPolicy decides on the server, and a step the state no longer
  * allows comes back as 422.
+ *
+ * The list comes from its own request, which can land well after «Ajustes
+ * vigentes» (ClickUp 86e3d1w36): the card shows «Cargando…» until it does and
+ * then says so when there is nothing, so "no proposals" never looks like
+ * "not loaded yet".
  */
 export function AccommodationProposalsSection({
   studentId,
@@ -96,9 +102,22 @@ export function AccommodationProposalsSection({
     )
   }
 
-  // Nothing to show until there is a proposal: the section is not an empty state.
-  if (!proposals || proposals.length === 0) {
-    return null
+  if (!proposals) {
+    return (
+      <SectionCard title="Propuestas de ajuste">
+        <p className="text-muted-foreground" role="status">
+          Cargando…
+        </p>
+      </SectionCard>
+    )
+  }
+
+  if (proposals.length === 0) {
+    return (
+      <SectionCard title="Propuestas de ajuste">
+        <EmptyState message="No hay propuestas de ajuste." />
+      </SectionCard>
+    )
   }
 
   return (
