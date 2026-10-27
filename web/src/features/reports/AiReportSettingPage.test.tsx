@@ -45,6 +45,6 @@ describe("AiReportSettingPage", () => {
   it("is for direction only", () => {
     renderPage("teacher")
 
-    expect(screen.getByText("Esta sección es solo para dirección.")).toBeInTheDocument()
+    expect(screen.getByText("Esta sección es solo para Dirección.")).toBeInTheDocument()
   })
 })

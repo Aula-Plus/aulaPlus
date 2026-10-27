@@ -44,7 +44,7 @@ export function AdoptionDashboardPage() {
   if (!allowed) {
     return (
       <p className="text-muted-foreground">
-        El tablero de adopción está disponible solo para dirección.
+        El tablero de adopción está disponible solo para Dirección.
       </p>
     )
   }

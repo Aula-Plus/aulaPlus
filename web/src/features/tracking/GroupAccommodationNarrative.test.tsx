@@ -105,7 +105,7 @@ describe("GroupAccommodationNarrative", () => {
     render(<GroupAccommodationNarrative groupId={7} canSummarise />)
 
     expect(await screen.findByText("Borrador de prueba")).toBeInTheDocument()
-    expect(screen.getByText("Borrador (solo lo ve psicopedagogía)")).toBeInTheDocument()
+    expect(screen.getByText("Borrador (solo lo ve Psicopedagogía)")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: /publicar para los docentes/i }))
     expect(publish).toHaveBeenCalledWith(7, 9)
   })

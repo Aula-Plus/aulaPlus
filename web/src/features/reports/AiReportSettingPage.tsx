@@ -40,7 +40,7 @@ export function AiReportSettingPage() {
   }
 
   if (!canManage) {
-    return <p className="text-muted-foreground">Esta sección es solo para dirección.</p>
+    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
   }
 
   return (
