@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useState, type ReactNode } from "react"
 import { CircleCheck } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
 import type { Alert } from "@/types"
@@ -18,9 +18,15 @@ import * as alertsApi from "./alertsApi"
  * loose «Cargando…» without saying what is loading.
  *
  * The Inicio (ClickUp 1dfd3mc2wwz) reuses it as is, minus the explanatory line
- * and with its own empty message (`compact`).
+ * and with its own empty message (`compact`). There the notices go with the
+ * alerts, below them (`children`; P01-DEC-03), and `onAlertChanged` lets the
+ * page refresh the follow-ups a way out may have linked.
  */
-export function AlertsSection({ compact = false }: { compact?: boolean } = {}) {
+export function AlertsSection({
+  compact = false,
+  onAlertChanged,
+  children,
+}: { compact?: boolean; onAlertChanged?: () => void; children?: ReactNode } = {}) {
   const headingId = useId()
   const [alerts, setAlerts] = useState<Alert[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +50,7 @@ export function AlertsSection({ compact = false }: { compact?: boolean } = {}) {
       .fetchMyAlerts()
       .then(setAlerts)
       .catch(() => undefined)
+    onAlertChanged?.()
   }
 
   return (
@@ -64,6 +71,7 @@ export function AlertsSection({ compact = false }: { compact?: boolean } = {}) {
         onChange={replace}
         emptyMessage={compact ? "No tenés alertas pendientes." : "No tenés alertas abiertas."}
       />
+      {children}
     </section>
   )
 }
