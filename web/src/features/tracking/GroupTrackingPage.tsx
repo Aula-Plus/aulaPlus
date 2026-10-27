@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
-import { FileText, Users } from "lucide-react"
+import { Users } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageScreeningTests, canRecalculateScreeningTestApplication } from "@/lib/permissions"
+import {
+  canManageScreeningTests,
+  canRecalculateScreeningTestApplication,
+  isSchoolWideStaff,
+} from "@/lib/permissions"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { RowLink } from "@/components/ui/row-link"
 import { SectionCard } from "@/components/ui/section-card"
-import { StatCard } from "@/components/ui/stat-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Comment, CommentCategory, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
@@ -25,6 +28,9 @@ export function GroupTrackingPage() {
   const { user } = useAuth()
   // Dirección reaches the applications too, to «Recalcular con el nivel actual».
   const canScreen = canManageScreeningTests(user) || canRecalculateScreeningTestApplication(user)
+  // Teachers don't get the per-student accommodation flag (the API omits it):
+  // a yes/no per name is a roster. They read the aggregate table below.
+  const showAccommodations = isSchoolWideStaff(user)
 
   const [tracking, setTracking] = useState<GroupTracking | null>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
@@ -67,7 +73,7 @@ export function GroupTrackingPage() {
     return <p className="text-muted-foreground">Cargando…</p>
   }
 
-  const { group, trend } = tracking
+  const { group } = tracking
 
   return (
     <div className="grid gap-6">
@@ -75,17 +81,12 @@ export function GroupTrackingPage() {
         backTo="/clases"
         backLabel="Volver a grupos"
         title={`Perfil del grupo — ${group.name}`}
-        description={`Tendencia de los últimos ${trend.period_days} días`}
       >
         <RowLink to={`/clases/${group.id}/evaluaciones`}>Evaluaciones</RowLink>
         {canScreen && (
           <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Screenings</RowLink>
         )}
       </PageHeader>
-
-      <div className="grid gap-4">
-        <StatCard label="Evaluaciones tomadas" value={trend.assessments_count} icon={FileText} />
-      </div>
 
       <GroupOpenAlerts
         groupId={group.id}
@@ -101,7 +102,7 @@ export function GroupTrackingPage() {
               <TableRow>
                 <TableHead className="pl-6">Nombre</TableHead>
                 <TableHead>Alertas abiertas</TableHead>
-                <TableHead>Ajustes activos</TableHead>
+                {showAccommodations && <TableHead>Ajustes activos</TableHead>}
                 <TableHead className="pr-6" />
               </TableRow>
             </TableHeader>
@@ -116,7 +117,9 @@ export function GroupTrackingPage() {
                       <span className="text-muted-foreground">0</span>
                     )}
                   </TableCell>
-                  <TableCell>{student.has_active_accommodations ? "Sí" : "No"}</TableCell>
+                  {showAccommodations && (
+                    <TableCell>{student.has_active_accommodations ? "Sí" : "No"}</TableCell>
+                  )}
                   <TableCell className="pr-6 text-right">
                     <RowLink to={`/alumnos/${student.id}/seguimiento`}>Ver alumno</RowLink>
                   </TableCell>

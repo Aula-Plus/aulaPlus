@@ -4,6 +4,7 @@ use App\Models\Accommodation;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
 
@@ -82,7 +83,7 @@ it('never names a student in the summary', function () {
         ->not->toContain('student_id');
 });
 
-it('is available to a teacher leading the group with no extra clinical gate', function () {
+it('is available to a teacher leading the group, with the general accommodations', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
     $group = Group::factory()->create(['school_id' => $school->id]);
@@ -95,6 +96,46 @@ it('is available to a teacher leading the group with no extra clinical gate', fu
     $this->getJson("/api/v1/groups/{$group->id}/accommodations-summary")
         ->assertOk()
         ->assertJsonFragment(['type' => 'tiempo extra', 'student_count' => 1]);
+});
+
+// ClickUp 1dfd3mc2wwy: for a teacher the table counts the general accommodations
+// plus those of the subjects they teach (Accommodation::scopeVisibleTo, as in the
+// student file), so it agrees with the student list. School-wide roles see all.
+it('counts for a teacher only general accommodations and those of the subjects they teach', function () {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $math = Subject::factory()->create(['school_id' => $school->id]);
+    $spanish = Subject::factory()->create(['school_id' => $school->id]);
+    $mathTeacher = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $mathTeacher, $math);
+    $spanishTeacher = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $spanishTeacher, $spanish);
+    $director = User::factory()->forSchool($school)->director()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+
+    $ana = Student::factory()->create(['school_id' => $school->id]);
+    $beto = Student::factory()->create(['school_id' => $school->id]);
+    $ana->groups()->attach($group, ['school_year' => now()->year]);
+    $beto->groups()->attach($group, ['school_year' => now()->year]);
+
+    Accommodation::factory()->create(['student_id' => $ana->id, 'type' => 'ortografía no puntúa', 'active' => true])
+        ->subjects()->attach($spanish);
+    Accommodation::factory()->create(['student_id' => $beto->id, 'type' => 'calculadora', 'active' => true])
+        ->subjects()->attach($math);
+    Accommodation::factory()->create(['student_id' => $beto->id, 'type' => 'tiempo extra', 'active' => true]);
+
+    $types = function (User $viewer) use ($group): array {
+        Sanctum::actingAs($viewer);
+
+        return collect($this->getJson("/api/v1/groups/{$group->id}/accommodations-summary")->assertOk()->json())
+            ->pluck('student_count', 'type')
+            ->all();
+    };
+
+    expect($types($mathTeacher))->toEqual(['calculadora' => 1, 'tiempo extra' => 1])
+        ->and($types($spanishTeacher))->toEqual(['ortografía no puntúa' => 1, 'tiempo extra' => 1])
+        ->and($types($director))->toEqual(['calculadora' => 1, 'ortografía no puntúa' => 1, 'tiempo extra' => 1])
+        ->and($types($psychopedagogue))->toEqual(['calculadora' => 1, 'ortografía no puntúa' => 1, 'tiempo extra' => 1]);
 });
 
 it('forbids a teacher who does not lead the group', function () {
