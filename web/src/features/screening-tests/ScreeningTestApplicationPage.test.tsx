@@ -180,6 +180,21 @@ describe("ScreeningTestApplicationPage", () => {
     expect(screen.queryByRole("button", { name: "Cálculo" })).not.toBeInTheDocument()
   })
 
+  it("agrees in plural when several screenings have no population", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue(group())
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type(1, "Comprensión lectora", true, []),
+      type(2, "Cálculo", true, []),
+    ])
+    vi.spyOn(screeningApi, "fetchGroupScreeningTestApplications").mockResolvedValue([])
+
+    renderPage()
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      "«Comprensión lectora», «Cálculo» no tienen población seleccionada: elegí a qué niveles se aplican en el diseño antes de aplicarlos.",
+    )
+  })
+
   it("lets direction recalculate an application with the current level", async () => {
     vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue(group())
     vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([

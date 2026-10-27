@@ -36,6 +36,7 @@ export function GroupsListPage() {
   const [levels, setLevels] = useState<EducationLevelOption[]>([])
   const [levelSetting, setLevelSetting] = useState<GroupLevelSetting | null>(null)
   const [settingError, setSettingError] = useState<string | null>(null)
+  const [savingSetting, setSavingSetting] = useState(false)
   const [levelGroup, setLevelGroup] = useState<Group | null>(null)
   const schoolWide = isSchoolWideStaff(user)
   // Direction edits the level in the group form; psychopedagogy gets its own
@@ -67,10 +68,15 @@ export function GroupsListPage() {
 
   async function toggleDelegation(enabled: boolean) {
     setSettingError(null)
+    // One request at a time: overlapping toggles could resolve out of order and
+    // leave the checkbox showing something other than what was saved.
+    setSavingSetting(true)
     try {
       setLevelSetting(await groupsApi.updateGroupLevelSetting(enabled))
     } catch {
       setSettingError("No pudimos guardar el cambio.")
+    } finally {
+      setSavingSetting(false)
     }
   }
 
@@ -154,6 +160,7 @@ export function GroupsListPage() {
             <input
               type="checkbox"
               checked={levelSetting.psychopedagogue_can_set_group_level}
+              disabled={savingSetting}
               onChange={(event) => toggleDelegation(event.target.checked)}
             />
             Psicopedagogía también puede elegir el nivel de los grupos

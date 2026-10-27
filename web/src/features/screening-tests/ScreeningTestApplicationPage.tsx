@@ -155,8 +155,9 @@ export function ScreeningTestApplicationPage() {
             {typesWithoutPopulation.length > 0 && (
               <p role="note" className="mb-4 text-sm text-muted-foreground">
                 {typesWithoutPopulation.map((type) => `«${type.name}»`).join(", ")}{" "}
-                {typesWithoutPopulation.length === 1 ? "no tiene" : "no tienen"} población
-                seleccionada: elegí a qué niveles se aplica en el diseño antes de aplicarlo.
+                {typesWithoutPopulation.length === 1
+                  ? "no tiene población seleccionada: elegí a qué niveles se aplica en el diseño antes de aplicarlo."
+                  : "no tienen población seleccionada: elegí a qué niveles se aplican en el diseño antes de aplicarlos."}
               </p>
             )}
             {applicableTypes.length === 0 ? (

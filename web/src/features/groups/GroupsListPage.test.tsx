@@ -1,11 +1,11 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 import { GroupsListPage } from "./GroupsListPage"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import * as groupsApi from "./groupsApi"
-import type { Group, Role } from "@/types"
+import type { Group, GroupLevelSetting, Role } from "@/types"
 
 function renderList(role: Role) {
   const value: AuthContextValue = {
@@ -198,10 +198,12 @@ describe("GroupsListPage", () => {
         psychopedagogue_can_set_group_level: false,
         can_set_level: true,
       })
-      const update = vi.spyOn(groupsApi, "updateGroupLevelSetting").mockResolvedValue({
-        psychopedagogue_can_set_group_level: true,
-        can_set_level: true,
-      })
+      let resolveUpdate: (setting: GroupLevelSetting) => void = () => {}
+      const update = vi.spyOn(groupsApi, "updateGroupLevelSetting").mockReturnValue(
+        new Promise<GroupLevelSetting>((resolve) => {
+          resolveUpdate = resolve
+        }),
+      )
 
       renderList("director")
 
@@ -211,10 +213,16 @@ describe("GroupsListPage", () => {
       // The old free text is never shown as the level.
       expect(screen.queryByText("Primaria")).not.toBeInTheDocument()
 
-      await userEvent.click(
-        await screen.findByRole("checkbox", { name: /psicopedagogía también puede elegir el nivel/i }),
-      )
+      const checkbox = await screen.findByRole("checkbox", {
+        name: /psicopedagogía también puede elegir el nivel/i,
+      })
+      await userEvent.click(checkbox)
       expect(update).toHaveBeenCalledWith(true)
+      // No second request while the first one is still saving.
+      expect(checkbox).toBeDisabled()
+      resolveUpdate({ psychopedagogue_can_set_group_level: true, can_set_level: true })
+      await waitFor(() => expect(checkbox).toBeEnabled())
+      expect(checkbox).toBeChecked()
       // Direction uses the full form, not the level-only dialog.
       expect(screen.queryByRole("button", { name: "Elegir nivel" })).not.toBeInTheDocument()
     })
