@@ -168,6 +168,12 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("heading", { name: /administración/i })).not.toBeInTheDocument()
   })
 
+  it("reaches the AI-in-reports switch through «Usuarios y permisos», not its own entry", () => {
+    renderSidebar("director")
+    expect(screen.getByRole("link", { name: "Usuarios y permisos" })).toHaveAttribute("href", "/usuarios")
+    expect(screen.queryByRole("link", { name: /IA en informes/i })).not.toBeInTheDocument()
+  })
+
   it("links a director to «Visibilidad de calificaciones» at /ajustes/calificaciones", () => {
     renderSidebar("director")
     expect(screen.getByRole("link", { name: "Visibilidad de calificaciones" })).toHaveAttribute(
