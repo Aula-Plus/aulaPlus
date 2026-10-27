@@ -20,6 +20,7 @@ function proposal(overrides: Partial<Accommodation> = {}): Accommodation {
     description: "Media hora extra.",
     focus_area: "Escritura",
     origin: null,
+    origin_report_id: null,
     is_effective: false,
     review_status: "pending",
     proposed_by_id: 9,

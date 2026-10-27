@@ -714,6 +714,8 @@ export interface Accommodation extends AccommodationScope {
    * full record (psychopedagogy and direction) carries it; never a teacher.
    */
   origin: string | null
+  /** Report the accommodation was approved from, when any (opens the file). */
+  origin_report_id: number | null
   is_effective: boolean
   /**
    * Direction proposal circuit (ClickUp 86e3qkwkk): `null` when psychopedagogy

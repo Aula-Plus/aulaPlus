@@ -45,6 +45,7 @@ import { PrivateNotesSignal } from "./PrivateNotesSignal"
 import { ShareCommentDialog } from "./ShareCommentDialog"
 import { SharedExtractsList } from "./SharedExtractsList"
 import { StudentReportsSection } from "@/features/reports/StudentReportsSection"
+import * as reportFiles from "@/features/reports/openReportFile"
 import { TeamSummaryCard } from "./TeamSummaryCard"
 import { ScheduledFollowUpsPanel } from "./ScheduledFollowUpsPanel"
 import { StudentPerformanceChart } from "./StudentPerformanceChart"
@@ -94,6 +95,9 @@ export function StudentTrackingPage() {
   const [sharingComment, setSharingComment] = useState<Comment | null>(null)
   const showShareComment = canShareComment(user)
   const [error, setError] = useState<string | null>(null)
+  // «Abrir archivo» of a report-born accommodation: shown in place, never
+  // replacing the whole profile like a load error.
+  const [fileError, setFileError] = useState<string | null>(null)
   const [accommodationDialogOpen, setAccommodationDialogOpen] = useState(false)
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null)
   const [proposalsRefreshKey, setProposalsRefreshKey] = useState(0)
@@ -353,71 +357,92 @@ export function StudentTrackingPage() {
                   }
                 />
               ) : (
-                <ul className="grid gap-2">
-                  {tracking.accommodations.map((accommodation) => {
-                    return (
-                      <li
-                        key={accommodation.id}
-                        className="rounded-md border p-3 text-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <span className="font-medium">{accommodation.type}</span>
-                            {accommodation.category && (
-                              <Badge tone="neutral" className="ml-2">
-                                {accommodationCategoryLabels[accommodation.category]}
-                              </Badge>
-                            )}
-                            {accommodation.description && (
-                              <p className="text-muted-foreground">{accommodation.description}</p>
-                            )}
-                            <p className="text-muted-foreground">
-                              {capitalize(describeAccommodationScope(accommodation))}
-                            </p>
-                            {/* This full record only reaches psychopedagogy and direction. */}
-                            {(accommodation.origin ||
-                              (accommodation.review_status === "confirmed" &&
-                                accommodation.reviewed_by_name)) && (
-                              <p className="text-xs text-muted-foreground">
-                                {[
-                                  accommodation.origin && `Origen: ${accommodation.origin}`,
-                                  accommodation.review_status === "confirmed" &&
-                                    accommodation.reviewed_by_name &&
-                                    `Confirmó ${accommodation.reviewed_by_name}`,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
+                <>
+                  {fileError && (
+                    <p role="alert" className="mb-2 text-sm text-destructive">
+                      {fileError}
+                    </p>
+                  )}
+                  <ul className="grid gap-2">
+                    {tracking.accommodations.map((accommodation) => {
+                      return (
+                        <li
+                          key={accommodation.id}
+                          className="rounded-md border p-3 text-sm"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span className="font-medium">{accommodation.type}</span>
+                              {accommodation.category && (
+                                <Badge tone="neutral" className="ml-2">
+                                  {accommodationCategoryLabels[accommodation.category]}
+                                </Badge>
+                              )}
+                              {accommodation.description && (
+                                <p className="text-muted-foreground">{accommodation.description}</p>
+                              )}
+                              <p className="text-muted-foreground">
+                                {capitalize(describeAccommodationScope(accommodation))}
                               </p>
-                            )}
+                              {/* This full record only reaches psychopedagogy and direction. */}
+                              {(accommodation.origin ||
+                                (accommodation.review_status === "confirmed" &&
+                                  accommodation.reviewed_by_name)) && (
+                                <p className="text-xs text-muted-foreground">
+                                  {[
+                                    accommodation.origin && `Origen: ${accommodation.origin}`,
+                                    accommodation.review_status === "confirmed" &&
+                                      accommodation.reviewed_by_name &&
+                                      `Confirmó ${accommodation.reviewed_by_name}`,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                  {accommodation.origin_report_id !== null && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="link"
+                                      className="h-auto px-1 py-0 text-xs"
+                                      onClick={() => {
+                                        setFileError(null)
+                                        reportFiles.openReportFile(accommodation.origin_report_id as number, setFileError)
+                                      }}
+                                    >
+                                      Abrir archivo
+                                    </Button>
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <AccommodationStatusBadge accommodation={accommodation} />
+                              {showEditAccommodations && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditAccommodation(accommodation)}
+                                >
+                                  Editar
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <AccommodationStatusBadge accommodation={accommodation} />
-                            {showEditAccommodations && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEditAccommodation(accommodation)}
-                              >
-                                Editar
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        {accommodation.is_effective && (
-                          <AccommodationInstanceOverrideForm
-                            accommodationId={accommodation.id}
-                            // Only the assessments it applies to (subject +
-                            // type): the server 422s any other one.
-                            assessments={tracking.recent_assessments.filter((assessment) =>
-                              accommodationAppliesToAssessment(accommodation, assessment),
-                            )}
-                          />
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
+                          {accommodation.is_effective && (
+                            <AccommodationInstanceOverrideForm
+                              accommodationId={accommodation.id}
+                              // Only the assessments it applies to (subject +
+                              // type): the server 422s any other one.
+                              assessments={tracking.recent_assessments.filter((assessment) =>
+                                accommodationAppliesToAssessment(accommodation, assessment),
+                              )}
+                            />
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
               )}
             </SectionCard>
           )}
