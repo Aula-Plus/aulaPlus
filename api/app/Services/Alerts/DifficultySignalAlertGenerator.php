@@ -14,6 +14,7 @@ use App\Models\CommentCategory;
 use App\Models\Student;
 use App\Support\AlertRouting;
 use App\Support\SchoolTime;
+use App\Support\StudentLevels;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,10 @@ use Illuminate\Support\Facades\DB;
  * generated on new evidence — the condition met on a later date (the date of
  * the latest counted signal) than the last alert for that student and
  * category. Soft-deleted students are skipped.
+ *
+ * Each rule only applies to students whose group this school year is at one of
+ * its levels (ClickUp 1dfd3mc2wx0); students with no levelled group are in no
+ * alert ({@see StudentLevels}).
  *
  * Days are the school's calendar days ({@see SchoolTime}): an observation
  * written at 22:00 in Montevideo counts on that day, not on the next UTC one.
@@ -84,6 +89,7 @@ class DifficultySignalAlertGenerator
 
         $recipients = AlertRouting::recipientsFor(AlertType::DifficultySignal);
         $categoryNames = CommentCategory::query()->pluck('name', 'id');
+        $levels = StudentLevels::forYear($today->year);
 
         $open = Alert::query()
             ->where('type', AlertType::DifficultySignal->value)
@@ -115,6 +121,10 @@ class DifficultySignalAlertGenerator
             $windowStart = $today->subDays((int) $rule->period_days)->toDateString();
 
             foreach ($series as $studentId => $categories) {
+                if (! $rule->appliesToLevels($levels[$studentId] ?? [])) {
+                    continue;
+                }
+
                 foreach ($categories as $categoryId => $dates) {
                     $key = "{$studentId}:{$categoryId}";
 
