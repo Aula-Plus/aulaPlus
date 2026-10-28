@@ -11,6 +11,7 @@ use App\Models\AlertRule;
 use App\Models\AssessmentResult;
 use App\Models\Subject;
 use App\Support\AlertRouting;
+use App\Support\StudentLevels;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,10 @@ use Illuminate\Support\Facades\DB;
  * met on a later date than the last alert for that student and subject — so
  * re-running the command never re-raises an alert someone already closed.
  * Soft-deleted students are skipped.
+ *
+ * Each rule only applies to students whose group this school year is at one of
+ * its levels (ClickUp 1dfd3mc2wx0); students with no levelled group are in no
+ * alert ({@see StudentLevels}).
  *
  * The caller must have set the tenant (Tenancy::forSchool) — this runs from a
  * console command with no authenticated user.
@@ -53,6 +58,7 @@ class PerformanceAlertGenerator
         }
 
         $series = $this->scoreSeries();
+        $levels = StudentLevels::forYear($today->year);
         $recipients = AlertRouting::recipientsFor(AlertType::Performance);
         $subjectNames = Subject::withTrashed()->pluck('name', 'id');
 
@@ -83,6 +89,10 @@ class PerformanceAlertGenerator
 
         foreach ($rules as $rule) {
             foreach ($series as $studentId => $subjects) {
+                if (! $rule->appliesToLevels($levels[$studentId] ?? [])) {
+                    continue;
+                }
+
                 foreach ($subjects as $subjectId => $scores) {
                     if ($rule->subject_id !== null && $rule->subject_id !== $subjectId) {
                         continue;

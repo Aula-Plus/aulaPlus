@@ -5,9 +5,18 @@ import type { Role } from "@/types"
 import { AlertSettingsPage } from "./AlertSettingsPage"
 import * as alertSettingsApi from "./alertSettingsApi"
 import * as subjectsApi from "@/features/subjects/subjectsApi"
+import * as groupsApi from "@/features/groups/groupsApi"
 
 vi.mock("./alertSettingsApi")
 vi.mock("@/features/subjects/subjectsApi")
+vi.mock("@/features/groups/groupsApi")
+
+const levels = [
+  { id: 1, key: "initial", label: "Inicial", grades: [] },
+  { id: 2, key: "primary", label: "Primaria", grades: [] },
+  { id: 3, key: "lower_secondary", label: "Ciclo Básico", grades: [] },
+  { id: 4, key: "upper_secondary", label: "Bachillerato", grades: [] },
+]
 
 let roles: Role[] = ["director"]
 vi.mock("@/features/auth/AuthContext", () => ({
@@ -31,6 +40,7 @@ describe("AlertSettingsPage", () => {
       { id: 7, name: "Matemática", short_code: null, color: null },
     ])
     vi.mocked(alertSettingsApi.fetchAlertSettings).mockResolvedValue({ rules: [], routing })
+    vi.mocked(groupsApi.fetchEducationLevels).mockResolvedValue({ data: levels, groups_without_level: 0 })
     vi.mocked(alertSettingsApi.createAlertRule).mockResolvedValue({
       id: 1,
       condition: "consecutive_below",
@@ -65,6 +75,7 @@ describe("AlertSettingsPage", () => {
         consecutive_count: 3,
         period_days: null,
         subject_id: null,
+        education_level_ids: null,
       }),
     )
   })
@@ -146,6 +157,103 @@ describe("AlertSettingsPage", () => {
     expect(screen.getByRole("button", { name: "Guardar" })).toBeInTheDocument()
   })
 
+  describe("levels each condition applies to (ClickUp 1dfd3mc2wx0)", () => {
+    it("starts with every level ticked and sends only the levels the school keeps", async () => {
+      render(<AlertSettingsPage />)
+      await userEvent.click(await screen.findByRole("button", { name: "3 calificaciones seguidas por debajo de 5" }))
+
+      const fieldset = screen.getByRole("group", { name: "Niveles donde aplica" })
+      for (const label of ["Inicial", "Primaria", "Ciclo Básico", "Bachillerato"]) {
+        expect(within(fieldset).getByRole("checkbox", { name: label })).toBeChecked()
+      }
+      await userEvent.click(within(fieldset).getByRole("checkbox", { name: "Inicial" }))
+      await userEvent.click(within(fieldset).getByRole("checkbox", { name: "Bachillerato" }))
+      await userEvent.click(screen.getByRole("button", { name: "Agregar condición" }))
+
+      await waitFor(() =>
+        expect(alertSettingsApi.createAlertRule).toHaveBeenCalledWith(
+          expect.objectContaining({ education_level_ids: [2, 3] }),
+        ),
+      )
+    })
+
+    it("asks for at least one level", async () => {
+      render(<AlertSettingsPage />)
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Nueva condición de señal de dificultad" }),
+      )
+      await userEvent.type(screen.getByLabelText("Cantidad de señales de dificultad"), "3")
+      await userEvent.type(screen.getByLabelText("En cuántos días"), "21")
+      const fieldset = screen.getByRole("group", { name: "Niveles donde aplica" })
+      for (const checkbox of within(fieldset).getAllByRole("checkbox")) {
+        await userEvent.click(checkbox)
+      }
+      await userEvent.click(screen.getByRole("button", { name: "Guardar condición" }))
+
+      expect(await screen.findByText("Elegí al menos un nivel.")).toBeInTheDocument()
+      expect(alertSettingsApi.createAlertRule).not.toHaveBeenCalled()
+    })
+
+    it("shows each condition's levels and keeps them when editing", async () => {
+      vi.mocked(alertSettingsApi.fetchAlertSettings).mockResolvedValue({
+        rules: [
+          {
+            id: 3,
+            condition: "consecutive_below",
+            threshold: 5,
+            consecutive_count: 3,
+            period_days: null,
+            subject_id: null,
+            education_level_ids: [2],
+            active: true,
+            created_at: null,
+          },
+          {
+            id: 4,
+            condition: "average_below",
+            threshold: 6,
+            consecutive_count: null,
+            period_days: 90,
+            subject_id: null,
+            education_level_ids: null,
+            active: true,
+            created_at: null,
+          },
+        ],
+        routing,
+      })
+      vi.mocked(alertSettingsApi.updateAlertRule).mockResolvedValue({} as never)
+      render(<AlertSettingsPage />)
+
+      const [primaryOnly, everyLevel] = await screen.findAllByRole("listitem")
+      expect(await within(primaryOnly).findByText("Primaria")).toBeInTheDocument()
+      expect(within(everyLevel).getByText("Todos los niveles")).toBeInTheDocument()
+
+      await userEvent.click(within(primaryOnly).getByRole("button", { name: "Editar" }))
+      const fieldset = within(primaryOnly).getByRole("group", { name: "Niveles donde aplica" })
+      expect(within(fieldset).getByRole("checkbox", { name: "Primaria" })).toBeChecked()
+      expect(within(fieldset).getByRole("checkbox", { name: "Ciclo Básico" })).not.toBeChecked()
+      await userEvent.click(within(fieldset).getByRole("checkbox", { name: "Ciclo Básico" }))
+      await userEvent.click(within(primaryOnly).getByRole("button", { name: "Guardar cambios" }))
+
+      await waitFor(() =>
+        expect(alertSettingsApi.updateAlertRule).toHaveBeenCalledWith(
+          3,
+          expect.objectContaining({ education_level_ids: [2, 3] }),
+        ),
+      )
+    })
+
+    it("warns how many groups have no level and so are in no alert", async () => {
+      vi.mocked(groupsApi.fetchEducationLevels).mockResolvedValue({ data: levels, groups_without_level: 2 })
+      render(<AlertSettingsPage />)
+
+      expect(
+        await screen.findByText("2 grupos sin nivel: no entran en ninguna alerta hasta que se les elija uno."),
+      ).toBeInTheDocument()
+    })
+  })
+
   it("does not load anything for a teacher", () => {
     roles = ["teacher"]
     render(<AlertSettingsPage />)
@@ -179,6 +287,7 @@ describe("AlertSettingsPage", () => {
           condition: "difficulty_signals",
           signal_count: 3,
           period_days: 21,
+          education_level_ids: null,
         }),
       )
     })

@@ -1630,6 +1630,11 @@ export interface AlertRule {
   period_days: number | null
   /** `null` = applies to every subject. */
   subject_id: number | null
+  /**
+   * The group levels it applies to (ClickUp 1dfd3mc2wx0); `null` = every
+   * level. Groups "Sin nivel" are in no alert either way.
+   */
+  education_level_ids?: number[] | null
   active: boolean
   created_at: string | null
 }
