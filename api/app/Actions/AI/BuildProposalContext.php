@@ -21,8 +21,9 @@ use Illuminate\Support\Collection;
  * isolation without mocking HTTP (docs/prompts/05-asistente-ia-docente.md §4).
  *
  * PII minimisation is the whole point of this class (CLAUDE.md security rule
- * 11): student learning profiles are only ever emitted as an aggregated,
- * anonymised cohort summary, and even a single personalised target student is
+ * 11): the group's learning profiles are only ever emitted as an aggregated,
+ * anonymised cohort summary plus «Lo que recibe la IA» (pedagogical actions,
+ * never who has them or how many), and even a single personalised target student is
  * referenced by a short opaque id ("Student #1") — a `full_name` never leaves
  * the database. The fixed DUA/UDL system instruction does NOT live here; it is
  * the same for every request and belongs in the Job's system prompt.
@@ -49,7 +50,10 @@ class BuildProposalContext
             ],
             'curricular_framework' => $this->curricularContext($group, $parameters),
             'subject_program' => $this->subjectProgram($proposal, $parameters),
-            'student_cohort_summary' => $this->cohortSummary($group, $inScope),
+            'student_cohort_summary' => $this->cohortSummary($group),
+            // «Lo que recibe la IA» (ClickUp 86e3jpzdr): the group's confirmed
+            // accommodations as pedagogical actions with their subjects.
+            'accommodation_input' => (new BuildAccommodationInput)($group, $inScope),
             'target_student' => $this->targetStudent($parameters, $inScope),
             'reference_example' => $this->referenceExample($proposal),
         ];
@@ -272,26 +276,19 @@ class BuildProposalContext
 
     /**
      * Aggregated, anonymised summary of the group's learners — counts only,
-     * never names (CLAUDE.md security rule 11).
+     * never names (CLAUDE.md security rule 11). Accommodations are not counted
+     * here any more: they reach the model as «Lo que recibe la IA»
+     * ({@see BuildAccommodationInput}), which never says how many students
+     * have one (PO, ClickUp 86e3jpzdr).
      *
-     * @param  Closure(HasMany<Accommodation, Student>): void  $inScope
      * @return array<string, mixed>
      */
-    protected function cohortSummary(Group $group, Closure $inScope): array
+    protected function cohortSummary(Group $group): array
     {
-        $students = $group->students()->with(['accommodations' => $inScope])->get();
-
-        $accommodationsByFocusArea = $students
-            ->flatMap(fn (Student $student) => $student->accommodations)
-            ->groupBy('focus_area')
-            ->map->count();
+        $students = $group->students()->get(['students.id', 'students.has_therapeutic_companion']);
 
         return [
             'total_students' => $students->count(),
-            'with_active_accommodations' => $students
-                ->filter(fn (Student $student) => $student->accommodations->isNotEmpty())
-                ->count(),
-            'active_accommodations_by_focus_area' => $accommodationsByFocusArea,
             'with_therapeutic_companion' => $students
                 ->where('has_therapeutic_companion', true)
                 ->count(),
