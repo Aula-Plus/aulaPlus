@@ -74,16 +74,14 @@ it('never sends any student full_name in the built context', function () {
     expect($encoded)->not->toContain('Distinctive');
 });
 
-it('aggregates the student cohort by active accommodations and therapeutic companion', function () {
+it('aggregates the student cohort without counting accommodations', function () {
     [$context] = buildContextForGroupWithStudents();
 
     $summary = $context['student_cohort_summary'];
 
-    expect($summary['total_students'])->toBe(2)
-        ->and($summary['with_therapeutic_companion'])->toBe(1)
-        ->and($summary['with_active_accommodations'])->toBe(1)
-        // Only the active accommodation counts, not the inactive one.
-        ->and($summary['active_accommodations_by_focus_area']['literacy'])->toBe(1);
+    // PO, ClickUp 86e3jpzdr: how many students have an accommodation is never
+    // sent — accommodations go as «Lo que recibe la IA» instead.
+    expect($summary)->toBe(['total_students' => 2, 'with_therapeutic_companion' => 1]);
 });
 
 it('references a personalised target student by an opaque id, never by name', function () {
@@ -129,6 +127,7 @@ function contextScopeScenario(): array
     $make = fn (string $focusArea, array $attributes = []) => Accommodation::factory()->create([
         'student_id' => $student->id,
         'focus_area' => $focusArea,
+        'type' => $focusArea,
         'starts_on' => now()->subMonth()->toDateString(),
         ...$attributes,
     ]);
@@ -158,10 +157,11 @@ function contextFor(array $scenario, AIProposalType $type, array $parameters): a
     return Tenancy::forSchool($scenario['school'], fn () => (new BuildProposalContext)($proposal));
 }
 
+/** The actions in «Lo que recibe la IA» (the scenario sets type = focus_area). */
 function focusAreas(array $context): array
 {
-    return collect($context['student_cohort_summary']['active_accommodations_by_focus_area'])
-        ->keys()->sort()->values()->all();
+    return collect($context['accommodation_input'])
+        ->pluck('action')->sort()->values()->all();
 }
 
 it('only sends accommodations in force: active, approved when required and already started', function () {
@@ -252,4 +252,78 @@ it('sends no past results of other units', function () {
         expect($context)->not->toHaveKeys(['group_accommodation_summary', 'recent_performance'])
             ->and($sent)->not->toContain('3.75');
     }
+});
+
+/**
+ * «Lo que recibe la IA» (ClickUp 86e3jpzdr, PO 24/10): built from the
+ * accommodations psychopedagogy confirmed, as pedagogical actions with their
+ * subject, never naming a student or saying how many have each one.
+ */
+function accommodationInputScenario(): array
+{
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $math = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Matemática']);
+    $students = Student::factory()->count(3)->sequence(
+        ['full_name' => 'Valentina Rocamora'],
+        ['full_name' => 'Bruno Echeverri'],
+        ['full_name' => 'Tomás Saravia'],
+    )->create(['school_id' => $school->id]);
+
+    foreach ($students as $student) {
+        $group->students()->attach($student, ['school_year' => now()->year]);
+    }
+
+    $make = fn (Student $student, string $type, array $attributes = []) => Accommodation::factory()->create([
+        'student_id' => $student->id,
+        'type' => $type,
+        'focus_area' => 'diagnóstico reservado',
+        'description' => 'detalle clínico reservado',
+        'starts_on' => now()->subMonth()->toDateString(),
+        ...$attributes,
+    ]);
+
+    return compact('school', 'teacher', 'group', 'math', 'students', 'make');
+}
+
+it('sends each confirmed accommodation once, as a pedagogical action with its subjects', function () {
+    $scenario = accommodationInputScenario();
+    [$first, $second, $third] = $scenario['students'];
+    $make = $scenario['make'];
+
+    // Two students with the same action and scope: one line, no count.
+    $make($first, 'Dar 15 minutos más en escritos', ['category' => 'access', 'assessment_types' => ['written']]);
+    $make($second, 'Dar 15 minutos más en escritos', ['category' => 'access', 'assessment_types' => ['written']]);
+    $make($third, 'Leer las consignas en voz baja', ['category' => 'access'])->subjects()->attach($scenario['math']);
+    $make($third, 'Propuesta de Dirección sin confirmar', ['review_status' => 'pending']);
+    $make($third, 'Propuesta devuelta', ['review_status' => 'returned']);
+    $make($third, 'Propuesta confirmada', ['review_status' => 'confirmed', 'reviewed_at' => now()]);
+
+    $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
+    $sent = json_encode($context, JSON_UNESCAPED_UNICODE);
+
+    expect($context['accommodation_input'])->toBe([
+        ['action' => 'Dar 15 minutos más en escritos', 'category' => 'access', 'subjects' => 'all', 'assessment_types' => ['written']],
+        ['action' => 'Leer las consignas en voz baja', 'category' => 'access', 'subjects' => ['Matemática'], 'assessment_types' => 'all'],
+        ['action' => 'Propuesta confirmada', 'category' => $context['accommodation_input'][2]['category'], 'subjects' => 'all', 'assessment_types' => 'all'],
+    ])
+        ->and($sent)->not->toContain('sin confirmar')
+        ->and($sent)->not->toContain('devuelta')
+        ->and($sent)->not->toContain('reservado')
+        ->and($sent)->not->toContain('Valentina');
+});
+
+it('drops an accommodation whose action names a student of the group', function () {
+    $scenario = accommodationInputScenario();
+    [$first] = $scenario['students'];
+    $make = $scenario['make'];
+
+    $make($first, 'Sentar a Valentina adelante');
+    $make($first, 'Usar apoyo visual');
+
+    $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
+
+    expect(collect($context['accommodation_input'])->pluck('action')->all())->toBe(['Usar apoyo visual'])
+        ->and(json_encode($context))->not->toContain('Valentina');
 });
