@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
 import type { Role, User } from "@/types"
@@ -10,7 +11,9 @@ function renderPage(role: Role) {
   const user = { id: 1, name: "U", email: "u@x.uy", school_id: 1, roles: [role] } as unknown as User
   return render(
     <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout: vi.fn() } as never}>
-      <AiReportSettingPanel />
+      <MemoryRouter>
+        <AiReportSettingPanel />
+      </MemoryRouter>
     </AuthContext.Provider>,
   )
 }
@@ -45,6 +48,10 @@ describe("AiReportSettingPanel", () => {
   it("is for direction only", () => {
     renderPage("teacher")
 
-    expect(screen.getByText("Esta sección es solo para Dirección.")).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está habilitada para tu cuenta" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+    expect(screen.queryByText(/solo para Dirección/)).not.toBeInTheDocument()
   })
 })

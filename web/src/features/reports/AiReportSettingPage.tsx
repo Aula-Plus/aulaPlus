@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { SectionCard } from "@/components/ui/section-card"
 import type { AiReportSetting } from "@/types"
 import * as reportsApi from "./reportsApi"
+import { NoAccessPage } from "@/pages/NoAccessPage"
 
 /**
  * School-wide switch for the AI reading of student reports (ClickUp
@@ -40,7 +41,7 @@ export function AiReportSettingPanel() {
   }
 
   if (!canManage) {
-    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
+    return <NoAccessPage />
   }
 
   return (

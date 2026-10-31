@@ -125,4 +125,23 @@ describe("App routes", () => {
     expect(screen.getByRole("link", { name: "Límites" })).toHaveAttribute("aria-current", "page")
     expect(window.location.pathname).toBe("/usuarios/limites")
   })
+
+  it("gives a teacher with the old «IA en informes» link a way back home", async () => {
+    vi.spyOn(authApi, "fetchCurrentUser").mockResolvedValue({
+      id: 1,
+      name: "Ana",
+      email: "ana@escuela.test",
+      roles: ["teacher"],
+    })
+    vi.spyOn(scheduledFollowUpsApi, "fetchUnreadNotificationCount").mockResolvedValue(0)
+    window.history.replaceState(null, "", "/ajustes/informes-ia")
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Esta pantalla no está habilitada para tu cuenta" }),
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/usuarios/limites")
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+  })
 })

@@ -22,6 +22,7 @@ import { NOT_AVAILABLE_LABEL, journeyStepLabels } from "@/types"
 import type { AdoptionDashboard, JourneyDataSince, JourneyStep, WeeklyContentByTypePoint } from "@/types"
 import { fetchAdoptionDashboard } from "./adoptionApi"
 import { AdoptionTeachersTab } from "./AdoptionTeachersTab"
+import { NoAccessPage } from "@/pages/NoAccessPage"
 
 export function AdoptionDashboardPage() {
   const { user } = useAuth()
@@ -42,11 +43,7 @@ export function AdoptionDashboardPage() {
   }, [allowed, schoolId])
 
   if (!allowed) {
-    return (
-      <p className="text-muted-foreground">
-        El tablero de adopción está disponible solo para Dirección.
-      </p>
-    )
+    return <NoAccessPage />
   }
 
   if (schoolId === undefined) {
