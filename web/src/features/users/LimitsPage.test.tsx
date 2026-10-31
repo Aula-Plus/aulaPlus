@@ -37,7 +37,11 @@ describe("LimitsPage", () => {
   it("is for direction only", () => {
     renderAt("/usuarios/limites", "psychopedagogue")
 
-    expect(screen.getByText("Esta sección es solo para Dirección.")).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está habilitada para tu cuenta" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+    expect(screen.queryByText(/solo para Dirección/)).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Límites" })).not.toBeInTheDocument()
   })
 })

@@ -9,6 +9,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { formatShortDate } from "@/lib/utils"
 import type { GradesVisibilityMode, GradesVisibilitySettings } from "@/types"
 import * as gradesVisibilityApi from "./gradesVisibilityApi"
+import { NoAccessPage } from "@/pages/NoAccessPage"
 
 const OPTIONS: { mode: GradesVisibilityMode; label: string; help: string }[] = [
   {
@@ -84,7 +85,7 @@ export function GradesVisibilityPage() {
   }
 
   if (!canManage) {
-    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
+    return <NoAccessPage />
   }
 
   return (

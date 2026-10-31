@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
 import { formatShortDate } from "@/lib/utils"
@@ -13,7 +14,9 @@ function renderPage(role: Role) {
     <AuthContext.Provider
       value={{ user, loading: false, login: vi.fn(), logout: vi.fn() } as never}
     >
-      <GradesVisibilityPage />
+      <MemoryRouter>
+        <GradesVisibilityPage />
+      </MemoryRouter>
     </AuthContext.Provider>,
   )
 }
@@ -74,6 +77,10 @@ describe("GradesVisibilityPage", () => {
 
   it("is not offered to teachers", () => {
     renderPage("teacher")
-    expect(screen.getByText(/solo para Dirección\./)).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está habilitada para tu cuenta" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+    expect(screen.queryByText(/solo para Dirección/)).not.toBeInTheDocument()
   })
 })
