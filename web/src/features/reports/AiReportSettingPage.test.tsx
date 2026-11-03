@@ -49,7 +49,7 @@ describe("AiReportSettingPanel", () => {
     renderPage("teacher")
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está habilitada para tu cuenta" }),
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está disponible para tu cuenta" }),
     ).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
     expect(screen.queryByText(/solo para Dirección/)).not.toBeInTheDocument()

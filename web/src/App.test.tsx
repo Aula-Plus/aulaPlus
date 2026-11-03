@@ -139,7 +139,7 @@ describe("App routes", () => {
     render(<App />)
 
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Esta pantalla no está habilitada para tu cuenta" }),
+      await screen.findByRole("heading", { level: 1, name: "Esta pantalla no está disponible para tu cuenta" }),
     ).toBeInTheDocument()
     expect(window.location.pathname).toBe("/usuarios/limites")
     expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
