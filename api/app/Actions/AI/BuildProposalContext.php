@@ -11,6 +11,7 @@ use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
+use App\Models\User;
 use Closure;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
@@ -37,7 +38,7 @@ class BuildProposalContext
     {
         $group = $proposal->group;
         $parameters = $proposal->input_parameters ?? [];
-        $inScope = $this->accommodationsInScope($parameters);
+        $inScope = $this->accommodationsInScope($parameters, $proposal->requestedBy);
 
         return [
             'group' => [
@@ -127,19 +128,32 @@ class BuildProposalContext
      * 86e3dpbwy follow-up) — an accommodation for another subject would steer
      * the draft wrongly.
      *
+     * A request that still reaches here without a subject (old data, a request
+     * built by hand — new ones must carry one, see GenerateAIProposalRequest)
+     * is cut to what the requester can see on screen (ClickUp 86e3jpzdr, PO
+     * decision of 03/11): a teacher gets the general accommodations plus those
+     * of the subjects they teach (Accommodation::scopeVisibleTo, the same rule
+     * as the group's accommodations table); psychopedagogy and direction, who
+     * see them all, get them all. With no known requester, only the general
+     * ones.
+     *
      * @param  array<string, mixed>  $parameters
      * @return Closure(HasMany<Accommodation, Student>): void
      */
-    protected function accommodationsInScope(array $parameters): Closure
+    protected function accommodationsInScope(array $parameters, ?User $requester): Closure
     {
         $subjectId = $this->subjectId($parameters);
         $assessmentType = AssessmentType::tryFrom((string) ($parameters['assessment_type'] ?? ''));
 
-        return function (HasMany $query) use ($subjectId, $assessmentType): void {
+        return function (HasMany $query) use ($subjectId, $assessmentType, $requester): void {
             $query->effective()->started();
 
             if ($subjectId !== null) {
                 $query->appliesToSubject($subjectId);
+            } elseif ($requester !== null) {
+                $query->visibleTo($requester);
+            } else {
+                $query->whereDoesntHave('subjects');
             }
 
             if ($assessmentType !== null) {

@@ -169,8 +169,40 @@ it('only sends accommodations in force: active, approved when required and alrea
 
     $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
 
-    // No subject in the request: every subject's accommodations count.
-    expect(focusAreas($context))->toBe(['approved', 'general', 'math', 'science', 'written']);
+    // No subject in the request: cut to what the requesting teacher sees
+    // (general + the subjects they teach in the group: math, not science).
+    expect(focusAreas($context))->toBe(['approved', 'general', 'math', 'written']);
+});
+
+it('cuts a request without subject to what the requester can see on screen', function () {
+    $scenario = contextScopeScenario();
+    $psychopedagogue = User::factory()->forSchool($scenario['school'])->psychopedagogue()->create();
+    $otherTeacher = User::factory()->forSchool($scenario['school'])->teacher()->create();
+    leadGroup($scenario['group'], $otherTeacher, $scenario['science']);
+
+    $as = fn (User $requester) => focusAreas(contextFor(
+        [...$scenario, 'teacher' => $requester],
+        AIProposalType::ClassSession,
+        ['focus' => 'fracciones'],
+    ));
+
+    // A teacher of science never gets the math-only accommodation, and vice
+    // versa; psychopedagogy (school-wide, sees them all) gets every one.
+    expect($as($otherTeacher))->toBe(['approved', 'general', 'science', 'written'])
+        ->and($as($scenario['teacher']))->toBe(['approved', 'general', 'math', 'written'])
+        ->and($as($psychopedagogue))->toBe(['approved', 'general', 'math', 'science', 'written']);
+});
+
+it('keeps the subject filter, not the requester\'s, when the request has a subject', function () {
+    $scenario = contextScopeScenario();
+    $psychopedagogue = User::factory()->forSchool($scenario['school'])->psychopedagogue()->create();
+
+    $context = contextFor([...$scenario, 'teacher' => $psychopedagogue], AIProposalType::ClassSession, [
+        'subject_id' => $scenario['science']->id,
+        'focus' => 'x',
+    ]);
+
+    expect(focusAreas($context))->toBe(['approved', 'general', 'science', 'written']);
 });
 
 it('only sends the general accommodations and those of the requested subject', function () {
@@ -300,7 +332,7 @@ it('sends each confirmed accommodation once, as a pedagogical action with its su
     $make($third, 'Propuesta devuelta', ['review_status' => 'returned']);
     $make($third, 'Propuesta confirmada', ['review_status' => 'confirmed', 'reviewed_at' => now()]);
 
-    $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
+    $context = contextFor($scenario, AIProposalType::ClassSession, ['subject_id' => $scenario['math']->id, 'focus' => 'fracciones']);
     $sent = json_encode($context, JSON_UNESCAPED_UNICODE);
 
     expect($context['accommodation_input'])->toBe([
@@ -322,7 +354,7 @@ it('drops an accommodation whose action names a student of the group', function 
     $make($first, 'Sentar a Valentina adelante');
     $make($first, 'Usar apoyo visual');
 
-    $context = contextFor($scenario, AIProposalType::ClassSession, ['focus' => 'fracciones']);
+    $context = contextFor($scenario, AIProposalType::ClassSession, ['subject_id' => $scenario['math']->id, 'focus' => 'fracciones']);
 
     expect(collect($context['accommodation_input'])->pluck('action')->all())->toBe(['Usar apoyo visual'])
         ->and(json_encode($context))->not->toContain('Valentina');
