@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   BellRing,
   BookOpen,
+  CalendarRange,
   ClipboardList,
   GraduationCap,
   Eye,
@@ -72,6 +73,9 @@ export function buildNavSections(
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
         // is unread notices only (not alerts); it goes away once read.
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
+        // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8): the teacher builds
+        // their plans; Psicopedagogía and Dirección read every plan.
+        ...(user ? [{ to: "/programa-anual", label: "Programa anual", icon: CalendarRange }] : []),
         // The screening design screen is for Psicopedagogía and Dirección,
         // who both edit designs (screen 08).
         ...(canEditScreeningTestDesign(user)

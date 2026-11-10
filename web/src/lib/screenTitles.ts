@@ -21,6 +21,8 @@ export const screenTitles: { pattern: string; title: string }[] = [
   { pattern: "/clases/:id/seguimiento", title: "Perfil del grupo" },
   { pattern: "/clases/:id/evaluaciones", title: "Evaluaciones" },
   { pattern: "/clases/:id/pruebas-de-sondeo", title: "Screenings del grupo" },
+  { pattern: "/programa-anual", title: "Programa anual" },
+  { pattern: "/programa-anual/:id", title: "Programa anual" },
   { pattern: "/alumnos", title: "Alumnos" },
   { pattern: "/alumnos/nuevo", title: "Nuevo alumno" },
   { pattern: "/alumnos/:id", title: "Editar alumno" },

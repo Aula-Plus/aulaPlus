@@ -146,8 +146,10 @@ skeleton is done, until explicitly asked:
 - Project/assignment entity and its relation to students — undecided
   (multi-submission, multi-grade design not settled).
 - Communications features in general (e.g. screen "Mensajes").
-- Lesson/curriculum planning proper (`AnnualPlan`, `Unit`, `ClassSession` — data
-  layer exists, no API surface yet) and AI-assisted class generation. The
+- Lesson/curriculum planning proper and AI-assisted class generation. Exception
+  (ClickUp 1dfd3mc4bg8, explicit request): screen 12 «Programa anual» — annual
+  plans, units and unit objectives now have an API and a screen, with unit
+  status/coverage derived (`AnnualPlanProgress`). `ClassSession` still has no API. The
   AI-proposal engine itself (`AIProposal`, `docs/prompts/05-asistente-ia-docente.md`)
   is done; `Assessment` now also has full CRUD (`docs/prompts/13-evaluaciones-
   resultados.md`) — what's still out of scope is the curriculum-planning UI/API

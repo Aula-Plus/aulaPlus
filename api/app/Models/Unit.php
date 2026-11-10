@@ -41,6 +41,11 @@ class Unit extends Model
         return $this->hasMany(ClassSession::class);
     }
 
+    public function objectives(): HasMany
+    {
+        return $this->hasMany(UnitObjective::class)->orderBy('position')->orderBy('id');
+    }
+
     public function curricularItems(): BelongsToMany
     {
         return $this->belongsToMany(CurricularItem::class, 'unit_curricular_item')

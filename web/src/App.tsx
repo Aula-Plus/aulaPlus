@@ -25,6 +25,8 @@ import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
+import { AnnualPlansListPage } from "@/features/annual-plans/AnnualPlansListPage"
+import { AnnualPlanPage } from "@/features/annual-plans/AnnualPlanPage"
 
 function App() {
   return (
@@ -118,6 +120,22 @@ function App() {
             element={
               <ProtectedLayout>
                 <ScreeningTestDesignPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/programa-anual"
+            element={
+              <ProtectedLayout>
+                <AnnualPlansListPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/programa-anual/:id"
+            element={
+              <ProtectedLayout>
+                <AnnualPlanPage />
               </ProtectedLayout>
             }
           />
