@@ -85,6 +85,14 @@ class GenerateAIProposalRequest extends FormRequest
                 'parameters.unit_id' => ['nullable', $this->unitBelongsToGroup()],
                 'parameters.focus' => ['required', 'string'],
                 'parameters.duration_minutes' => ['nullable', 'integer'],
+                // Optional: the class's subject (used for the Calendar and to
+                // pre-fill time/room from «Mis horarios»). Same rule as the
+                // assessment subject: one the teacher teaches in the group.
+                'parameters.subject_id' => [
+                    'nullable',
+                    Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
+                    $this->assignedSubjectInGroup(),
+                ],
             ],
             AIProposalType::Assessment => [
                 'parameters.focus' => ['required', 'string'],

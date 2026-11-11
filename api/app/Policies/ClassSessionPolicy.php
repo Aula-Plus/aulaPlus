@@ -13,6 +13,11 @@ use App\Models\User;
  * class session is the teacher who leads its Group (group_teacher pivot),
  * consistent with how Group ownership is checked everywhere else in this
  * session. Director/psychopedagogue get read-only, school-wide visibility.
+ *
+ * Since ClickUp 1dfd3mc4bgh a class may carry its `subject_id`: then only the
+ * teacher assigned that subject in the group owns it (a group with several
+ * teachers no longer lets one edit another's class). A class without a
+ * subject keeps the previous rule (any teacher who leads the group).
  */
 class ClassSessionPolicy
 {
@@ -48,7 +53,13 @@ class ClassSessionPolicy
 
     protected function isOwner(User $user, ClassSession $classSession): bool
     {
-        return $user->teachesGroup($classSession->loadMissing('group')->group);
+        $classSession->loadMissing(['group', 'subject']);
+
+        if ($classSession->subject !== null) {
+            return $user->teachesSubjectInGroup($classSession->group, $classSession->subject);
+        }
+
+        return $user->teachesGroup($classSession->group);
     }
 
     protected function sharesSchool(User $user, ClassSession $classSession): bool

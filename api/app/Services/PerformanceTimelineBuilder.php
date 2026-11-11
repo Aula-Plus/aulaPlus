@@ -212,6 +212,9 @@ class PerformanceTimelineBuilder
     protected function appendCalendarEvents(Collection $entries, ?string $from, ?string $to): void
     {
         $events = CalendarEvent::query()
+            // Only the dates the whole school sees: a meeting is private to
+            // its invitees (screen 21 red line), so it never becomes a mark.
+            ->institutional()
             ->when($from, fn (Builder $q) => $q->whereDate('start_at', '>=', $from))
             ->when($to, fn (Builder $q) => $q->whereDate('start_at', '<=', $to))
             ->get();

@@ -10,9 +10,11 @@ use App\Models\AnnualPlan;
 use App\Models\Assessment;
 use App\Models\ClassSession;
 use App\Models\CurricularItem;
+use App\Models\Group;
 use App\Models\Unit;
 use App\Models\UsageEvent;
 use App\Models\User;
+use App\Services\Calendar\TimetableSlotSuggester;
 use App\Support\UsageJourney;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +33,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ApplyProposal
 {
+    public function __construct(protected TimetableSlotSuggester $suggester) {}
+
     public function __invoke(AIProposal $proposal, User $applier): Model
     {
         return DB::transaction(function () use ($proposal, $applier): Model {
@@ -38,8 +42,8 @@ class ApplyProposal
             // confirmed-creation step (ClickUp 86e3qkxtc).
             $entity = UsageJourney::within($proposal->journey_id, fn (): Model => match ($proposal->type) {
                 AIProposalType::AnnualPlan => $this->applyAnnualPlan($proposal, $applier),
-                AIProposalType::Unit => $this->applyUnit($proposal),
-                AIProposalType::ClassSession => $this->applyClassSession($proposal),
+                AIProposalType::Unit => $this->applyUnit($proposal, $applier),
+                AIProposalType::ClassSession => $this->applyClassSession($proposal, $applier),
                 AIProposalType::Assessment => $this->applyAssessment($proposal, $applier),
             });
 
@@ -83,7 +87,7 @@ class ApplyProposal
         ]);
     }
 
-    protected function applyUnit(AIProposal $proposal): Unit
+    protected function applyUnit(AIProposal $proposal, User $applier): Unit
     {
         $params = $proposal->input_parameters;
         $raw = $proposal->raw_response;
@@ -107,10 +111,14 @@ class ApplyProposal
         // The unit-session schema carries no per-session date, so each planned
         // session is seeded at the unit's start date for the teacher to reschedule.
         $groupId = $unit->loadMissing('annualPlan')->annualPlan->group_id;
+        $subjectId = $unit->annualPlan->subject_id;
 
         foreach ($raw['sessions'] ?? [] as $session) {
-            ClassSession::create([
+            // Created one by one so each pre-fill sees the previous ones: two
+            // sessions on the same day take the two free slots of that day.
+            $classSession = ClassSession::create([
                 'group_id' => $groupId,
+                'subject_id' => $subjectId,
                 'unit_id' => $unit->id,
                 'title' => $session['title'] ?? self::DEFAULT_SESSION_TITLE,
                 'objective' => $session['objective'] ?? null,
@@ -118,20 +126,22 @@ class ApplyProposal
                 'duration_minutes' => $session['duration_minutes'] ?? self::DEFAULT_SESSION_MINUTES,
                 'status' => ClassSessionStatus::Planned,
             ]);
+            $this->suggester->prefill($classSession, $applier);
         }
 
         return $unit;
     }
 
-    protected function applyClassSession(AIProposal $proposal): ClassSession
+    protected function applyClassSession(AIProposal $proposal, User $applier): ClassSession
     {
         $params = $proposal->input_parameters;
         $raw = $proposal->raw_response;
 
         // date/duration_minutes/title are NOT NULL on class_sessions; the
         // model's suggested_date may be null, so default to today.
-        return ClassSession::create([
+        $classSession = ClassSession::create([
             'group_id' => $proposal->group_id,
+            'subject_id' => $this->classSessionSubjectId($proposal, $applier),
             'unit_id' => $params['unit_id'] ?? null,
             'title' => $raw['title'] ?? self::DEFAULT_SESSION_TITLE,
             'objective' => $raw['objective'] ?? null,
@@ -140,6 +150,43 @@ class ApplyProposal
             'date' => $raw['suggested_date'] ?? now()->toDateString(),
             'status' => ClassSessionStatus::Planned,
         ]);
+
+        // Time and room come pre-filled from the teacher's «Mis horarios»
+        // (ClickUp 1dfd3mc4bgh); the teacher edits them from the Calendar.
+        $this->suggester->prefill($classSession, $applier);
+
+        return $classSession;
+    }
+
+    /**
+     * The subject of a generated class: the one asked for, else the subject of
+     * the unit's annual plan, else — when the teacher teaches a single subject
+     * in the group — that one. Otherwise none (the class stays visible to the
+     * group's teachers, as before).
+     */
+    protected function classSessionSubjectId(AIProposal $proposal, User $applier): ?int
+    {
+        $params = $proposal->input_parameters;
+
+        if (isset($params['subject_id'])) {
+            return (int) $params['subject_id'];
+        }
+
+        if (isset($params['unit_id'])) {
+            $subjectId = Unit::query()->whereKey($params['unit_id'])->first()?->annualPlan?->subject_id;
+
+            if ($subjectId !== null) {
+                return $subjectId;
+            }
+        }
+
+        $subjectIds = Group::query()->whereKey($proposal->group_id)->first()?->teachers()
+            ->wherePivot('teacher_id', $applier->id)
+            ->pluck('group_teacher.subject_id')
+            ->unique()
+            ->values();
+
+        return $subjectIds !== null && $subjectIds->count() === 1 ? (int) $subjectIds->first() : null;
     }
 
     protected function applyAssessment(AIProposal $proposal, User $applier): Assessment

@@ -338,3 +338,21 @@ export function canManageAiReportSetting(user: User | null): boolean {
 export function canShareComment(user: User | null): boolean {
   return isPsychopedagogue(user)
 }
+
+// ── Calendar (screen 21, ClickUp 1dfd3mc4bgh) ───────────────────────────────
+
+/**
+ * Create, edit and remove institutional events. Mirror of
+ * `CalendarEventPolicy::create` (role portion): Dirección only.
+ */
+export function canManageInstitutionalEvents(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
+ * The «Mis horarios» tab: only teachers have one, and it is private to them.
+ * Mirror of `TimetableSlotPolicy::viewAny` (role portion).
+ */
+export function hasTimetable(user: User | null): boolean {
+  return isTeacher(user)
+}

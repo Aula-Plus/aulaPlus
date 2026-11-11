@@ -259,6 +259,9 @@ class GroupProfileController extends Controller
     protected function calendarEventMarks($from, $to): array
     {
         return CalendarEvent::query()
+            // Only the dates the whole school sees: a meeting is private to
+            // its invitees (screen 21 red line), so it never becomes a mark.
+            ->institutional()
             ->when($from, fn ($query) => $query->whereDate('start_at', '>=', $from))
             ->when($to, fn ($query) => $query->whereDate('start_at', '<=', $to))
             ->orderBy('start_at')

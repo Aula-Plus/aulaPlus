@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as alertsApi from "@/features/alerts/alertsApi"
 import * as scheduledFollowUpsApi from "@/features/tracking/scheduledFollowUpsApi"
+import * as calendarApi from "@/features/calendar/calendarApi"
 import type { Alert, ScheduledFollowUp } from "@/types"
 import { DashboardPage } from "./DashboardPage"
 
@@ -67,6 +68,7 @@ describe("DashboardPage", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(new Date(2026, 10, 20, 9, 0))
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
   })
   afterEach(() => {
     vi.useRealTimers()
