@@ -31,12 +31,35 @@ export interface AnnualPlanSummary {
   units_count: number
 }
 
+/**
+ * Derived per objective by the server. «started» (empezado) means a class
+ * recorded «una parte»: it is shown, but it never counts as given
+ * (P12-UNI-01, P12-COB-02).
+ */
+export type ObjectiveStatus = "given" | "started" | "planned" | "unplanned"
+
+export const objectiveStatusLabels: Record<ObjectiveStatus, string> = {
+  given: "Dado",
+  started: "Empezado",
+  planned: "Con clase o evaluación",
+  unplanned: "Sin planificar",
+}
+
+/** The class where «una parte» was last recorded — what «Lo terminé» opens. */
+export interface ClassToClose {
+  id: number
+  date: string | null
+  title: string | null
+}
+
 export interface PlanObjective {
   id: number
   description: string
   position: number
   planned: boolean
   given: boolean
+  status: ObjectiveStatus
+  class_to_close: ClassToClose | null
 }
 
 export interface PlanUnit {
@@ -45,10 +68,12 @@ export interface PlanUnit {
   position: number
   start_date: string
   end_date: string
-  status: UnitStatus
+  /** null when the unit has no objectives written yet: it shows no state. */
+  status: UnitStatus | null
   objectives_count: number
   planned_count: number
   given_count: number
+  started_count: number
   objectives: PlanObjective[]
 }
 
@@ -146,4 +171,18 @@ export async function updateObjective(objectiveId: number, description: string):
 
 export async function deleteObjective(objectiveId: number): Promise<void> {
   await api.delete(`/api/v1/unit-objectives/${objectiveId}`)
+}
+
+export type ObjectiveCoverage = "full" | "partial" | "none"
+
+/**
+ * Corrects what a closed class recorded for an objective («Lo terminé»:
+ * «una parte» → «todo»). The objective's state still derives from the class.
+ */
+export async function updateClassObjectiveCoverage(
+  classSessionId: number,
+  objectiveId: number,
+  coverage: ObjectiveCoverage,
+): Promise<void> {
+  await api.patch(`/api/v1/class-sessions/${classSessionId}/objectives/${objectiveId}`, { coverage })
 }

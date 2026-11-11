@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react"
-import { useParams } from "react-router-dom"
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { Link, useParams } from "react-router-dom"
 import { Plus, Trash2 } from "lucide-react"
 
 import { PageHeader } from "@/components/ui/page-header"
@@ -12,6 +12,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatShortDate } from "@/lib/utils"
 import {
@@ -20,15 +30,30 @@ import {
   deleteObjective,
   deleteUnit,
   fetchAnnualPlan,
+  objectiveStatusLabels,
   unitStatusLabels,
   updateAnnualPlan,
+  updateClassObjectiveCoverage,
   updateObjective,
   updateUnit,
   type AnnualPlanDetail,
+  type ObjectiveStatus,
+  type PlanMark,
+  type PlanObjective,
   type PlanUnit,
   type UnitStatus,
 } from "./annualPlansApi"
-import { barPosition, givenShare, overlappingUnits } from "./timeline"
+import {
+  barPosition,
+  datePosition,
+  givenLabel,
+  givenShare,
+  inYear,
+  overlappingUnits,
+  startedShare,
+  todayIso,
+  unitSummary,
+} from "./timeline"
 
 type Tab = "schedule" | "units" | "coverage" | "relations"
 
@@ -45,6 +70,19 @@ const statusTone: Record<UnitStatus, BadgeTone> = {
   given: "success",
 }
 
+const objectiveTone: Record<ObjectiveStatus, BadgeTone> = {
+  given: "success",
+  started: "warning",
+  planned: "info",
+  unplanned: "neutral",
+}
+
+/** Which unit is open in «Unidades», and whether to focus its objective input. */
+interface OpenUnit {
+  id: number
+  focusObjective: boolean
+}
+
 /**
  * Screen 12 of the living document — Programa anual (ClickUp 1dfd3mc4bg8).
  * Four tabs: Cronograma (default), Unidades, Cobertura and Relaciones entre
@@ -59,6 +97,13 @@ export function AnnualPlanPage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>("schedule")
   const [addingUnit, setAddingUnit] = useState(false)
+  const [openUnit, setOpenUnit] = useState<OpenUnit | null>(null)
+
+  /** «Tocar una unidad la abre» (P12-CRO-03), also used by the no-objectives link. */
+  const showUnit = useCallback((unitId: number, focusObjective = false) => {
+    setTab("units")
+    setOpenUnit({ id: unitId, focusObjective })
+  }, [])
 
   const reload = useCallback(
     () =>
@@ -126,12 +171,14 @@ export function AnnualPlanPage() {
         ))}
       </div>
 
-      {tab === "schedule" && <ScheduleTab plan={plan} onSaved={setPlan} />}
+      {tab === "schedule" && <ScheduleTab plan={plan} onSaved={setPlan} onOpenUnit={showUnit} />}
       {tab === "units" && (
         <UnitsTab
           plan={plan}
           adding={addingUnit}
           onAddingChange={setAddingUnit}
+          openUnit={openUnit}
+          onOpenUnitChange={setOpenUnit}
           onChanged={reload}
         />
       )}
@@ -144,15 +191,23 @@ export function AnnualPlanPage() {
 function ScheduleTab({
   plan,
   onSaved,
+  onOpenUnit,
 }: {
   plan: AnnualPlanDetail
   onSaved: (plan: AnnualPlanDetail) => void
+  onOpenUnit: (unitId: number) => void
 }) {
   const [purpose, setPurpose] = useState(plan.description)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const overlaps = overlappingUnits(plan.units)
   const marks = plan.marks.filter((m) => m.date)
+  const today = todayIso()
+  const unitIds = new Set(plan.units.map((u) => u.id))
+  // Marks tied to a unit of this plan sit on that unit's bar; the rest
+  // (assessments, classes without a unit) on a general line above.
+  const generalMarks = marks.filter((m) => m.unit_id === null || !unitIds.has(m.unit_id))
+  const marksOf = (unitId: number) => marks.filter((m) => m.unit_id === unitId)
 
   async function savePurpose() {
     setSaving(true)
@@ -215,33 +270,55 @@ function ScheduleTab({
               </p>
             ))}
             <ul className="grid gap-3" aria-label="Línea de tiempo">
+              <li className="grid gap-1">
+                <span className="text-sm text-muted-foreground">Evaluaciones y otras clases</span>
+                <MarksTrack marks={generalMarks} plan={plan} today={today} showTodayLabel />
+              </li>
               {plan.units.map((unit) => {
                 const { left, width } = barPosition(unit, plan.year)
                 const share = givenShare(unit)
+                const started = startedShare(unit)
+                const summary = unitSummary(unit)
                 return (
                   <li key={unit.id} className="grid gap-1">
                     <div className="flex flex-wrap justify-between gap-2 text-sm">
-                      <span className="font-medium">
+                      <button
+                        type="button"
+                        className="text-left font-medium hover:underline"
+                        title={summary}
+                        onClick={() => onOpenUnit(unit.id)}
+                      >
                         {unit.position} · {unit.name}
-                      </span>
+                      </button>
                       <span className="text-muted-foreground">
                         {formatShortDate(unit.start_date)} – {formatShortDate(unit.end_date)} · Dado {share}%
                       </span>
                     </div>
-                    <div className="relative h-3 rounded bg-muted" aria-hidden="true">
+                    <MarksTrack marks={marksOf(unit.id)} plan={plan} today={today}>
                       <div
-                        className="absolute inset-y-0 overflow-hidden rounded border border-primary/40 bg-primary/15"
+                        role="img"
+                        aria-label={summary}
+                        title={summary}
+                        data-testid={`unit-bar-${unit.id}`}
+                        className="absolute inset-y-0 flex overflow-hidden rounded border border-primary/40 bg-primary/5"
                         style={{ left: `${left}%`, width: `${width}%` }}
                       >
                         <div className="h-full bg-primary" style={{ width: `${share}%` }} />
+                        <div
+                          className="h-full bg-primary/35"
+                          style={{ width: `${started}%` }}
+                          data-testid={`unit-bar-started-${unit.id}`}
+                        />
                       </div>
-                    </div>
+                    </MarksTrack>
                   </li>
                 )
               })}
             </ul>
             <p className="text-xs text-muted-foreground">
-              Cada unidad es una barra; lo relleno es lo dado.
+              Cada unidad es una barra: lo relleno es lo dado y lo tenue, lo empezado (una parte, todavía
+              no cuenta como dado). Encima van las clases, las evaluaciones y el día de hoy. Los cierres de
+              período todavía no están cargados.
             </p>
           </div>
         )}
@@ -265,18 +342,90 @@ function ScheduleTab({
   )
 }
 
+/**
+ * One line of the Cronograma: the year as a track, with the marks of classes
+ * and assessments at their date and a «hoy» line (P12-CRO-03), using the same
+ * position math as the unit bars. An assessment mark opens the group's
+ * assessments; a class has no screen yet, so its mark only shows a tooltip.
+ */
+function MarksTrack({
+  marks,
+  plan,
+  today,
+  showTodayLabel = false,
+  children,
+}: {
+  marks: PlanMark[]
+  plan: AnnualPlanDetail
+  today: string
+  showTodayLabel?: boolean
+  children?: ReactNode
+}) {
+  const showToday = inYear(today, plan.year)
+  return (
+    <div className="relative h-4 rounded bg-muted">
+      {children}
+      {showToday && (
+        <span
+          className="absolute -inset-y-1 w-0.5 bg-destructive"
+          style={{ left: `${datePosition(today, plan.year)}%` }}
+          title={`Hoy · ${formatShortDate(today)}`}
+          data-testid={showTodayLabel ? "today-mark" : undefined}
+        >
+          {showTodayLabel && (
+            <span className="absolute -top-4 -translate-x-1/2 text-[10px] font-medium text-destructive">
+              hoy
+            </span>
+          )}
+        </span>
+      )}
+      {marks.map((mark) => {
+        const label = `${mark.kind === "class" ? "Clase" : "Evaluación"} · ${formatShortDate(mark.date)}${
+          mark.title ? ` — ${mark.title}` : ""
+        }`
+        const style = { left: `calc(${datePosition(mark.date as string, plan.year)}% - 4px)` }
+        const shape =
+          "absolute top-1/2 size-2 -translate-y-1/2 rounded-full border border-background " +
+          (mark.kind === "class" ? "bg-foreground" : "rotate-45 rounded-none bg-info")
+        return mark.kind === "assessment" && plan.group.id !== null ? (
+          <Link
+            key={`${mark.kind}-${mark.id}`}
+            to={`/clases/${plan.group.id}/evaluaciones`}
+            className={shape}
+            style={style}
+            title={label}
+            aria-label={label}
+          />
+        ) : (
+          <span
+            key={`${mark.kind}-${mark.id}`}
+            role="img"
+            className={shape}
+            style={style}
+            title={label}
+            aria-label={label}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 function UnitsTab({
   plan,
   adding,
   onAddingChange,
+  openUnit,
+  onOpenUnitChange,
   onChanged,
 }: {
   plan: AnnualPlanDetail
   adding: boolean
   onAddingChange: (adding: boolean) => void
+  openUnit: OpenUnit | null
+  onOpenUnitChange: (open: OpenUnit | null) => void
   onChanged: () => Promise<void>
 }) {
-  const [openUnit, setOpenUnit] = useState<number | null>(null)
 
   return (
     <div className="grid gap-6">
@@ -319,8 +468,12 @@ function UnitsTab({
                   key={unit.id}
                   unit={unit}
                   canEdit={plan.can_edit}
-                  open={openUnit === unit.id}
-                  onToggle={() => setOpenUnit(openUnit === unit.id ? null : unit.id)}
+                  open={openUnit?.id === unit.id}
+                  focusObjective={openUnit?.id === unit.id && openUnit.focusObjective}
+                  onToggle={() =>
+                    onOpenUnitChange(openUnit?.id === unit.id ? null : { id: unit.id, focusObjective: false })
+                  }
+                  onWriteObjectives={() => onOpenUnitChange({ id: unit.id, focusObjective: true })}
                   onChanged={onChanged}
                 />
               ))}
@@ -329,7 +482,8 @@ function UnitsTab({
         )}
         <p className="px-6 pb-6 text-xs text-muted-foreground">
           El estado sale solo. Una unidad está «planificada» cuando todos sus objetivos tienen una clase o
-          una evaluación armada, y «dada» cuando todos se dieron.
+          una evaluación armada, y «dada» cuando todos se dieron. Un objetivo «empezado» se dio en
+          parte y todavía no cuenta como dado.
         </p>
       </SectionCard>
     </div>
@@ -340,13 +494,17 @@ function UnitRow({
   unit,
   canEdit,
   open,
+  focusObjective,
   onToggle,
+  onWriteObjectives,
   onChanged,
 }: {
   unit: PlanUnit
   canEdit: boolean
   open: boolean
+  focusObjective: boolean
   onToggle: () => void
+  onWriteObjectives: () => void
   onChanged: () => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
@@ -361,11 +519,24 @@ function UnitRow({
           {formatShortDate(unit.start_date)} – {formatShortDate(unit.end_date)}
         </TableCell>
         <TableCell>{unit.objectives_count}</TableCell>
+        <TableCell>{unit.objectives_count === 0 ? "—" : givenLabel(unit)}</TableCell>
         <TableCell>
-          {unit.given_count} de {unit.objectives_count}
-        </TableCell>
-        <TableCell>
-          <Badge tone={statusTone[unit.status]}>{unitStatusLabels[unit.status]}</Badge>
+          {unit.status === null ? (
+            <div className="grid gap-0.5">
+              <span aria-label="Sin estado">—</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  className="text-left text-xs text-primary underline-offset-2 hover:underline"
+                  onClick={onWriteObjectives}
+                >
+                  Escribí los objetivos y el estado sale solo
+                </button>
+              )}
+            </div>
+          ) : (
+            <Badge tone={statusTone[unit.status]}>{unitStatusLabels[unit.status]}</Badge>
+          )}
         </TableCell>
         <TableCell className="text-right">
           <Button size="sm" variant="ghost" onClick={onToggle} aria-expanded={open}>
@@ -411,7 +582,12 @@ function UnitRow({
                     />
                   </div>
                 ))}
-              <ObjectivesList unit={unit} canEdit={canEdit} onChanged={onChanged} />
+              <ObjectivesList
+                unit={unit}
+                canEdit={canEdit}
+                autoFocusInput={focusObjective}
+                onChanged={onChanged}
+              />
             </div>
           </TableCell>
         </TableRow>
@@ -423,24 +599,39 @@ function UnitRow({
 function ObjectivesList({
   unit,
   canEdit,
+  autoFocusInput,
   onChanged,
 }: {
   unit: PlanUnit
   canEdit: boolean
+  autoFocusInput: boolean
   onChanged: () => Promise<void>
 }) {
   const [draft, setDraft] = useState("")
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editText, setEditText] = useState("")
   const [error, setError] = useState<string | null>(null)
+  // One request at a time: no double submit while adding, editing or removing.
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  async function run(action: () => Promise<void>) {
+  // Opened from «Escribí los objetivos y el estado sale solo»: the input is
+  // ready to write the first objective.
+  useEffect(() => {
+    if (autoFocusInput) inputRef.current?.focus()
+  }, [autoFocusInput])
+
+  async function run(action: () => Promise<void>, failure = "No pudimos guardar el objetivo.") {
+    if (busy) return
+    setBusy(true)
     setError(null)
     try {
       await action()
       await onChanged()
     } catch {
-      setError("No pudimos guardar el objetivo.")
+      setError(failure)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -463,7 +654,7 @@ function ObjectivesList({
                   />
                   <Button
                     size="sm"
-                    disabled={!editText.trim()}
+                    disabled={busy || !editText.trim()}
                     onClick={() =>
                       run(async () => {
                         await updateObjective(objective.id, editText.trim())
@@ -482,14 +673,25 @@ function ObjectivesList({
                   <span>
                     {index + 1} · {objective.description}
                   </span>
-                  <Badge tone={objective.given ? "success" : objective.planned ? "info" : "neutral"}>
-                    {objective.given ? "Dado" : objective.planned ? "Con clase o evaluación" : "Sin planificar"}
-                  </Badge>
+                  <Badge tone={objectiveTone[objective.status]}>{objectiveStatusLabels[objective.status]}</Badge>
+                  {canEdit && objective.status === "started" && objective.class_to_close && (
+                    <FinishObjectiveDialog
+                      objective={objective}
+                      busy={busy}
+                      onConfirm={(classId) =>
+                        run(
+                          () => updateClassObjectiveCoverage(classId, objective.id, "full"),
+                          "No pudimos cambiar el registro de la clase.",
+                        )
+                      }
+                    />
+                  )}
                   {canEdit && (
                     <>
                       <Button
                         size="xs"
                         variant="ghost"
+                        disabled={busy}
                         onClick={() => {
                           setEditingId(objective.id)
                           setEditText(objective.description)
@@ -497,13 +699,18 @@ function ObjectivesList({
                       >
                         Editar
                       </Button>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => run(() => deleteObjective(objective.id))}
-                      >
-                        Quitar
-                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button size="xs" variant="ghost" disabled={busy}>
+                            Quitar
+                          </Button>
+                        }
+                        title="Quitar el objetivo"
+                        description="Se borra el objetivo y lo que las clases y evaluaciones registraron sobre él. El estado de la unidad puede cambiar."
+                        confirmLabel="Quitar"
+                        isConfirming={busy}
+                        onConfirm={() => void run(() => deleteObjective(objective.id), "No pudimos quitar el objetivo.")}
+                      />
                     </>
                   )}
                 </>
@@ -517,7 +724,7 @@ function ObjectivesList({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(event: FormEvent) => {
             event.preventDefault()
-            if (!draft.trim()) return
+            if (!draft.trim() || busy) return
             void run(async () => {
               await createObjective(unit.id, draft.trim())
               setDraft("")
@@ -531,15 +738,84 @@ function ObjectivesList({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               className="w-96 max-w-full"
+              ref={inputRef}
             />
           </div>
-          <Button type="submit" size="sm" disabled={!draft.trim()}>
-            Agregar objetivo
+          <Button type="submit" size="sm" disabled={busy || !draft.trim()}>
+            {busy ? "Guardando…" : "Agregar objetivo"}
           </Button>
         </form>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
+  )
+}
+
+/**
+ * «Lo terminé» on an objective «empezado». Not a checkbox: it opens the
+ * closing record of the class where «una parte» was last recorded and lets
+ * the teacher change it to «todo». The objective's state keeps deriving only
+ * from that class record (P12-COB-02, screen 13 F-7).
+ */
+function FinishObjectiveDialog({
+  objective,
+  busy,
+  onConfirm,
+}: {
+  objective: PlanObjective
+  busy: boolean
+  onConfirm: (classId: number) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const target = objective.class_to_close
+  if (!target) return null
+
+  const classLabel = `${formatShortDate(target.date)}${target.title ? ` · ${target.title}` : ""}`
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="xs" variant="outline" disabled={busy}>
+          Lo terminé
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cierre de la clase</DialogTitle>
+          <DialogDescription>
+            Clase del {classLabel}. Al cerrarla registraste «una parte» de este objetivo. Si lo terminaste,
+            cambiá ese registro a «todo» y el objetivo pasa a contar como dado.
+          </DialogDescription>
+        </DialogHeader>
+        <dl className="grid gap-2 text-sm">
+          <div>
+            <dt className="text-muted-foreground">Objetivo</dt>
+            <dd>{objective.description}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Registrado al cerrar la clase</dt>
+            <dd>Una parte</dd>
+          </div>
+        </dl>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              await onConfirm(target.id)
+              setOpen(false)
+            }}
+          >
+            {busy ? "Guardando…" : "Cambiar a «todo»"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -661,7 +937,11 @@ function CoverageTab({ plan }: { plan: AnnualPlanDetail }) {
                   <TableCell>{unit.given_count}</TableCell>
                   <TableCell>{unit.objectives_count - unit.planned_count}</TableCell>
                   <TableCell>
-                    <Badge tone={statusTone[unit.status]}>{unitStatusLabels[unit.status]}</Badge>
+                    {unit.status === null ? (
+                      "—"
+                    ) : (
+                      <Badge tone={statusTone[unit.status]}>{unitStatusLabels[unit.status]}</Badge>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

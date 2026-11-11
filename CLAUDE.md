@@ -149,7 +149,9 @@ skeleton is done, until explicitly asked:
 - Lesson/curriculum planning proper and AI-assisted class generation. Exception
   (ClickUp 1dfd3mc4bg8, explicit request): screen 12 «Programa anual» — annual
   plans, units and unit objectives now have an API and a screen, with unit
-  status/coverage derived (`AnnualPlanProgress`). `ClassSession` still has no API. The
+  status/coverage derived (`AnnualPlanProgress`). `ClassSession` has no API beyond
+  correcting a closed class's record for one objective (`PATCH /class-sessions/{id}/
+  objectives/{objective}`, «Lo terminé»). The
   AI-proposal engine itself (`AIProposal`, `docs/prompts/05-asistente-ia-docente.md`)
   is done; `Assessment` now also has full CRUD (`docs/prompts/13-evaluaciones-
   resultados.md`) — what's still out of scope is the curriculum-planning UI/API

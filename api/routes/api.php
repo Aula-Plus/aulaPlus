@@ -17,6 +17,7 @@ use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
+use App\Http\Controllers\ClassSessionObjectiveController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
@@ -259,6 +260,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/units/{unit}/objectives', [UnitObjectiveController::class, 'store']);
         Route::patch('/unit-objectives/{objective}', [UnitObjectiveController::class, 'update']);
         Route::delete('/unit-objectives/{objective}', [UnitObjectiveController::class, 'destroy']);
+        // «Lo terminé»: correct a closed class's record for one objective
+        // («una parte» → «todo»). The objective's state still derives only
+        // from the class record (P12-COB-02, screen 13 F-7).
+        Route::patch('/class-sessions/{classSession}/objectives/{objective}', [ClassSessionObjectiveController::class, 'update'])
+            ->whereNumber(['classSession', 'objective']);
 
         // Session 6: assessments CRUD + per-student results (docs/prompts/
         // 13-evaluaciones-resultados.md). Fills the gap left by Session 1

@@ -19,6 +19,7 @@ import {
   type AnnualPlanOptions,
   type AnnualPlanSummary,
 } from "./annualPlansApi"
+import { createPlanError } from "./planErrors"
 
 /**
  * Entry to screen 12 (Programa anual): the plans the person can open — a
@@ -137,8 +138,8 @@ function NewPlanForm() {
         description: purpose.trim() || undefined,
       })
       navigate(`/programa-anual/${plan.id}`)
-    } catch {
-      setError("No pudimos crear el programa. Revisá que no exista ya uno para ese grupo, materia y año.")
+    } catch (err) {
+      setError(createPlanError(err))
       setSaving(false)
     }
   }

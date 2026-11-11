@@ -36,4 +36,17 @@ class UnitObjective extends Model
         return $this->belongsToMany(Assessment::class, 'assessment_unit_objective')
             ->withTimestamps();
     }
+
+    /**
+     * UnitObjective is tenant-scoped itself; binding also requires its unit to
+     * hang from a group plan reachable by the current school (same rule as
+     * Unit::resolveRouteBinding), so a mismatched row is a 404, never a 500.
+     */
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        return $this->newQuery()
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->whereHas('unit.annualPlan', fn ($query) => $query->whereNull('student_id'))
+            ->first();
+    }
 }
