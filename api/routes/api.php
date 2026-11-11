@@ -31,6 +31,8 @@ use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NumericGradeSettingsController;
+use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
@@ -122,6 +124,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
         Route::get('/grades-visibility', [GradesVisibilitySettingsController::class, 'show']);
         Route::put('/grades-visibility', [GradesVisibilitySettingsController::class, 'update']);
+
+        // Screen 24 · «Escalas oficiales» (ClickUp 1dfd3mc4bgg): direction
+        // consults the official scales — read-only, no write route on purpose
+        // (loaded by the Aula+ team, OfficialScaleSeeder) — and sets the
+        // school's Primaria numeric-grade switch and its own equivalence.
+        Route::get('/official-scales', [OfficialScaleController::class, 'index']);
+        Route::get('/numeric-grade-settings', [NumericGradeSettingsController::class, 'show']);
+        Route::put('/numeric-grade-settings', [NumericGradeSettingsController::class, 'update']);
         Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
 
         // Student reports (ClickUp 86e3jujgx): upload, anonymized-text review,
@@ -251,6 +261,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::delete('/assessments/{assessment}', [AssessmentController::class, 'destroy']);
 
         Route::get('/assessments/{assessment}/results', [AssessmentResultController::class, 'index']);
+        Route::get('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'scale']);
         Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store']);
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
 

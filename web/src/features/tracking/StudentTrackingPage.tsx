@@ -33,6 +33,7 @@ import {
   type CommentShare,
   type StaffMember,
   type GradeAccommodation,
+  type StudentGrade,
   type StudentTracking,
 } from "@/types"
 import { AccommodationFormDialog } from "./AccommodationFormDialog"
@@ -605,7 +606,7 @@ export function StudentTrackingPage() {
                       <TableCell className="pl-6">{grade.subject_name}</TableCell>
                       <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
                       <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
-                      <TableCell className="tabular-nums">{grade.score ?? "—"}</TableCell>
+                      <TableCell className="tabular-nums">{gradeText(grade)}</TableCell>
                       <TableCell className="pr-6">
                         <GradeAccommodations accommodations={grade.accommodations} />
                       </TableCell>
@@ -776,4 +777,18 @@ function SupportsReadOnly({ chips }: { chips: StudentTracking["support_chips"] }
       </SectionCard>
     </>
   )
+}
+
+/**
+ * A grade as shown in the list: the decimal score, or — in Primaria — the
+ * scale level with the number next to it only when the school allows it (the
+ * server already applies the switch; ClickUp 1dfd3mc4bgg).
+ */
+function gradeText(grade: StudentGrade): string {
+  if (grade.scale_level_name) {
+    return grade.numeric_grade != null
+      ? `${grade.scale_level_name} · ${grade.numeric_grade}`
+      : grade.scale_level_name
+  }
+  return grade.score === null ? "—" : String(grade.score)
 }

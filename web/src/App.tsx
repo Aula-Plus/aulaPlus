@@ -14,6 +14,7 @@ import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { LimitsPage } from "@/features/users/LimitsPage"
 import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
+import { OfficialScalesPage } from "@/features/official-scales/OfficialScalesPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
@@ -153,6 +154,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <GradesVisibilityPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/administracion/evaluacion-y-juicios"
+            element={
+              <ProtectedLayout>
+                <OfficialScalesPage />
               </ProtectedLayout>
             }
           />

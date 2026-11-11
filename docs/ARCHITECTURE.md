@@ -167,6 +167,35 @@ endpoint de candidatos y `ChooseAlertOutcomeRequest`).
   (sin candidatos; pasarla da 422). Quien la tiene puede igual tomarla,
   dejarla en observación, anotarla y cerrarla.
 
+## Escalas oficiales y resultados por nivel
+
+Pantalla 24 · solapa «Escalas oficiales» (ClickUp 1dfd3mc4bgg). Fuente única
+en el backend: `App\Services\ResultScales`.
+
+- **Glosario:** *Escala oficial* → `OfficialScale`; *nivel de avance* →
+  `OfficialScaleLevel`; *equivalencia del colegio* (nivel → nota 1..10) →
+  `SchoolScaleEquivalence`.
+- **Las escalas son datos globales**, como los marcos curriculares (sin
+  `school_id`): las carga el equipo de Aula+ una vez por marco con
+  `OfficialScaleSeeder` (`php artisan db:seed --class=OfficialScaleSeeder`,
+  idempotente), cada una con su cita (documento + página). No hay ruta de
+  escritura: Dirección las consulta (`GET /api/v1/official-scales`, solo
+  Dirección, `SchoolPolicy::viewOfficialScales`) y nadie las edita.
+- **Lo que decide el colegio** (`GET/PUT /api/v1/numeric-grade-settings`, solo
+  Dirección): `schools.show_primary_numeric_grade` («Mostrar la calificación
+  numérica junto al nivel de avance», una sola casilla para todo lugar donde
+  se ve una calificación de Primaria) y, opcional, su propia equivalencia
+  nivel → 1..10 para su escala de Primaria (completa o vacía).
+- **Resultados:** un grupo de Primaria cuyo marco (el del grupo, o si no tiene,
+  los activos del colegio) tiene escala oficial de Primaria registra cada
+  resultado como un nivel (`assessment_results.official_scale_level_id`,
+  `score` nulo). El resto de los grupos sigue con el `score` decimal. El
+  número junto al nivel sale de la equivalencia del colegio o, si no hay, del
+  que escribe el docente (`numeric_grade`); con la casilla apagada no se
+  devuelve ningún número. Aula+ nunca convierte entre escalas.
+- La línea «Nota de 1 a 10» de los gráficos de evolución solo toma resultados
+  numéricos (PA-088): un nivel nunca se ubica por una conversión inventada.
+
 ## Autenticación (SPA + Sanctum)
 
 - Login por cookies (no tokens). Flujo: `GET /sanctum/csrf-cookie` →

@@ -1,5 +1,5 @@
 import { api } from "@/lib/api"
-import type { Assessment, AssessmentResult, AssessmentType } from "@/types"
+import type { Assessment, AssessmentResult, AssessmentResultScale, AssessmentType } from "@/types"
 
 /**
  * Data layer for the assessments feature (Sesión 10), talking to the versioned
@@ -23,11 +23,27 @@ export interface AssessmentInput {
   journey_id?: string
 }
 
-/** One row of the results upsert batch. */
-export interface AssessmentResultInput {
-  student_id: number
-  score: number
-  feedback?: string | null
+/**
+ * One row of the results upsert batch: a decimal `score`, or — in a Primaria
+ * group with an official scale — `scale_level_id` plus the optional 1..10
+ * `numeric_grade` the teacher writes when the school has no equivalence
+ * (ClickUp 1dfd3mc4bgg). The backend decides which shape a group takes.
+ */
+export type AssessmentResultInput =
+  | { student_id: number; score: number; feedback?: string | null }
+  | {
+      student_id: number
+      scale_level_id: number
+      numeric_grade?: number | null
+      feedback?: string | null
+    }
+
+/** How this assessment's results are recorded (score or a scale level). */
+export async function fetchAssessmentResultScale(assessmentId: number): Promise<AssessmentResultScale> {
+  const { data } = await api.get<{ data: AssessmentResultScale }>(
+    `/api/v1/assessments/${assessmentId}/result-scale`,
+  )
+  return data.data
 }
 
 export async function fetchAssessments(groupId: number): Promise<Assessment[]> {

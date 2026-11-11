@@ -66,6 +66,10 @@ class PerformanceTimelineBuilder
         return $this->gradeAccess->restrict(
             AssessmentResult::query()
                 ->where('assessment_results.student_id', $student->id)
+                // The «Nota de 1 a 10» line: a result recorded as a scale level
+                // (Primaria) has no number and is never placed on it by an
+                // invented conversion (PA-088, ClickUp 1dfd3mc4bgg).
+                ->whereNotNull('assessment_results.score')
                 ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
             $user,
             $student,

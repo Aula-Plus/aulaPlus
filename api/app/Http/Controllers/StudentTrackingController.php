@@ -10,10 +10,12 @@ use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
+use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\CommentTrendDetector;
 use App\Services\GradeAccessRule;
+use App\Services\ResultScales;
 use App\Services\StudentGradeAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -45,6 +47,9 @@ class StudentTrackingController extends Controller
     protected const RECENT_ASSESSMENTS_LIMIT = 5;
 
     protected const RECENT_COMMENTS_LIMIT = 10;
+
+    /** @var array{0: School, 1: array<int, int>}|null */
+    protected ?array $numericContext = null;
 
     /** Most recent grade rows listed in `grades`; the aggregates use all of them. */
     public const GRADES_LIMIT = 100;
@@ -209,22 +214,48 @@ class StudentTrackingController extends Controller
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->orderByDesc('assessments.administered_at')
             ->orderByDesc('assessment_results.id')
+            ->leftJoin('official_scale_levels', 'official_scale_levels.id', '=', 'assessment_results.official_scale_level_id')
             ->select('assessment_results.id', 'assessment_results.score', 'assessments.id as assessment_id',
                 'assessments.type', 'assessments.administered_at', 'subjects.id as subject_id',
-                'subjects.name as subject_name')
+                'subjects.name as subject_name', 'assessment_results.official_scale_level_id',
+                'assessment_results.numeric_grade', 'official_scale_levels.name as scale_level_name')
             ->limit(self::GRADES_LIMIT + 1)
             ->get()
-            ->map(fn ($row) => [
-                'id' => (int) $row->id,
-                'assessment_id' => (int) $row->assessment_id,
-                'subject_id' => (int) $row->subject_id,
-                'subject_name' => $row->subject_name,
-                'type' => $row->type,
-                'administered_at' => $row->administered_at
-                    ? substr((string) $row->administered_at, 0, 10) : null,
-                'score' => $row->score === null ? null : (float) $row->score,
-            ])
+            ->map(fn ($row) => $this->gradeRow($row, $student))
             ->all();
+    }
+
+    /**
+     * One row of `grades`. A Primaria result recorded as a scale level carries
+     * the level's name, and the number next to it only as the school's switch
+     * and equivalence allow (ResultScales::numericGradeFor, ClickUp
+     * 1dfd3mc4bgg).
+     *
+     * @return array<string, mixed>
+     */
+    protected function gradeRow(AssessmentResult $row, Student $student): array
+    {
+        $this->numericContext ??= (function () use ($student): array {
+            $school = School::query()->findOrFail($student->school_id);
+
+            return [$school, app(ResultScales::class)->equivalences($school)];
+        })();
+        [$school, $equivalences] = $this->numericContext;
+        $numeric = app(ResultScales::class)->numericGradeFor($row, $school, $equivalences);
+
+        return [
+            'id' => (int) $row->id,
+            'assessment_id' => (int) $row->assessment_id,
+            'subject_id' => (int) $row->subject_id,
+            'subject_name' => $row->subject_name,
+            'type' => $row->type,
+            'administered_at' => $row->administered_at
+                ? substr((string) $row->administered_at, 0, 10) : null,
+            'score' => $row->score === null ? null : (float) $row->score,
+            'scale_level_name' => $row->scale_level_name,
+            'numeric_grade' => $numeric['value'],
+            'numeric_grade_source' => $numeric['source'],
+        ];
     }
 
     /**

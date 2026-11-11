@@ -4,9 +4,13 @@ namespace App\Http\Requests;
 
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
+use App\Models\OfficialScale;
+use App\Models\School;
+use App\Services\ResultScales;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 
 /**
  * Upserting a batch of results for one assessment (docs/prompts/13-
@@ -17,11 +21,25 @@ use Illuminate\Support\Collection;
  * Each student_id must belong to the assessment's group. A student has no
  * direct group_id — membership lives in the historized group_student pivot —
  * so we check it through the relation, exactly as the spec prescribes.
+ *
+ * How each row is recorded depends on the group (ClickUp 1dfd3mc4bgg,
+ * App\Services\ResultScales):
+ *
+ * - A Primaria group with an official scale: `scale_level_id` is required and
+ *   must be a level of THAT scale; `score` is prohibited. `numeric_grade`
+ *   (whole number 1..10, optional) is accepted only when the school shows the
+ *   number and has no equivalence of its own — otherwise it is prohibited.
+ * - Any other group: the decimal `score` as before; level and number are
+ *   prohibited.
  */
 class StoreAssessmentResultsRequest extends FormRequest
 {
     /** @var Collection<int, int>|null */
     protected ?Collection $enrolledStudentIds = null;
+
+    protected ?OfficialScale $scale = null;
+
+    protected bool $scaleResolved = false;
 
     public function authorize(): bool
     {
@@ -36,12 +54,60 @@ class StoreAssessmentResultsRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             'results' => ['required', 'array', 'min:1'],
             'results.*.student_id' => ['required', 'integer', $this->studentBelongsToGroup()],
-            'results.*.score' => ['required', 'numeric', 'min:0', 'max:999.99', 'decimal:0,2'],
             'results.*.feedback' => ['nullable', 'string'],
         ];
+
+        $scale = $this->scale();
+
+        if ($scale === null) {
+            return $rules + [
+                'results.*.score' => ['required', 'numeric', 'min:0', 'max:999.99', 'decimal:0,2'],
+                'results.*.scale_level_id' => ['prohibited'],
+                'results.*.numeric_grade' => ['prohibited'],
+            ];
+        }
+
+        $resultScales = app(ResultScales::class);
+        $school = School::query()->findOrFail($this->assessment()->school_id);
+        $teacherWritesNumber = $resultScales->teacherWritesNumber(
+            $school,
+            $scale,
+            $resultScales->equivalences($school),
+        );
+
+        return $rules + [
+            'results.*.score' => ['prohibited'],
+            'results.*.scale_level_id' => ['required', 'integer', Rule::in($scale->levels->pluck('id')->all())],
+            'results.*.numeric_grade' => $teacherWritesNumber
+                ? ['nullable', 'integer', 'min:1', 'max:10']
+                : ['prohibited'],
+        ];
+    }
+
+    /**
+     * The official scale the assessment's group records with (null = decimal
+     * score), resolved once per request.
+     */
+    public function scale(): ?OfficialScale
+    {
+        if (! $this->scaleResolved) {
+            $this->scaleResolved = true;
+            $group = $this->assessment()->group;
+            $this->scale = $group ? app(ResultScales::class)->scaleForGroup($group) : null;
+        }
+
+        return $this->scale;
+    }
+
+    protected function assessment(): Assessment
+    {
+        /** @var Assessment $assessment */
+        $assessment = $this->route('assessment');
+
+        return $assessment;
     }
 
     /**
