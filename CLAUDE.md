@@ -150,8 +150,11 @@ skeleton is done, until explicitly asked:
   layer exists, no API surface yet) and AI-assisted class generation. The
   AI-proposal engine itself (`AIProposal`, `docs/prompts/05-asistente-ia-docente.md`)
   is done; `Assessment` now also has full CRUD (`docs/prompts/13-evaluaciones-
-  resultados.md`) — what's still out of scope is the curriculum-planning UI/API
-  built on top of them.
+  resultados.md`). The Calendar (screen 21, ClickUp 1dfd3mc4bgh) added a class's
+  optional time and room (`PATCH /v1/class-sessions/{id}`) and the teacher's
+  private «Mis horarios» (`TimetableSlot`, pre-fill only) — what's still out of
+  scope is the curriculum-planning UI/API built on top of them (creating/listing
+  classes, plans, units).
 - "PTP y enriquecimiento" (screen 9 of the living document) — explicitly deferred:
   it's unclear whether it's a new entity or a relabeling of
   Accommodation/Barrier, and it depends on the annual-plan/curriculum module

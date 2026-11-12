@@ -239,3 +239,14 @@ it('rejects an invalid date window (422)', function () {
     $this->getJson("/api/v1/students/{$student->id}/performance-timeline?from=not-a-date")
         ->assertStatus(422);
 });
+
+it('never turns a meeting into a timeline mark (only institutional events are school-wide)', function () {
+    ['school' => $school, 'teacher' => $teacher, 'student' => $student] = timelineScenario();
+    CalendarEvent::factory()->meeting()->create(['school_id' => $school->id, 'title' => 'Reunión con equipo tratante', 'start_at' => '2026-03-05 08:00:00']);
+    Sanctum::actingAs($teacher);
+
+    $response = $this->getJson("/api/v1/students/{$student->id}/performance-timeline")->assertOk();
+
+    expect(markTypes($response->json('marks')))->not->toContain('calendar_event')
+        ->and($response->getContent())->not->toContain('equipo tratante');
+});

@@ -28,6 +28,8 @@ export const screenTitles: { pattern: string; title: string }[] = [
   { pattern: "/alumnos/:id/historial", title: "Historial del alumno" },
   { pattern: "/alertas", title: "Alertas" },
   { pattern: "/mis-seguimientos", title: "Mis seguimientos" },
+  { pattern: "/calendario", title: "Calendario" },
+  { pattern: "/calendario/mis-horarios", title: "Mis horarios" },
   { pattern: "/pruebas-de-sondeo/tipos", title: "Diseño de screenings" },
   { pattern: "/usuarios", title: "Usuarios y permisos" },
   { pattern: "/usuarios/limites", title: "Límites" },

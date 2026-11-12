@@ -16,6 +16,8 @@ use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
+use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\ClassSessionScheduleController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
@@ -50,6 +52,7 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\TimetableSlotController;
 use App\Http\Controllers\UsageJourneyStepController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -319,6 +322,21 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);
         Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store']);
         Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy']);
+
+        // Calendar (screen 21, ClickUp 1dfd3mc4bgh): each person's dates in
+        // time (the Inicio's «Hoy en tu calendario» reads the same feed),
+        // Direction's institutional events, the time/room of a class, and the
+        // teacher's private «Mis horarios», which only pre-fills them.
+        Route::get('/calendar', [CalendarController::class, 'index']);
+        Route::post('/calendar-events', [CalendarController::class, 'store']);
+        Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
+        Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);
+        Route::get('/class-sessions/suggested-slot', [ClassSessionScheduleController::class, 'suggestedSlot']);
+        Route::patch('/class-sessions/{classSession}', [ClassSessionScheduleController::class, 'update']);
+        Route::get('/timetable-slots', [TimetableSlotController::class, 'index']);
+        Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
+        Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
+        Route::delete('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'destroy']);
 
         // Session: user management (docs/superpowers/specs/2026-09-15-user-
         // management-design.md). Director-only staff onboarding + lifecycle.

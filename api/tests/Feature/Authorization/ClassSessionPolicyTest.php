@@ -57,3 +57,17 @@ it('never authorizes across schools', function () {
 
     expect($directorA->can('view', $classSessionB))->toBeFalse();
 });
+
+it('lets only the teacher of the class\'s subject write it when the class names one', function () {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $mathTeacher = User::factory()->forSchool($school)->teacher()->create();
+    $englishTeacher = User::factory()->forSchool($school)->teacher()->create();
+    $math = leadGroup($group, $mathTeacher);
+    leadGroup($group, $englishTeacher);
+    $classSession = ClassSession::factory()->create(['group_id' => $group->id, 'subject_id' => $math->id]);
+
+    expect($mathTeacher->can('update', $classSession))->toBeTrue()
+        ->and($englishTeacher->can('view', $classSession))->toBeFalse()
+        ->and($englishTeacher->can('update', $classSession))->toBeFalse();
+});

@@ -26,6 +26,7 @@ import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
+import { CalendarPage } from "@/features/calendar/CalendarPage"
 
 function App() {
   return (
@@ -178,6 +179,18 @@ function App() {
               </ProtectedLayout>
             }
           />
+          {/* Calendario (screen 21) and the teacher's private «Mis horarios» tab. */}
+          {["/calendario", "/calendario/mis-horarios"].map((path) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedLayout>
+                  <CalendarPage />
+                </ProtectedLayout>
+              }
+            />
+          ))}
           <Route
             path="/configuracion/alertas"
             element={

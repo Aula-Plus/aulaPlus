@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   BellRing,
   BookOpen,
+  CalendarDays,
   ClipboardList,
   GraduationCap,
   Eye,
@@ -74,6 +75,9 @@ export function buildNavSections(
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
         // is unread notices only (not alerts); it goes away once read.
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
+        // Every role has a Calendar (screen 21); what each sees is decided
+        // server-side.
+        { to: "/calendario", label: "Calendario", icon: CalendarDays },
         // The screening design screen is for Psicopedagogía and Dirección,
         // who both edit designs (screen 08).
         ...(canEditScreeningTestDesign(user)

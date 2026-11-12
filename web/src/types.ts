@@ -1755,6 +1755,108 @@ export interface AiReportSetting {
   available: boolean
 }
 
+// ── Calendar (screen 21, ClickUp 1dfd3mc4bgh) ────────────────────────────────
+
+/** Mirror of `App\Enums\CalendarItemType`: the seven kinds of date. */
+export type CalendarItemType =
+  | "assessment"
+  | "class"
+  | "meeting"
+  | "task"
+  | "period_closing"
+  | "project_stage"
+  | "institutional"
+
+/** Filter order and labels, as on screen 21 (P21-DEC-06). */
+export const calendarItemTypes: readonly CalendarItemType[] = [
+  "assessment",
+  "class",
+  "meeting",
+  "task",
+  "period_closing",
+  "project_stage",
+  "institutional",
+]
+
+export const calendarItemTypeLabels: Record<CalendarItemType, string> = {
+  assessment: "Evaluación",
+  class: "Clase",
+  meeting: "Reunión",
+  task: "Tarea",
+  period_closing: "Cierre de período",
+  project_stage: "Etapa de proyecto",
+  institutional: "Institucional",
+}
+
+/** Where each kind of date comes from («Viene de»). */
+export const calendarItemSourceLabels: Record<CalendarItemType, string> = {
+  assessment: "Evaluaciones",
+  class: "Clases",
+  meeting: "Reuniones",
+  task: "Seguimientos",
+  period_closing: "Año y calendario",
+  project_stage: "Proyectos",
+  institutional: "Dirección",
+}
+
+/** One date of `GET /api/v1/calendar`. Never carries a student's name. */
+export interface CalendarItem {
+  key: string
+  type: CalendarItemType
+  id: number
+  /** School-local day, `YYYY-MM-DD`. */
+  date: string
+  /** School-local `HH:MM`, or null for a date without a time. */
+  time: string | null
+  end_time: string | null
+  title: string | null
+  detail: string | null
+  group: { id: number; name: string } | null
+  subject: { id: number; name: string } | null
+  /** Room of a class, place of an event. */
+  place: string | null
+  assessment_type: AssessmentType | null
+  can_edit: boolean
+}
+
+/** An institutional event as returned by `/api/v1/calendar-events`. */
+export interface InstitutionalEvent {
+  id: number
+  type: "institutional"
+  title: string
+  date: string
+  time: string | null
+  location: string | null
+  description: string | null
+}
+
+/** ISO weekday (1 = lunes … 7 = domingo) → Spanish label. */
+export const weekdayLabels: Record<number, string> = {
+  1: "Lunes",
+  2: "Martes",
+  3: "Miércoles",
+  4: "Jueves",
+  5: "Viernes",
+  6: "Sábado",
+  7: "Domingo",
+}
+
+/** One line of the teacher's private «Mis horarios». */
+export interface TimetableSlot {
+  id: number
+  group: { id: number; name: string }
+  subject: { id: number; name: string }
+  weekday: number
+  start_time: string
+  room: string | null
+}
+
+/** A group-subject the teacher teaches (what a slot can be for). */
+export interface TeachingAssignment {
+  group: { id: number; name: string }
+  subject: { id: number; name: string | null }
+}
+
 // ── Official scales (screen 24 · «Escalas oficiales», ClickUp 1dfd3mc4bgg) ──
 
 /** Where the number next to a Primaria level comes from. */

@@ -10,6 +10,8 @@ use App\Models\AuditLog;
 use App\Models\CalendarEvent;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\SchoolTime;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -216,8 +218,13 @@ class PerformanceTimelineBuilder
     protected function appendCalendarEvents(Collection $entries, ?string $from, ?string $to): void
     {
         $events = CalendarEvent::query()
-            ->when($from, fn (Builder $q) => $q->whereDate('start_at', '>=', $from))
-            ->when($to, fn (Builder $q) => $q->whereDate('start_at', '<=', $to))
+            // Only the dates the whole school sees: a meeting is private to
+            // its invitees (screen 21 red line), so it never becomes a mark.
+            ->institutional()
+            // `start_at` is stored in UTC: bound by the school's local days so
+            // an event at 22:00 in Montevideo stays on its own day.
+            ->when($from, fn (Builder $q) => $q->where('start_at', '>=', SchoolTime::startOfDay($from)))
+            ->when($to, fn (Builder $q) => $q->where('start_at', '<', SchoolTime::startOfDay(CarbonImmutable::parse($to)->addDay())))
             ->get();
 
         foreach ($events as $event) {

@@ -277,6 +277,49 @@ no escribe nada (cubierto por test).
   el registro dueño existe; sin `details`, se muestran desde `changes` (los
   campos sensibles aparecen como "contenido no disponible").
 
+## Calendario (pantalla 21)
+
+ClickUp 1dfd3mc4bgh. Ordena en el tiempo fechas que ya existen en otras
+pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
+(P21-DEC-03).
+
+- **Feed** `GET /api/v1/calendar?from&to&types[]` (`App\Services\Calendar\CalendarFeed`):
+  lee cada fecha de su propio registro. Siete tipos (`App\Enums\CalendarItemType`);
+  hoy tienen fuente `assessment`, `class`, `task` (seguimientos propios con
+  plazo) e `institutional`. `meeting`, `period_closing` y `project_stage`
+  devuelven vacío hasta que existan las pantallas 10, 26 y 18. El Inicio
+  («Hoy en tu calendario», P01-HOY-01) lee el mismo feed para hoy.
+- **Quién ve qué** (línea roja): clases solo el docente que da esa materia en
+  ese grupo; evaluaciones el docente dueño, Psicopedagogía y Dirección todas
+  (sin notas ni alumnos); tareas solo las propias; institucionales todos. Una
+  reunión (`CalendarEvent` tipo `meeting`) la ve solo quien la tiene en su
+  calendario (pivot `calendar_calendar_event`) — ni Dirección la ve si no está
+  citada. Ningún ítem lleva nombre de alumno.
+- **Evento institucional**: la única fecha que nace acá. Solo Dirección crea,
+  edita y quita (`CalendarEventPolicy`). Fecha, hora opcional (`all_day`),
+  lugar opcional; fechas/horas en hora local del colegio, guardadas en UTC.
+- **Hora y salón de una clase**: datos de la clase (`class_sessions.start_time`,
+  `room`, ambos opcionales), editables por su docente en cualquier momento.
+  `class_sessions.subject_id` dice de qué materia es la clase.
+- **Mis horarios** (`TimetableSlot`): horario semanal privado del docente (solo
+  él lo lee, `TimetableSlotPolicy`). Es un valor por defecto: precompleta hora y
+  salón al crear (aplicar una propuesta de IA) o editar una clase
+  (`TimetableSlotSuggester`: el horario libre de ese día; si no hay, el
+  primero). Nunca crea clases; cambiarlo no toca las ya creadas.
+
+### Glosario (Calendario)
+
+| Español (UI)        | Código                                   |
+|---------------------|------------------------------------------|
+| Calendario          | calendar feed (`CalendarFeed`)           |
+| Evento institucional| `CalendarEvent` tipo `institutional`     |
+| Reunión             | `CalendarEvent` tipo `meeting` / item `meeting` |
+| Cierre de período   | item `period_closing`                    |
+| Etapa de proyecto   | item `project_stage`                     |
+| Tarea (en Calendario)| item `task` (= `ScheduledFollowUp` propio) |
+| Mis horarios        | `TimetableSlot` (tabla `timetable_slots`) |
+| Salón               | `room`                                   |
+
 ## Estado actual (scaffolding)
 
 **Implementado**
