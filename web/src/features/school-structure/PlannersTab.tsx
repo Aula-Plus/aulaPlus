@@ -191,12 +191,18 @@ function CustomFieldRow({
   onSaved: (settings: PlannerFamilySettings[]) => void
 }) {
   const [failed, setFailed] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   async function remove() {
+    if (removing) return
+    setRemoving(true)
+    setFailed(false)
     try {
       onSaved(await deleteCustomField(field.id))
     } catch {
       setFailed(true)
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -213,7 +219,7 @@ function CustomFieldRow({
       <TableCell>{field.required_by_school ? "Obligatorio para el colegio" : "Opcional"}</TableCell>
       <TableCell>{field.shown ? "Sí" : "No"}</TableCell>
       <TableCell className="text-right">
-        <Button size="sm" variant="outline" onClick={remove}>
+        <Button size="sm" variant="outline" onClick={remove} disabled={removing}>
           Quitar
         </Button>
         {failed && (
@@ -240,6 +246,8 @@ function AddCustomField({
   const [error, setError] = useState<string | null>(null)
   const needsOptions = type === "list" || type === "multiple_choice"
 
+  const [saving, setSaving] = useState(false)
+
   async function add() {
     const parsed = options
       .split(",")
@@ -253,7 +261,9 @@ function AddCustomField({
       setError("Una lista necesita al menos dos opciones, separadas por coma.")
       return
     }
+    if (saving) return
     setError(null)
+    setSaving(true)
     try {
       onSaved(
         await createCustomField({
@@ -269,6 +279,8 @@ function AddCustomField({
       setRequired(false)
     } catch {
       setError("No pudimos agregar el campo. Revisá que las opciones no se repitan.")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -320,7 +332,9 @@ function AddCustomField({
         </label>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div>
-          <Button onClick={add}>Agregar</Button>
+          <Button onClick={add} disabled={saving}>
+            {saving ? "Agregando…" : "Agregar"}
+          </Button>
         </div>
       </div>
     </SectionCard>

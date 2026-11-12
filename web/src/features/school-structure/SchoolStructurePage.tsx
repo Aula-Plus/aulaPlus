@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useState } from "react"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageCurricularStructure } from "@/lib/permissions"
 import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 import { CurricularOfferingTab } from "./CurricularOfferingTab"
 import { PlannersTab } from "./PlannersTab"
+import { NoAccessPage } from "@/pages/NoAccessPage"
 
 type Tab = "offering" | "planners"
 
@@ -25,19 +25,9 @@ export function SchoolStructurePage() {
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>("offering")
 
-  useEffect(() => {
-    document.title = "Colegio y estructura · Aula+"
-  }, [])
-
+  // The tab title comes from the route (src/lib/screenTitles.ts).
   if (!canManageCurricularStructure(user)) {
-    return (
-      <div className="grid gap-3">
-        <p>Esta pantalla no está disponible para tu cuenta.</p>
-        <Link to="/" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-          Volver al inicio
-        </Link>
-      </div>
-    )
+    return <NoAccessPage />
   }
 
   return (

@@ -93,7 +93,10 @@ export function CurricularOfferingTab() {
               const isEditing = editing === rowKey(row)
               return (
                 <TableRow key={rowKey(row)}>
-                  <TableCell>{row.group.name}</TableCell>
+                  <TableCell>
+                    {row.group.name}
+                    <span className="block text-xs text-muted-foreground">{row.group.school_year}</span>
+                  </TableCell>
                   <TableCell>{row.subject.name}</TableCell>
                   <TableCell>
                     {isEditing ? (

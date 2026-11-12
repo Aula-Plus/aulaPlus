@@ -109,6 +109,45 @@ it('keeps the screen to direction: teachers and psychopedagogy cannot read or ed
     }
 });
 
+/** A custom planner field of the given school. */
+function customPlannerField(School $school): SchoolPlannerField
+{
+    return Tenancy::forSchool($school, fn () => SchoolPlannerField::query()->create([
+        'name' => 'Hilo conductor', 'type' => 'short_text', 'shown' => true, 'position' => 1,
+    ]));
+}
+
+it('forbids teachers and psychopedagogy to rename, change or remove planner fields', function () {
+    $s = curricularScenario();
+    $psychopedagogue = User::factory()->forSchool($s['school'])->psychopedagogue()->create();
+    $field = customPlannerField($s['school']);
+    $notes = PlannerFieldDefinition::query()->where('key', 'teacher_notes')->firstOrFail();
+
+    foreach ([$s['teacher'], $psychopedagogue] as $user) {
+        Sanctum::actingAs($user);
+        $this->putJson("/api/v1/planner-settings/fields/{$notes->id}", ['school_name' => 'Notas', 'shown' => false])
+            ->assertForbidden();
+        $this->putJson("/api/v1/planner-settings/custom-fields/{$field->id}", ['name' => 'Otro', 'type' => 'short_text'])
+            ->assertForbidden();
+        $this->deleteJson("/api/v1/planner-settings/custom-fields/{$field->id}")->assertForbidden();
+    }
+
+    expect(SchoolPlannerField::withoutGlobalScopes()->whereKey($field->id)->value('name'))->toBe('Hilo conductor')
+        ->and(SchoolPlannerField::withoutGlobalScopes()->whereNotNull('planner_field_definition_id')->count())->toBe(0);
+});
+
+it('returns 404 for another school custom planner field', function () {
+    $s = curricularScenario();
+    $foreign = customPlannerField(School::factory()->create());
+    Sanctum::actingAs($s['director']);
+
+    $this->putJson("/api/v1/planner-settings/custom-fields/{$foreign->id}", ['name' => 'Otro', 'type' => 'short_text'])
+        ->assertNotFound();
+    $this->deleteJson("/api/v1/planner-settings/custom-fields/{$foreign->id}")->assertNotFound();
+
+    expect(SchoolPlannerField::withoutGlobalScopes()->whereKey($foreign->id)->value('name'))->toBe('Hilo conductor');
+});
+
 it('never reaches another school group-subject', function () {
     $s = curricularScenario();
     $other = School::factory()->create();

@@ -60,7 +60,9 @@ describe("SchoolStructurePage", () => {
     const fetch = vi.spyOn(structureApi, "fetchCurricularOfferings")
     renderPage("teacher")
 
-    expect(screen.getByText("Esta pantalla no está disponible para tu cuenta.")).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está disponible para tu cuenta" }),
+    ).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
     expect(fetch).not.toHaveBeenCalled()
   })
