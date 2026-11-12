@@ -25,6 +25,8 @@ class AlertRuleResource extends JsonResource
             'signal_count' => $this->signal_count,
             'period_days' => $this->period_days,
             'subject_id' => $this->subject_id,
+            // Null = every level (ClickUp 1dfd3mc2wx0).
+            'education_level_ids' => $this->education_level_ids,
             'active' => $this->active,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
