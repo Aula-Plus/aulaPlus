@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
+use App\Enums\Role;
 use App\Models\AIProposal;
 use App\Models\Group;
 use App\Models\Subject;
@@ -81,8 +82,23 @@ class GenerateAIProposalRequest extends FormRequest
                 'parameters.target_sessions' => ['nullable', 'integer'],
                 'parameters.duration_weeks' => ['nullable', 'integer'],
             ],
+            // A proposal can't be requested without a subject (ClickUp
+            // 86e3jpzdr, PO decision of 03/11): without one there is no
+            // program, no group performance and no way to cut the group's
+            // accommodations to the right subject. Annual plans and
+            // assessments name it directly and a unit inherits it from its
+            // plan (annual_plans.subject_id is NOT NULL); a class session gets
+            // it from its unit or, when it hangs from none, chosen directly —
+            // never both, so there's a single source of truth.
             AIProposalType::ClassSession => [
-                'parameters.unit_id' => ['nullable', $this->unitBelongsToGroup()],
+                'parameters.unit_id' => ['nullable', 'required_without:parameters.subject_id', $this->unitBelongsToGroup()],
+                'parameters.subject_id' => [
+                    'nullable',
+                    'required_without:parameters.unit_id',
+                    'prohibits:parameters.unit_id',
+                    Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
+                    $this->subjectTaughtInGroup(),
+                ],
                 'parameters.focus' => ['required', 'string'],
                 'parameters.duration_minutes' => ['nullable', 'integer'],
             ],
@@ -118,6 +134,31 @@ class GenerateAIProposalRequest extends FormRequest
             $subject = Subject::find($value);
             if ($subject === null || ! $this->user()->teachesSubjectInGroup($this->group(), $subject)) {
                 $fail('You are not assigned to teach this subject in this group.');
+            }
+        };
+    }
+
+    /**
+     * A subject chosen directly for a class session must be taught in the
+     * route group. A teacher may only pick one they teach there themselves
+     * (User::teachesSubjectInGroup, as for assessments); psychopedagogy and
+     * direction, who aren't assigned subjects, any subject someone teaches in
+     * the group.
+     */
+    protected function subjectTaughtInGroup(): callable
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            $subject = Subject::find($value);
+            if ($subject === null) {
+                return;
+            }
+
+            $allowed = $this->user()->hasAnyRole(Role::schoolWideValues())
+                ? $this->group()->teachers()->wherePivot('subject_id', $subject->id)->exists()
+                : $this->user()->teachesSubjectInGroup($this->group(), $subject);
+
+            if (! $allowed) {
+                $fail('The selected subject is not taught in this group.');
             }
         };
     }
