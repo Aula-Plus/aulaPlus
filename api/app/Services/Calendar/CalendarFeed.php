@@ -112,7 +112,11 @@ class CalendarFeed
                 'subject' => $session->subject ? ['id' => $session->subject->id, 'name' => $session->subject->name] : null,
                 'place' => $session->room,
                 'assessment_type' => null,
-                'can_edit' => $user->can('update', $session),
+                // Every class returned above passes ClassSessionPolicy::update
+                // (the same group_teacher + subject condition as isOwner), so
+                // no per-row policy query (N+1). Keep both rules in sync:
+                // CalendarFeedTest checks them against each other.
+                'can_edit' => true,
             ]);
     }
 

@@ -8,6 +8,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { weekdayLabels, type TeachingAssignment, type TimetableSlot } from "@/types"
 import { createTimetableSlot, deleteTimetableSlot, fetchTimetable } from "./calendarApi"
+import { calendarErrorMessage } from "./calendarErrors"
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -62,8 +63,8 @@ export function TimetablePanel() {
       })
       setTime("")
       load()
-    } catch {
-      setFormError("No pudimos guardar el horario. Revisá que no esté repetido.")
+    } catch (err) {
+      setFormError(calendarErrorMessage(err, "No pudimos guardar el horario."))
     } finally {
       setSaving(false)
     }

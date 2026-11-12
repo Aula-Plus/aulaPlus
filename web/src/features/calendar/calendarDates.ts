@@ -114,3 +114,38 @@ export function viewTitle(view: CalendarView, anchor: string): string {
   }
   return monthTitle(anchor)
 }
+
+/** Days in each «Ver más» step of the list view. */
+export const LIST_STEP_DAYS = 14
+
+/** The longest window the feed serves in one request (CalendarRequest). */
+export const MAX_FEED_DAYS = 62
+
+/**
+ * The list view's opening window: from the Monday of the anchor's week, two
+ * weeks of what's coming (PO answer of 12/11).
+ */
+export function initialListRange(anchor: string): { from: string; to: string } {
+  const from = mondayOf(anchor)
+  return { from, to: addDays(from, LIST_STEP_DAYS - 1) }
+}
+
+/** A long window split into chunks the feed accepts, in order. */
+export function chunkRange(from: string, to: string, size = MAX_FEED_DAYS): { from: string; to: string }[] {
+  const chunks: { from: string; to: string }[] = []
+  for (let start = from; start <= to; start = addDays(start, size)) {
+    const end = addDays(start, size - 1)
+    chunks.push({ from: start, to: end < to ? end : to })
+  }
+  return chunks
+}
+
+/** «Del 09/11 al 22/11». */
+export function listTitle(from: string, to: string): string {
+  return `Del ${dayMonth(from)} al ${dayMonth(to)}`
+}
+
+/** A valid `YYYY-MM-DD` from the URL, or null. */
+export function dayParam(value: string | null): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
+}

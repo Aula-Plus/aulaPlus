@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { AxiosError } from "axios"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as calendarApi from "./calendarApi"
 import { TimetablePanel } from "./TimetablePanel"
@@ -72,5 +73,26 @@ describe("TimetablePanel", () => {
     expect(screen.getByText("Elegí la hora.")).toBeInTheDocument()
     expect(create).not.toHaveBeenCalled()
     expect(screen.getByText("Todavía no cargaste horarios.")).toBeInTheDocument()
+  })
+
+  it.each([
+    ["subject_id", "Ya no tenés asignado ese grupo y materia."],
+    ["start_time", "Ya tenés ese horario cargado, o la hora no es válida."],
+  ])("says why a slot was rejected (%s)", async (field, message) => {
+    vi.spyOn(calendarApi, "fetchTimetable").mockResolvedValue({ slots: [], assignments })
+    vi.spyOn(calendarApi, "createTimetableSlot").mockRejectedValue(
+      new AxiosError("Unprocessable", "ERR_BAD_REQUEST", undefined, undefined, {
+        status: 422,
+        data: { errors: { [field]: ["x"] } },
+      } as never),
+    )
+    const user = userEvent.setup()
+    render(<TimetablePanel />)
+
+    await user.selectOptions(await screen.findByLabelText("Grupo y materia"), "5:2")
+    await user.type(screen.getByLabelText("Hora"), "08:30")
+    await user.click(screen.getByRole("button", { name: "Agregar" }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
   })
 })

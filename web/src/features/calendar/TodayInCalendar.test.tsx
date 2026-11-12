@@ -117,4 +117,34 @@ describe("TodayInCalendar", () => {
 
     expect(await screen.findByText("Hoy no hay nada en tu calendario.")).toBeInTheDocument()
   })
+
+  it("gives Direction and Psychopedagogy the total of today's assessments, opening the filtered calendar", async () => {
+    vi.spyOn(calendarApi, "fetchCalendar").mockImplementation(async (_from, _to, types) =>
+      types?.includes("assessment")
+        ? [1, 2, 3].map((id) =>
+            item({ key: `assessment-${id}`, type: "assessment", id, title: `Escrito ${id}`, can_edit: false }),
+          )
+        : [],
+    )
+
+    renderBlock(director)
+
+    const link = await screen.findByRole("link", { name: "3 evaluaciones hoy" })
+    expect(link).toHaveAttribute(
+      "href",
+      "/calendario?vista=lista&desde=2026-12-15&hasta=2026-12-15&tipos=assessment",
+    )
+    // Only the total on the Inicio: no titles, groups or grades.
+    expect(screen.queryByText("Escrito 1")).not.toBeInTheDocument()
+  })
+
+  it("never adds the assessments total for a teacher", async () => {
+    const fetch = vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+
+    renderBlock(teacher)
+
+    await screen.findByText("Hoy no hay nada en tu calendario.")
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/evaluaciones? hoy/)).not.toBeInTheDocument()
+  })
 })

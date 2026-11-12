@@ -207,4 +207,78 @@ describe("CalendarPage", () => {
     await screen.findByText("Diciembre 2026")
     expect(screen.queryByRole("button", { name: "Evento institucional" })).not.toBeInTheDocument()
   })
+
+  it("starts the list on the current week and moves forward and back keeping the filter", async () => {
+    const fetch = vi.spyOn(calendarApi, "fetchCalendar").mockImplementation(async (from) =>
+      from <= "2026-11-27"
+        ? [item({ key: "institutional-1", type: "institutional", id: 1, date: "2026-11-27", title: "Acto", group: null, can_edit: false })]
+        : [
+            item({}),
+            assessment,
+            item({ key: "institutional-2", type: "institutional", id: 2, date: "2026-12-30", title: "Fin de cursos", group: null, can_edit: false }),
+          ],
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText("Diciembre 2026")
+
+    await user.click(screen.getByRole("button", { name: "Lista" }))
+    expect(await screen.findByRole("heading", { level: 2, name: "Del 14/12 al 27/12" })).toBeInTheDocument()
+    expect(fetch).toHaveBeenLastCalledWith("2026-12-14", "2026-12-27")
+
+    // Hide classes: the filter stays while moving.
+    await user.click(screen.getByRole("button", { name: "Clase" }))
+
+    await user.click(screen.getByRole("button", { name: "Ver más" }))
+    expect(await screen.findByRole("heading", { level: 2, name: "Del 14/12 al 10/01" })).toBeInTheDocument()
+    expect(fetch).toHaveBeenLastCalledWith("2026-12-14", "2027-01-10")
+    expect(await screen.findByText("Fin de cursos")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Ver la semana anterior" }))
+    await user.click(screen.getByRole("button", { name: "Ver la semana anterior" }))
+    await user.click(screen.getByRole("button", { name: "Ver la semana anterior" }))
+    expect(await screen.findByRole("heading", { level: 2, name: "Del 23/11 al 10/01" })).toBeInTheDocument()
+    expect(await screen.findByText("Acto")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Clase" })).toHaveAttribute("aria-pressed", "false")
+    expect(screen.queryByText("Repaso de ecuaciones")).not.toBeInTheDocument()
+  })
+
+  it("opens today's assessments from the Inicio link, filtered", async () => {
+    currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+    const fetch = vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([
+      { ...assessment, key: "assessment-8", id: 8, date: "2026-12-15" },
+      item({ key: "institutional-3", type: "institutional", id: 3, date: "2026-12-15", title: "Acto", can_edit: false }),
+    ])
+
+    renderPage("/calendario?vista=lista&desde=2026-12-15&hasta=2026-12-15&tipos=assessment")
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Del 15/12 al 15/12" })).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith("2026-12-15", "2026-12-15")
+    expect(await screen.findByText(/Escrito de integración/)).toBeInTheDocument()
+    expect(screen.queryByText(/Acto/)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Institucional" })).toHaveAttribute("aria-pressed", "false")
+    // From there, one click to the group's assessments and to the group.
+    expect(screen.getByRole("link", { name: "Abrir" })).toHaveAttribute("href", "/clases/3/evaluaciones")
+    expect(screen.getByRole("link", { name: "Grupo" })).toHaveAttribute("href", "/clases/3/seguimiento")
+  })
+
+  it("never lets an older response overwrite the range being shown", async () => {
+    let resolveOld: (items: CalendarItem[]) => void = () => {}
+    vi.spyOn(calendarApi, "fetchCalendar").mockImplementation((from) =>
+      from === "2026-11-30"
+        ? new Promise((resolve) => {
+            resolveOld = resolve
+          })
+        : Promise.resolve([item({ key: "class-9", id: 9, date: "2027-01-14", title: "Geografía" })]),
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole("button", { name: "Siguiente" }))
+    expect(await screen.findByText("Geografía")).toBeInTheDocument()
+
+    resolveOld([item({ key: "class-8", id: 8, date: "2026-12-17", title: "Historia" })])
+    await waitFor(() => expect(screen.queryByText("Historia")).not.toBeInTheDocument())
+    expect(screen.getByText("Geografía")).toBeInTheDocument()
+  })
 })

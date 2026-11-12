@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\SchoolTime;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -213,4 +214,78 @@ it('never leaks another school\'s dates into the feed', function () {
     Sanctum::actingAs(User::factory()->forSchool($schoolA)->director()->create());
 
     $this->getJson(feed())->assertOk()->assertExactJson(['data' => []]);
+});
+
+it('marks every class in the feed as editable exactly when the policy allows it, with or without subject', function () {
+    $school = School::factory()->create();
+    [$teacher, $group, $subject] = calendarTeacher($school);
+    $coTeacher = User::factory()->forSchool($school)->teacher()->create();
+    $otherSubject = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Inglés']);
+    leadGroup($group, $coTeacher, $otherSubject);
+    $withSubject = ClassSession::factory()->create(['group_id' => $group->id, 'subject_id' => $subject->id, 'date' => '2026-12-15']);
+    $coTeachers = ClassSession::factory()->create(['group_id' => $group->id, 'subject_id' => $otherSubject->id, 'date' => '2026-12-15']);
+    $withoutSubject = ClassSession::factory()->create(['group_id' => $group->id, 'subject_id' => null, 'date' => '2026-12-15']);
+
+    foreach ([$teacher, $coTeacher] as $user) {
+        Sanctum::actingAs($user);
+        $items = collect($this->getJson(feed())->assertOk()->json('data'))->where('type', 'class');
+
+        foreach ([$withSubject, $coTeachers, $withoutSubject] as $session) {
+            $item = $items->firstWhere('id', $session->id);
+            $allowed = $user->can('update', $session->fresh());
+
+            // In the feed ⇔ the policy lets them edit it; and then can_edit.
+            expect($item !== null)->toBe($allowed);
+            if ($item !== null) {
+                expect($item['can_edit'])->toBeTrue();
+            }
+        }
+    }
+
+    // The class without a subject: any teacher of the group.
+    Sanctum::actingAs($coTeacher);
+    expect(collect($this->getJson(feed())->json('data'))->pluck('id'))->toContain($withoutSubject->id)
+        ->not->toContain($withSubject->id);
+});
+
+it('builds the teacher feed with a constant number of queries, however many classes', function () {
+    $school = School::factory()->create();
+    [$teacher, $group, $subject] = calendarTeacher($school);
+    Sanctum::actingAs($teacher);
+    $count = function () {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson(feed())->assertOk();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    ClassSession::factory()->create(['group_id' => $group->id, 'subject_id' => $subject->id, 'date' => '2026-12-01']);
+    $count(); // warm-up: per-request caches (roles, permissions) fill on the first call
+    $one = $count();
+
+    ClassSession::factory()->count(19)->sequence(fn ($s) => ['date' => '2026-12-'.str_pad((string) ($s->index + 2), 2, '0', STR_PAD_LEFT)])
+        ->create(['group_id' => $group->id, 'subject_id' => $subject->id]);
+    $twenty = $count();
+
+    expect($twenty)->toBe($one);
+});
+
+it('puts an institutional event on its local day in the group timeline marks', function () {
+    $school = School::factory()->create();
+    [$teacher, $group] = calendarTeacher($school);
+    // 22:00 in Montevideo on 15/12 is 01:00 UTC on 16/12.
+    CalendarEvent::factory()->create([
+        'school_id' => $school->id, 'type' => 'institutional', 'title' => 'Acto de fin de año',
+        'start_at' => SchoolTime::startOfDay('2026-12-15')->addHours(22),
+    ]);
+    Sanctum::actingAs($teacher);
+
+    $marks = collect($this->getJson("/api/v1/groups/{$group->id}/performance-timeline?from=2026-12-01&to=2026-12-15")
+        ->assertOk()->json('marks'))->where('type', 'calendar_event');
+
+    expect($marks)->toHaveCount(1)
+        ->and($marks->first()['date'])->toBe('2026-12-15');
 });

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import type { CalendarItem } from "@/types"
 import { fetchSuggestedSlot, updateClassSchedule } from "./calendarApi"
 import { weekdayDayMonth } from "./calendarDates"
+import { calendarErrorMessage } from "./calendarErrors"
 
 /**
  * Time and room of a class (ClickUp 1dfd3mc4bgh): data of the class, both
@@ -71,8 +72,8 @@ export function ClassScheduleDialog({
     try {
       await updateClassSchedule(item.id, { start_time: time || null, room: room.trim() || null })
       onSaved()
-    } catch {
-      setError("No pudimos guardar la hora y el salón.")
+    } catch (err) {
+      setError(calendarErrorMessage(err, "No pudimos guardar la hora y el salón."))
     } finally {
       setSaving(false)
     }

@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { CalendarItem } from "@/types"
 import { createInstitutionalEvent, updateInstitutionalEvent } from "./calendarApi"
+import { calendarErrorMessage } from "./calendarErrors"
 
 // UX only: the server validates again (InstitutionalEventRequest).
 const eventSchema = z.object({
@@ -74,8 +75,8 @@ export function InstitutionalEventDialog({
       if (item) await updateInstitutionalEvent(item.id, input)
       else await createInstitutionalEvent(input)
       onSaved()
-    } catch {
-      setError("No pudimos guardar el evento.")
+    } catch (err) {
+      setError(calendarErrorMessage(err, "No pudimos guardar el evento."))
     }
   }
 

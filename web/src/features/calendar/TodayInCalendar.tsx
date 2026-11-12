@@ -25,7 +25,9 @@ const TEACHER_TYPES: readonly CalendarItemType[] = [
 
 /**
  * Psychopedagogy and Direction: meetings, closings and institutional events
- * (P01-HOY-01) — not the school's assessment load, which is for the Calendar.
+ * (P01-HOY-01). The school's assessments of the day are only a total
+ * («3 evaluaciones hoy», PO answer of 12/11) that opens the Calendar's list
+ * of today filtered by assessments — no names, no grades here.
  */
 const STAFF_TYPES: readonly CalendarItemType[] = ["meeting", "period_closing", "institutional"]
 
@@ -40,14 +42,34 @@ export function TodayInCalendar({ user }: { user: User }) {
   const headingId = useId()
   const teacher = isTeacher(user)
   const [items, setItems] = useState<CalendarItem[] | null>(null)
+  const [assessmentsToday, setAssessmentsToday] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [today] = useState(() => toDay(new Date()))
 
   useEffect(() => {
-    const today = toDay(new Date())
+    let active = true
     fetchCalendar(today, today, teacher ? TEACHER_TYPES : STAFF_TYPES)
-      .then(setItems)
-      .catch(() => setError("No pudimos cargar tu calendario de hoy."))
-  }, [teacher])
+      .then((loaded) => {
+        if (active) setItems(loaded)
+      })
+      .catch(() => {
+        if (active) setError("No pudimos cargar tu calendario de hoy.")
+      })
+    if (!teacher) {
+      fetchCalendar(today, today, ["assessment"])
+        .then((loaded) => {
+          if (active) setAssessmentsToday(loaded.length)
+        })
+        .catch(() => {
+          if (active) setAssessmentsToday(null)
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [teacher, today])
+
+  const assessmentsLink = `/calendario?vista=lista&desde=${today}&hasta=${today}&tipos=assessment`
 
   return (
     <section aria-labelledby={headingId} className="grid gap-6">
@@ -69,6 +91,13 @@ export function TodayInCalendar({ user }: { user: User }) {
             </Link>
           }
         >
+          {!teacher && assessmentsToday !== null && assessmentsToday > 0 && (
+            <p className="px-6 pb-2 text-sm">
+              <Link to={assessmentsLink} className="font-medium text-primary underline-offset-4 hover:underline">
+                {assessmentsToday === 1 ? "1 evaluación hoy" : `${assessmentsToday} evaluaciones hoy`}
+              </Link>
+            </p>
+          )}
           {items === null ? (
             <p className="px-6 text-muted-foreground">Cargando…</p>
           ) : items.length === 0 ? (

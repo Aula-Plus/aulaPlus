@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useLocation, useSearchParams } from "react-router-dom"
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -19,7 +19,13 @@ import {
 } from "@/types"
 import { deleteInstitutionalEvent, fetchCalendar } from "./calendarApi"
 import {
+  addDays,
+  chunkRange,
+  dayParam,
   daysBetween,
+  initialListRange,
+  LIST_STEP_DAYS,
+  listTitle,
   rangeFor,
   shiftAnchor,
   toDay,
@@ -115,26 +121,77 @@ type Dialogs =
   | { kind: "event"; item?: CalendarItem }
   | null
 
+/**
+ * The feed for a window of any length (the list grows with «Ver más»): split
+ * into the chunks the server accepts (at most 62 days each), in order.
+ */
+async function fetchCalendarRange(from: string, to: string): Promise<CalendarItem[]> {
+  const results = await Promise.all(chunkRange(from, to).map((chunk) => fetchCalendar(chunk.from, chunk.to)))
+  return results.flat()
+}
+
+const VIEW_PARAMS: Record<string, CalendarView> = { mes: "month", semana: "week", lista: "list" }
+
+/**
+ * The opening state can come from the URL, so the Inicio can open «today's
+ * assessments» directly: `?vista=lista&desde=2026-12-15&hasta=2026-12-15&tipos=assessment`.
+ */
+function initialState(params: URLSearchParams, today: string) {
+  const view = VIEW_PARAMS[params.get("vista") ?? ""] ?? "month"
+  const from = dayParam(params.get("desde"))
+  const to = dayParam(params.get("hasta"))
+  const shown = (params.get("tipos") ?? "")
+    .split(",")
+    .filter((type): type is CalendarItemType => (calendarItemTypes as readonly string[]).includes(type))
+  const anchor = from ?? today
+  const list = from && to && to >= from ? { from, to } : initialListRange(anchor)
+  return {
+    view,
+    anchor,
+    list,
+    hidden: shown.length > 0 ? calendarItemTypes.filter((type) => !shown.includes(type)) : [],
+  }
+}
+
 function CalendarBoard({ user }: { user: User | null }) {
+  const [params] = useSearchParams()
   const [today] = useState(() => toDay(new Date()))
-  const [view, setView] = useState<CalendarView>("month")
-  const [anchor, setAnchor] = useState(today)
-  const [hidden, setHidden] = useState<CalendarItemType[]>([])
-  const [items, setItems] = useState<CalendarItem[] | null>(null)
+  const [initial] = useState(() => initialState(params, today))
+  const [view, setView] = useState<CalendarView>(initial.view)
+  const [anchor, setAnchor] = useState(initial.anchor)
+  // The list view's own window: starts on the current week and grows with
+  // «Ver más» / «Semana anterior», keeping the type filter (PO 12/11).
+  const [listRange, setListRange] = useState(initial.list)
+  const [hidden, setHidden] = useState<CalendarItemType[]>(initial.hidden)
+  const [loaded, setLoaded] = useState<{ key: string; items: CalendarItem[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialogs>(null)
-  const { from, to } = rangeFor(view, anchor)
+  const [reloadKey, setReloadKey] = useState(0)
+  const { from, to } = view === "list" ? listRange : rangeFor(view, anchor)
+  const rangeKey = `${from}|${to}|${reloadKey}`
+  // Only what was loaded for the range on screen counts: while a new range
+  // loads, «Cargando…» shows instead of the previous range's dates.
+  const items = loaded?.key === rangeKey ? loaded.items : null
 
-  const load = useCallback(() => {
-    fetchCalendar(from, to)
-      .then((loaded) => {
-        setItems(loaded)
+  // An older response never overwrites a newer range: each load is dropped
+  // once the range changes (or the component goes away).
+  useEffect(() => {
+    let active = true
+    fetchCalendarRange(from, to)
+      .then((result) => {
+        if (!active) return
+        setLoaded({ key: `${from}|${to}|${reloadKey}`, items: result })
         setError(null)
       })
-      .catch(() => setError("No pudimos cargar el calendario."))
-  }, [from, to])
+      .catch(() => {
+        if (active) setError("No pudimos cargar el calendario.")
+      })
+    return () => {
+      active = false
+    }
+  }, [from, to, reloadKey])
 
-  useEffect(load, [load])
+  const reload = () => setReloadKey((key) => key + 1)
 
   const visible = useMemo(() => (items ?? []).filter((item) => !hidden.includes(item.type)), [items, hidden])
   const byDay = useMemo(() => {
@@ -155,7 +212,7 @@ function CalendarBoard({ user }: { user: User | null }) {
   async function remove(item: CalendarItem) {
     try {
       await deleteInstitutionalEvent(item.id)
-      load()
+      reload()
     } catch {
       setError("No pudimos quitar el evento.")
     }
@@ -163,7 +220,22 @@ function CalendarBoard({ user }: { user: User | null }) {
 
   function saved() {
     setDialog(null)
-    load()
+    reload()
+  }
+
+  function previous() {
+    if (view === "list") setListRange((range) => ({ from: addDays(range.from, -7), to: range.to }))
+    else setAnchor(shiftAnchor(view, anchor, -1))
+  }
+
+  function next() {
+    if (view === "list") setListRange((range) => ({ from: range.from, to: addDays(range.to, LIST_STEP_DAYS) }))
+    else setAnchor(shiftAnchor(view, anchor, 1))
+  }
+
+  function goToday() {
+    setAnchor(today)
+    setListRange(initialListRange(today))
   }
 
   return (
@@ -197,25 +269,27 @@ function CalendarBoard({ user }: { user: User | null }) {
               type="button"
               variant="outline"
               size="icon-sm"
-              aria-label="Anterior"
-              onClick={() => setAnchor(shiftAnchor(view, anchor, -1))}
+              aria-label={view === "list" ? "Semana anterior" : "Anterior"}
+              onClick={previous}
             >
               <ChevronLeft />
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setAnchor(today)}>
+            <Button type="button" variant="outline" size="sm" onClick={goToday}>
               Hoy
             </Button>
             <Button
               type="button"
               variant="outline"
               size="icon-sm"
-              aria-label="Siguiente"
-              onClick={() => setAnchor(shiftAnchor(view, anchor, 1))}
+              aria-label={view === "list" ? "Ver más adelante" : "Siguiente"}
+              onClick={next}
             >
               <ChevronRight />
             </Button>
           </div>
-          <h2 className="text-lg font-semibold">{viewTitle(view, anchor)}</h2>
+          <h2 className="text-lg font-semibold">
+            {view === "list" ? listTitle(listRange.from, listRange.to) : viewTitle(view, anchor)}
+          </h2>
         </div>
         {canManageInstitutionalEvents(user) && (
           <Button type="button" size="sm" onClick={() => setDialog({ kind: "event" })}>
@@ -265,7 +339,13 @@ function CalendarBoard({ user }: { user: User | null }) {
       ) : view === "week" ? (
         <WeekColumns from={from} to={to} today={today} byDay={byDay} onOpen={open} />
       ) : (
-        <ListView items={visible} onOpen={open} onRemove={remove} />
+        <ListView
+          items={visible}
+          onOpen={open}
+          onRemove={remove}
+          onEarlier={previous}
+          onMore={next}
+        />
       )}
 
       <p className="text-sm text-muted-foreground">{roleNote(user)}</p>
@@ -431,13 +511,45 @@ function ListView({
   items,
   onOpen,
   onRemove,
+  onEarlier,
+  onMore,
+}: {
+  items: CalendarItem[]
+  onOpen: (item: CalendarItem) => void
+  onRemove: (item: CalendarItem) => void
+  onEarlier: () => void
+  onMore: () => void
+}) {
+  return (
+    <div className="grid gap-3">
+      <div>
+        <Button type="button" variant="outline" size="sm" onClick={onEarlier}>
+          Ver la semana anterior
+        </Button>
+      </div>
+      {items.length === 0 ? (
+        <EmptyState icon={CalendarDays} message="No hay fechas en este período." />
+      ) : (
+        <ListTable items={items} onOpen={onOpen} onRemove={onRemove} />
+      )}
+      <div>
+        <Button type="button" variant="outline" size="sm" onClick={onMore}>
+          Ver más
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ListTable({
+  items,
+  onOpen,
+  onRemove,
 }: {
   items: CalendarItem[]
   onOpen: (item: CalendarItem) => void
   onRemove: (item: CalendarItem) => void
 }) {
-  if (items.length === 0) return <EmptyState icon={CalendarDays} message="No hay fechas en este período." />
-
   return (
     <Table>
       <TableHeader>
@@ -496,6 +608,14 @@ function ListView({
                 {link && (
                   <Link to={link} className="text-sm text-primary underline-offset-4 hover:underline">
                     Abrir
+                  </Link>
+                )}
+                {item.group && item.type !== "task" && (
+                  <Link
+                    to={`/clases/${item.group.id}/seguimiento`}
+                    className="ml-3 text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    Grupo
                   </Link>
                 )}
               </TableCell>

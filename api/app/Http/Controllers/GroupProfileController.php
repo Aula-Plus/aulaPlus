@@ -14,6 +14,8 @@ use App\Models\Group;
 use App\Models\Student;
 use App\Services\GradeAccessRule;
 use App\Services\StudentGradeAccess;
+use App\Support\SchoolTime;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -262,13 +264,15 @@ class GroupProfileController extends Controller
             // Only the dates the whole school sees: a meeting is private to
             // its invitees (screen 21 red line), so it never becomes a mark.
             ->institutional()
-            ->when($from, fn ($query) => $query->whereDate('start_at', '>=', $from))
-            ->when($to, fn ($query) => $query->whereDate('start_at', '<=', $to))
+            // `start_at` is stored in UTC: bound and date by the school's local
+            // day, so an event at 22:00 in Montevideo stays on its own day.
+            ->when($from, fn ($query) => $query->where('start_at', '>=', SchoolTime::startOfDay($from)))
+            ->when($to, fn ($query) => $query->where('start_at', '<', SchoolTime::startOfDay(CarbonImmutable::parse($to)->addDay())))
             ->orderBy('start_at')
             ->get()
             ->map(fn (CalendarEvent $event): array => [
                 'type' => 'calendar_event',
-                'date' => $event->start_at->toDateString(),
+                'date' => CarbonImmutable::instance($event->start_at)->setTimezone(SchoolTime::timezone())->toDateString(),
                 'calendar_event_id' => $event->id,
                 'title' => $event->title,
             ])
