@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/page-header"
 import { SingleSelect } from "@/components/ui/single-select"
 import { fetchEducationLevels } from "@/features/groups/groupsApi"
 import { fetchSubjects } from "@/features/subjects/subjectsApi"
+import { NoAccessPage } from "@/pages/NoAccessPage"
 import {
   alertRecipientLabels,
   alertTypeLabels,
@@ -535,7 +536,7 @@ export function AlertSettingsPage() {
   }, [canManage])
 
   if (!canManage) {
-    return <p className="text-sm text-muted-foreground">No tenés permiso para ver esta pantalla.</p>
+    return <NoAccessPage />
   }
   if (error) return <p className="text-sm text-destructive">{error}</p>
   if (!rules) return <p className="text-muted-foreground">Cargando…</p>

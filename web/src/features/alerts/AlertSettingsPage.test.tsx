@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
+import { MemoryRouter } from "react-router-dom"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Role } from "@/types"
@@ -254,10 +255,18 @@ describe("AlertSettingsPage", () => {
     })
   })
 
-  it("does not load anything for a teacher", () => {
+  it("shows a teacher the no-access notice and loads nothing (ClickUp 1dfd3mc3qj8)", () => {
     roles = ["teacher"]
-    render(<AlertSettingsPage />)
-    expect(screen.getByText("No tenés permiso para ver esta pantalla.")).toBeInTheDocument()
+    render(
+      <MemoryRouter>
+        <AlertSettingsPage />
+      </MemoryRouter>,
+    )
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está disponible para tu cuenta" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
+    expect(screen.queryByText("No tenés permiso para ver esta pantalla.")).not.toBeInTheDocument()
     expect(alertSettingsApi.fetchAlertSettings).not.toHaveBeenCalled()
   })
 
