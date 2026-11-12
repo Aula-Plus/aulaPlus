@@ -65,7 +65,12 @@ class BuildAccommodationInput
                     ? self::ALL
                     : collect($accommodation->assessment_types)->sort()->values()->all(),
             ])
-            ->unique(fn (array $line): string => (string) json_encode($line))
+            // Same action typed with other casing or spacing is one line: a
+            // repeated action would hint how many students have it.
+            ->unique(fn (array $line): string => (string) json_encode([
+                ...$line,
+                'action' => mb_strtolower((string) preg_replace('/\s+/u', ' ', $line['action'])),
+            ]))
             ->sortBy(fn (array $line): string => mb_strtolower($line['action']))
             ->values()
             ->all();

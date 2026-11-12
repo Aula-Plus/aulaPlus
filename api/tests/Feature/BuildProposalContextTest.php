@@ -11,6 +11,7 @@ use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\Subject;
+use App\Models\Unit;
 use App\Models\User;
 use App\Support\Tenancy;
 
@@ -220,6 +221,7 @@ it('only sends the general accommodations and those of the requested subject', f
 
 it('takes the subject of the annual plan a unit belongs to', function () {
     $scenario = contextScopeScenario();
+    $psychopedagogue = User::factory()->forSchool($scenario['school'])->psychopedagogue()->create();
     $plan = AnnualPlan::factory()->create([
         'school_id' => $scenario['school']->id,
         'group_id' => $scenario['group']->id,
@@ -227,9 +229,57 @@ it('takes the subject of the annual plan a unit belongs to', function () {
         'teacher_id' => $scenario['teacher']->id,
     ]);
 
-    $context = contextFor($scenario, AIProposalType::Unit, ['annual_plan_id' => $plan->id, 'focus' => 'x']);
+    $context = contextFor(
+        [...$scenario, 'teacher' => $psychopedagogue],
+        AIProposalType::Unit,
+        ['annual_plan_id' => $plan->id, 'focus' => 'x'],
+    );
 
+    // Psychopedagogy sees every accommodation: only the subject filter cuts
+    // (science, not math).
     expect(focusAreas($context))->toBe(['approved', 'general', 'science', 'written']);
+});
+
+it('never sends a teacher the accommodations of a colleague\'s subject inherited from their unit or plan', function () {
+    $scenario = contextScopeScenario();
+    $colleague = User::factory()->forSchool($scenario['school'])->teacher()->create();
+    leadGroup($scenario['group'], $colleague, $scenario['science']);
+    $plan = AnnualPlan::factory()->create([
+        'school_id' => $scenario['school']->id,
+        'group_id' => $scenario['group']->id,
+        'subject_id' => $scenario['science']->id,
+        'teacher_id' => $colleague->id,
+    ]);
+    $unit = Unit::factory()->create(['annual_plan_id' => $plan->id]);
+
+    // The math teacher asks over the science colleague's plan and unit: the
+    // science-only accommodation (hidden from them on screen) never goes.
+    $viaPlan = contextFor($scenario, AIProposalType::Unit, ['annual_plan_id' => $plan->id, 'focus' => 'x']);
+    $viaUnit = contextFor($scenario, AIProposalType::ClassSession, ['unit_id' => $unit->id, 'focus' => 'x']);
+
+    expect(focusAreas($viaPlan))->toBe(['approved', 'general', 'written'])
+        ->and(focusAreas($viaUnit))->toBe(['approved', 'general', 'written']);
+
+    // The colleague who teaches science still gets it.
+    expect(focusAreas(contextFor(
+        [...$scenario, 'teacher' => $colleague],
+        AIProposalType::ClassSession,
+        ['unit_id' => $unit->id, 'focus' => 'x'],
+    )))->toBe(['approved', 'general', 'science', 'written']);
+});
+
+it('sends an action once whatever its casing or spacing', function () {
+    $scenario = accommodationInputScenario();
+    [$first, $second] = $scenario['students'];
+    $make = $scenario['make'];
+
+    $make($first, 'Dar 15 minutos más en escritos', ['category' => 'access']);
+    $make($second, '  dar 15  MINUTOS más en escritos ', ['category' => 'access']);
+
+    $context = contextFor($scenario, AIProposalType::ClassSession, ['subject_id' => $scenario['math']->id, 'focus' => 'x']);
+
+    expect(collect($context['accommodation_input'])->pluck('action')->all())
+        ->toBe(['Dar 15 minutos más en escritos']);
 });
 
 it('only sends the accommodations that cover the requested assessment type', function () {
@@ -306,6 +356,9 @@ function accommodationInputScenario(): array
     foreach ($students as $student) {
         $group->students()->attach($student, ['school_year' => now()->year]);
     }
+
+    // The requester teaches math in the group, as a real requester would.
+    leadGroup($group, $teacher, $math);
 
     $make = fn (Student $student, string $type, array $attributes = []) => Accommodation::factory()->create([
         'student_id' => $student->id,

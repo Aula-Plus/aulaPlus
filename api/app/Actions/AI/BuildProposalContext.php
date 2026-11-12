@@ -128,9 +128,11 @@ class BuildProposalContext
      * 86e3dpbwy follow-up) — an accommodation for another subject would steer
      * the draft wrongly.
      *
-     * A request that still reaches here without a subject (old data, a request
-     * built by hand — new ones must carry one, see GenerateAIProposalRequest)
-     * is cut to what the requester can see on screen (ClickUp 86e3jpzdr, PO
+     * Every request is also cut to what the requester can see on screen —
+     * with a subject too, since it may be inherited from a colleague's unit or
+     * annual plan. A request that still reaches here without a subject (old
+     * data, a request built by hand — new ones must carry one, see
+     * GenerateAIProposalRequest) relies on that cut alone (ClickUp 86e3jpzdr, PO
      * decision of 03/11): a teacher gets the general accommodations plus those
      * of the subjects they teach (Accommodation::scopeVisibleTo, the same rule
      * as the group's accommodations table); psychopedagogy and direction, who
@@ -150,9 +152,16 @@ class BuildProposalContext
 
             if ($subjectId !== null) {
                 $query->appliesToSubject($subjectId);
-            } elseif ($requester !== null) {
+            }
+
+            // Always cut to what the requester sees, also when the subject is
+            // inherited from a unit or annual plan of a colleague: the input
+            // must never hold an accommodation the requester can't see on
+            // screen. A no-op for school-wide roles and for a teacher of
+            // that subject.
+            if ($requester !== null) {
                 $query->visibleTo($requester);
-            } else {
+            } elseif ($subjectId === null) {
                 $query->whereDoesntHave('subjects');
             }
 
