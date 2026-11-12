@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/page-header"
 import { FollowUpNotices } from "@/features/tracking/FollowUpNotices"
 import { FollowUpsSectionView } from "@/features/tracking/FollowUpsSection"
 import { useFollowUpsInbox } from "@/features/tracking/useFollowUpsInbox"
+import { TodayInCalendar } from "@/features/calendar/TodayInCalendar"
 import { formatLongDate } from "@/lib/utils"
 
 /**
@@ -19,8 +20,11 @@ import { formatLongDate } from "@/lib/utils"
  * a deadline. The page owns the follow-ups/notices state so both blocks share
  * one load, and an alert's way out (which may link a follow-up) reloads it.
  *
- * The greeting stays small, above what there is to do. The teacher's classes
- * of the day wait for the planner.
+ * The greeting stays small, above what there is to do. On top, «Hoy en tu
+ * calendario» (P01-HOY-01, PA-089; ClickUp 1dfd3mc4bgh) reads today's dates
+ * from the Calendar — the teacher's classes with time, group, subject and
+ * room. Tasks and follow-ups are not repeated there: they stay in their own
+ * card below.
  */
 export function DashboardPage() {
   const { user } = useAuth()
@@ -34,6 +38,7 @@ export function DashboardPage() {
         <p className="text-sm text-muted-foreground">Hola, {user.name}</p>
         <PageHeader title="¿Qué tenés que hacer hoy?" description={formatLongDate(new Date())} />
       </div>
+      <TodayInCalendar user={user} />
       <AlertsSection compact onAlertChanged={() => void inbox.reload()}>
         <FollowUpNotices inbox={inbox} showError />
       </AlertsSection>

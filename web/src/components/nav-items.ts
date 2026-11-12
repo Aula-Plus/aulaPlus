@@ -3,11 +3,13 @@ import {
   BellRing,
   BookOpen,
   Building2,
+  CalendarDays,
   ClipboardList,
   GraduationCap,
   Eye,
   MessageSquare,
   Home,
+  Scale,
   TriangleAlert,
   LifeBuoy,
   TrendingUp,
@@ -23,6 +25,7 @@ import {
   canManageCommentSettings,
   canManageSubjects,
   canManageUsers,
+  canViewOfficialScales,
   canViewAdoptionDashboard,
 } from "@/lib/permissions"
 
@@ -74,6 +77,9 @@ export function buildNavSections(
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
         // is unread notices only (not alerts); it goes away once read.
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
+        // Every role has a Calendar (screen 21); what each sees is decided
+        // server-side.
+        { to: "/calendario", label: "Calendario", icon: CalendarDays },
         // The screening design screen is for Psicopedagogía and Dirección,
         // who both edit designs (screen 08).
         ...(canEditScreeningTestDesign(user)
@@ -106,6 +112,11 @@ export function buildNavSections(
         // Grade visibility for teachers is director-only.
         ...(canManageGradesVisibility(user)
           ? [{ to: "/ajustes/calificaciones", label: "Visibilidad de calificaciones", icon: Eye }]
+          : []),
+        // Screen 24 «Evaluación y juicios» (only «Escalas oficiales» for
+        // now): director-only (mirror of SchoolPolicy::viewOfficialScales).
+        ...(canViewOfficialScales(user)
+          ? [{ to: "/administracion/evaluacion-y-juicios", label: "Evaluación y juicios", icon: Scale }]
           : []),
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.

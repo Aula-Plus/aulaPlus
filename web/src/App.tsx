@@ -14,6 +14,7 @@ import { StudentHistoryPage } from "@/features/tracking/StudentHistoryPage"
 import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { LimitsPage } from "@/features/users/LimitsPage"
 import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
+import { OfficialScalesPage } from "@/features/official-scales/OfficialScalesPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
@@ -26,6 +27,7 @@ import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
+import { CalendarPage } from "@/features/calendar/CalendarPage"
 
 function App() {
   return (
@@ -165,6 +167,14 @@ function App() {
               </ProtectedLayout>
             }
           />
+          <Route
+            path="/administracion/evaluacion-y-juicios"
+            element={
+              <ProtectedLayout>
+                <OfficialScalesPage />
+              </ProtectedLayout>
+            }
+          />
           <Route path="/ajustes/notas" element={<Navigate to="/ajustes/calificaciones" replace />} />
           <Route
             path="/ajustes/informes-ia"
@@ -178,6 +188,18 @@ function App() {
               </ProtectedLayout>
             }
           />
+          {/* Calendario (screen 21) and the teacher's private «Mis horarios» tab. */}
+          {["/calendario", "/calendario/mis-horarios"].map((path) => (
+            <Route
+              key={path}
+              path={path}
+              element={
+                <ProtectedLayout>
+                  <CalendarPage />
+                </ProtectedLayout>
+              }
+            />
+          ))}
           <Route
             path="/configuracion/alertas"
             element={

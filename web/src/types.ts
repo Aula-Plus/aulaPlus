@@ -361,7 +361,17 @@ export interface AssessmentResult {
   id: number
   assessment_id: number
   student_id: number
-  score: number
+  /** Null for a Primaria result recorded as a scale level (ClickUp 1dfd3mc4bgg). */
+  score: number | null
+  /** The level of the official scale (Primaria), or null for a numeric result. */
+  scale_level: { id: number; position: number; name: string } | null
+  /**
+   * The number shown next to the level — only when the school turned the
+   * switch on; null otherwise (server-side rule, `ResultScales`).
+   */
+  numeric_grade: number | null
+  /** Where that number comes from: the school's own equivalence or the teacher. */
+  numeric_grade_source: NumericGradeSource | null
   feedback: string | null
   created_by_id: number | null
   created_at: string | null
@@ -1574,6 +1584,13 @@ export interface StudentGrade {
   type: AssessmentType
   administered_at: string | null
   score: number | null
+  /** Primaria: the scale level the result was recorded with (null = numeric). */
+  scale_level_name?: string | null
+  /** The number next to the level, as the school's switch allows. */
+  numeric_grade?: number | null
+  numeric_grade_source?: NumericGradeSource | null
+  /** Primaria: the school shows the number but this result has none («sin nota»). */
+  numeric_grade_missing?: boolean
   /**
    * The accommodations that were in force on the instance's date for its
    * subject and type, minus any deactivated for that instance — only the ones
@@ -1737,3 +1754,161 @@ export interface AiReportSetting {
   /** False when Aula+ has the feature off for every school or the provider is not configured. */
   available: boolean
 }
+
+// ── Calendar (screen 21, ClickUp 1dfd3mc4bgh) ────────────────────────────────
+
+/** Mirror of `App\Enums\CalendarItemType`: the seven kinds of date. */
+export type CalendarItemType =
+  | "assessment"
+  | "class"
+  | "meeting"
+  | "task"
+  | "period_closing"
+  | "project_stage"
+  | "institutional"
+
+/** Filter order and labels, as on screen 21 (P21-DEC-06). */
+export const calendarItemTypes: readonly CalendarItemType[] = [
+  "assessment",
+  "class",
+  "meeting",
+  "task",
+  "period_closing",
+  "project_stage",
+  "institutional",
+]
+
+export const calendarItemTypeLabels: Record<CalendarItemType, string> = {
+  assessment: "Evaluación",
+  class: "Clase",
+  meeting: "Reunión",
+  task: "Tarea",
+  period_closing: "Cierre de período",
+  project_stage: "Etapa de proyecto",
+  institutional: "Institucional",
+}
+
+/** Where each kind of date comes from («Viene de»). */
+export const calendarItemSourceLabels: Record<CalendarItemType, string> = {
+  assessment: "Evaluaciones",
+  class: "Clases",
+  meeting: "Reuniones",
+  task: "Seguimientos",
+  period_closing: "Año y calendario",
+  project_stage: "Proyectos",
+  institutional: "Dirección",
+}
+
+/** One date of `GET /api/v1/calendar`. Never carries a student's name. */
+export interface CalendarItem {
+  key: string
+  type: CalendarItemType
+  id: number
+  /** School-local day, `YYYY-MM-DD`. */
+  date: string
+  /** School-local `HH:MM`, or null for a date without a time. */
+  time: string | null
+  end_time: string | null
+  title: string | null
+  detail: string | null
+  group: { id: number; name: string } | null
+  subject: { id: number; name: string } | null
+  /** Room of a class, place of an event. */
+  place: string | null
+  assessment_type: AssessmentType | null
+  can_edit: boolean
+}
+
+/** An institutional event as returned by `/api/v1/calendar-events`. */
+export interface InstitutionalEvent {
+  id: number
+  type: "institutional"
+  title: string
+  date: string
+  time: string | null
+  location: string | null
+  description: string | null
+}
+
+/** ISO weekday (1 = lunes … 7 = domingo) → Spanish label. */
+export const weekdayLabels: Record<number, string> = {
+  1: "Lunes",
+  2: "Martes",
+  3: "Miércoles",
+  4: "Jueves",
+  5: "Viernes",
+  6: "Sábado",
+  7: "Domingo",
+}
+
+/** One line of the teacher's private «Mis horarios». */
+export interface TimetableSlot {
+  id: number
+  group: { id: number; name: string }
+  subject: { id: number; name: string }
+  weekday: number
+  start_time: string
+  room: string | null
+}
+
+/** A group-subject the teacher teaches (what a slot can be for). */
+export interface TeachingAssignment {
+  group: { id: number; name: string }
+  subject: { id: number; name: string | null }
+}
+
+// ── Official scales (screen 24 · «Escalas oficiales», ClickUp 1dfd3mc4bgg) ──
+
+/** Where the number next to a Primaria level comes from. */
+export type NumericGradeSource = "school" | "teacher"
+
+/** One level of an official scale; `position` 1 is the highest. */
+export interface OfficialScaleLevel {
+  id: number
+  position: number
+  name: string
+  description: string | null
+  /**
+   * The grade band the official table prints next to the level (e.g. «9–10»).
+   * Reference only: never used to compute or show a student's grade.
+   */
+  official_band: string | null
+}
+
+/**
+ * An official scale (`OfficialScaleResource`): read-only, loaded by the Aula+
+ * team per framework. The visible label is the framework; the document is
+ * named in the citation.
+ */
+export interface OfficialScale {
+  id: number
+  framework: { id: number; name: string }
+  education_level: { key: string; label: string } | null
+  name: string
+  issuing_body: string
+  citation: { document: string; page: string; url: string | null }
+  levels: OfficialScaleLevel[]
+}
+
+/** `GET/PUT /api/v1/numeric-grade-settings` (direction only). */
+export interface NumericGradeSettings {
+  show_numeric_grade: boolean
+  primary_scale_id: number | null
+  /** The school's own equivalence; empty = none (the teacher writes the number). */
+  equivalences: { level_id: number; numeric_grade: number }[]
+}
+
+/** `GET /api/v1/assessments/{id}/result-scale`: how results are recorded. */
+export type AssessmentResultScale =
+  | { mode: "score"; scale: null; numeric_grade: null }
+  /** Two or more valid scales: the teacher chooses one before the first result. */
+  | { mode: "choose"; scale: null; numeric_grade: null; choices: OfficialScale[] }
+  | {
+      mode: "scale"
+      scale: OfficialScale
+      numeric_grade: {
+        shown: boolean
+        source: NumericGradeSource | null
+        equivalences: { level_id: number; numeric_grade: number }[]
+      }
+    }

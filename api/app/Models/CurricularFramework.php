@@ -37,6 +37,11 @@ class CurricularFramework extends Model
         return $this->hasMany(CurricularCatalog::class);
     }
 
+    public function officialScales(): HasMany
+    {
+        return $this->hasMany(OfficialScale::class);
+    }
+
     public function schools(): BelongsToMany
     {
         return $this->belongsToMany(School::class, 'school_curricular_framework')

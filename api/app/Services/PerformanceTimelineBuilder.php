@@ -10,6 +10,8 @@ use App\Models\AuditLog;
 use App\Models\CalendarEvent;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\SchoolTime;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -66,6 +68,10 @@ class PerformanceTimelineBuilder
         return $this->gradeAccess->restrict(
             AssessmentResult::query()
                 ->where('assessment_results.student_id', $student->id)
+                // The «Nota de 1 a 10» line: a result recorded as a scale level
+                // (Primaria) has no number and is never placed on it by an
+                // invented conversion (PA-088, ClickUp 1dfd3mc4bgg).
+                ->whereNotNull('assessment_results.score')
                 ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id'),
             $user,
             $student,
@@ -212,8 +218,13 @@ class PerformanceTimelineBuilder
     protected function appendCalendarEvents(Collection $entries, ?string $from, ?string $to): void
     {
         $events = CalendarEvent::query()
-            ->when($from, fn (Builder $q) => $q->whereDate('start_at', '>=', $from))
-            ->when($to, fn (Builder $q) => $q->whereDate('start_at', '<=', $to))
+            // Only the dates the whole school sees: a meeting is private to
+            // its invitees (screen 21 red line), so it never becomes a mark.
+            ->institutional()
+            // `start_at` is stored in UTC: bound by the school's local days so
+            // an event at 22:00 in Montevideo stays on its own day.
+            ->when($from, fn (Builder $q) => $q->where('start_at', '>=', SchoolTime::startOfDay($from)))
+            ->when($to, fn (Builder $q) => $q->where('start_at', '<', SchoolTime::startOfDay(CarbonImmutable::parse($to)->addDay())))
             ->get();
 
         foreach ($events as $event) {

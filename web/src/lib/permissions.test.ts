@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+  canManageInstitutionalEvents,
+  hasTimetable,
   canEditConfirmedAccommodations,
   canEditScreeningTestDesign,
   canReviewAccommodationProposals,
@@ -262,5 +264,20 @@ describe("permissions", () => {
     it("is false for a null user", () => {
       expect(canValidateBarrierAccommodation(null, 99)).toBe(false)
     })
+  })
+})
+
+describe("calendar (screen 21)", () => {
+  it("lets only Dirección manage institutional events", () => {
+    expect(canManageInstitutionalEvents(userWith("director"))).toBe(true)
+    expect(canManageInstitutionalEvents(userWith("psychopedagogue"))).toBe(false)
+    expect(canManageInstitutionalEvents(userWith("teacher"))).toBe(false)
+    expect(canManageInstitutionalEvents(null)).toBe(false)
+  })
+
+  it("gives «Mis horarios» only to teachers", () => {
+    expect(hasTimetable(userWith("teacher"))).toBe(true)
+    expect(hasTimetable(userWith("director"))).toBe(false)
+    expect(hasTimetable(userWith("psychopedagogue"))).toBe(false)
   })
 })
