@@ -79,7 +79,11 @@ class AnnualPlanProgress
         return $query->withExists([
             'classSessions as has_class' => fn (Builder $q) => $q->where('class_sessions.status', '!=', ClassSessionStatus::Cancelled->value),
             'assessments as has_assessment',
-            'classSessions as given_by_class' => fn (Builder $q) => $q->where('class_session_unit_objective.coverage', ObjectiveCoverage::Full->value),
+            // A cancelled class never counts, not even if it was closed «todo»
+            // before being cancelled (ClickUp 1dfd3mc4bg8, PO 12/11).
+            'classSessions as given_by_class' => fn (Builder $q) => $q
+                ->where('class_sessions.status', '!=', ClassSessionStatus::Cancelled->value)
+                ->where('class_session_unit_objective.coverage', ObjectiveCoverage::Full->value),
             'assessments as given_by_assessment' => fn (Builder $q) => $q->whereHas('results'),
         ]);
     }

@@ -416,3 +416,76 @@ it('only corrects closed, non-cancelled class records with a valid value', funct
     $class->update(['status' => ClassSessionStatus::Cancelled]);
     $this->patchJson($url, ['coverage' => 'full'])->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
 });
+
+it('never counts a cancelled class closed «todo» as given', function () {
+    [, $teacher, $plan, $objective, $class] = startedObjectiveSetup();
+    $class->unitObjectives()->updateExistingPivot($objective->id, ['coverage' => 'full']);
+    $class->update(['status' => ClassSessionStatus::Cancelled]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/annual-plans/{$plan->id}")->assertOk()
+        ->assertJsonPath('data.units.0.objectives.0.given', false)
+        ->assertJsonPath('data.units.0.given_count', 0)
+        ->assertJsonPath('data.units.0.status', 'unplanned')
+        ->assertJsonPath('data.coverage.objectives_given', 0)
+        ->assertJsonPath('data.coverage.units_given', 0);
+});
+
+it('needs both the class permission and the plan permission to correct a record', function () {
+    [$school, $teacher, , $objective, $class, $group] = startedObjectiveSetup();
+    $url = "/api/v1/class-sessions/{$class->id}/objectives/{$objective->id}";
+
+    // A co-teacher of the group passes the class check but does not own the plan.
+    $coTeacher = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $coTeacher);
+    Sanctum::actingAs($coTeacher);
+    $this->patchJson($url, ['coverage' => 'full'])->assertForbidden();
+
+    // The plan owner who no longer leads the group passes the plan check only.
+    $group->teachers()->detach($teacher);
+    Sanctum::actingAs($teacher);
+    $this->patchJson($url, ['coverage' => 'full'])->assertForbidden();
+
+    $this->assertDatabaseHas('class_session_unit_objective', ['class_session_id' => $class->id, 'coverage' => 'partial']);
+});
+
+it('only records «todo» through «Lo terminé»', function (string $coverage) {
+    [, $teacher, , $objective, $class] = startedObjectiveSetup();
+    Sanctum::actingAs($teacher);
+
+    $this->patchJson("/api/v1/class-sessions/{$class->id}/objectives/{$objective->id}", ['coverage' => $coverage])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
+    $this->assertDatabaseHas('class_session_unit_objective', ['class_session_id' => $class->id, 'coverage' => 'partial']);
+})->with(['partial', 'none']);
+
+it('rejects a class that is not of the plan\'s group or subject', function () {
+    [$school, $teacher, $plan, $objective, $class, $group] = startedObjectiveSetup();
+    Sanctum::actingAs($teacher);
+
+    // A class of another group of the same teacher, linked by mistake.
+    $otherGroup = Group::factory()->create(['school_id' => $school->id]);
+    leadGroup($otherGroup, $teacher, $plan->subject);
+    $foreign = ClassSession::factory()->create([
+        'school_id' => $school->id, 'group_id' => $otherGroup->id, 'unit_id' => null,
+        'status' => ClassSessionStatus::Delivered, 'date' => '2026-05-12',
+    ]);
+    $foreign->unitObjectives()->attach($objective, ['coverage' => 'partial']);
+    $this->patchJson("/api/v1/class-sessions/{$foreign->id}/objectives/{$objective->id}", ['coverage' => 'full'])
+        ->assertNotFound();
+
+    // A class of the same group hanging from another subject's unit.
+    $otherSubject = Subject::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher, $otherSubject);
+    $otherPlan = makePlan($group, $otherSubject, $teacher, $plan->curricularFramework);
+    $otherUnit = Unit::factory()->create(['annual_plan_id' => $otherPlan->id]);
+    $crossed = ClassSession::factory()->create([
+        'school_id' => $school->id, 'group_id' => $group->id, 'unit_id' => $otherUnit->id,
+        'status' => ClassSessionStatus::Delivered, 'date' => '2026-05-13',
+    ]);
+    $crossed->unitObjectives()->attach($objective, ['coverage' => 'partial']);
+    $this->patchJson("/api/v1/class-sessions/{$crossed->id}/objectives/{$objective->id}", ['coverage' => 'full'])
+        ->assertNotFound();
+
+    expect($foreign->unitObjectives()->first()->pivot->coverage)->toBe('partial')
+        ->and($crossed->unitObjectives()->first()->pivot->coverage)->toBe('partial');
+});
