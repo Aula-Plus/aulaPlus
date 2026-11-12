@@ -361,7 +361,17 @@ export interface AssessmentResult {
   id: number
   assessment_id: number
   student_id: number
-  score: number
+  /** Null for a Primaria result recorded as a scale level (ClickUp 1dfd3mc4bgg). */
+  score: number | null
+  /** The level of the official scale (Primaria), or null for a numeric result. */
+  scale_level: { id: number; position: number; name: string } | null
+  /**
+   * The number shown next to the level — only when the school turned the
+   * switch on; null otherwise (server-side rule, `ResultScales`).
+   */
+  numeric_grade: number | null
+  /** Where that number comes from: the school's own equivalence or the teacher. */
+  numeric_grade_source: NumericGradeSource | null
   feedback: string | null
   created_by_id: number | null
   created_at: string | null
@@ -1574,6 +1584,13 @@ export interface StudentGrade {
   type: AssessmentType
   administered_at: string | null
   score: number | null
+  /** Primaria: the scale level the result was recorded with (null = numeric). */
+  scale_level_name?: string | null
+  /** The number next to the level, as the school's switch allows. */
+  numeric_grade?: number | null
+  numeric_grade_source?: NumericGradeSource | null
+  /** Primaria: the school shows the number but this result has none («sin nota»). */
+  numeric_grade_missing?: boolean
   /**
    * The accommodations that were in force on the instance's date for its
    * subject and type, minus any deactivated for that instance — only the ones
@@ -1839,3 +1856,59 @@ export interface TeachingAssignment {
   group: { id: number; name: string }
   subject: { id: number; name: string | null }
 }
+
+// ── Official scales (screen 24 · «Escalas oficiales», ClickUp 1dfd3mc4bgg) ──
+
+/** Where the number next to a Primaria level comes from. */
+export type NumericGradeSource = "school" | "teacher"
+
+/** One level of an official scale; `position` 1 is the highest. */
+export interface OfficialScaleLevel {
+  id: number
+  position: number
+  name: string
+  description: string | null
+  /**
+   * The grade band the official table prints next to the level (e.g. «9–10»).
+   * Reference only: never used to compute or show a student's grade.
+   */
+  official_band: string | null
+}
+
+/**
+ * An official scale (`OfficialScaleResource`): read-only, loaded by the Aula+
+ * team per framework. The visible label is the framework; the document is
+ * named in the citation.
+ */
+export interface OfficialScale {
+  id: number
+  framework: { id: number; name: string }
+  education_level: { key: string; label: string } | null
+  name: string
+  issuing_body: string
+  citation: { document: string; page: string; url: string | null }
+  levels: OfficialScaleLevel[]
+}
+
+/** `GET/PUT /api/v1/numeric-grade-settings` (direction only). */
+export interface NumericGradeSettings {
+  show_numeric_grade: boolean
+  primary_scale_id: number | null
+  /** The school's own equivalence; empty = none (the teacher writes the number). */
+  equivalences: { level_id: number; numeric_grade: number }[]
+}
+
+/** `GET /api/v1/assessments/{id}/result-scale`: how results are recorded. */
+export type AssessmentResultScale =
+  | { mode: "score"; scale: null; numeric_grade: null }
+  /** Two or more valid scales: the teacher chooses one before the first result. */
+  | { mode: "choose"; scale: null; numeric_grade: null; choices: OfficialScale[] }
+  | {
+      mode: "scale"
+      scale: OfficialScale
+      numeric_grade: {
+        shown: boolean
+        source: NumericGradeSource | null
+        equivalences: { level_id: number; numeric_grade: number }[]
+      }
+    }

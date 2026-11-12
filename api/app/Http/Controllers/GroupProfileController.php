@@ -84,7 +84,10 @@ class GroupProfileController extends Controller
      */
     protected function timelineResults(Group $group, GradeAccessRule $gradeRule, $from, $to): array
     {
-        $visible = fn ($query) => $gradeRule->apply($query);
+        // Only numeric results make a point on this line: a Primaria result
+        // recorded as a scale level has no number and is never converted to
+        // one (PA-088, ClickUp 1dfd3mc4bgg).
+        $visible = fn ($query) => $gradeRule->apply($query)->whereNotNull('assessment_results.score');
 
         return Assessment::query()
             ->where('group_id', $group->id)

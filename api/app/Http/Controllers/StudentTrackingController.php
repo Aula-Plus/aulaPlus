@@ -10,10 +10,12 @@ use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\Barrier;
 use App\Models\Comment;
+use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\CommentTrendDetector;
 use App\Services\GradeAccessRule;
+use App\Services\ResultScales;
 use App\Services\StudentGradeAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -205,26 +207,58 @@ class StudentTrackingController extends Controller
      */
     protected function grades(Student $student, GradeAccessRule $rule): array
     {
+        // Read once per call (not memoized on the controller, which the
+        // router may reuse across requests).
+        $school = School::query()->findOrFail($student->school_id);
+        $context = [$school, app(ResultScales::class)->equivalences($school)];
+
         return $this->visibleResults($student, $rule)
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->orderByDesc('assessments.administered_at')
             ->orderByDesc('assessment_results.id')
+            ->leftJoin('official_scale_levels', 'official_scale_levels.id', '=', 'assessment_results.official_scale_level_id')
             ->select('assessment_results.id', 'assessment_results.score', 'assessments.id as assessment_id',
                 'assessments.type', 'assessments.administered_at', 'subjects.id as subject_id',
-                'subjects.name as subject_name')
+                'subjects.name as subject_name', 'assessment_results.official_scale_level_id',
+                'assessment_results.numeric_grade', 'official_scale_levels.name as scale_level_name')
             ->limit(self::GRADES_LIMIT + 1)
             ->get()
-            ->map(fn ($row) => [
-                'id' => (int) $row->id,
-                'assessment_id' => (int) $row->assessment_id,
-                'subject_id' => (int) $row->subject_id,
-                'subject_name' => $row->subject_name,
-                'type' => $row->type,
-                'administered_at' => $row->administered_at
-                    ? substr((string) $row->administered_at, 0, 10) : null,
-                'score' => $row->score === null ? null : (float) $row->score,
-            ])
+            ->map(fn ($row) => $this->gradeRow($row, $context))
             ->all();
+    }
+
+    /**
+     * One row of `grades`. A Primaria result recorded as a scale level carries
+     * the level's name, and the number next to it only as the school's switch
+     * and equivalence allow (ResultScales::numericGradeFor, ClickUp
+     * 1dfd3mc4bgg).
+     *
+     * @param  array{0: School, 1: array<int, int>}  $context
+     * @return array<string, mixed>
+     */
+    protected function gradeRow(AssessmentResult $row, array $context): array
+    {
+        [$school, $equivalences] = $context;
+        $numeric = app(ResultScales::class)->numericGradeFor($row, $school, $equivalences);
+
+        return [
+            'id' => (int) $row->id,
+            'assessment_id' => (int) $row->assessment_id,
+            'subject_id' => (int) $row->subject_id,
+            'subject_name' => $row->subject_name,
+            'type' => $row->type,
+            'administered_at' => $row->administered_at
+                ? substr((string) $row->administered_at, 0, 10) : null,
+            'score' => $row->score === null ? null : (float) $row->score,
+            'scale_level_name' => $row->scale_level_name,
+            'numeric_grade' => $numeric['value'],
+            'numeric_grade_source' => $numeric['source'],
+            // A level result with the number switched on but none to show
+            // reads «sin nota» on screen (PO 12/11).
+            'numeric_grade_missing' => $row->official_scale_level_id !== null
+                && (bool) $school->show_primary_numeric_grade
+                && $numeric['value'] === null,
+        ];
     }
 
     /**
