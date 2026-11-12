@@ -130,6 +130,61 @@ it('validates required per-type parameters', function () {
     ])->assertStatus(422)->assertJsonValidationErrors('parameters.assessment_type');
 });
 
+it('rejects a class session request without a subject or a unit', function () {
+    Queue::fake();
+    [$school, $teacher, $group] = teacherWithGroupAndPlan();
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'class_session',
+        'parameters' => ['focus' => 'fracciones'],
+    ])->assertStatus(422)->assertJsonValidationErrors(['parameters.subject_id', 'parameters.unit_id']);
+
+    Queue::assertNothingPushed();
+});
+
+it('accepts a class session with a subject chosen directly, only one taught in the group', function () {
+    Queue::fake();
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $math = leadGroup($group, $teacher);
+    $science = Subject::factory()->create(['school_id' => $school->id]);
+    $colleague = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $colleague, $science);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $notTaught = Subject::factory()->create(['school_id' => $school->id]);
+    $url = "/api/v1/groups/{$group->id}/assistant/generate";
+    $body = fn (Subject $subject) => ['type' => 'class_session', 'parameters' => ['subject_id' => $subject->id, 'focus' => 'x']];
+
+    Sanctum::actingAs($teacher);
+    $this->postJson($url, $body($math))->assertStatus(202);
+    // A subject a colleague teaches in the group is not the teacher's to pick.
+    $this->postJson($url, $body($science))->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+
+    Sanctum::actingAs($psychopedagogue);
+    $this->postJson($url, $body($science))->assertStatus(202);
+    $this->postJson($url, $body($notTaught))->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+});
+
+it('does not take a subject alongside a unit (the unit already carries it)', function () {
+    Queue::fake();
+    [$school, $teacher, $group, $plan] = teacherWithGroupAndPlan();
+    $unit = Unit::factory()->create(['annual_plan_id' => $plan->id]);
+    $subject = $group->teachers()->first()->pivot->subject_id;
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'class_session',
+        'parameters' => ['unit_id' => $unit->id, 'subject_id' => $subject, 'focus' => 'x'],
+    ])->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+
+    $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [
+        'type' => 'class_session',
+        'parameters' => ['unit_id' => $unit->id, 'focus' => 'x'],
+    ])->assertStatus(202);
+});
+
 it('requires subject_id (existing in the school) for an annual_plan generation', function () {
     Queue::fake();
     [$school, $teacher, $group] = teacherWithGroupAndPlan();

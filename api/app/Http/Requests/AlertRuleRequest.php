@@ -55,6 +55,11 @@ class AlertRuleRequest extends FormRequest
                     ->where('school_id', Tenancy::schoolId())
                     ->whereNull('deleted_at'),
             ],
+            // The levels the condition applies to (ClickUp 1dfd3mc2wx0), from
+            // the same list groups and screenings use. Null = every level; an
+            // empty list would be a condition that never fires, so at least one.
+            'education_level_ids' => ['sometimes', 'nullable', 'array', 'min:1'],
+            'education_level_ids.*' => ['integer', 'distinct', Rule::exists('education_levels', 'id')],
             'active' => ['sometimes', 'boolean'],
         ];
     }

@@ -24,6 +24,8 @@ export interface AlertRuleInput {
   signal_count?: number | null
   period_days?: number | null
   subject_id?: number | null
+  /** `null` = every level (ClickUp 1dfd3mc2wx0). Omitted = unchanged. */
+  education_level_ids?: number[] | null
   active?: boolean
 }
 
