@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\Group;
 use App\Models\OfficialScale;
@@ -21,27 +22,31 @@ use Illuminate\Support\Collection;
  *   «Mostrar la calificación numérica junto al nivel de avance». It is the
  *   school's own equivalence when the school configured one, otherwise the
  *   number the teacher wrote with the level. Aula+ never derives it.
- * - Open product question: switch on, no school equivalence and no number
- *   written by the teacher → nothing is shown but the level (no placeholder).
+ * - Switch on, no school equivalence and no number written by the teacher →
+ *   the level is shown with a discreet «sin nota» (PO answer of 12/11, done
+ *   in the frontend; `numeric_grade` stays null here).
+ * - When a group has two valid Primaria scales, the teacher chooses one per
+ *   assessment before the first result, and it is kept with the assessment
+ *   (`assessments.official_scale_id`), so the recorded results stay tied to
+ *   it (PO answer of 12/11).
  */
 class ResultScales
 {
     public const PRIMARY_LEVEL_KEY = 'primary';
 
     /**
-     * The official scale a group records its results with, or null when the
-     * group records a decimal score. Only Primaria groups use a scale.
+     * Every official Primaria scale a group may record with: the scales of
+     * its own frameworks or, when it has none, of its school's active ones.
+     * Empty for any group that is not Primaria.
      *
-     * The framework is the group's own (group_curricular_framework); a group
-     * without one uses its school's active frameworks. With several candidates
-     * the first framework (by id) wins, so the choice is deterministic.
+     * @return Collection<int, OfficialScale>
      */
-    public function scaleForGroup(Group $group): ?OfficialScale
+    public function primaryScalesForGroup(Group $group): Collection
     {
         $group->loadMissing('educationLevel');
 
         if ($group->educationLevel?->key !== self::PRIMARY_LEVEL_KEY) {
-            return null;
+            return collect();
         }
 
         $frameworkIds = $group->curricularFrameworks()->pluck('curricular_frameworks.id');
@@ -50,7 +55,44 @@ class ResultScales
             $frameworkIds = $this->activeFrameworkIds($group->school_id);
         }
 
-        return $this->primaryScaleAmong($frameworkIds);
+        if ($frameworkIds->isEmpty()) {
+            return collect();
+        }
+
+        return OfficialScale::query()
+            ->whereIn('curricular_framework_id', $frameworkIds)
+            ->whereHas('educationLevel', fn ($q) => $q->where('key', self::PRIMARY_LEVEL_KEY))
+            ->with(['levels', 'curricularFramework', 'educationLevel'])
+            ->orderBy('curricular_framework_id')
+            ->get();
+    }
+
+    /**
+     * How an assessment records its results:
+     *
+     * - `scale`: the scale kept with the assessment once chosen; otherwise
+     *   the group's only valid Primaria scale; null when the assessment
+     *   records a decimal score, or while a choice is still pending.
+     * - `choices`: the scales the teacher must choose among first (two or
+     *   more valid ones and none kept yet); empty otherwise.
+     *
+     * @return array{scale: OfficialScale|null, choices: Collection<int, OfficialScale>}
+     */
+    public function resolveForAssessment(Assessment $assessment): array
+    {
+        if ($assessment->official_scale_id !== null) {
+            $scale = OfficialScale::query()
+                ->with(['levels', 'curricularFramework', 'educationLevel'])
+                ->find($assessment->official_scale_id);
+
+            return ['scale' => $scale, 'choices' => collect()];
+        }
+
+        $candidates = $assessment->group ? $this->primaryScalesForGroup($assessment->group) : collect();
+
+        return $candidates->count() > 1
+            ? ['scale' => null, 'choices' => $candidates]
+            : ['scale' => $candidates->first(), 'choices' => collect()];
     }
 
     /**

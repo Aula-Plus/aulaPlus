@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
 import type { NumericGradeSettings, OfficialScale } from "@/types"
+import { NoAccessPage } from "@/pages/NoAccessPage"
 import * as officialScalesApi from "./officialScalesApi"
 
 /** Visible label of a scale: the framework's name, then which part of it. */
@@ -45,6 +46,7 @@ export function OfficialScalesPage() {
   const [numbers, setNumbers] = useState<Record<number, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!canView) return
@@ -66,7 +68,7 @@ export function OfficialScalesPage() {
   }
 
   if (!canView) {
-    return <p className="text-muted-foreground">Esta sección es solo para Dirección.</p>
+    return <NoAccessPage />
   }
 
   const primaryScale = scales?.find((scale) => scale.id === settings?.primary_scale_id) ?? null
@@ -85,6 +87,7 @@ export function OfficialScalesPage() {
       setError("Elegí una nota de 1 a 10 para cada nivel, o sacá la equivalencia.")
       return
     }
+    setSaving(true)
     try {
       applySettings(
         await officialScalesApi.updateNumericGradeSettings({ show_numeric_grade: show, equivalences }),
@@ -92,6 +95,8 @@ export function OfficialScalesPage() {
       setSaved(true)
     } catch {
       setError("No pudimos guardar. Revisá que cada nivel tenga una nota de 1 a 10.")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -130,12 +135,23 @@ export function OfficialScalesPage() {
                 {scale.levels.map((level) => (
                   <li key={level.id} className="text-sm">
                     <span className="font-medium">{level.name}</span>
+                    {level.official_band && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        Franja oficial: {level.official_band}
+                      </span>
+                    )}
                     {level.description && (
                       <span className="block text-muted-foreground">{level.description}</span>
                     )}
                   </li>
                 ))}
               </ol>
+              {scale.levels.some((level) => level.official_band) && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  La franja oficial es un dato de consulta del documento: no se usa para calcular ni
+                  para mostrar la calificación de un alumno.
+                </p>
+              )}
               <p className="mt-3 text-xs text-muted-foreground">
                 Fuente: {citationText(scale)}
                 {scale.citation.url && (
@@ -215,8 +231,8 @@ export function OfficialScalesPage() {
         ) : null}
 
         <div className="mt-4 flex items-center gap-3">
-          <Button onClick={save} disabled={settings === null}>
-            Guardar
+          <Button onClick={save} disabled={settings === null || saving}>
+            {saving ? "Guardando…" : "Guardar cambios"}
           </Button>
           {saved && (
             <span role="status" className="text-sm text-muted-foreground">

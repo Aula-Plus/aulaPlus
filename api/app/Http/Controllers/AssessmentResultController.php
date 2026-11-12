@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ChooseResultScaleRequest;
 use App\Http\Requests\StoreAssessmentResultsRequest;
 use App\Http\Resources\AssessmentResultResource;
 use App\Http\Resources\OfficialScaleResource;
@@ -39,18 +40,47 @@ class AssessmentResultController extends Controller
     {
         $this->authorize('view', [AssessmentResult::class, $assessment]);
 
-        $scale = $assessment->group ? $scales->scaleForGroup($assessment->group) : null;
+        return response()->json(['data' => $this->scalePayload($request, $assessment, $scales)]);
+    }
+
+    /**
+     * PUT /assessments/{assessment}/result-scale — the teacher chooses which
+     * of the group's valid scales this assessment is recorded with, before
+     * the first result (ClickUp 1dfd3mc4bgg, PO 12/11). Kept with the
+     * assessment so the recorded results stay tied to it.
+     */
+    public function chooseScale(ChooseResultScaleRequest $request, Assessment $assessment, ResultScales $scales): JsonResponse
+    {
+        $assessment->forceFill(['official_scale_id' => (int) $request->validated('official_scale_id')])->save();
+
+        return response()->json(['data' => $this->scalePayload($request, $assessment->refresh(), $scales)]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function scalePayload(Request $request, Assessment $assessment, ResultScales $scales): array
+    {
+        ['scale' => $scale, 'choices' => $choices] = $scales->resolveForAssessment($assessment);
+
+        if ($scale === null && $choices->isNotEmpty()) {
+            return [
+                'mode' => 'choose',
+                'scale' => null,
+                'numeric_grade' => null,
+                'choices' => OfficialScaleResource::collection($choices)->resolve($request),
+            ];
+        }
 
         if ($scale === null) {
-            return response()->json(['data' => ['mode' => 'score', 'scale' => null, 'numeric_grade' => null]]);
+            return ['mode' => 'score', 'scale' => null, 'numeric_grade' => null];
         }
 
         $school = School::query()->findOrFail($assessment->school_id);
         $equivalences = $scales->equivalences($school);
         $schoolEquivalence = $scales->hasEquivalenceFor($scale, $equivalences);
-        $scale->load(['curricularFramework', 'educationLevel']);
 
-        return response()->json(['data' => [
+        return [
             'mode' => 'scale',
             'scale' => (new OfficialScaleResource($scale))->resolve($request),
             'numeric_grade' => [
@@ -66,7 +96,7 @@ class AssessmentResultController extends Controller
                         ->all()
                     : [],
             ],
-        ]]);
+        ];
     }
 
     /**
@@ -77,20 +107,20 @@ class AssessmentResultController extends Controller
      */
     public function store(StoreAssessmentResultsRequest $request, Assessment $assessment, ResultScales $scales): AnonymousResourceCollection
     {
-        $byScale = $request->scale() !== null;
+        $scale = $request->scale();
+        $teacherWritesNumber = $request->teacherWritesNumber();
 
-        $results = DB::transaction(function () use ($request, $assessment, $byScale): array {
+        $results = DB::transaction(function () use ($request, $assessment, $scale, $teacherWritesNumber): array {
+            // The scale is kept with the assessment from its first result on,
+            // so later changes to the group's frameworks never re-label it.
+            if ($scale !== null && $assessment->official_scale_id === null) {
+                $assessment->forceFill(['official_scale_id' => $scale->id])->save();
+            }
+
             return array_map(
                 fn (array $row): AssessmentResult => $assessment->results()->updateOrCreate(
                     ['student_id' => $row['student_id']],
-                    [
-                        // Exactly one of score / level is set (the Form
-                        // Request decides which for this group).
-                        'score' => $byScale ? null : $row['score'],
-                        'official_scale_level_id' => $byScale ? (int) $row['scale_level_id'] : null,
-                        'numeric_grade' => $byScale && isset($row['numeric_grade']) ? (int) $row['numeric_grade'] : null,
-                        'feedback' => $row['feedback'] ?? null,
-                    ],
+                    $this->attributesFor($row, $scale !== null, $teacherWritesNumber),
                 ),
                 $request->validated('results'),
             );
@@ -101,6 +131,45 @@ class AssessmentResultController extends Controller
         }
 
         return $this->resources($assessment, $results, $scales);
+    }
+
+    /**
+     * Only the fields of the mode in use are written. The other mode's value
+     * is cleared only on an explicit `replace_previous` (the FormRequest
+     * rejects a silent overwrite), and the teacher's number is written only
+     * when the teacher may write it and sent it: turning the switch off or
+     * configuring a school equivalence never erases it (PO 12/11).
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    protected function attributesFor(array $row, bool $byScale, bool $teacherWritesNumber): array
+    {
+        $replace = (bool) ($row['replace_previous'] ?? false);
+        $attributes = ['feedback' => $row['feedback'] ?? null];
+
+        if ($byScale) {
+            $attributes['official_scale_level_id'] = (int) $row['scale_level_id'];
+
+            if ($teacherWritesNumber && array_key_exists('numeric_grade', $row)) {
+                $attributes['numeric_grade'] = $row['numeric_grade'] === null ? null : (int) $row['numeric_grade'];
+            }
+
+            if ($replace) {
+                $attributes['score'] = null;
+            }
+
+            return $attributes;
+        }
+
+        $attributes['score'] = $row['score'];
+
+        if ($replace) {
+            $attributes['official_scale_level_id'] = null;
+            $attributes['numeric_grade'] = null;
+        }
+
+        return $attributes;
     }
 
     /**

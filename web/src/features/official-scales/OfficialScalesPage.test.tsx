@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react"
+import { MemoryRouter } from "react-router-dom"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
@@ -14,9 +15,9 @@ const PRIMARY: OfficialScale = {
   issuing_body: "ANEP",
   citation: { document: "REDE 2024, artículo 21", page: "14", url: "https://www.anep.edu.uy/rede.pdf" },
   levels: [
-    { id: 11, position: 1, name: "Avance destacado", description: "Activa procesos complejos." },
-    { id: 12, position: 2, name: "Avance significativo", description: null },
-    { id: 13, position: 3, name: "Avance mínimo", description: null },
+    { id: 11, position: 1, name: "Avance destacado", description: "Activa procesos complejos.", official_band: "9–10" },
+    { id: 12, position: 2, name: "Avance significativo", description: null, official_band: "7–8" },
+    { id: 13, position: 3, name: "Avance mínimo", description: null, official_band: "1–2" },
   ],
 }
 
@@ -24,7 +25,9 @@ function renderPage(role: Role) {
   const user = { id: 1, name: "Dir", email: "d@x.uy", school_id: 1, roles: [role] } as unknown as User
   return render(
     <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout: vi.fn() } as never}>
-      <OfficialScalesPage />
+      <MemoryRouter>
+        <OfficialScalesPage />
+      </MemoryRouter>
     </AuthContext.Provider>,
   )
 }
@@ -53,6 +56,9 @@ describe("OfficialScalesPage («Escalas oficiales»)", () => {
       "Avance mínimo",
     ])
     expect(screen.getByText(/Fuente: REDE 2024, artículo 21, p\. 14/)).toBeInTheDocument()
+    // The official band, as reference data only (PO 12/11).
+    expect(screen.getByText("Franja oficial: 9–10")).toBeInTheDocument()
+    expect(screen.getByText(/no se usa para calcular ni para mostrar la calificación/)).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "documento oficial" })).toHaveAttribute("rel", "noopener noreferrer")
     // Nothing of the scale itself is editable: no input carries a level name.
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
@@ -79,7 +85,7 @@ describe("OfficialScalesPage («Escalas oficiales»)", () => {
     await userEvent.selectOptions(screen.getByLabelText("Nota del colegio para Avance destacado"), "10")
     await userEvent.selectOptions(screen.getByLabelText("Nota del colegio para Avance significativo"), "7")
     await userEvent.selectOptions(screen.getByLabelText("Nota del colegio para Avance mínimo"), "2")
-    await userEvent.click(screen.getByRole("button", { name: "Guardar" }))
+    await userEvent.click(screen.getByRole("button", { name: "Guardar cambios" }))
 
     expect(update).toHaveBeenCalledWith({
       show_numeric_grade: true,
@@ -99,7 +105,7 @@ describe("OfficialScalesPage («Escalas oficiales»)", () => {
 
     await userEvent.click(await screen.findByLabelText(/propia equivalencia/))
     await userEvent.selectOptions(screen.getByLabelText("Nota del colegio para Avance destacado"), "10")
-    await userEvent.click(screen.getByRole("button", { name: "Guardar" }))
+    await userEvent.click(screen.getByRole("button", { name: "Guardar cambios" }))
 
     expect(update).not.toHaveBeenCalled()
     expect(screen.getByRole("alert")).toHaveTextContent(/cada nivel/)
@@ -109,7 +115,9 @@ describe("OfficialScalesPage («Escalas oficiales»)", () => {
     const fetchScales = vi.spyOn(officialScalesApi, "fetchOfficialScales")
     renderPage(role)
 
-    expect(screen.getByText("Esta sección es solo para Dirección.")).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Esta pantalla no está disponible para tu cuenta" }),
+    ).toBeInTheDocument()
     expect(fetchScales).not.toHaveBeenCalled()
   })
 })

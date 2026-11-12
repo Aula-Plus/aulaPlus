@@ -606,7 +606,12 @@ export function StudentTrackingPage() {
                       <TableCell className="pl-6">{grade.subject_name}</TableCell>
                       <TableCell>{assessmentTypeLabels[grade.type]}</TableCell>
                       <TableCell>{formatShortDate(grade.administered_at)}</TableCell>
-                      <TableCell className="tabular-nums">{gradeText(grade)}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {gradeText(grade)}
+                        {grade.numeric_grade_missing && (
+                          <span className="ml-2 text-xs text-muted-foreground">sin nota</span>
+                        )}
+                      </TableCell>
                       <TableCell className="pr-6">
                         <GradeAccommodations accommodations={grade.accommodations} />
                       </TableCell>

@@ -48,9 +48,6 @@ class StudentTrackingController extends Controller
 
     protected const RECENT_COMMENTS_LIMIT = 10;
 
-    /** @var array{0: School, 1: array<int, int>}|null */
-    protected ?array $numericContext = null;
-
     /** Most recent grade rows listed in `grades`; the aggregates use all of them. */
     public const GRADES_LIMIT = 100;
 
@@ -210,6 +207,11 @@ class StudentTrackingController extends Controller
      */
     protected function grades(Student $student, GradeAccessRule $rule): array
     {
+        // Read once per call (not memoized on the controller, which the
+        // router may reuse across requests).
+        $school = School::query()->findOrFail($student->school_id);
+        $context = [$school, app(ResultScales::class)->equivalences($school)];
+
         return $this->visibleResults($student, $rule)
             ->join('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->orderByDesc('assessments.administered_at')
@@ -221,7 +223,7 @@ class StudentTrackingController extends Controller
                 'assessment_results.numeric_grade', 'official_scale_levels.name as scale_level_name')
             ->limit(self::GRADES_LIMIT + 1)
             ->get()
-            ->map(fn ($row) => $this->gradeRow($row, $student))
+            ->map(fn ($row) => $this->gradeRow($row, $context))
             ->all();
     }
 
@@ -231,16 +233,12 @@ class StudentTrackingController extends Controller
      * and equivalence allow (ResultScales::numericGradeFor, ClickUp
      * 1dfd3mc4bgg).
      *
+     * @param  array{0: School, 1: array<int, int>}  $context
      * @return array<string, mixed>
      */
-    protected function gradeRow(AssessmentResult $row, Student $student): array
+    protected function gradeRow(AssessmentResult $row, array $context): array
     {
-        $this->numericContext ??= (function () use ($student): array {
-            $school = School::query()->findOrFail($student->school_id);
-
-            return [$school, app(ResultScales::class)->equivalences($school)];
-        })();
-        [$school, $equivalences] = $this->numericContext;
+        [$school, $equivalences] = $context;
         $numeric = app(ResultScales::class)->numericGradeFor($row, $school, $equivalences);
 
         return [
@@ -255,6 +253,11 @@ class StudentTrackingController extends Controller
             'scale_level_name' => $row->scale_level_name,
             'numeric_grade' => $numeric['value'],
             'numeric_grade_source' => $numeric['source'],
+            // A level result with the number switched on but none to show
+            // reads «sin nota» on screen (PO 12/11).
+            'numeric_grade_missing' => $row->official_scale_level_id !== null
+                && (bool) $school->show_primary_numeric_grade
+                && $numeric['value'] === null,
         ];
     }
 

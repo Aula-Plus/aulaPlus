@@ -43,6 +43,8 @@ class OfficialScaleResource extends JsonResource
                 'position' => $level->position,
                 'name' => $level->name,
                 'description' => $level->description,
+                // Reference only (PO 12/11): never part of a calculation.
+                'official_band' => $level->official_band,
             ])->values()->all(),
         ];
     }

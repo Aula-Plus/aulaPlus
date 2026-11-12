@@ -1589,6 +1589,8 @@ export interface StudentGrade {
   /** The number next to the level, as the school's switch allows. */
   numeric_grade?: number | null
   numeric_grade_source?: NumericGradeSource | null
+  /** Primaria: the school shows the number but this result has none («sin nota»). */
+  numeric_grade_missing?: boolean
   /**
    * The accommodations that were in force on the instance's date for its
    * subject and type, minus any deactivated for that instance — only the ones
@@ -1764,6 +1766,11 @@ export interface OfficialScaleLevel {
   position: number
   name: string
   description: string | null
+  /**
+   * The grade band the official table prints next to the level (e.g. «9–10»).
+   * Reference only: never used to compute or show a student's grade.
+   */
+  official_band: string | null
 }
 
 /**
@@ -1792,6 +1799,8 @@ export interface NumericGradeSettings {
 /** `GET /api/v1/assessments/{id}/result-scale`: how results are recorded. */
 export type AssessmentResultScale =
   | { mode: "score"; scale: null; numeric_grade: null }
+  /** Two or more valid scales: the teacher chooses one before the first result. */
+  | { mode: "choose"; scale: null; numeric_grade: null; choices: OfficialScale[] }
   | {
       mode: "scale"
       scale: OfficialScale

@@ -262,6 +262,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         Route::get('/assessments/{assessment}/results', [AssessmentResultController::class, 'index']);
         Route::get('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'scale']);
+        Route::put('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'chooseScale']);
         Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store']);
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
 

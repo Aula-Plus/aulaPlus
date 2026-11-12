@@ -21,9 +21,11 @@ use Illuminate\Support\Facades\DB;
  * Texts: ANEP's official descriptors as relevados in the prototype's catalog
  * (ANEP curricular survey, consulted 05/10/2026). Only ANEP scales are loaded:
  * IB and Cambridge have no licensed text yet (P24-DEC-08: sample text only).
- * The official grade bands some ANEP tables print next to each level are NOT
- * loaded: the number next to a Primaria level is the school's own equivalence
- * or the teacher's, never one Aula+ derives (ClickUp answer, 10/11).
+ * The official grade band ANEP prints next to each level («9–10»…) is loaded
+ * as reference data (`official_band`, PO answer of 12/11): it is shown with
+ * the scale's citation and never used to compute or show a student's grade;
+ * the number next to a Primaria level stays the school's own equivalence or
+ * the teacher's.
  */
 class OfficialScaleSeeder extends Seeder
 {
@@ -54,6 +56,14 @@ class OfficialScaleSeeder extends Seeder
         ['Avance escaso', 'El desempeño del estudiante evidencia haber alcanzado parcialmente los niveles establecidos en los criterios de logro, asociados a las competencias específicas. Aplica los conocimientos en contextos conocidos en algunas situaciones. Avanza en sus aprendizajes con orientación y apoyo con escasa autonomía.'],
         ['Avance mínimo', 'El desempeño del estudiante evidencia no haber alcanzado los criterios de logro asociados a las competencias específicas. Aplica algunos conocimientos en contextos conocidos y de manera parcial.'],
     ];
+
+    /**
+     * The grade band ANEP's tables print next to each level, highest first
+     * (same for REDE and REEMS).
+     *
+     * @var list<string>
+     */
+    protected const ANEP_BANDS = ['9–10', '7–8', '5–6', '3–4', '1–2'];
 
     public function run(): void
     {
@@ -124,7 +134,7 @@ class OfficialScaleSeeder extends Seeder
             foreach ($levels as $index => [$levelName, $description]) {
                 $scale->levels()->updateOrCreate(
                     ['position' => $index + 1],
-                    ['name' => $levelName, 'description' => $description],
+                    ['name' => $levelName, 'description' => $description, 'official_band' => self::ANEP_BANDS[$index] ?? null],
                 );
             }
         });

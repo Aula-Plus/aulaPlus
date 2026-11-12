@@ -195,6 +195,23 @@ en el backend: `App\Services\ResultScales`.
   devuelve ningún número. Aula+ nunca convierte entre escalas.
 - La línea «Nota de 1 a 10» de los gráficos de evolución solo toma resultados
   numéricos (PA-088): un nivel nunca se ubica por una conversión inventada.
+- **Respuestas del PO del 12/11:**
+  - Casilla prendida y sin número (ni equivalencia ni nota del docente): se
+    muestra el nivel con «sin nota» al lado, discreto.
+  - El número que escribió el docente se conserva aunque se apague la casilla
+    o Dirección configure una equivalencia (solo se escribe cuando el docente
+    puede escribirlo y lo manda).
+  - Un resultado registrado del otro modo (nota donde ahora se registra nivel,
+    o al revés) se sigue viendo; reemplazarlo exige `replace_previous: true`
+    en esa fila («Reemplazar» en la planilla), si no es 422.
+  - Si el grupo tiene dos escalas de Primaria válidas, el docente elige una
+    antes del primer resultado (`PUT /api/v1/assessments/{id}/result-scale`).
+    La escala queda guardada con la evaluación (`assessments.official_scale_id`,
+    también al primer resultado cuando hay una sola), así los resultados no
+    cambian de escala si después cambian los marcos del grupo.
+  - La franja oficial de ANEP («9–10»…) se muestra con la escala como dato de
+    consulta (`official_scale_levels.official_band`); nunca entra en un
+    cálculo ni en la calificación de un alumno.
 
 ## Autenticación (SPA + Sanctum)
 

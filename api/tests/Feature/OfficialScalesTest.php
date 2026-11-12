@@ -3,6 +3,7 @@
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\CurricularFramework;
+use App\Models\EducationLevel;
 use App\Models\Group;
 use App\Models\OfficialScale;
 use App\Models\School;
@@ -328,7 +329,7 @@ it('shows no number at all when the switch is off, even with an equivalence or a
         ->assertJsonPath('data.0.numeric_grade_source', null);
 });
 
-it('shows only the level when the switch is on, there is no equivalence and no teacher number (open question)', function () {
+it('returns no number when the switch is on, there is no equivalence and no teacher number (the screen shows «sin nota»)', function () {
     $school = anepSchool();
     $school->update(['show_primary_numeric_grade' => true]);
     ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student] = scaleAssessment($school);
@@ -357,7 +358,14 @@ it('shows the level and the allowed number in the student\'s grade list, and kee
         ->assertJsonPath('data.grades.0.scale_level_name', 'Avance significativo')
         ->assertJsonPath('data.grades.0.numeric_grade', 8)
         ->assertJsonPath('data.grades.0.numeric_grade_source', 'school')
+        ->assertJsonPath('data.grades.0.numeric_grade_missing', false)
         ->assertJsonPath('data.grades.0.score', null);
+
+    // Without the school's equivalence and no teacher number: «sin nota».
+    SchoolScaleEquivalence::query()->withoutGlobalScopes()->where('school_id', $school->id)->delete();
+    $this->getJson("/api/v1/students/{$student->id}/tracking")
+        ->assertJsonPath('data.grades.0.numeric_grade', null)
+        ->assertJsonPath('data.grades.0.numeric_grade_missing', true);
 
     // PA-088: a level is never placed on the «Nota de 1 a 10» line.
     $this->getJson("/api/v1/students/{$student->id}/performance-timeline")
@@ -402,4 +410,190 @@ it('does not let a teacher of another school load results with a level', functio
     $this->postJson("/api/v1/assessments/{$assessmentA->id}/results", [
         'results' => [['student_id' => $student->id, 'scale_level_id' => primaryScale()->levels[0]->id]],
     ])->assertNotFound();
+});
+
+// ── PO answers of 12/11 ─────────────────────────────────────────────────────
+
+it('shows the official ANEP band of each level as reference data', function () {
+    $school = anepSchool();
+    Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
+
+    $this->getJson('/api/v1/official-scales')->assertOk()
+        ->assertJsonPath('data.0.levels.0.official_band', '9–10')
+        ->assertJsonPath('data.0.levels.4.official_band', '1–2');
+});
+
+it('keeps the teacher\'s number when the switch goes off or the school configures an equivalence', function () {
+    $school = anepSchool();
+    $school->update(['show_primary_numeric_grade' => true]);
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student] = scaleAssessment($school);
+    Sanctum::actingAs($teacher);
+    $url = "/api/v1/assessments/{$assessment->id}/results";
+    $level = primaryScale()->levels[0]->id;
+
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'scale_level_id' => $level, 'numeric_grade' => 9]]])
+        ->assertOk();
+
+    // Switch off, the level saved again (the number can't be sent now).
+    $school->update(['show_primary_numeric_grade' => false]);
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'scale_level_id' => $level, 'feedback' => 'x']]])
+        ->assertOk()->assertJsonPath('data.0.numeric_grade', null);
+
+    // Back on: the 9 is still there.
+    $school->update(['show_primary_numeric_grade' => true]);
+    $this->getJson($url)->assertJsonPath('data.0.numeric_grade', 9)
+        ->assertJsonPath('data.0.numeric_grade_source', 'teacher');
+
+    // An equivalence configured, the level saved again, the equivalence removed.
+    configureEquivalence($school, [10, 8, 6, 4, 2]);
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'scale_level_id' => $level]]])
+        ->assertOk()->assertJsonPath('data.0.numeric_grade', 10);
+    SchoolScaleEquivalence::query()->withoutGlobalScopes()->where('school_id', $school->id)->delete();
+    $this->getJson($url)->assertJsonPath('data.0.numeric_grade', 9);
+});
+
+it('keeps a result recorded as a score visible and only replaces it explicitly', function () {
+    $school = anepSchool();
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student] = scaleAssessment($school);
+    (new AssessmentResult)->forceFill([
+        'assessment_id' => $assessment->id, 'student_id' => $student->id, 'score' => 7,
+        'created_by_id' => $teacher->id, 'school_id' => $school->id,
+    ])->save();
+    Sanctum::actingAs($teacher);
+    $url = "/api/v1/assessments/{$assessment->id}/results";
+    $level = primaryScale()->levels[1]->id;
+
+    $this->getJson($url)->assertJsonPath('data.0.score', '7.00')->assertJsonPath('data.0.scale_level', null);
+
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'scale_level_id' => $level]]])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('results.0.scale_level_id');
+    $this->assertDatabaseHas('assessment_results', ['student_id' => $student->id, 'score' => 7, 'official_scale_level_id' => null]);
+
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'scale_level_id' => $level, 'replace_previous' => true]]])
+        ->assertOk()
+        ->assertJsonPath('data.0.score', null)
+        ->assertJsonPath('data.0.scale_level.id', $level);
+});
+
+it('keeps a result recorded as a level visible in a group that records scores now', function () {
+    $school = anepSchool();
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student, 'group' => $group] = scaleAssessment($school);
+    (new AssessmentResult)->forceFill([
+        'assessment_id' => $assessment->id, 'student_id' => $student->id,
+        'official_scale_level_id' => primaryScale()->levels[0]->id,
+        'created_by_id' => $teacher->id, 'school_id' => $school->id,
+    ])->save();
+    // The group stops being Primaria (its level was corrected).
+    $group->update(['education_level_id' => EducationLevel::query()->where('key', 'lower_secondary')->value('id')]);
+    Sanctum::actingAs($teacher);
+    $url = "/api/v1/assessments/{$assessment->id}/results";
+
+    $this->getJson("/api/v1/assessments/{$assessment->id}/result-scale")->assertJsonPath('data.mode', 'score');
+    $this->getJson($url)->assertJsonPath('data.0.scale_level.name', 'Avance destacado');
+
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'score' => 8]]])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('results.0.score');
+    $this->postJson($url, ['results' => [['student_id' => $student->id, 'score' => 8, 'replace_previous' => true]]])
+        ->assertOk()->assertJsonPath('data.0.score', '8.00')->assertJsonPath('data.0.scale_level', null);
+});
+
+/**
+ * A second valid Primaria scale for the group, from another framework.
+ */
+function secondPrimaryScale(Group $group): OfficialScale
+{
+    $framework = CurricularFramework::query()->firstOrCreate(['name' => 'IB PYP']);
+    $group->curricularFrameworks()->attach([
+        CurricularFramework::query()->where('name', 'ANEP EBI')->value('id'),
+        $framework->id,
+    ]);
+    $scale = OfficialScale::query()->create([
+        'key' => 'ib_pyp_primary',
+        'curricular_framework_id' => $framework->id,
+        'education_level_id' => EducationLevel::query()->where('key', 'primary')->value('id'),
+        'name' => 'PYP · niveles',
+        'issuing_body' => 'IB',
+        'citation_document' => 'Texto de muestra',
+        'citation_page' => '1',
+    ]);
+    foreach (['Excelente', 'Bueno', 'En desarrollo'] as $index => $name) {
+        $scale->levels()->create(['position' => $index + 1, 'name' => $name]);
+    }
+
+    return $scale->load('levels');
+}
+
+it('makes the teacher choose the scale first when the group has two valid ones, and keeps it', function () {
+    $school = anepSchool();
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student, 'group' => $group] = scaleAssessment($school);
+    $pyp = secondPrimaryScale($group);
+    Sanctum::actingAs($teacher);
+    $scaleUrl = "/api/v1/assessments/{$assessment->id}/result-scale";
+    $resultsUrl = "/api/v1/assessments/{$assessment->id}/results";
+
+    $this->getJson($scaleUrl)->assertOk()
+        ->assertJsonPath('data.mode', 'choose')
+        ->assertJsonCount(2, 'data.choices')
+        ->assertJsonPath('data.choices.0.framework.name', 'ANEP EBI')
+        ->assertJsonPath('data.choices.1.framework.name', 'IB PYP');
+
+    // Nothing is recorded before choosing.
+    $this->postJson($resultsUrl, ['results' => [['student_id' => $student->id, 'scale_level_id' => $pyp->levels[0]->id]]])
+        ->assertUnprocessable();
+
+    // A scale that is not valid for the group is rejected.
+    $this->putJson($scaleUrl, ['official_scale_id' => OfficialScale::query()->where('key', 'anep_upper_secondary')->value('id')])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('official_scale_id');
+
+    $this->putJson($scaleUrl, ['official_scale_id' => $pyp->id])->assertOk()
+        ->assertJsonPath('data.mode', 'scale')
+        ->assertJsonPath('data.scale.framework.name', 'IB PYP');
+    expect($assessment->refresh()->official_scale_id)->toBe($pyp->id);
+
+    // Only PYP levels now.
+    $this->postJson($resultsUrl, ['results' => [['student_id' => $student->id, 'scale_level_id' => primaryScale()->levels[0]->id]]])
+        ->assertUnprocessable();
+    $this->postJson($resultsUrl, ['results' => [['student_id' => $student->id, 'scale_level_id' => $pyp->levels[0]->id]]])
+        ->assertOk();
+
+    // With results recorded, the scale can't change any more.
+    $this->putJson($scaleUrl, ['official_scale_id' => primaryScale()->id])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('official_scale_id');
+
+    // And the group losing a framework doesn't re-label what was recorded.
+    $group->curricularFrameworks()->detach($pyp->curricular_framework_id);
+    $this->getJson($scaleUrl)->assertJsonPath('data.scale.framework.name', 'IB PYP');
+});
+
+it('only lets the owning teacher choose the scale', function (string $role) {
+    $school = anepSchool();
+    ['assessment' => $assessment, 'group' => $group] = scaleAssessment($school);
+    $pyp = secondPrimaryScale($group);
+    Sanctum::actingAs(User::factory()->forSchool($school)->{$role}()->create());
+
+    $this->putJson("/api/v1/assessments/{$assessment->id}/result-scale", ['official_scale_id' => $pyp->id])
+        ->assertForbidden();
+    expect($assessment->refresh()->official_scale_id)->toBeNull();
+})->with(['teacher', 'director', 'psychopedagogue']);
+
+it('returns 404 when a teacher of another school chooses the scale', function () {
+    $school = anepSchool();
+    ['assessment' => $assessment, 'group' => $group] = scaleAssessment($school);
+    $pyp = secondPrimaryScale($group);
+    Sanctum::actingAs(User::factory()->forSchool(anepSchool())->teacher()->create());
+
+    $this->putJson("/api/v1/assessments/{$assessment->id}/result-scale", ['official_scale_id' => $pyp->id])
+        ->assertNotFound();
+});
+
+it('keeps the only valid scale with the assessment on its first result', function () {
+    $school = anepSchool();
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student] = scaleAssessment($school);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/assessments/{$assessment->id}/results", [
+        'results' => [['student_id' => $student->id, 'scale_level_id' => primaryScale()->levels[0]->id]],
+    ])->assertOk();
+
+    expect($assessment->refresh()->official_scale_id)->toBe(primaryScale()->id);
 });
