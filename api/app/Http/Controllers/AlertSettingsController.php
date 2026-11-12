@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateAlertRoutingRequest;
 use App\Http\Resources\AlertRuleResource;
 use App\Models\AlertRoutingSetting;
 use App\Models\AlertRule;
+use App\Models\EducationLevel;
 use App\Support\AlertRouting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
@@ -89,6 +90,24 @@ class AlertSettingsController extends Controller
             $data[$field] = null;
         }
 
+        if (isset($data['education_level_ids'])) {
+            $data['education_level_ids'] = $this->normalizedLevels($data['education_level_ids']);
+        }
+
         return $data;
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     * @return list<int>|null
+     */
+    protected function normalizedLevels(array $ids): ?array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        sort($ids);
+
+        $all = EducationLevel::query()->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id)->all();
+
+        return $ids === $all ? null : $ids;
     }
 }

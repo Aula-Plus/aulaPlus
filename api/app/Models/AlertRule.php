@@ -21,8 +21,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * dificultad» one (ClickUp 86e3qkwpn: `signal_count` signals in one category
  * within `period_days` days), evaluated daily by `alerts:difficulty-signals`
  * ({@see DifficultySignalAlertGenerator}).
+ *
+ * `education_level_ids` are the group levels the condition applies to
+ * (ClickUp 1dfd3mc2wx0); null = every level. Either way a student only counts
+ * through a group of theirs that has a level: groups "Sin nivel" are in no
+ * alert until one is chosen.
  */
-#[Fillable(['condition', 'threshold', 'consecutive_count', 'signal_count', 'period_days', 'subject_id', 'active'])]
+#[Fillable([
+    'condition',
+    'threshold',
+    'consecutive_count',
+    'signal_count',
+    'period_days',
+    'subject_id',
+    'education_level_ids',
+    'active',
+])]
 class AlertRule extends Model
 {
     /** @use HasFactory<AlertRuleFactory> */
@@ -36,8 +50,29 @@ class AlertRule extends Model
             'consecutive_count' => 'integer',
             'signal_count' => 'integer',
             'period_days' => 'integer',
+            'education_level_ids' => 'array',
             'active' => 'boolean',
         ];
+    }
+
+    /**
+     * Whether the condition applies to a student whose groups this school
+     * year have these levels. No level at all (no group, or only groups "Sin
+     * nivel") never applies.
+     *
+     * @param  list<int>  $levelIds
+     */
+    public function appliesToLevels(array $levelIds): bool
+    {
+        if ($levelIds === []) {
+            return false;
+        }
+
+        if ($this->education_level_ids === null) {
+            return true;
+        }
+
+        return array_intersect($levelIds, $this->education_level_ids) !== [];
     }
 
     public function subject(): BelongsTo

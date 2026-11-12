@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PageHeader } from "@/components/ui/page-header"
 import { SingleSelect } from "@/components/ui/single-select"
+import { fetchEducationLevels } from "@/features/groups/groupsApi"
 import { fetchSubjects } from "@/features/subjects/subjectsApi"
 import {
   alertRecipientLabels,
@@ -22,6 +23,7 @@ import {
   type AlertRoutingEntry,
   type AlertRule,
   type AlertType,
+  type LevelRef,
   type Subject,
 } from "@/types"
 import * as alertSettingsApi from "./alertSettingsApi"
@@ -42,6 +44,90 @@ const routingTypeHints: Partial<Record<AlertType, string>> = {
   difficulty_signal: "Nunca le llega a docentes: se arma con observaciones que quizás no pueden leer.",
 }
 
+/**
+ * The levels a condition applies to (ClickUp 1dfd3mc2wx0; prototype screen 32,
+ * «Niveles donde aplica cada alerta»): one or several from the same list groups
+ * and screenings use. All ticked is sent as `null` ("every level"); with no
+ * level list loaded the field is hidden and the rule's levels are left as they
+ * were (`undefined`).
+ */
+function useLevelChoice(levels: LevelRef[], initial: number[] | null | undefined) {
+  const [selected, setSelected] = useState<number[] | null>(initial ?? null)
+  const [error, setError] = useState<string | null>(null)
+
+  // `null` (every level) shows every box ticked, including levels loaded later.
+  const checked = selected ?? levels.map((level) => level.id)
+
+  function toggle(id: number) {
+    setError(null)
+    setSelected(checked.includes(id) ? checked.filter((value) => value !== id) : [...checked, id])
+  }
+
+  /** The value to send, or `false` when nothing is ticked (shows the error). */
+  function value(): number[] | null | undefined | false {
+    if (levels.length === 0) return undefined
+    if (checked.length === 0) {
+      setError("Elegí al menos un nivel.")
+      return false
+    }
+    if (levels.every((level) => checked.includes(level.id))) return null
+    return levels.filter((level) => checked.includes(level.id)).map((level) => level.id)
+  }
+
+  return { checked, toggle, error, value }
+}
+
+function LevelChecklist({
+  idPrefix,
+  levels,
+  checked,
+  error,
+  onToggle,
+}: {
+  idPrefix: string
+  levels: LevelRef[]
+  checked: number[]
+  error: string | null
+  onToggle: (id: number) => void
+}) {
+  if (levels.length === 0) return null
+
+  return (
+    <fieldset className="grid gap-2 sm:col-span-2">
+      <legend className="mb-2 text-sm font-medium">Niveles donde aplica</legend>
+      <div className="flex flex-wrap gap-4">
+        {levels.map((level) => {
+          const id = `${idPrefix}-level-${level.id}`
+          return (
+            <div key={level.id} className="flex items-center gap-2">
+              <input
+                id={id}
+                type="checkbox"
+                className="size-4"
+                checked={checked.includes(level.id)}
+                onChange={() => onToggle(level.id)}
+              />
+              <Label htmlFor={id}>{level.label}</Label>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Se genera solo para alumnos de grupos de esos niveles. Los grupos sin nivel no entran en
+        ninguna alerta.
+      </p>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </fieldset>
+  )
+}
+
+/** "Todos los niveles", or the chosen levels in list order. */
+function levelsText(ids: number[] | null | undefined, levels: LevelRef[]): string {
+  if (ids == null) return "Todos los niveles"
+  const labels = levels.filter((level) => ids.includes(level.id)).map((level) => level.label)
+  return labels.length > 0 ? labels.join(", ") : "Niveles elegidos"
+}
+
 const ruleSchema = z
   .object({
     condition: z.enum(["consecutive_below", "average_below"]),
@@ -56,7 +142,10 @@ type RuleValues = z.output<typeof ruleSchema>
 
 type RuleDraft = Pick<AlertRule, "condition" | "threshold" | "consecutive_count" | "period_days"> & {
   subject_id?: number | null
+  education_level_ids?: number[] | null
 }
+
+type LevelIds = number[] | null | undefined
 
 function toFormValues(rule: RuleDraft): RuleFormInput {
   return {
@@ -71,17 +160,20 @@ function toFormValues(rule: RuleDraft): RuleFormInput {
 function RuleForm({
   initial,
   subjects,
+  levels,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial: RuleDraft
   subjects: Subject[]
+  levels: LevelRef[]
   submitLabel: string
-  onSubmit: (values: RuleValues) => Promise<void>
+  onSubmit: (values: RuleValues, levelIds: LevelIds) => Promise<void>
   onCancel: () => void
 }) {
   const [formError, setFormError] = useState<string | null>(null)
+  const levelChoice = useLevelChoice(levels, initial.education_level_ids)
   const {
     register,
     handleSubmit,
@@ -98,8 +190,10 @@ function RuleForm({
 
   async function submit(values: RuleValues) {
     setFormError(null)
+    const levelIds = levelChoice.value()
+    if (levelIds === false) return
     try {
-      await onSubmit(values)
+      await onSubmit(values, levelIds)
     } catch {
       setFormError("No pudimos guardar la condición. Revisá los valores.")
     }
@@ -150,6 +244,13 @@ function RuleForm({
           ]}
         />
       </div>
+      <LevelChecklist
+        idPrefix="alert-rule"
+        levels={levels}
+        checked={levelChoice.checked}
+        error={levelChoice.error}
+        onToggle={levelChoice.toggle}
+      />
       {formError && (
         <p role="alert" className="text-sm text-destructive sm:col-span-2">
           {formError}
@@ -167,13 +268,14 @@ function RuleForm({
   )
 }
 
-function toInput(values: RuleValues) {
+function toInput(values: RuleValues, levelIds: LevelIds) {
   return {
     condition: values.condition,
     threshold: values.threshold,
     consecutive_count: values.condition === "consecutive_below" ? values.consecutive_count : null,
     period_days: values.condition === "average_below" ? values.period_days : null,
     subject_id: values.subject_id ? Number(values.subject_id) : null,
+    ...(levelIds !== undefined && { education_level_ids: levelIds }),
   }
 }
 
@@ -200,16 +302,19 @@ type DifficultyRuleValues = z.output<typeof difficultyRuleSchema>
 
 function DifficultyRuleForm({
   initial,
+  levels,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
-  initial?: Pick<AlertRule, "signal_count" | "period_days">
+  initial?: Pick<AlertRule, "signal_count" | "period_days" | "education_level_ids">
+  levels: LevelRef[]
   submitLabel: string
-  onSubmit: (values: DifficultyRuleValues) => Promise<void>
+  onSubmit: (values: DifficultyRuleValues, levelIds: LevelIds) => Promise<void>
   onCancel: () => void
 }) {
   const [formError, setFormError] = useState<string | null>(null)
+  const levelChoice = useLevelChoice(levels, initial?.education_level_ids)
   const {
     register,
     handleSubmit,
@@ -224,8 +329,10 @@ function DifficultyRuleForm({
 
   async function submit(values: DifficultyRuleValues) {
     setFormError(null)
+    const levelIds = levelChoice.value()
+    if (levelIds === false) return
     try {
-      await onSubmit(values)
+      await onSubmit(values, levelIds)
     } catch {
       setFormError("No pudimos guardar la condición. Revisá los valores.")
     }
@@ -248,6 +355,13 @@ function DifficultyRuleForm({
         observaciones reservadas, salvo las de «Solo quien escribe». La alerta solo muestra cuántas
         son y en qué categoría.
       </p>
+      <LevelChecklist
+        idPrefix="difficulty-rule"
+        levels={levels}
+        checked={levelChoice.checked}
+        error={levelChoice.error}
+        onToggle={levelChoice.toggle}
+      />
       {formError && (
         <p role="alert" className="text-sm text-destructive sm:col-span-2">
           {formError}
@@ -265,11 +379,12 @@ function DifficultyRuleForm({
   )
 }
 
-function toDifficultyInput(values: DifficultyRuleValues) {
+function toDifficultyInput(values: DifficultyRuleValues, levelIds: LevelIds) {
   return {
     condition: "difficulty_signals" as const,
     signal_count: values.signal_count,
     period_days: values.period_days,
+    ...(levelIds !== undefined && { education_level_ids: levelIds }),
   }
 }
 
@@ -388,6 +503,8 @@ export function AlertSettingsPage() {
   const [rules, setRules] = useState<AlertRule[] | null>(null)
   const [routing, setRouting] = useState<AlertRoutingEntry[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [levels, setLevels] = useState<LevelRef[]>([])
+  const [groupsWithoutLevel, setGroupsWithoutLevel] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState<RuleDraft | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -409,6 +526,12 @@ export function AlertSettingsPage() {
     fetchSubjects()
       .then(setSubjects)
       .catch(() => setSubjects([]))
+    fetchEducationLevels()
+      .then((result) => {
+        setLevels(result.data)
+        setGroupsWithoutLevel(result.groups_without_level)
+      })
+      .catch(() => setLevels([]))
   }, [canManage])
 
   if (!canManage) {
@@ -446,26 +569,26 @@ export function AlertSettingsPage() {
   const subjectName = (id: number | null) =>
     id === null ? "Todas las materias" : (subjects.find((subject) => subject.id === id)?.name ?? "Materia")
 
-  async function onCreate(values: RuleValues) {
-    await alertSettingsApi.createAlertRule(toInput(values))
+  async function onCreate(values: RuleValues, levelIds: LevelIds) {
+    await alertSettingsApi.createAlertRule(toInput(values, levelIds))
     setDraft(null)
     await load()
   }
 
-  async function onUpdate(id: number, values: RuleValues) {
-    await alertSettingsApi.updateAlertRule(id, toInput(values))
+  async function onUpdate(id: number, values: RuleValues, levelIds: LevelIds) {
+    await alertSettingsApi.updateAlertRule(id, toInput(values, levelIds))
     setEditingId(null)
     await load()
   }
 
-  async function onCreateDifficulty(values: DifficultyRuleValues) {
-    await alertSettingsApi.createAlertRule(toDifficultyInput(values))
+  async function onCreateDifficulty(values: DifficultyRuleValues, levelIds: LevelIds) {
+    await alertSettingsApi.createAlertRule(toDifficultyInput(values, levelIds))
     setAddingDifficulty(false)
     await load()
   }
 
-  async function onUpdateDifficulty(id: number, values: DifficultyRuleValues) {
-    await alertSettingsApi.updateAlertRule(id, toDifficultyInput(values))
+  async function onUpdateDifficulty(id: number, values: DifficultyRuleValues, levelIds: LevelIds) {
+    await alertSettingsApi.updateAlertRule(id, toDifficultyInput(values, levelIds))
     setEditingId(null)
     await load()
   }
@@ -500,6 +623,14 @@ export function AlertSettingsPage() {
         description="Qué condición dispara una alerta de desempeño bajo sostenido o de señal de dificultad y a quién le llega primero. La decide el colegio, no Aula+."
       />
 
+      {groupsWithoutLevel > 0 && (
+        <p role="status" className="rounded-md bg-warning-background px-3 py-2 text-sm text-warning">
+          {groupsWithoutLevel === 1
+            ? "1 grupo sin nivel: no entra en ninguna alerta hasta que se le elija uno."
+            : `${groupsWithoutLevel} grupos sin nivel: no entran en ninguna alerta hasta que se les elija uno.`}
+        </p>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Desempeño bajo sostenido</CardTitle>
@@ -518,8 +649,9 @@ export function AlertSettingsPage() {
                     <RuleForm
                       initial={rule}
                       subjects={subjects}
+                      levels={levels}
                       submitLabel="Guardar cambios"
-                      onSubmit={(values) => onUpdate(rule.id, values)}
+                      onSubmit={(values, levelIds) => onUpdate(rule.id, values, levelIds)}
                       onCancel={() => setEditingId(null)}
                     />
                   ) : (
@@ -527,6 +659,9 @@ export function AlertSettingsPage() {
                       <div className="grid gap-1">
                         <p className="font-medium">{describeAlertRule(rule)}</p>
                         <p className="text-sm text-muted-foreground">{subjectName(rule.subject_id)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {levelsText(rule.education_level_ids, levels)}
+                        </p>
                       </div>
                       {ruleActions(rule)}
                     </div>
@@ -541,6 +676,7 @@ export function AlertSettingsPage() {
               <RuleForm
                 initial={draft}
                 subjects={subjects}
+                levels={levels}
                 submitLabel="Agregar condición"
                 onSubmit={onCreate}
                 onCancel={() => setDraft(null)}
@@ -590,13 +726,19 @@ export function AlertSettingsPage() {
                   {editingId === rule.id ? (
                     <DifficultyRuleForm
                       initial={rule}
+                      levels={levels}
                       submitLabel="Guardar cambios"
-                      onSubmit={(values) => onUpdateDifficulty(rule.id, values)}
+                      onSubmit={(values, levelIds) => onUpdateDifficulty(rule.id, values, levelIds)}
                       onCancel={() => setEditingId(null)}
                     />
                   ) : (
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="font-medium">{describeAlertRule(rule)}</p>
+                      <div className="grid gap-1">
+                        <p className="font-medium">{describeAlertRule(rule)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {levelsText(rule.education_level_ids, levels)}
+                        </p>
+                      </div>
                       {ruleActions(rule)}
                     </div>
                   )}
@@ -607,6 +749,7 @@ export function AlertSettingsPage() {
           {addingDifficulty ? (
             <div className="rounded-md border p-4">
               <DifficultyRuleForm
+                levels={levels}
                 submitLabel="Guardar condición"
                 onSubmit={onCreateDifficulty}
                 onCancel={() => setAddingDifficulty(false)}
