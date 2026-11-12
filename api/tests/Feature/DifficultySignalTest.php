@@ -6,6 +6,7 @@ use App\Models\AlertRoutingSetting;
 use App\Models\AlertRule;
 use App\Models\Comment;
 use App\Models\CommentCategory;
+use App\Models\EducationLevel;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
@@ -479,4 +480,25 @@ it('counts signals on the school\'s calendar days, not UTC ones', function () {
 
     $this->artisan('alerts:difficulty-signals')->assertSuccessful();
     expect(($this->alerts)()->sole()->condition_met_on->toDateString())->toBe('2026-10-22');
+});
+
+it('applies the levels of a difficulty condition, and leaves groups without a level out (ClickUp 1dfd3mc2wx0)', function () {
+    $rule = ($this->rule)(2, 10);
+    ($this->observe)(['Social' => 'difficulty'], 2);
+    ($this->observe)(['Social' => 'difficulty'], 1);
+
+    // The student's group is Primaria: a Bachillerato-only condition skips it.
+    Tenancy::forSchool($this->school, fn () => $rule->update(['education_level_ids' => [EducationLevel::query()->where('key', 'upper_secondary')->value('id')]]));
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)())->toHaveCount(0);
+
+    // Every level, but the group has no level yet: still nothing.
+    Tenancy::forSchool($this->school, fn () => $rule->update(['education_level_ids' => null]));
+    Tenancy::forSchool($this->school, fn () => $this->group->update(['education_level_id' => null]));
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)())->toHaveCount(0);
+
+    Tenancy::forSchool($this->school, fn () => $this->group->update(['education_level_id' => EducationLevel::query()->where('key', 'primary')->value('id')]));
+    $this->artisan('alerts:difficulty-signals')->assertSuccessful();
+    expect(($this->alerts)())->toHaveCount(1);
 });

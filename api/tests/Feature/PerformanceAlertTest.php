@@ -8,6 +8,7 @@ use App\Models\AlertRoutingSetting;
 use App\Models\AlertRule;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
+use App\Models\EducationLevel;
 use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
@@ -414,4 +415,85 @@ it('rewords alerts stored before the «notas» → «calificaciones» rename, an
         ->and($description($otherType))->toBe($otherType->description)
         ->and(AlertAction::query()->withoutGlobalScopes()->findOrFail($note->id)->note)
         ->toBe('Revisé las notas con la familia: 3 notas seguidas por debajo de 5.');
+});
+
+// ClickUp 1dfd3mc2wx0 — the levels each alert condition applies to.
+
+it('fires a level-limited condition only for students of a group at one of its levels', function () {
+    $levelId = fn (string $key): int => EducationLevel::query()->where('key', $key)->value('id');
+
+    // $this->group is Primaria (factory default); a second student is in Ciclo Básico.
+    $cbGroup = Group::factory()->atLevel('lower_secondary')->create(['school_id' => $this->school->id]);
+    $cbStudent = Student::factory()->create(['school_id' => $this->school->id]);
+    $cbStudent->groups()->attach($cbGroup, ['school_year' => now()->year]);
+
+    ($this->rule)(['education_level_ids' => [$levelId('primary')]]);
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4]);
+    ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4], $cbStudent);
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    expect(Alert::query()->withoutGlobalScopes()->pluck('student_id')->all())->toBe([$this->student->id]);
+});
+
+it('keeps conditions with no levels chosen applying to every level, but never to groups without one', function () {
+    $cbGroup = Group::factory()->atLevel('lower_secondary')->create(['school_id' => $this->school->id]);
+    $cbStudent = Student::factory()->create(['school_id' => $this->school->id]);
+    $cbStudent->groups()->attach($cbGroup, ['school_year' => now()->year]);
+
+    $unlevelledGroup = Group::factory()->withoutLevel()->create(['school_id' => $this->school->id]);
+    $unlevelledStudent = Student::factory()->create(['school_id' => $this->school->id]);
+    $unlevelledStudent->groups()->attach($unlevelledGroup, ['school_year' => now()->year]);
+
+    // Only last year's group had a level: it doesn't count this year.
+    $unlevelledStudent->groups()->attach($cbGroup, ['school_year' => now()->year - 1]);
+
+    ($this->rule)();
+    foreach ([$this->student, $cbStudent, $unlevelledStudent] as $student) {
+        ($this->scores)($this->math, [30 => 4, 20 => 3, 10 => 4], $student);
+    }
+
+    $this->artisan('alerts:performance')->assertSuccessful();
+
+    expect(Alert::query()->withoutGlobalScopes()->orderBy('student_id')->pluck('student_id')->all())
+        ->toBe([$this->student->id, $cbStudent->id]);
+});
+
+it('lets the school choose the levels of a condition, from the shared level list', function () {
+    $levelId = fn (string $key): int => EducationLevel::query()->where('key', $key)->value('id');
+    Sanctum::actingAs($this->psychopedagogue);
+
+    $id = $this->postJson('/api/v1/alert-rules', [
+        'condition' => 'consecutive_below',
+        'threshold' => 5,
+        'consecutive_count' => 3,
+    ])->assertCreated()
+        ->assertJsonPath('data.education_level_ids', null)
+        ->json('data.id');
+
+    $this->patchJson("/api/v1/alert-rules/{$id}", [
+        'education_level_ids' => [$levelId('upper_secondary'), $levelId('primary'), $levelId('lower_secondary')],
+    ])->assertOk()
+        ->assertJsonPath('data.education_level_ids', [$levelId('primary'), $levelId('lower_secondary'), $levelId('upper_secondary')]);
+
+    // Ticking every level is "every level".
+    $this->patchJson("/api/v1/alert-rules/{$id}", [
+        'education_level_ids' => EducationLevel::query()->pluck('id')->all(),
+    ])->assertOk()->assertJsonPath('data.education_level_ids', null);
+
+    // Other fields leave the levels as they were.
+    $this->patchJson("/api/v1/alert-rules/{$id}", ['education_level_ids' => [$levelId('primary')]])->assertOk();
+    $this->patchJson("/api/v1/alert-rules/{$id}", ['active' => false])
+        ->assertOk()
+        ->assertJsonPath('data.education_level_ids', [$levelId('primary')]);
+
+    $this->patchJson("/api/v1/alert-rules/{$id}", ['education_level_ids' => []])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('education_level_ids');
+    $this->patchJson("/api/v1/alert-rules/{$id}", ['education_level_ids' => [999999]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('education_level_ids.0');
+    $this->patchJson("/api/v1/alert-rules/{$id}", ['education_level_ids' => ['primary']])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('education_level_ids.0');
 });
