@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\CalendarEventType;
 use App\Models\CalendarEvent;
 use App\Models\School;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -21,7 +22,15 @@ class CalendarEventFactory extends Factory
             'description' => fake()->optional()->paragraph(),
             'start_at' => $startAt,
             'end_at' => (clone $startAt)->modify('+1 hour'),
-            'type' => fake()->randomElement(['reunion', 'evento', 'feriado', 'entrega']),
+            'type' => CalendarEventType::Institutional->value,
         ];
+    }
+
+    /**
+     * A meeting (screen 10, reserved): private to the calendars it is linked to.
+     */
+    public function meeting(): static
+    {
+        return $this->state(['type' => CalendarEventType::Meeting->value]);
     }
 }

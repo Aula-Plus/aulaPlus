@@ -167,6 +167,52 @@ endpoint de candidatos y `ChooseAlertOutcomeRequest`).
   (sin candidatos; pasarla da 422). Quien la tiene puede igual tomarla,
   dejarla en observación, anotarla y cerrarla.
 
+## Escalas oficiales y resultados por nivel
+
+Pantalla 24 · solapa «Escalas oficiales» (ClickUp 1dfd3mc4bgg). Fuente única
+en el backend: `App\Services\ResultScales`.
+
+- **Glosario:** *Escala oficial* → `OfficialScale`; *nivel de avance* →
+  `OfficialScaleLevel`; *equivalencia del colegio* (nivel → nota 1..10) →
+  `SchoolScaleEquivalence`.
+- **Las escalas son datos globales**, como los marcos curriculares (sin
+  `school_id`): las carga el equipo de Aula+ una vez por marco con
+  `OfficialScaleSeeder` (`php artisan db:seed --class=OfficialScaleSeeder`,
+  idempotente), cada una con su cita (documento + página). No hay ruta de
+  escritura: Dirección las consulta (`GET /api/v1/official-scales`, solo
+  Dirección, `SchoolPolicy::viewOfficialScales`) y nadie las edita.
+- **Lo que decide el colegio** (`GET/PUT /api/v1/numeric-grade-settings`, solo
+  Dirección): `schools.show_primary_numeric_grade` («Mostrar la calificación
+  numérica junto al nivel de avance», una sola casilla para todo lugar donde
+  se ve una calificación de Primaria) y, opcional, su propia equivalencia
+  nivel → 1..10 para su escala de Primaria (completa o vacía).
+- **Resultados:** un grupo de Primaria cuyo marco (el del grupo, o si no tiene,
+  los activos del colegio) tiene escala oficial de Primaria registra cada
+  resultado como un nivel (`assessment_results.official_scale_level_id`,
+  `score` nulo). El resto de los grupos sigue con el `score` decimal. El
+  número junto al nivel sale de la equivalencia del colegio o, si no hay, del
+  que escribe el docente (`numeric_grade`); con la casilla apagada no se
+  devuelve ningún número. Aula+ nunca convierte entre escalas.
+- La línea «Nota de 1 a 10» de los gráficos de evolución solo toma resultados
+  numéricos (PA-088): un nivel nunca se ubica por una conversión inventada.
+- **Respuestas del PO del 12/11:**
+  - Casilla prendida y sin número (ni equivalencia ni nota del docente): se
+    muestra el nivel con «sin nota» al lado, discreto.
+  - El número que escribió el docente se conserva aunque se apague la casilla
+    o Dirección configure una equivalencia (solo se escribe cuando el docente
+    puede escribirlo y lo manda).
+  - Un resultado registrado del otro modo (nota donde ahora se registra nivel,
+    o al revés) se sigue viendo; reemplazarlo exige `replace_previous: true`
+    en esa fila («Reemplazar» en la planilla), si no es 422.
+  - Si el grupo tiene dos escalas de Primaria válidas, el docente elige una
+    antes del primer resultado (`PUT /api/v1/assessments/{id}/result-scale`).
+    La escala queda guardada con la evaluación (`assessments.official_scale_id`,
+    también al primer resultado cuando hay una sola), así los resultados no
+    cambian de escala si después cambian los marcos del grupo.
+  - La franja oficial de ANEP («9–10»…) se muestra con la escala como dato de
+    consulta (`official_scale_levels.official_band`); nunca entra en un
+    cálculo ni en la calificación de un alumno.
+
 ## Autenticación (SPA + Sanctum)
 
 - Login por cookies (no tokens). Flujo: `GET /sanctum/csrf-cookie` →
@@ -230,6 +276,49 @@ no escribe nada (cubierto por test).
 - Filas anteriores a esta feature: se backfillean `student_id`/`section` cuando
   el registro dueño existe; sin `details`, se muestran desde `changes` (los
   campos sensibles aparecen como "contenido no disponible").
+
+## Calendario (pantalla 21)
+
+ClickUp 1dfd3mc4bgh. Ordena en el tiempo fechas que ya existen en otras
+pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
+(P21-DEC-03).
+
+- **Feed** `GET /api/v1/calendar?from&to&types[]` (`App\Services\Calendar\CalendarFeed`):
+  lee cada fecha de su propio registro. Siete tipos (`App\Enums\CalendarItemType`);
+  hoy tienen fuente `assessment`, `class`, `task` (seguimientos propios con
+  plazo) e `institutional`. `meeting`, `period_closing` y `project_stage`
+  devuelven vacío hasta que existan las pantallas 10, 26 y 18. El Inicio
+  («Hoy en tu calendario», P01-HOY-01) lee el mismo feed para hoy.
+- **Quién ve qué** (línea roja): clases solo el docente que da esa materia en
+  ese grupo; evaluaciones el docente dueño, Psicopedagogía y Dirección todas
+  (sin notas ni alumnos); tareas solo las propias; institucionales todos. Una
+  reunión (`CalendarEvent` tipo `meeting`) la ve solo quien la tiene en su
+  calendario (pivot `calendar_calendar_event`) — ni Dirección la ve si no está
+  citada. Ningún ítem lleva nombre de alumno.
+- **Evento institucional**: la única fecha que nace acá. Solo Dirección crea,
+  edita y quita (`CalendarEventPolicy`). Fecha, hora opcional (`all_day`),
+  lugar opcional; fechas/horas en hora local del colegio, guardadas en UTC.
+- **Hora y salón de una clase**: datos de la clase (`class_sessions.start_time`,
+  `room`, ambos opcionales), editables por su docente en cualquier momento.
+  `class_sessions.subject_id` dice de qué materia es la clase.
+- **Mis horarios** (`TimetableSlot`): horario semanal privado del docente (solo
+  él lo lee, `TimetableSlotPolicy`). Es un valor por defecto: precompleta hora y
+  salón al crear (aplicar una propuesta de IA) o editar una clase
+  (`TimetableSlotSuggester`: el horario libre de ese día; si no hay, el
+  primero). Nunca crea clases; cambiarlo no toca las ya creadas.
+
+### Glosario (Calendario)
+
+| Español (UI)        | Código                                   |
+|---------------------|------------------------------------------|
+| Calendario          | calendar feed (`CalendarFeed`)           |
+| Evento institucional| `CalendarEvent` tipo `institutional`     |
+| Reunión             | `CalendarEvent` tipo `meeting` / item `meeting` |
+| Cierre de período   | item `period_closing`                    |
+| Etapa de proyecto   | item `project_stage`                     |
+| Tarea (en Calendario)| item `task` (= `ScheduledFollowUp` propio) |
+| Mis horarios        | `TimetableSlot` (tabla `timetable_slots`) |
+| Salón               | `room`                                   |
 
 ## Estado actual (scaffolding)
 

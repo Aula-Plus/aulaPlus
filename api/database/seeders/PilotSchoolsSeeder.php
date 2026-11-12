@@ -4,12 +4,16 @@ namespace Database\Seeders;
 
 use App\Enums\AnepPrimaryBody;
 use App\Enums\AnepSecondaryBody;
+use App\Enums\AssessmentType;
 use App\Enums\CurricularItemType;
+use App\Models\Assessment;
 use App\Models\CurricularCatalog;
 use App\Models\CurricularFramework;
 use App\Models\CurricularItem;
+use App\Models\EducationLevel;
 use App\Models\Group;
 use App\Models\School;
+use App\Models\SchoolGrade;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
@@ -25,6 +29,7 @@ class PilotSchoolsSeeder extends Seeder
     public function run(): void
     {
         $this->call(CurricularFrameworkSeeder::class);
+        $this->call(OfficialScaleSeeder::class);
 
         $escuelaIntegral = $this->seedSchool(
             name: 'Escuela Integral',
@@ -55,6 +60,10 @@ class PilotSchoolsSeeder extends Seeder
             anepSecondaryBody: AnepSecondaryBody::Dges,
             frameworkNames: ['IB MYP', 'IB DP'],
         );
+
+        // The example Primaria group of the living document (5.°A), on ANEP
+        // EBI, with an assessment ready to be loaded with the rubric scale.
+        $this->seedPrimaryGroup($escuelaIntegral, 'integral');
 
         // One catalog with a 3-level item hierarchy, under St. Patrick's IB DP
         // framework, to demonstrate the curricular tree.
@@ -129,6 +138,48 @@ class PilotSchoolsSeeder extends Seeder
             }
 
             return $school;
+        });
+    }
+
+    /**
+     * 5.°A of Primaria (ClickUp 1dfd3mc4bgg): linked to the ANEP EBI framework,
+     * so its results are recorded with the official Primaria scale, plus one
+     * assessment with no results yet.
+     */
+    protected function seedPrimaryGroup(School $school, string $emailSlug): void
+    {
+        Tenancy::forSchool($school, function () use ($school, $emailSlug): void {
+            $teacher = User::query()->where('email', "m{$emailSlug}@gmail.com")->firstOrFail();
+            $subject = Subject::query()->where('school_id', $school->id)->where('name', 'Matemática')->firstOrFail();
+            $schoolYear = (int) now()->year;
+
+            $group = Group::factory()->create([
+                'school_id' => $school->id,
+                'name' => '5.°A',
+                'level' => 'Primaria',
+                'education_level_id' => EducationLevel::query()->where('key', 'primary')->value('id'),
+                'school_grade_id' => SchoolGrade::query()->where('key', 'primary_5')->value('id'),
+                'school_year' => $schoolYear,
+            ]);
+            $group->curricularFrameworks()->attach(
+                CurricularFramework::query()->where('name', 'ANEP EBI')->firstOrFail(),
+            );
+            $group->teachers()->attach($teacher, ['subject_id' => $subject->id]);
+
+            Student::factory()
+                ->count(18)
+                ->create(['school_id' => $school->id])
+                ->each(fn (Student $student) => $student->groups()->attach($group, ['school_year' => $schoolYear]));
+
+            Assessment::factory()->create([
+                'school_id' => $school->id,
+                'group_id' => $group->id,
+                'subject_id' => $subject->id,
+                'teacher_id' => $teacher->id,
+                'type' => AssessmentType::Written,
+                'purpose' => 'Escrito de fracciones',
+                'administered_at' => now()->toDateString(),
+            ]);
         });
     }
 

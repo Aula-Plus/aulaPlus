@@ -51,6 +51,15 @@ class Assessment extends Model
         return $this->hasMany(ClassSession::class);
     }
 
+    /**
+     * The official scale the results are recorded with (ClickUp 1dfd3mc4bgg),
+     * kept once chosen. Not mass assignable: only ResultScales sets it.
+     */
+    public function officialScale(): BelongsTo
+    {
+        return $this->belongsTo(OfficialScale::class);
+    }
+
     public function results(): HasMany
     {
         return $this->hasMany(AssessmentResult::class);

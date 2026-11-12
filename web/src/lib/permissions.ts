@@ -255,6 +255,15 @@ export function canManageGradesVisibility(user: User | null): boolean {
 }
 
 /**
+ * Screen 24 «Evaluación y juicios» (only its «Escalas oficiales» tab exists):
+ * direction only. Mirror of `SchoolPolicy::viewOfficialScales` /
+ * `updateNumericGradeSettings`.
+ */
+export function canViewOfficialScales(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
  * Show the create/edit-accommodation UI (docs/prompts/24 §3). Deliberately
  * gated on the SAME roles that may already SEE accommodations
  * (`canViewClinicalProfileUX` → school-wide staff), not on the looser backend
@@ -337,4 +346,22 @@ export function canManageAiReportSetting(user: User | null): boolean {
  */
 export function canShareComment(user: User | null): boolean {
   return isPsychopedagogue(user)
+}
+
+// ── Calendar (screen 21, ClickUp 1dfd3mc4bgh) ───────────────────────────────
+
+/**
+ * Create, edit and remove institutional events. Mirror of
+ * `CalendarEventPolicy::create` (role portion): Dirección only.
+ */
+export function canManageInstitutionalEvents(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
+ * The «Mis horarios» tab: only teachers have one, and it is private to them.
+ * Mirror of `TimetableSlotPolicy::viewAny` (role portion).
+ */
+export function hasTimetable(user: User | null): boolean {
+  return isTeacher(user)
 }

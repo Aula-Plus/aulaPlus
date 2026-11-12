@@ -18,6 +18,8 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\ClassSessionObjectiveController;
+use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\ClassSessionScheduleController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
@@ -33,6 +35,8 @@ use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NumericGradeSettingsController;
+use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
@@ -52,6 +56,7 @@ use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\UnitController;
 use App\Http\Controllers\UnitObjectiveController;
+use App\Http\Controllers\TimetableSlotController;
 use App\Http\Controllers\UsageJourneyStepController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -126,6 +131,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/tracking', [StudentTrackingController::class, 'show']);
         Route::get('/grades-visibility', [GradesVisibilitySettingsController::class, 'show']);
         Route::put('/grades-visibility', [GradesVisibilitySettingsController::class, 'update']);
+
+        // Screen 24 · «Escalas oficiales» (ClickUp 1dfd3mc4bgg): direction
+        // consults the official scales — read-only, no write route on purpose
+        // (loaded by the Aula+ team, OfficialScaleSeeder) — and sets the
+        // school's Primaria numeric-grade switch and its own equivalence.
+        Route::get('/official-scales', [OfficialScaleController::class, 'index']);
+        Route::get('/numeric-grade-settings', [NumericGradeSettingsController::class, 'show']);
+        Route::put('/numeric-grade-settings', [NumericGradeSettingsController::class, 'update']);
         Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
 
         // Student reports (ClickUp 86e3jujgx): upload, anonymized-text review,
@@ -276,6 +289,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::delete('/assessments/{assessment}', [AssessmentController::class, 'destroy']);
 
         Route::get('/assessments/{assessment}/results', [AssessmentResultController::class, 'index']);
+        Route::get('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'scale']);
+        Route::put('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'chooseScale']);
         Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store']);
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
 
@@ -332,6 +347,21 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);
         Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store']);
         Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy']);
+
+        // Calendar (screen 21, ClickUp 1dfd3mc4bgh): each person's dates in
+        // time (the Inicio's «Hoy en tu calendario» reads the same feed),
+        // Direction's institutional events, the time/room of a class, and the
+        // teacher's private «Mis horarios», which only pre-fills them.
+        Route::get('/calendar', [CalendarController::class, 'index']);
+        Route::post('/calendar-events', [CalendarController::class, 'store']);
+        Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
+        Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);
+        Route::get('/class-sessions/suggested-slot', [ClassSessionScheduleController::class, 'suggestedSlot']);
+        Route::patch('/class-sessions/{classSession}', [ClassSessionScheduleController::class, 'update']);
+        Route::get('/timetable-slots', [TimetableSlotController::class, 'index']);
+        Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
+        Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
+        Route::delete('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'destroy']);
 
         // Session: user management (docs/superpowers/specs/2026-09-15-user-
         // management-design.md). Director-only staff onboarding + lifecycle.

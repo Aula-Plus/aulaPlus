@@ -146,16 +146,20 @@ skeleton is done, until explicitly asked:
 - Project/assignment entity and its relation to students — undecided
   (multi-submission, multi-grade design not settled).
 - Communications features in general (e.g. screen "Mensajes").
-- Lesson/curriculum planning proper and AI-assisted class generation. Exception
-  (ClickUp 1dfd3mc4bg8, explicit request): screen 12 «Programa anual» — annual
-  plans, units and unit objectives now have an API and a screen, with unit
-  status/coverage derived (`AnnualPlanProgress`). `ClassSession` has no API beyond
-  correcting a closed class's record for one objective (`PATCH /class-sessions/{id}/
-  objectives/{objective}`, «Lo terminé»). The
-  AI-proposal engine itself (`AIProposal`, `docs/prompts/05-asistente-ia-docente.md`)
-  is done; `Assessment` now also has full CRUD (`docs/prompts/13-evaluaciones-
-  resultados.md`) — what's still out of scope is the curriculum-planning UI/API
-  built on top of them.
+- Lesson/curriculum planning proper and AI-assisted class generation. Explicit
+  exceptions already built:
+  - Screen 12 «Programa anual» (ClickUp 1dfd3mc4bg8): annual plans, units and
+    unit objectives have an API and a screen, with unit status/coverage derived
+    (`AnnualPlanProgress`).
+  - `ClassSession` only exposes correcting a closed class's record for one
+    objective (`PATCH /class-sessions/{id}/objectives/{objective}`, «Lo
+    terminé») and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
+    optional time and room (`PATCH /v1/class-sessions/{id}`) plus the teacher's
+    private «Mis horarios» (`TimetableSlot`, pre-fill only).
+  The AI-proposal engine itself (`AIProposal`,
+  `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
+  full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
+  scope is creating/listing classes and the class-closing flow (screens 14–17).
 - "PTP y enriquecimiento" (screen 9 of the living document) — explicitly deferred:
   it's unclear whether it's a new entity or a relabeling of
   Accommodation/Barrier, and it depends on the annual-plan/curriculum module

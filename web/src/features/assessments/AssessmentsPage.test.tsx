@@ -8,7 +8,16 @@ import * as trackingApi from "@/features/tracking/trackingApi"
 import * as subjectsApi from "@/features/subjects/subjectsApi"
 import * as assessmentsApi from "./assessmentsApi"
 import { api } from "@/lib/api"
-import type { Assessment, GroupTeacherAssignment, GroupTracking, Role } from "@/types"
+import type {
+  Assessment,
+  AssessmentResultScale,
+  GroupTeacherAssignment,
+  GroupTracking,
+  Role,
+} from "@/types"
+
+/** A non-Primaria assessment: results are decimal scores, as before. */
+const NUMERIC_SCALE: AssessmentResultScale = { mode: "score", scale: null, numeric_grade: null }
 
 /** One teacher-subject assignment for the authed teacher (id 1) in the group. */
 function assignments(): GroupTeacherAssignment[] {
@@ -204,6 +213,7 @@ describe("AssessmentsPage", () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([1]))
     vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([assessment()])
     vi.spyOn(assessmentsApi, "fetchAssessmentResults").mockResolvedValue([])
+    vi.spyOn(assessmentsApi, "fetchAssessmentResultScale").mockResolvedValue(NUMERIC_SCALE)
     vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
     const saveAssessmentResults = vi
       .spyOn(assessmentsApi, "saveAssessmentResults")
@@ -230,12 +240,16 @@ describe("AssessmentsPage", () => {
     vi.spyOn(trackingApi, "fetchGroupTracking").mockResolvedValue(groupTracking([2]))
     vi.spyOn(assessmentsApi, "fetchAssessments").mockResolvedValue([assessment()])
     vi.spyOn(subjectsApi, "fetchGroupAssignments").mockResolvedValue(assignments())
+    vi.spyOn(assessmentsApi, "fetchAssessmentResultScale").mockResolvedValue(NUMERIC_SCALE)
     vi.spyOn(assessmentsApi, "fetchAssessmentResults").mockResolvedValue([
       {
         id: 1,
         assessment_id: 10,
         student_id: 3,
         score: 7,
+        scale_level: null,
+        numeric_grade: null,
+        numeric_grade_source: null,
         feedback: "Bien",
         created_by_id: 2,
         created_at: null,

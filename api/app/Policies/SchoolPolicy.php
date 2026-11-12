@@ -65,4 +65,25 @@ class SchoolPolicy
         return $user->school_id === $school->id
             && $user->hasRole(Role::Director->value);
     }
+
+    /**
+     * Screen 24 · «Escalas oficiales»: direction consults the official scales
+     * of its frameworks (read-only, nobody edits them — P24-ESC-01) and the
+     * school's numeric-grade settings. Nobody else enters the screen.
+     */
+    public function viewOfficialScales(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
+
+    /**
+     * Only direction decides whether the number is shown next to the
+     * Primaria level and declares the school's own equivalence.
+     */
+    public function updateNumericGradeSettings(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
 }
