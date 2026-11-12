@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PlannerFamily;
 use Database\Factories\CurricularFrameworkFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,13 +12,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Global catalog shared by every school (e.g. "ANEP EBI", "IB DP"). NOT
- * tenant-scoped — does not use BelongsToSchool / school_id.
+ * tenant-scoped — does not use BelongsToSchool / school_id. `planner_family`
+ * says which unit-planner fields it brings (null = only the common ones).
  */
-#[Fillable(['name'])]
+#[Fillable(['name', 'planner_family'])]
 class CurricularFramework extends Model
 {
     /** @use HasFactory<CurricularFrameworkFactory> */
     use HasFactory;
+
+    protected function casts(): array
+    {
+        return ['planner_family' => PlannerFamily::class];
+    }
+
+    /** ANEP articulation is mandatory for every private school (screen 23). */
+    public function isAnep(): bool
+    {
+        return $this->planner_family === PlannerFamily::Anep;
+    }
 
     public function catalogs(): HasMany
     {

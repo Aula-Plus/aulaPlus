@@ -21,6 +21,7 @@ import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
+import { SchoolStructurePage } from "@/features/school-structure/SchoolStructurePage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
@@ -118,6 +119,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <ScreeningTestDesignPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/colegio"
+            element={
+              <ProtectedLayout>
+                <SchoolStructurePage />
               </ProtectedLayout>
             }
           />

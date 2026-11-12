@@ -19,6 +19,7 @@ use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\CurricularOfferingController;
 use App\Http\Controllers\EducationLevelController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
@@ -31,6 +32,7 @@ use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PlannerSettingsController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\ScreeningTestApplicationController;
@@ -222,6 +224,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/scheduled-follow-ups/{followUp}/general-responsibles/{user}/remove', [FollowUpMemberController::class, 'removeGeneralResponsible']);
         Route::post('/scheduled-follow-ups/{followUp}/withdraw', [FollowUpMemberController::class, 'withdraw']);
         Route::post('/scheduled-follow-ups/{followUp}/hide', [FollowUpMemberController::class, 'hide']);
+
+        // Screen 23 › «Oferta curricular» and «Planificadores» (ClickUp
+        // 1dfd3mc4bgf): direction configures; the resolved planner of a
+        // group-subject is what its units show (screen 13).
+        Route::get('/curricular-offerings', [CurricularOfferingController::class, 'index']);
+        Route::put('/groups/{group}/subjects/{subject}/curricular-offering', [CurricularOfferingController::class, 'update']);
+        Route::get('/groups/{group}/subjects/{subject}/planner-fields', [CurricularOfferingController::class, 'planner']);
+        Route::get('/planner-settings', [PlannerSettingsController::class, 'show']);
+        Route::put('/planner-settings/fields/{definition}', [PlannerSettingsController::class, 'updateField']);
+        Route::post('/planner-settings/custom-fields', [PlannerSettingsController::class, 'storeCustom']);
+        Route::put('/planner-settings/custom-fields/{plannerField}', [PlannerSettingsController::class, 'updateCustom']);
+        Route::delete('/planner-settings/custom-fields/{plannerField}', [PlannerSettingsController::class, 'destroyCustom']);
 
         // Session 11: "Perfil de grupo" aggregators (docs/prompts/21-perfil-de-
         // grupo.md). All read-only and strictly aggregate — accommodations

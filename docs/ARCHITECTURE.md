@@ -250,3 +250,14 @@ no escribe nada (cubierto por test).
 - Comunicaciones, materiales, seguimiento pedagógico.
 - Storage R2 + URLs firmadas (config lista en `.env`, sin uso todavía).
 - Sentry, Playwright E2E.
+
+## Glosario de dominio (código ↔ producto)
+
+Términos sin traducción 1:1, decididos una vez (CLAUDE.md → Language convention).
+Se agregan acá a medida que aparecen.
+
+| Producto (UI, español) | Código (inglés) | Notas |
+|---|---|---|
+| Oferta curricular | `CurricularOffering` (`curricular_offerings`) | Un programa que sigue un grupo-materia; varios por grupo-materia, siempre con uno de ANEP (pantalla 23). |
+| Marco / programa (ANEP, IB MYP, Cambridge…) | `CurricularFramework` | Catálogo global. `planner_family` dice qué campos del planificador trae. |
+| Planificador de unidad | planner (`PlannerFieldDefinition`, `SchoolPlannerField`) | Campos del catálogo (base común + los que pide cada programa) y los propios del colegio (pantallas 23 y 13). |

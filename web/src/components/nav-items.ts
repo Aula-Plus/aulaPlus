@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   BellRing,
   BookOpen,
+  Building2,
   ClipboardList,
   GraduationCap,
   Eye,
@@ -18,6 +19,7 @@ import {
   canEditScreeningTestDesign,
   canManageGradesVisibility,
   canManageAlertSettings,
+  canManageCurricularStructure,
   canManageCommentSettings,
   canManageSubjects,
   canManageUsers,
@@ -91,6 +93,11 @@ export function buildNavSections(
         // Staff management is director-only (mirror of UserPolicy).
         ...(canManageUsers(user)
           ? [{ to: "/usuarios", label: "Usuarios y permisos", icon: UserCog }]
+          : []),
+        // Screen 23 «Colegio y estructura» (offering + planners): director-only
+        // (mirror of CurricularOfferingPolicy) — ClickUp 1dfd3mc4bgf.
+        ...(canManageCurricularStructure(user)
+          ? [{ to: "/colegio", label: "Colegio y estructura", icon: Building2 }]
           : []),
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)

@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
 use App\Models\AIProposal;
+use App\Models\CurricularOffering;
 use App\Models\Group;
 use App\Models\Subject;
 use App\Models\Unit;
@@ -129,7 +130,14 @@ class GenerateAIProposalRequest extends FormRequest
     protected function frameworkBelongsToGroup(): callable
     {
         return function (string $attribute, mixed $value, callable $fail): void {
-            if (! $this->group()->curricularFrameworks()->whereKey($value)->exists()) {
+            // The group's frameworks, or one of the programs the school set
+            // for this group-subject in «Oferta curricular» (screen 23).
+            $offered = CurricularOffering::query()
+                ->forGroupSubject($this->group()->id, (int) $this->input('parameters.subject_id'))
+                ->where('curricular_framework_id', $value)
+                ->exists();
+
+            if (! $offered && ! $this->group()->curricularFrameworks()->whereKey($value)->exists()) {
                 $fail('The selected curricular framework is not available for this group.');
             }
         };
