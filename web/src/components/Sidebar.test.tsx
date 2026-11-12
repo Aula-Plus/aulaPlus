@@ -182,6 +182,19 @@ describe("Sidebar", () => {
     )
   })
 
+  it("links only a director to «Evaluación y juicios» (screen 24)", () => {
+    renderSidebar("director")
+    expect(screen.getByRole("link", { name: "Evaluación y juicios" })).toHaveAttribute(
+      "href",
+      "/administracion/evaluacion-y-juicios",
+    )
+  })
+
+  it.each(["teacher", "psychopedagogue"] as const)("hides «Evaluación y juicios» from %s", (role) => {
+    renderSidebar(role)
+    expect(screen.queryByRole("link", { name: "Evaluación y juicios" })).not.toBeInTheDocument()
+  })
+
   it("toggles collapsed state and persists the preference", async () => {
     renderSidebar()
 

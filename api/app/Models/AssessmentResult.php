@@ -20,10 +20,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * or Student's learning profile — nothing is excluded from the audit diff and
  * the read endpoints are school-wide, same as AssessmentPolicy::view.
  *
+ * A result is either a decimal `score` or, in Primaria, a level of the
+ * official scale (`official_scale_level_id`) plus the optional 1..10
+ * `numeric_grade` the teacher wrote next to it (ClickUp 1dfd3mc4bgg). Whether
+ * that number is ever shown is App\Services\ResultScales::numericGradeFor().
+ *
  * The unique (assessment_id, student_id) pair (see the migration) enforces one
  * result per student per assessment; the controller upserts on that pair.
  */
-#[Fillable(['assessment_id', 'student_id', 'score', 'feedback', 'created_by_id'])]
+#[Fillable(['assessment_id', 'student_id', 'score', 'official_scale_level_id', 'numeric_grade', 'feedback', 'created_by_id'])]
 class AssessmentResult extends Model
 {
     /** @use HasFactory<AssessmentResultFactory> */
@@ -33,6 +38,7 @@ class AssessmentResult extends Model
     {
         return [
             'score' => 'decimal:2',
+            'numeric_grade' => 'integer',
         ];
     }
 
@@ -44,6 +50,11 @@ class AssessmentResult extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    public function scaleLevel(): BelongsTo
+    {
+        return $this->belongsTo(OfficialScaleLevel::class, 'official_scale_level_id');
     }
 
     public function createdBy(): BelongsTo

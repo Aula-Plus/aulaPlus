@@ -7,6 +7,7 @@ import {
   Eye,
   MessageSquare,
   Home,
+  Scale,
   TriangleAlert,
   LifeBuoy,
   TrendingUp,
@@ -21,6 +22,7 @@ import {
   canManageCommentSettings,
   canManageSubjects,
   canManageUsers,
+  canViewOfficialScales,
   canViewAdoptionDashboard,
 } from "@/lib/permissions"
 
@@ -99,6 +101,11 @@ export function buildNavSections(
         // Grade visibility for teachers is director-only.
         ...(canManageGradesVisibility(user)
           ? [{ to: "/ajustes/calificaciones", label: "Visibilidad de calificaciones", icon: Eye }]
+          : []),
+        // Screen 24 «Evaluación y juicios» (only «Escalas oficiales» for
+        // now): director-only (mirror of SchoolPolicy::viewOfficialScales).
+        ...(canViewOfficialScales(user)
+          ? [{ to: "/administracion/evaluacion-y-juicios", label: "Evaluación y juicios", icon: Scale }]
           : []),
         // Alert conditions and routing: direction and psychopedagogy
         // (mirror of AlertRulePolicy) — ClickUp 86e3jpzcv.
