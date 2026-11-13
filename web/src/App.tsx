@@ -27,6 +27,7 @@ import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
 import { CalendarPage } from "@/features/calendar/CalendarPage"
+import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 
 function App() {
   return (
@@ -176,6 +177,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <AlertsAndFollowUpsPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Notificaciones (screen 22): every role's own notice history. */}
+          <Route
+            path="/notificaciones"
+            element={
+              <ProtectedLayout>
+                <NotificationsPage />
               </ProtectedLayout>
             }
           />

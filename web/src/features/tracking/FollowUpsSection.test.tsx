@@ -142,11 +142,11 @@ describe("FollowUpsSection", () => {
       </AuthContext>,
     )
 
-    expect(await screen.findByRole("link", { name: "Alertas y seguimientos, 1 aviso de seguimiento sin leer" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Notificaciones, 1 aviso sin leer" })).toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole("button", { name: /entendido/i }))
 
-    expect(await screen.findByRole("link", { name: "Alertas y seguimientos" })).toBeInTheDocument()
+    expect(await screen.findByRole("link", { name: "Notificaciones" })).toBeInTheDocument()
     expect(screen.queryByText(/sin leer/i)).not.toBeInTheDocument()
   })
 

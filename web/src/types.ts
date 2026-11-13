@@ -1156,9 +1156,24 @@ export interface AppNotification {
     | FollowUpAssignedNotice
     | AlertOverdueNotice
     | AccommodationProposalReturnedNotice
+    | AccommodationConfirmedNotice
     | CommentSharedNotice
     | ScreeningDesignNotice
+  /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
+  read_at?: string | null
   created_at: string | null
+}
+
+/**
+ * A new accommodation is in force for a student of mine (screen 22, ClickUp
+ * 1dfd3mc4bgw). Ids only: never its type or content; the server adds
+ * `student_name` at read time when the caller may still see the student.
+ */
+export interface AccommodationConfirmedNotice {
+  type: "accommodation_confirmed"
+  accommodation_id: number
+  student_id: number
+  student_name?: string | null
 }
 
 export interface FollowUpAssignedNotice {
