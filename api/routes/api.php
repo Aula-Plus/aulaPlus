@@ -218,6 +218,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
         Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
         // Follow-ups with stages and several people (ClickUp 86e3qkwna),
