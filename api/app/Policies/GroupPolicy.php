@@ -28,6 +28,17 @@ class GroupPolicy
         return true;
     }
 
+    /**
+     * Screen 05 «Comparativa por año de cursada»: Psicopedagogía and Dirección
+     * only (P05-DEC-04 — comparing two whole groups is an institutional
+     * reading, never a comparison between colleagues). Each compared group is
+     * still checked with `view` (tenant isolation).
+     */
+    public function compare(User $user): bool
+    {
+        return $user->hasAnyRole(Role::schoolWideValues());
+    }
+
     public function view(User $user, Group $group): bool
     {
         if (! $this->sharesSchool($user, $group)) {

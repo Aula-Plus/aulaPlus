@@ -27,6 +27,7 @@ import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
 import { CalendarPage } from "@/features/calendar/CalendarPage"
+import { GroupComparisonPage } from "@/features/group-comparison/GroupComparisonPage"
 
 function App() {
   return (
@@ -176,6 +177,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <AlertsAndFollowUpsPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Comparativa por año de cursada (screen 05): Psicopedagogía y Dirección. */}
+          <Route
+            path="/comparativa"
+            element={
+              <ProtectedLayout>
+                <GroupComparisonPage />
               </ProtectedLayout>
             }
           />
