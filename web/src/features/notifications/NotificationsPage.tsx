@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -34,17 +34,24 @@ export function NotificationsPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(
-    (which: NotificationsFilter) =>
-      fetchNotificationHistory(which).then(
-        (list) => {
-          setLoadError(null)
-          setNotices(list)
-        },
-        () => setLoadError("No pudimos cargar tus notificaciones."),
-      ),
-    [],
-  )
+  // Only the latest request may write the list: switching the filter while a
+  // slower response is in flight must not let the old one overwrite it.
+  const latestLoad = useRef(0)
+
+  const load = useCallback((which: NotificationsFilter) => {
+    const requestId = ++latestLoad.current
+    return fetchNotificationHistory(which).then(
+      (list) => {
+        if (requestId !== latestLoad.current) return
+        setLoadError(null)
+        setNotices(list)
+      },
+      () => {
+        if (requestId !== latestLoad.current) return
+        setLoadError("No pudimos cargar tus notificaciones.")
+      },
+    )
+  }, [])
 
   useEffect(() => {
     void load(filter)

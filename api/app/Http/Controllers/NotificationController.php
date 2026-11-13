@@ -63,7 +63,7 @@ class NotificationController extends Controller
 
     /**
      * How many unread notices the caller has — the same set `index` lists (only
-     * uncapped), so the sidebar count next to "Alertas y seguimientos" matches the
+     * uncapped), so the sidebar count next to "Notificaciones" matches the
      * notices shown there and drops as they are read. A cheap COUNT over the
      * caller's own notifications only (the relation is keyed by the
      * authenticated user, so another user's or another school's notices can

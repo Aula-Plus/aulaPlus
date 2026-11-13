@@ -11,6 +11,7 @@ use App\Models\Accommodation;
 use App\Models\AccommodationProposal;
 use App\Models\ReportDocument;
 use App\Models\Subject;
+use App\Services\Accommodations\AccommodationConfirmedNotifier;
 use App\Support\SchoolTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +20,8 @@ use Illuminate\Support\Facades\DB;
  * Accommodations proposed from a student report (ClickUp 86e3jujgx). Only
  * psychopedagogy reviews them (ReportDocumentPolicy::manage). Nothing is in
  * force until it approves one: approving (as is or modified) creates the
- * accommodation with the same fields a manual one has; rejecting only closes
- * the proposal. A proposal is reviewed once.
+ * accommodation with the same fields a manual one has (and notifies the
+ * teachers it reaches, like a manual one); rejecting only closes the proposal. A proposal is reviewed once.
  */
 class AccommodationProposalController extends Controller
 {
@@ -123,6 +124,10 @@ class AccommodationProposalController extends Controller
             // Subjects the report points to are pre-loaded in the review; the
             // reviewer's own list (even empty = every subject) wins when sent.
             $accommodation->subjects()->sync($subjectIds);
+
+            // Approved means in force: the teachers it reaches learn it from
+            // Notificaciones (screen 22). Sent after the commit.
+            app(AccommodationConfirmedNotifier::class)->notify($accommodation, $request->user());
 
             $locked->forceFill([
                 'status' => $modified ? ProposalStatus::Modified : ProposalStatus::Approved,

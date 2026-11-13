@@ -1,11 +1,15 @@
 <?php
 
+use App\Enums\ReportDocumentStatus;
 use App\Models\Accommodation;
+use App\Models\AccommodationProposal;
 use App\Models\Group;
+use App\Models\ReportDocument;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\AccommodationConfirmedNotification;
+use App\Support\Tenancy;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -160,4 +164,67 @@ it('does not name the student when the recipient can no longer see them', functi
     $this->getJson('/api/v1/notifications?filter=all')->assertOk()
         ->assertJsonPath('data.0.data.type', 'accommodation_confirmed')
         ->assertJsonPath('data.0.data.student_name', null);
+});
+
+function noticeReportProposal(array $scenario): AccommodationProposal
+{
+    return Tenancy::forSchool($scenario['school'], function () use ($scenario): AccommodationProposal {
+        $report = ReportDocument::create([
+            'student_id' => $scenario['student']->id,
+            'uploaded_by_id' => $scenario['psycho']->id,
+            'path' => 'schools/'.$scenario['school']->id.'/reports/x.pdf',
+            'original_name' => 'informe.pdf',
+            'format' => 'pdf',
+            'size' => 10,
+            'status' => ReportDocumentStatus::Proposed,
+            'pages' => ['x'],
+            'anonymized_pages' => ['x'],
+        ]);
+
+        return AccommodationProposal::create([
+            'report_document_id' => $report->id, 'student_id' => $scenario['student']->id,
+            'type' => 'Lectura en voz alta', 'category' => 'access',
+            'description' => 'Diagnóstico reservado del informe.', 'focus_area' => 'lectura', 'basis' => 'explicit',
+        ]);
+    });
+}
+
+it('notifies the teachers when psychopedagogy approves a proposal read from a report, without its content', function () {
+    $scenario = noticesScenario();
+    ['psycho' => $psycho, 'teacher' => $teacher, 'otherTeacher' => $otherTeacher, 'outsider' => $outsider] = $scenario;
+    $proposal = noticeReportProposal($scenario);
+
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'approve'])->assertOk();
+
+    $accommodationId = $proposal->fresh()->accommodation_id;
+    foreach ([$teacher, $otherTeacher] as $recipient) {
+        $stored = $recipient->unreadNotifications()->sole();
+        expect($stored->data)->toMatchArray(['type' => 'accommodation_confirmed', 'accommodation_id' => $accommodationId])
+            ->and(json_encode($stored->data))->not->toContain('Diagnóstico')->not->toContain('Lectura en voz alta');
+    }
+    expect($outsider->notifications()->count())->toBe(0)
+        ->and($psycho->notifications()->count())->toBe(0);
+});
+
+it('does not notify anyone when a report proposal is rejected', function () {
+    $scenario = noticesScenario();
+    $proposal = noticeReportProposal($scenario);
+
+    Sanctum::actingAs($scenario['psycho']);
+    $this->postJson("/api/v1/accommodation-proposals/{$proposal->id}/review", ['decision' => 'reject'])->assertOk();
+
+    expect($scenario['teacher']->notifications()->count())->toBe(0)
+        ->and($scenario['otherTeacher']->notifications()->count())->toBe(0);
+});
+
+it('skips disabled teacher accounts', function () {
+    ['psycho' => $psycho, 'teacher' => $teacher, 'otherTeacher' => $otherTeacher, 'student' => $student] = noticesScenario();
+    $otherTeacher->forceFill(['disabled_at' => now()])->save();
+
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", noticeAccommodationPayload())->assertCreated();
+
+    expect($teacher->notifications()->count())->toBe(1)
+        ->and($otherTeacher->notifications()->count())->toBe(0);
 });

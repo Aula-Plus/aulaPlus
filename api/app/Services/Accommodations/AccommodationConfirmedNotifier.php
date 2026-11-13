@@ -13,12 +13,14 @@ use Illuminate\Support\Facades\DB;
 /**
  * Tells the teachers an accommodation reaches that it is now in force (screen
  * 22, ClickUp 1dfd3mc4bgw): when psychopedagogy confirms a direction proposal,
- * or when an accommodation is registered already in force.
+ * approves a proposal read from a report, or registers an accommodation
+ * already in force.
  *
  * Recipients are the teachers who teach the student's groups AND may see this
  * accommodation (Accommodation::isVisibleTo: a general one reaches every
  * teacher of the student; one scoped to subjects only those who teach them).
- * The person who made it effective is never notified about their own action.
+ * The person who made it effective is never notified about their own action,
+ * and disabled accounts are skipped.
  * Runs after the commit, so a rolled-back confirmation never notifies anyone.
  */
 class AccommodationConfirmedNotifier
@@ -28,7 +30,7 @@ class AccommodationConfirmedNotifier
         DB::afterCommit(function () use ($accommodation, $actor): void {
             $accommodation->refresh();
 
-            if (! $accommodation->active || ! $accommodation->isConfirmed()) {
+            if (! $accommodation->isEffective()) {
                 return;
             }
 
@@ -45,6 +47,7 @@ class AccommodationConfirmedNotifier
         return User::query()
             ->where('school_id', $accommodation->school_id)
             ->whereKeyNot($actor->getKey())
+            ->whereNull('disabled_at')
             ->role(Role::Teacher->value)
             ->whereExists(fn (QueryBuilder $teaches) => $teaches
                 ->selectRaw('1')
