@@ -5,6 +5,7 @@ import {
   BookOpen,
   CalendarDays,
   ClipboardList,
+  Columns2,
   GraduationCap,
   Eye,
   MessageSquare,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react"
 import type { User } from "@/types"
 import {
+  canCompareGroups,
   canEditScreeningTestDesign,
   canManageGradesVisibility,
   canManageAlertSettings,
@@ -72,6 +74,9 @@ export function buildNavSections(
       items: [
         { to: "/clases", label: "Grupos", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
+        // Screen 05: comparing whole groups is an institutional reading, so
+        // only Psicopedagogía and Dirección get it (P05-DEC-04).
+        ...(canCompareGroups(user) ? [{ to: "/comparativa", label: "Comparativa", icon: Columns2 }] : []),
         // One screen for the alerts that reach the user and their own scheduled
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr).
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },
