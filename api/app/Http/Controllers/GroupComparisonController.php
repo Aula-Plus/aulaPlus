@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Groups\BuildGroupComparison;
+use App\Http\Requests\GroupComparisonRequest;
 use App\Models\Group;
 use App\Models\SchoolGrade;
 use Illuminate\Http\JsonResponse;
@@ -55,14 +56,9 @@ class GroupComparisonController extends Controller
      * GET /api/v1/group-comparison?school_grade_id=&school_year= — the groups
      * of that year side by side.
      */
-    public function show(Request $request, BuildGroupComparison $compare): JsonResponse
+    public function show(GroupComparisonRequest $request, BuildGroupComparison $compare): JsonResponse
     {
-        $this->authorize('compare', Group::class);
-
-        $validated = $request->validate([
-            'school_grade_id' => ['required', 'integer', 'exists:school_grades,id'],
-            'school_year' => ['required', 'integer', 'min:2000', 'max:2100'],
-        ]);
+        $validated = $request->validated();
 
         $groups = Group::query()
             ->where('school_grade_id', $validated['school_grade_id'])

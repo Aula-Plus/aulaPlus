@@ -64,13 +64,20 @@ function GroupComparisonScreen() {
   const [variables, setVariables] = useState<Set<Variable>>(() => new Set(ALL_VARIABLES))
 
   useEffect(() => {
+    let cancelled = false
     fetchComparisonOptions().then(
       (list) => {
+        if (cancelled) return
         setOptions(list)
         if (list.length > 0) setSelected(optionKey(list[0]))
       },
-      () => setOptionsError("No pudimos cargar los años de cursada."),
+      () => {
+        if (!cancelled) setOptionsError("No pudimos cargar los años de cursada.")
+      },
     )
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const option = options?.find((candidate) => optionKey(candidate) === selected) ?? null
@@ -95,6 +102,7 @@ function GroupComparisonScreen() {
 
   function changeYear(next: string) {
     setComparison(null)
+    setComparisonError(null)
     setSelected(next)
   }
 
@@ -245,7 +253,11 @@ function buildRows(groups: ComparedGroup[], variables: Set<Variable>): Row[] {
         label: `Promedio ${subject.name}`,
         cell: (group) => {
           const item = group.subject_averages.find((candidate) => candidate.subject_id === subject.id)
-          return item ? formatAverage(item.average) : "Sin calificaciones"
+          if (!item) return "Sin calificaciones"
+          if (item.average !== null) return formatAverage(item.average)
+          // Primaria with an official scale: results exist, but a level is
+          // never turned into a number (PA-088).
+          return `Sin nota numérica (${item.level_results_count} ${item.level_results_count === 1 ? "resultado" : "resultados"} por nivel)`
         },
       })
     }
@@ -275,7 +287,9 @@ function buildRows(groups: ComparedGroup[], variables: Set<Variable>): Row[] {
         label: screening.name,
         cell: (group) => {
           const item = group.screenings.find((candidate) => candidate.screening_test_type_id === screening.id)
-          return item ? item.bands.map((band) => `${band.name} ${band.count}`).join(" · ") : "Sin tomas"
+          if (!item) return "Sin tomas"
+          if (item.bands.length === 0) return "Sin resultados cargados"
+          return item.bands.map((band) => `${band.name} ${band.count}`).join(" · ")
         },
       })
     }

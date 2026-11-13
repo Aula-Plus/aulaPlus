@@ -12,7 +12,17 @@ export interface ComparedGroup {
   id: number
   name: string
   student_count: number
-  subject_averages: { subject_id: number; subject_name: string; average: number; results_count: number }[]
+  /**
+   * `average` is null when the subject only has scale-level results (Primaria):
+   * a level is never turned into a number; `level_results_count` says how many.
+   */
+  subject_averages: {
+    subject_id: number
+    subject_name: string
+    average: number | null
+    results_count: number
+    level_results_count: number
+  }[]
   accommodations_by_type: { type: string; category: string | null; student_count: number }[]
   screenings: {
     screening_test_type_id: number

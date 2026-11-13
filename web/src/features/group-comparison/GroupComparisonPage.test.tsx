@@ -27,7 +27,7 @@ const comparison: comparisonApi.GroupComparison = {
       id: 1,
       name: "5.°A",
       student_count: 16,
-      subject_averages: [{ subject_id: 3, subject_name: "Matemática", average: 7.5, results_count: 30 }],
+      subject_averages: [{ subject_id: 3, subject_name: "Matemática", average: 7.5, results_count: 30, level_results_count: 0 }],
       accommodations_by_type: [{ type: "Tiempo extendido 25%", category: "access", student_count: 2 }],
       screenings: [
         {
@@ -46,7 +46,7 @@ const comparison: comparisonApi.GroupComparison = {
       id: 2,
       name: "5.°B",
       student_count: 16,
-      subject_averages: [{ subject_id: 3, subject_name: "Matemática", average: 7, results_count: 28 }],
+      subject_averages: [{ subject_id: 3, subject_name: "Matemática", average: 7, results_count: 28, level_results_count: 0 }],
       accommodations_by_type: [],
       screenings: [],
     },
@@ -91,6 +91,32 @@ describe("GroupComparisonPage", () => {
     expect(within(table).getByText("Sin tomas")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Evolución de 5.°A" })).toHaveAttribute("href", "/clases/1/seguimiento")
     expect(screen.getByRole("link", { name: "Comentarios de 5.°B" })).toHaveAttribute("href", "/clases/2/seguimiento")
+  })
+
+  it("tells scale-level results and an application without scores apart from no data", async () => {
+    vi.spyOn(comparisonApi, "fetchComparisonOptions").mockResolvedValue(options)
+    const [first, second] = comparison.groups
+    vi.spyOn(comparisonApi, "fetchGroupComparison").mockResolvedValue({
+      ...comparison,
+      groups: [
+        {
+          ...first,
+          subject_averages: [
+            { subject_id: 4, subject_name: "Lengua", average: null, results_count: 0, level_results_count: 16 },
+          ],
+          screenings: [{ ...first.screenings[0], bands: [] }],
+        },
+        second,
+      ],
+    })
+
+    renderPage("director")
+
+    const table = await screen.findByRole("table")
+    const language = within(table).getByText("Promedio Lengua").closest("tr")!
+    expect(within(language).getByText("Sin nota numérica (16 resultados por nivel)")).toBeInTheDocument()
+    expect(within(language).getByText("Sin calificaciones")).toBeInTheDocument()
+    expect(within(table).getByText("Sin resultados cargados")).toBeInTheDocument()
   })
 
   it("turns a variable off and on", async () => {

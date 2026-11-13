@@ -4,6 +4,7 @@ use App\Models\Accommodation;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\Group;
+use App\Models\OfficialScale;
 use App\Models\School;
 use App\Models\SchoolGrade;
 use App\Models\ScreeningTestApplication;
@@ -14,6 +15,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
+use Database\Seeders\OfficialScaleSeeder;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -153,4 +155,58 @@ it('validates the year asked for and requires authentication', function () {
 
 it('requires authentication', function () {
     $this->getJson('/api/v1/group-comparison/options')->assertUnauthorized();
+});
+
+it('tells scale-level results apart from nothing loaded, never turning a level into a number', function () {
+    ['psycho' => $psycho, 'grade' => $grade, 'year' => $year, 'b' => $b, 'school' => $school] = comparisonScenario();
+    $this->seed(OfficialScaleSeeder::class);
+    $level = OfficialScale::query()->where('key', 'anep_ebi_primary')->with('levels')->firstOrFail()->levels[0];
+    $language = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Lengua']);
+    $test = Assessment::factory()->for($b)->create(['subject_id' => $language->id]);
+    foreach ($b->students as $student) {
+        AssessmentResult::factory()->for($test)->for($student)->create(['score' => null, 'official_scale_level_id' => $level->id]);
+    }
+    Sanctum::actingAs($psycho);
+
+    $this->getJson("/api/v1/group-comparison?school_grade_id={$grade}&school_year={$year}")->assertOk()
+        // 5.°B: Lengua only by level (no average), Matemática numeric.
+        ->assertJsonPath('data.groups.1.subject_averages.0.subject_name', 'Lengua')
+        ->assertJsonPath('data.groups.1.subject_averages.0.average', null)
+        ->assertJsonPath('data.groups.1.subject_averages.0.results_count', 0)
+        ->assertJsonPath('data.groups.1.subject_averages.0.level_results_count', 3)
+        ->assertJsonPath('data.groups.1.subject_averages.1.subject_name', 'Matemática')
+        ->assertJsonPath('data.groups.1.subject_averages.1.average', 6)
+        ->assertJsonPath('data.groups.1.subject_averages.1.level_results_count', 0);
+});
+
+it('keeps showing the latest banded application while a newer one has no scores yet', function () {
+    ['psycho' => $psycho, 'grade' => $grade, 'year' => $year, 'a' => $a, 'school' => $school, 'studentsA' => $studentsA] = comparisonScenario();
+    $application = ScreeningTestApplication::query()->where('group_id', $a->id)->firstOrFail();
+    // Just created: one row per student, no band yet.
+    $fresh = ScreeningTestApplication::factory()->create([
+        'school_id' => $school->id, 'screening_test_type_id' => $application->screening_test_type_id, 'group_id' => $a->id, 'application_date' => now()->toDateString(),
+    ]);
+    ScreeningTestResult::factory()->create(['school_id' => $school->id, 'screening_test_application_id' => $fresh->id, 'student_id' => $studentsA[0]->id, 'score' => null, 'band' => null]);
+    Sanctum::actingAs($psycho);
+
+    $this->getJson("/api/v1/group-comparison?school_grade_id={$grade}&school_year={$year}")->assertOk()
+        ->assertJsonCount(1, 'data.groups.0.screenings')
+        ->assertJsonPath('data.groups.0.screenings.0.application_date', now()->subMonth()->toDateString())
+        ->assertJsonPath('data.groups.0.screenings.0.bands', [
+            ['name' => 'Inicial', 'count' => 0],
+            ['name' => 'En proceso', 'count' => 1],
+            ['name' => 'Adecuado', 'count' => 1],
+        ]);
+});
+
+it('leaves out groups with no grade and grades with a single group in a year', function () {
+    ['psycho' => $psycho, 'school' => $school, 'grade' => $grade, 'year' => $year] = comparisonScenario();
+    Group::factory()->create(['school_id' => $school->id, 'name' => 'Sin grado', 'school_grade_id' => null, 'school_year' => $year]);
+    Group::factory()->create(['school_id' => $school->id, 'name' => '5.°A', 'school_grade_id' => $grade, 'school_year' => $year - 1]);
+    Sanctum::actingAs($psycho);
+
+    $this->getJson('/api/v1/group-comparison/options')->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.school_year', $year)
+        ->assertJsonCount(2, 'data.0.groups');
 });
