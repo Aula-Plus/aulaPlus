@@ -1,10 +1,12 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  Bell,
   BellRing,
   BookOpen,
   CalendarRange,
   CalendarDays,
   ClipboardList,
+  Columns2,
   GraduationCap,
   Eye,
   MessageSquare,
@@ -18,6 +20,7 @@ import {
 } from "lucide-react"
 import type { User } from "@/types"
 import {
+  canCompareGroups,
   canEditScreeningTestDesign,
   canManageGradesVisibility,
   canManageAlertSettings,
@@ -37,8 +40,8 @@ export interface NavItem {
   /** Passes the originating screen to the target (e.g. the support form). */
   passFrom?: boolean
   /**
-   * A count shown next to the label (e.g. unread follow-up notices on
-   * "Alertas y seguimientos"). Omitted or 0 means no count is rendered.
+   * A count shown next to the label (e.g. unread notices on
+   * "Notificaciones"). Omitted or 0 means no count is rendered.
    */
   badge?: number
 }
@@ -72,16 +75,22 @@ export function buildNavSections(
       items: [
         { to: "/clases", label: "Grupos", icon: Users },
         { to: "/alumnos", label: "Alumnos", icon: GraduationCap },
+        // Screen 05: comparing whole groups is an institutional reading, so
+        // only Psicopedagogía and Dirección get it (P05-DEC-04).
+        ...(canCompareGroups(user) ? [{ to: "/comparativa", label: "Comparativa", icon: Columns2 }] : []),
         // One screen for the alerts that reach the user and their own scheduled
-        // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr). The count
-        // is unread notices only (not alerts); it goes away once read.
-        { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert, badge: unreadNotices },
+        // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr).
+        { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },
         // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8): the teacher builds
         // their plans; Psicopedagogía and Dirección read every plan.
         ...(user ? [{ to: "/programa-anual", label: "Programa anual", icon: CalendarRange }] : []),
         // Every role has a Calendar (screen 21); what each sees is decided
         // server-side.
         { to: "/calendario", label: "Calendario", icon: CalendarDays },
+        // Every role's own notice history (screen 22, ClickUp 1dfd3mc4bgw).
+        // The count is unread notices only (not alerts); it goes away once
+        // read.
+        { to: "/notificaciones", label: "Notificaciones", icon: Bell, badge: unreadNotices },
         // The screening design screen is for Psicopedagogía and Dirección,
         // who both edit designs (screen 08).
         ...(canEditScreeningTestDesign(user)

@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateAccommodationRequest;
 use App\Http\Resources\AccommodationResource;
 use App\Models\Accommodation;
 use App\Models\Student;
+use App\Services\Accommodations\AccommodationConfirmedNotifier;
 use App\Services\Accommodations\AccommodationProposalWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
@@ -38,7 +39,10 @@ use Illuminate\Validation\ValidationException;
  */
 class AccommodationController extends Controller
 {
-    public function __construct(protected AccommodationProposalWorkflow $workflow) {}
+    public function __construct(
+        protected AccommodationProposalWorkflow $workflow,
+        protected AccommodationConfirmedNotifier $notifier,
+    ) {}
 
     public function store(StoreAccommodationRequest $request, Student $student): JsonResponse
     {
@@ -65,6 +69,10 @@ class AccommodationController extends Controller
                     $validated['review_due_date'],
                     $validated['review_recipients'] === 'people' ? $validated['reviewer_ids'] : null,
                 );
+            } else {
+                // Registered already in force: the teachers it reaches learn
+                // it from Notificaciones (screen 22).
+                $this->notifier->notify($accommodation, $user);
             }
 
             return $accommodation;

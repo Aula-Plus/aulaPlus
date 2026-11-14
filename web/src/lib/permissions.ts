@@ -365,3 +365,11 @@ export function canManageInstitutionalEvents(user: User | null): boolean {
 export function hasTimetable(user: User | null): boolean {
   return isTeacher(user)
 }
+
+/**
+ * Screen 05 «Comparativa por año de cursada»: Psicopedagogía and Dirección
+ * only (P05-DEC-04). Mirror of `GroupPolicy::compare`.
+ */
+export function canCompareGroups(user: User | null): boolean {
+  return isSchoolWideStaff(user)
+}
