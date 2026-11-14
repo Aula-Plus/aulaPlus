@@ -43,7 +43,7 @@ class CurricularOfferingController extends Controller
         $pairs = $taught->concat($stored->keys())->unique()
             ->map(fn (string $pair) => array_map('intval', explode('-', $pair)));
 
-        $groups = Group::query()->whereKey($pairs->pluck(0)->all())->get()->keyBy('id');
+        $groups = Group::query()->with('educationLevel')->whereKey($pairs->pluck(0)->all())->get()->keyBy('id');
         $subjects = Subject::query()->whereKey($pairs->pluck(1)->all())->get()->keyBy('id');
 
         $rows = $pairs
@@ -51,6 +51,11 @@ class CurricularOfferingController extends Controller
             ->map(fn (array $pair) => $this->row(
                 $groups[$pair[0]],
                 $subjects[$pair[1]],
+                // Already loaded above: no query per row.
+                $stored->get($pair[0].'-'.$pair[1], collect())
+                    ->map(fn (CurricularOffering $offering) => $offering->curricularFramework)
+                    ->filter()
+                    ->values(),
             ))
             ->sortBy(fn (array $row) => [$row['group']['school_year'] * -1, $row['group']['name'], $row['subject']['name']])
             ->values()
@@ -104,9 +109,10 @@ class CurricularOfferingController extends Controller
      * A row: its effective programs (stored + mandatory, the mandatory ones
      * flagged `locked`) and the programs its editor may offer.
      *
+     * @param  Collection<int, CurricularFramework>|null  $stored
      * @return array<string, mixed>
      */
-    protected function row(Group $group, Subject $subject): array
+    protected function row(Group $group, Subject $subject, ?Collection $stored = null): array
     {
         $group->loadMissing('educationLevel');
         $mandatory = $this->offerings->mandatoryFor($group)->pluck('id');
@@ -119,7 +125,7 @@ class CurricularOfferingController extends Controller
                 'level' => $group->educationLevel?->label,
             ],
             'subject' => ['id' => $subject->id, 'name' => $subject->name],
-            'frameworks' => $this->offerings->effectiveFor($group, $subject)
+            'frameworks' => $this->offerings->effectiveFor($group, $subject, $stored)
                 ->map(fn (CurricularFramework $framework) => $this->framework($framework, $mandatory))
                 ->values()->all(),
             'available_frameworks' => $this->offerings->eligibleFor($group)

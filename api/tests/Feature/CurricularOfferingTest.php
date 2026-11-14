@@ -16,9 +16,11 @@ use App\Models\SchoolPlannerField;
 use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\CurricularStructure\CurricularOfferings;
 use App\Support\Tenancy;
 use Database\Seeders\CurricularFrameworkSeeder;
 use Database\Seeders\OfficialScaleSeeder;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 // ClickUp 1dfd3mc4bgf — screen 23 › «Oferta curricular» and «Planificadores».
@@ -145,6 +147,61 @@ it('has no locked program for a school without a mandatory regime', function () 
         ->assertOk()->assertJsonPath('data.frameworks.0.name', 'Cambridge Primary')->assertJsonCount(1, 'data.frameworks');
     $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => []])
         ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids');
+});
+
+it('drops a stored program that is no longer eligible, so the row can be saved again', function () {
+    $s = curricularScenario();
+    Sanctum::actingAs($s['director']);
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['cambridge']->id]])
+        ->assertOk()->assertJsonCount(2, 'data.frameworks');
+
+    // Aula+ deactivates Cambridge for the school: it stays stored, but no longer counts.
+    $s['school']->curricularFrameworks()->updateExistingPivot($s['cambridge']->id, ['active' => false]);
+
+    $this->getJson('/api/v1/curricular-offerings')->assertOk()
+        ->assertJsonPath('data.0.frameworks', [
+            ['id' => $s['anep']->id, 'name' => 'ANEP EBI', 'planner_family' => 'anep', 'locked' => true],
+        ]);
+    expect(app(CurricularOfferings::class)
+        ->effectiveIdsFor($s['group'], $s['subject'])->all())->toBe([$s['anep']->id]);
+
+    // What the editor now sends (only what it shows) saves fine.
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['anep']->id]])
+        ->assertOk()->assertJsonCount(1, 'data.frameworks');
+});
+
+it('lists the offering with a number of queries that does not grow with the rows', function () {
+    $s = curricularScenario();
+    $count = function (): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/curricular-offerings')->assertOk();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+    Sanctum::actingAs($s['director']);
+    Tenancy::forSchool($s['school'], fn () => CurricularOffering::create([
+        'group_id' => $s['group']->id, 'subject_id' => $s['subject']->id, 'curricular_framework_id' => $s['cambridge']->id,
+    ]));
+    $count(); // warm-up: the first request loads roles/permissions once
+    $baseline = $count();
+
+    foreach (range(1, 3) as $i) {
+        $group = Group::factory()->atLevel('primary')->create(['school_id' => $s['school']->id]);
+        foreach (range(1, 3) as $j) {
+            $subject = Subject::factory()->create(['school_id' => $s['school']->id]);
+            $group->teachers()->attach($s['teacher'], ['subject_id' => $subject->id]);
+            Tenancy::forSchool($s['school'], fn () => CurricularOffering::create([
+                'group_id' => $group->id, 'subject_id' => $subject->id, 'curricular_framework_id' => $s['cambridge']->id,
+            ]));
+        }
+    }
+
+    $response = $this->getJson('/api/v1/curricular-offerings')->assertOk()->assertJsonCount(10, 'data');
+    expect(collect($response->json('data'))->every(fn (array $row) => count($row['frameworks']) === 2))->toBeTrue();
+    expect($count())->toBe($baseline);
 });
 
 it('keeps the screen to direction: teachers and psychopedagogy cannot read or edit it', function () {

@@ -21,7 +21,8 @@ use Illuminate\Support\Collection;
  *   group's level. They are always part of the offering and cannot be
  *   removed. It is data per school, never a fixed rule in code, and never a
  *   text shown to users.
- * - Effective: what was stored for the group-subject plus the mandatory ones.
+ * - Effective: what was stored for the group-subject, while still eligible,
+ *   plus the mandatory ones.
  *   It decides both what the AI receives and the scale results are recorded
  *   with (PO 13/11).
  */
@@ -65,17 +66,28 @@ class CurricularOfferings
             ->values();
     }
 
-    /** @return Collection<int, CurricularFramework> */
-    public function effectiveFor(Group $group, Subject $subject): Collection
+    /**
+     * The stored programs, kept only while they are still eligible (active
+     * for the school and for the group's level), plus the mandatory ones. A
+     * program Aula+ deactivates, or one that stops applying because the group
+     * changed level, stays stored but no longer reaches the AI, the planner
+     * or the scale, and the editor can save the row again without it.
+     *
+     * @param  Collection<int, CurricularFramework>|null  $stored  the row's stored programs, when the caller already loaded them
+     * @return Collection<int, CurricularFramework>
+     */
+    public function effectiveFor(Group $group, Subject $subject, ?Collection $stored = null): Collection
     {
-        $stored = CurricularFramework::query()
+        $stored ??= CurricularFramework::query()
             ->whereIn('id', CurricularOffering::query()
                 ->forGroupSubject($group->id, $subject->id)
                 ->select('curricular_framework_id'))
             ->get();
 
+        $eligible = $this->eligibleFor($group)->pluck('id');
+
         return $this->mandatoryFor($group)
-            ->concat($stored)
+            ->concat($stored->filter(fn (CurricularFramework $framework) => $eligible->contains($framework->id)))
             ->unique('id')
             ->sortBy('id')
             ->values();
