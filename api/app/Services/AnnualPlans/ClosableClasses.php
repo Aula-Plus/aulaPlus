@@ -7,6 +7,7 @@ use App\Models\AnnualPlan;
 use App\Models\ClassSession;
 use App\Models\Unit;
 use App\Models\UnitObjective;
+use App\Support\SchoolTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -65,7 +66,9 @@ class ClosableClasses
     {
         $query = $this->eligible($objective)
             ->where('status', '!=', ClassSessionStatus::Cancelled->value)
-            ->whereDate('date', '<=', now()->toDateString())
+            // «Up to today» on the school's calendar, not UTC's (UTC-3: from
+            // 21:00 in Montevideo UTC is already on the next day).
+            ->whereDate('date', '<=', SchoolTime::today()->toDateString())
             ->with(['unitObjectives' => fn ($q) => $q->whereKey($objective->getKey())])
             ->orderByDesc('date')
             ->orderByDesc('id');

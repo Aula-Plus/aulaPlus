@@ -13,6 +13,7 @@ use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -437,6 +438,22 @@ it('only records on non-cancelled classes that already happened, with a valid va
     $this->patchJson($url, ['coverage' => 'full'])->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
 
     $this->assertDatabaseHas('class_session_unit_objective', ['class_session_id' => $class->id, 'coverage' => 'partial']);
+});
+
+it('judges «up to today» on the school\'s calendar, not UTC\'s', function () {
+    [$school, $teacher, $plan, $objective, , $group] = startedObjectiveSetup();
+    // 22:30 in Montevideo on 2026-06-10 is already 2026-06-11 in UTC.
+    $this->travelTo(CarbonImmutable::parse('2026-06-11 01:30:00', 'UTC'));
+    $tomorrow = ClassSession::factory()->create([
+        'school_id' => $school->id, 'group_id' => $group->id, 'subject_id' => $plan->subject_id, 'unit_id' => null,
+        'status' => ClassSessionStatus::Planned, 'date' => '2026-06-11', 'title' => 'Mañana',
+    ]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes")->assertOk()
+        ->assertJsonMissing(['id' => $tomorrow->id]);
+    $this->patchJson("/api/v1/class-sessions/{$tomorrow->id}/objectives/{$objective->id}", ['coverage' => 'full'])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
 });
 
 it('lists the recent classes of the plan\'s group and subject for «Lo terminé», with what each recorded', function () {

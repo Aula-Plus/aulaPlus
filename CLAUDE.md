@@ -151,9 +151,11 @@ skeleton is done, until explicitly asked:
   - Screen 12 «Programa anual» (ClickUp 1dfd3mc4bg8): annual plans, units and
     unit objectives have an API and a screen, with unit status/coverage derived
     (`AnnualPlanProgress`).
-  - `ClassSession` only exposes correcting a closed class's record for one
-    objective (`PATCH /class-sessions/{id}/objectives/{objective}`, «Lo
-    terminé») and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
+  - `ClassSession` only exposes «Lo terminé»: recording one objective as
+    «todo» on a past, non-cancelled class of the plan's group and subject that
+    the plan owner picks (`GET /unit-objectives/{objective}/closable-classes` +
+    `PATCH /class-sessions/{id}/objectives/{objective}`, which creates the link
+    if needed and keeps other classes' records) and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
     optional time and room (`PATCH /v1/class-sessions/{id}`) plus the teacher's
     private «Mis horarios» (`TimetableSlot`, pre-fill only).
   The AI-proposal engine itself (`AIProposal`,

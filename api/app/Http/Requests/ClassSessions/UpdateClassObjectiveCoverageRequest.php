@@ -7,6 +7,7 @@ use App\Enums\ObjectiveCoverage;
 use App\Models\ClassSession;
 use App\Models\UnitObjective;
 use App\Services\AnnualPlans\ClosableClasses;
+use App\Support\SchoolTime;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -71,7 +72,8 @@ class UpdateClassObjectiveCoverageRequest extends FormRequest
 
                     return;
                 }
-                if ($class->date !== null && $class->date->isAfter(now()->endOfDay())) {
+                // Compared on the school's calendar day, not UTC's.
+                if ($class->date !== null && $class->date->toDateString() > SchoolTime::today()->toDateString()) {
                     $validator->errors()->add('coverage', 'A class that has not happened yet cannot record coverage.');
                 }
             },
