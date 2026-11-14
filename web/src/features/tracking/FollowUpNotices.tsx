@@ -1,13 +1,13 @@
-import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { SectionCard } from "@/components/ui/section-card"
-import { formatShortDate } from "@/lib/utils"
+import { NoticeText } from "@/features/notifications/NoticeText"
 import type { FollowUpsInbox } from "./useFollowUpsInbox"
 
 /**
  * «Avisos»: follow-ups assigned to the caller, alerts they have that reached
  * their deadline without a way out («Llegó a su fecha sin salida»), shared
- * extracts, returned proposals and screening design changes. A notice is read
+ * extracts, returned proposals, new accommodations in force and screening
+ * design changes. A notice is read
  * and dismissed — it is not a new alert and asks for nothing. Renders nothing
  * when there are none.
  *
@@ -29,54 +29,14 @@ export function FollowUpNotices({ inbox, showError = false }: { inbox: FollowUps
       <ul className="grid gap-2">
         {notifications.map((notice) => (
           <li key={notice.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-            {notice.data.type === "comment_shared" ? (
-              <span>
-                Psicopedagogía te compartió un extracto
-                {notice.data.student_name ? ` sobre ${notice.data.student_name}` : ""}.{" "}
-                <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                  Ver ficha del alumno
-                </Link>
-              </span>
-            ) : notice.data.type === "alert_overdue" ? (
-              <span>
-                Una alerta que tenés llegó a su fecha sin salida (plazo al{" "}
-                {formatShortDate(notice.data.due_date)}).{" "}
-                <Link className="underline" to="/alertas">
-                  Ver alertas
-                </Link>
-              </span>
-            ) : notice.data.type === "accommodation_proposal_returned" ? (
-              <span>
-                Psicopedagogía te devolvió una propuesta de ajuste para corregir.{" "}
-                <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                  Ver ficha del alumno
-                </Link>
-              </span>
-            ) : notice.data.type === "follow_up_assigned" ? (
-              <span>
-                Te asignaron un seguimiento
-                {studentNameByFollowUp.get(notice.data.follow_up_id)
-                  ? ` de ${studentNameByFollowUp.get(notice.data.follow_up_id)}`
-                  : ""}{" "}
-                con fecha {formatShortDate(notice.data.due_date)}.{" "}
-                <Link className="underline" to={`/alumnos/${notice.data.student_id}/seguimiento`}>
-                  Ver ficha del alumno
-                </Link>
-              </span>
-            ) : (
-              <span>
-                {notice.data.type === "screening_design_changed"
-                  ? "Cambiaron las franjas"
-                  : "Dirección volvió atrás tu cambio en las franjas"}
-                {notice.data.screening_test_type_name
-                  ? ` del screening «${notice.data.screening_test_type_name}»`
-                  : " de un screening"}
-                .{" "}
-                <Link className="underline" to={`/pruebas-de-sondeo/tipos?abrir=${notice.data.screening_test_type_id}`}>
-                  Ver diseño
-                </Link>
-              </span>
-            )}
+            <NoticeText
+              notice={notice}
+              studentName={
+                notice.data.type === "follow_up_assigned"
+                  ? studentNameByFollowUp.get(notice.data.follow_up_id)
+                  : undefined
+              }
+            />
             <Button type="button" size="sm" variant="outline" onClick={() => dismiss(notice.id)}>
               Entendido
             </Button>

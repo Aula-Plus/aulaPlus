@@ -188,6 +188,8 @@ class AccommodationProposalWorkflow
             ]);
             $this->record($accommodation, $actor, AccommodationReviewAction::Confirmed);
             $this->closeReviewTask($accommodation, $actor);
+            // Screen 22: the teachers it reaches learn it is in force.
+            app(AccommodationConfirmedNotifier::class)->notify($accommodation, $actor);
             // It is in force now: the cached «Ajustes vigentes» must show it.
             // After the commit, so a request racing it can't re-cache the
             // pre-confirmation state.

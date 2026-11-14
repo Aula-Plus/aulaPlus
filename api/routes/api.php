@@ -27,6 +27,7 @@ use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
 use App\Http\Controllers\GroupCommentController;
+use App\Http\Controllers\GroupComparisonController;
 use App\Http\Controllers\GroupController;
 use App\Http\Controllers\GroupLevelController;
 use App\Http\Controllers\GroupProfileController;
@@ -219,6 +220,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
         Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
         Route::post('/scheduled-follow-ups/{followUp}/resolve', [ScheduledFollowUpController::class, 'resolve']);
 
         // Follow-ups with stages and several people (ClickUp 86e3qkwna),
@@ -256,6 +258,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // count-by-(type,date) marks (never a student identifier), and the
         // group's scheduled follow-ups filtered per-student by policy.
         Route::get('/groups/{group}/accommodations-summary', [GroupProfileController::class, 'accommodationsSummary']);
+        // Screen 05 «Comparativa por año de cursada» (Psicopedagogía y Dirección).
+        Route::get('/group-comparison/options', [GroupComparisonController::class, 'options']);
+        Route::get('/group-comparison', [GroupComparisonController::class, 'show']);
         Route::get('/groups/{group}/performance-timeline', [GroupProfileController::class, 'performanceTimeline']);
         Route::get('/groups/{group}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'indexForGroup']);
 
