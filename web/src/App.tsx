@@ -27,6 +27,8 @@ import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
 import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
+import { AnnualPlansListPage } from "@/features/annual-plans/AnnualPlansListPage"
+import { AnnualPlanPage } from "@/features/annual-plans/AnnualPlanPage"
 import { CalendarPage } from "@/features/calendar/CalendarPage"
 import { GroupComparisonPage } from "@/features/group-comparison/GroupComparisonPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
@@ -131,6 +133,22 @@ function App() {
             element={
               <ProtectedLayout>
                 <SchoolStructurePage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/programa-anual"
+            element={
+              <ProtectedLayout>
+                <AnnualPlansListPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/programa-anual/:id"
+            element={
+              <ProtectedLayout>
+                <AnnualPlanPage />
               </ProtectedLayout>
             }
           />
