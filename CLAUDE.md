@@ -146,15 +146,22 @@ skeleton is done, until explicitly asked:
 - Project/assignment entity and its relation to students — undecided
   (multi-submission, multi-grade design not settled).
 - Communications features in general (e.g. screen "Mensajes").
-- Lesson/curriculum planning proper (`AnnualPlan`, `Unit`, `ClassSession` — data
-  layer exists, no API surface yet) and AI-assisted class generation. The
-  AI-proposal engine itself (`AIProposal`, `docs/prompts/05-asistente-ia-docente.md`)
-  is done; `Assessment` now also has full CRUD (`docs/prompts/13-evaluaciones-
-  resultados.md`). The Calendar (screen 21, ClickUp 1dfd3mc4bgh) added a class's
-  optional time and room (`PATCH /v1/class-sessions/{id}`) and the teacher's
-  private «Mis horarios» (`TimetableSlot`, pre-fill only) — what's still out of
-  scope is the curriculum-planning UI/API built on top of them (creating/listing
-  classes, plans, units).
+- Lesson/curriculum planning proper and AI-assisted class generation. Explicit
+  exceptions already built:
+  - Screen 12 «Programa anual» (ClickUp 1dfd3mc4bg8): annual plans, units and
+    unit objectives have an API and a screen, with unit status/coverage derived
+    (`AnnualPlanProgress`).
+  - `ClassSession` only exposes «Lo terminé»: recording one objective as
+    «todo» on a past, non-cancelled class of the plan's group and subject that
+    the plan owner picks (`GET /unit-objectives/{objective}/closable-classes` +
+    `PATCH /class-sessions/{id}/objectives/{objective}`, which creates the link
+    if needed and keeps other classes' records) and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
+    optional time and room (`PATCH /v1/class-sessions/{id}`) plus the teacher's
+    private «Mis horarios» (`TimetableSlot`, pre-fill only).
+  The AI-proposal engine itself (`AIProposal`,
+  `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
+  full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
+  scope is creating/listing classes and the class-closing flow (screens 14–17).
 - "PTP y enriquecimiento" (screen 9 of the living document) — explicitly deferred:
   it's unclear whether it's a new entity or a relabeling of
   Accommodation/Barrier, and it depends on the annual-plan/curriculum module

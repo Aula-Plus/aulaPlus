@@ -64,4 +64,19 @@ class AnnualPlan extends Model
     {
         return $this->hasMany(Unit::class);
     }
+
+    /**
+     * Route binding only resolves the group's general plan (screen 12): an
+     * individualized plan (`student_id` set, legacy PEI shape) is not part of
+     * this screen and resolves to 404, like `index()` never lists it. The
+     * SchoolScope still applies, so another school's plan is a 404 too. When
+     * individualized plans get their own endpoints they need their own binding.
+     */
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        return $this->newQuery()
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->whereNull('student_id')
+            ->first();
+    }
 }

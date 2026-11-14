@@ -3,6 +3,7 @@ import {
   Bell,
   BellRing,
   BookOpen,
+  CalendarRange,
   CalendarDays,
   ClipboardList,
   Columns2,
@@ -80,6 +81,9 @@ export function buildNavSections(
         // One screen for the alerts that reach the user and their own scheduled
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr).
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },
+        // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8): the teacher builds
+        // their plans; Psicopedagogía and Dirección read every plan.
+        ...(user ? [{ to: "/programa-anual", label: "Programa anual", icon: CalendarRange }] : []),
         // Every role has a Calendar (screen 21); what each sees is decided
         // server-side.
         { to: "/calendario", label: "Calendario", icon: CalendarDays },

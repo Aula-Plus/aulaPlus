@@ -75,4 +75,11 @@ class Assessment extends Model
         return $this->belongsToMany(CurricularItem::class, 'assessment_curricular_item')
             ->withTimestamps();
     }
+
+    /** The unit objectives this assessment works (screens 12–13). */
+    public function unitObjectives(): BelongsToMany
+    {
+        return $this->belongsToMany(UnitObjective::class, 'assessment_unit_objective')
+            ->withTimestamps();
+    }
 }

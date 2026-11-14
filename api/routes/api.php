@@ -11,12 +11,14 @@ use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AlertOutcomeController;
 use App\Http\Controllers\AlertSettingsController;
 use App\Http\Controllers\AlertThreadController;
+use App\Http\Controllers\AnnualPlanController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentResultController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\ClassSessionObjectiveController;
 use App\Http\Controllers\ClassSessionScheduleController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
@@ -54,6 +56,8 @@ use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
 use App\Http\Controllers\TimetableSlotController;
+use App\Http\Controllers\UnitController;
+use App\Http\Controllers\UnitObjectiveController;
 use App\Http\Controllers\UsageJourneyStepController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -258,6 +262,29 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/ai-proposals/{ai_proposal}', [AIProposalController::class, 'show']);
         Route::post('/ai-proposals/{ai_proposal}/apply', [AIProposalController::class, 'apply']);
         Route::post('/ai-proposals/{ai_proposal}/discard', [AIProposalController::class, 'discard']);
+
+        // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8). The teacher builds
+        // the plan, its units and their objectives; Psicopedagogía and
+        // Dirección read any plan (AnnualPlanPolicy / UnitPolicy). Unit status
+        // and coverage are derived (AnnualPlanProgress), never written.
+        Route::get('/annual-plans', [AnnualPlanController::class, 'index']);
+        Route::get('/annual-plans/options', [AnnualPlanController::class, 'options']);
+        Route::post('/annual-plans', [AnnualPlanController::class, 'store']);
+        Route::get('/annual-plans/{annualPlan}', [AnnualPlanController::class, 'show'])->whereNumber('annualPlan');
+        Route::patch('/annual-plans/{annualPlan}', [AnnualPlanController::class, 'update'])->whereNumber('annualPlan');
+        Route::post('/annual-plans/{annualPlan}/units', [UnitController::class, 'store']);
+        Route::patch('/units/{unit}', [UnitController::class, 'update']);
+        Route::delete('/units/{unit}', [UnitController::class, 'destroy']);
+        Route::post('/units/{unit}/objectives', [UnitObjectiveController::class, 'store']);
+        Route::patch('/unit-objectives/{objective}', [UnitObjectiveController::class, 'update']);
+        Route::delete('/unit-objectives/{objective}', [UnitObjectiveController::class, 'destroy']);
+        // «Lo terminé»: pick a class of the plan's group and subject and
+        // record the objective «todo» there. The objective's state still
+        // derives only from the class records (P12-COB-02, screen 13 F-7).
+        Route::get('/unit-objectives/{objective}/closable-classes', [UnitObjectiveController::class, 'closableClasses'])
+            ->whereNumber('objective');
+        Route::patch('/class-sessions/{classSession}/objectives/{objective}', [ClassSessionObjectiveController::class, 'update'])
+            ->whereNumber(['classSession', 'objective']);
 
         // Session 6: assessments CRUD + per-student results (docs/prompts/
         // 13-evaluaciones-resultados.md). Fills the gap left by Session 1

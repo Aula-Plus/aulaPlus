@@ -41,9 +41,28 @@ class Unit extends Model
         return $this->hasMany(ClassSession::class);
     }
 
+    public function objectives(): HasMany
+    {
+        return $this->hasMany(UnitObjective::class)->orderBy('position')->orderBy('id');
+    }
+
     public function curricularItems(): BelongsToMany
     {
         return $this->belongsToMany(CurricularItem::class, 'unit_curricular_item')
             ->withTimestamps();
+    }
+
+    /**
+     * Unit has no school_id of its own, so binding it straight by id would
+     * resolve another school's unit. `whereHas('annualPlan')` applies
+     * AnnualPlan's SchoolScope: a unit of another school — or of an
+     * individualized plan, which screen 12 does not handle — is a 404.
+     */
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        return $this->newQuery()
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->whereHas('annualPlan', fn ($query) => $query->whereNull('student_id'))
+            ->first();
     }
 }
