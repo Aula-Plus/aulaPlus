@@ -38,6 +38,7 @@ export const screenTitles: { pattern: string; title: string }[] = [
   { pattern: "/usuarios/nueva", title: "Invitar usuario" },
   { pattern: "/usuarios/:id", title: "Editar usuario" },
   { pattern: "/materias", title: "Materias" },
+  { pattern: "/colegio", title: "Colegio y estructura" },
   { pattern: "/configuracion/alertas", title: "Configurar alertas" },
   { pattern: "/ajustes/comentarios", title: "Configurar comentarios" },
   { pattern: "/adopcion", title: "Tablero de adopción" },

@@ -6,12 +6,14 @@ use App\Enums\AssessmentType;
 use App\Models\Accommodation;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
+use App\Models\CurricularFramework;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\CurricularStructure\CurricularOfferings;
 use Closure;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
@@ -77,12 +79,12 @@ class BuildProposalContext
     {
         // The subject label is now referenced by id; resolve it to the subject's
         // name (the only thing sent to the model — a name, never student PII).
-        $subjectName = isset($parameters['subject_id'])
-            ? (Subject::find($parameters['subject_id'])?->name ?? '')
-            : '';
+        // Unit and class-session requests inherit it from their annual plan.
+        $subject = $this->plannedSubject($parameters);
+        $subjectName = $subject?->name ?? '';
         $needle = mb_strtolower(trim((string) ($subjectName !== '' ? $subjectName : ($parameters['focus'] ?? ''))));
 
-        $frameworks = $group->curricularFrameworks()->with('catalogs.items')->get();
+        $frameworks = $this->frameworksFor($group, $subject);
 
         $items = $frameworks
             ->flatMap(fn ($framework) => $framework->catalogs)
@@ -116,6 +118,31 @@ class BuildProposalContext
             'frameworks' => $frameworks->pluck('name')->all(),
             'relevant_items' => $items,
         ];
+    }
+
+    /**
+     * The programs the request is about. When it is tied to a subject and the
+     * group-subject has an effective «Oferta curricular» (screen 23, ClickUp
+     * 1dfd3mc4bgf: stored + mandatory programs of its level), those programs — the right one for Matemática in 5.°A even
+     * if the group follows others in other subjects. Otherwise the group's.
+     *
+     * @return Collection<int, CurricularFramework>
+     */
+    protected function frameworksFor(Group $group, ?Subject $subject): Collection
+    {
+        if ($subject !== null) {
+            $offered = CurricularFramework::query()
+                ->whereKey(app(CurricularOfferings::class)->effectiveIdsFor($group, $subject)->all())
+                ->with('catalogs.items')
+                ->orderBy('id')
+                ->get();
+
+            if ($offered->isNotEmpty()) {
+                return $offered;
+            }
+        }
+
+        return $group->curricularFrameworks()->with('catalogs.items')->get();
     }
 
     /**

@@ -78,7 +78,7 @@ class School extends Model
     public function curricularFrameworks(): BelongsToMany
     {
         return $this->belongsToMany(CurricularFramework::class, 'school_curricular_framework')
-            ->withPivot(['level_from', 'level_to', 'active', 'configuration'])
+            ->withPivot(['level_from', 'level_to', 'active', 'mandatory', 'configuration'])
             ->withTimestamps();
     }
 }

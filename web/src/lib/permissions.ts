@@ -84,6 +84,14 @@ export function canManageSubjects(user: User | null): boolean {
 }
 
 /**
+ * «Colegio y estructura» › Oferta curricular and Planificadores (screen 23):
+ * director only. Mirror of `CurricularOfferingPolicy::manage`.
+ */
+export function canManageCurricularStructure(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
  * Directors edit the comment categories and the trend threshold (mirror of
  * CommentCategoryPolicy / CommentTrendSettingsController). UX-only gate.
  */

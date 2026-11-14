@@ -9,6 +9,7 @@ use App\Models\AIProposal;
 use App\Models\Group;
 use App\Models\Subject;
 use App\Models\Unit;
+use App\Services\CurricularStructure\CurricularOfferings;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -170,7 +171,13 @@ class GenerateAIProposalRequest extends FormRequest
     protected function frameworkBelongsToGroup(): callable
     {
         return function (string $attribute, mixed $value, callable $fail): void {
-            if (! $this->group()->curricularFrameworks()->whereKey($value)->exists()) {
+            // The group's frameworks, or one of the programs the school set
+            // for this group-subject in «Oferta curricular» (screen 23).
+            $subject = Subject::query()->find((int) $this->input('parameters.subject_id'));
+            $offered = $subject !== null
+                && app(CurricularOfferings::class)->effectiveIdsFor($this->group(), $subject)->contains((int) $value);
+
+            if (! $offered && ! $this->group()->curricularFrameworks()->whereKey($value)->exists()) {
                 $fail('The selected curricular framework is not available for this group.');
             }
         };

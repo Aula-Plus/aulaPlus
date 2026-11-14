@@ -100,6 +100,12 @@ class PilotSchoolsSeeder extends Seeder
             $school->curricularFrameworks()->attach($framework, ['active' => true]);
         }
 
+        // Aula+ loads the ANEP regime for every school (P23-DEC-01): active
+        // and mandatory, so every row of «Oferta curricular» carries it.
+        CurricularFramework::query()->where('planner_family', 'anep')->get()
+            ->each(fn (CurricularFramework $anep) => $school->curricularFrameworks()
+                ->syncWithoutDetaching([$anep->id => ['active' => true, 'mandatory' => true]]));
+
         return Tenancy::forSchool($school, function () use ($school, $name, $emailSlug) {
             $teacher = User::factory()->forSchool($school)->teacher()->create([
                 'name' => "Docente {$name}",
@@ -127,6 +133,9 @@ class PilotSchoolsSeeder extends Seeder
                 $group = Group::factory()->create([
                     'school_id' => $school->id,
                     'name' => "{$i}° A",
+                    'level' => 'Primaria',
+                    'education_level_id' => EducationLevel::query()->where('key', 'primary')->value('id'),
+                    'school_grade_id' => SchoolGrade::query()->where('key', "primary_{$i}")->value('id'),
                     'school_year' => $schoolYear,
                 ]);
                 $group->teachers()->attach($teacher, ['subject_id' => $subject->id]);
