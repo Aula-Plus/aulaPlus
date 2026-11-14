@@ -26,10 +26,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatShortDate } from "@/lib/utils"
 import {
   createObjective,
+  coverageLabels,
   createUnit,
   deleteObjective,
   deleteUnit,
   fetchAnnualPlan,
+  fetchClosableClasses,
   objectiveStatusLabels,
   unitStatusLabels,
   updateAnnualPlan,
@@ -37,6 +39,7 @@ import {
   updateObjective,
   updateUnit,
   type AnnualPlanDetail,
+  type ClosableClass,
   type ObjectiveStatus,
   type PlanMark,
   type PlanObjective,
@@ -752,10 +755,13 @@ function ObjectivesList({
 }
 
 /**
- * «Lo terminé» on an objective «empezado». Not a checkbox: it opens the
- * closing record of the class where «una parte» was last recorded and lets
- * the teacher change it to «todo». The objective's state keeps deriving only
- * from that class record (P12-COB-02, screen 13 F-7).
+ * «Lo terminé» on an objective «empezado». Not a checkbox: the teacher picks
+ * the class where they finished it — the recent classes of the plan's group
+ * and subject, preselecting the one where «una parte» was last recorded, or
+ * another one found with «Buscar otra» — sees what that class's closing said
+ * and what will change, and records «Todo» there. Other classes keep their
+ * record; the objective's state keeps deriving only from the class records
+ * (P12-COB-02, screen 13 F-7; ClickUp 1dfd3mc4bg8, PO 14/11).
  */
 function FinishObjectiveDialog({
   objective,
@@ -767,13 +773,53 @@ function FinishObjectiveDialog({
   onConfirm: (classId: number) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
-  const target = objective.class_to_close
-  if (!target) return null
+  const [classes, setClasses] = useState<ClosableClass[]>([])
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [search, setSearch] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const preselected = objective.class_to_close
 
-  const classLabel = `${formatShortDate(target.date)}${target.title ? ` · ${target.title}` : ""}`
+  const load = useCallback(
+    async (term?: string) => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const found = await fetchClosableClasses(objective.id, term)
+        setClasses((previous) => {
+          // Keep the picked class visible even when a search does not return it.
+          const kept = previous.find((c) => c.id === selectedId && !found.some((f) => f.id === c.id))
+          return kept ? [kept, ...found] : found
+        })
+        if (term === undefined) {
+          setSelectedId(preselected && found.some((c) => c.id === preselected.id) ? preselected.id : (found[0]?.id ?? null))
+        }
+      } catch {
+        setLoadError("No pudimos traer las clases.")
+      } finally {
+        setLoading(false)
+      }
+    },
+    [objective.id, preselected, selectedId],
+  )
+
+  function onOpenChange(next: boolean) {
+    setOpen(next)
+    if (next) {
+      setClasses([])
+      setSearch("")
+      setSelectedId(null)
+      void load()
+    }
+  }
+
+  const selected = classes.find((c) => c.id === selectedId) ?? null
+  const classLabel = (c: ClosableClass) => `${formatShortDate(c.date)}${c.title ? ` · ${c.title}` : ""}`
+  const recordedLabel = (c: ClosableClass) =>
+    c.coverage ? coverageLabels[c.coverage] : "Sin registro de este objetivo"
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="xs" variant="outline" disabled={busy}>
           Lo terminé
@@ -781,22 +827,79 @@ function FinishObjectiveDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cierre de la clase</DialogTitle>
+          <DialogTitle>¿En qué clase lo terminaste?</DialogTitle>
           <DialogDescription>
-            Clase del {classLabel}. Al cerrarla registraste «una parte» de este objetivo. Si lo terminaste,
-            cambiá ese registro a «todo» y el objetivo pasa a contar como dado.
+            Elegí la clase y queda registrado «Todo» para este objetivo en esa clase. Los cierres de las otras
+            clases se conservan.
           </DialogDescription>
         </DialogHeader>
-        <dl className="grid gap-2 text-sm">
-          <div>
-            <dt className="text-muted-foreground">Objetivo</dt>
-            <dd>{objective.description}</dd>
+        <p className="text-sm">
+          <span className="text-muted-foreground">Objetivo: </span>
+          {objective.description}
+        </p>
+        <fieldset className="grid gap-1 text-sm" aria-label="Clases recientes">
+          {loading && classes.length === 0 && <p className="text-muted-foreground">Cargando…</p>}
+          {!loading && classes.length === 0 && !loadError && (
+            <p className="text-muted-foreground">No encontramos clases de este grupo y materia.</p>
+          )}
+          {classes.map((c) => (
+            <label key={c.id} className="flex items-start gap-2 rounded-md px-2 py-1 hover:bg-muted">
+              <input
+                type="radio"
+                name={`finish-objective-${objective.id}`}
+                className="mt-1"
+                checked={selectedId === c.id}
+                onChange={() => setSelectedId(c.id)}
+              />
+              <span>
+                {classLabel(c)}
+                <span className="block text-xs text-muted-foreground">{recordedLabel(c)}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void load(search.trim() || undefined)
+          }}
+        >
+          <Input
+            aria-label="Buscar otra clase"
+            placeholder="Buscar otra: título o fecha (AAAA-MM-DD)"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <Button type="submit" variant="outline" size="sm" disabled={loading}>
+            Buscar
+          </Button>
+        </form>
+        {loadError && <p className="text-sm text-destructive">{loadError}</p>}
+        {selected && (
+          <div role="group" aria-label="Qué va a cambiar" className="rounded-md border p-3 text-sm">
+            <dl className="grid gap-2">
+              <div>
+                <dt className="text-muted-foreground">Clase</dt>
+                <dd>{classLabel(selected)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Qué decía ese cierre</dt>
+                <dd>{recordedLabel(selected)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Cómo va a quedar</dt>
+                <dd>
+                  {selected.coverage === "full"
+                    ? "Ya dice «Todo»: no cambia nada."
+                    : selected.coverage
+                      ? `«${coverageLabels[selected.coverage]}» pasa a «Todo», y el objetivo cuenta como dado.`
+                      : "Se suma este objetivo a esa clase con «Todo», y el objetivo cuenta como dado."}
+                </dd>
+              </div>
+            </dl>
           </div>
-          <div>
-            <dt className="text-muted-foreground">Registrado al cerrar la clase</dt>
-            <dd>Una parte</dd>
-          </div>
-        </dl>
+        )}
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline">
@@ -805,9 +908,10 @@ function FinishObjectiveDialog({
           </DialogClose>
           <Button
             type="button"
-            disabled={busy}
+            disabled={busy || !selected || selected.coverage === "full"}
             onClick={async () => {
-              await onConfirm(target.id)
+              if (!selected) return
+              await onConfirm(selected.id)
               setOpen(false)
             }}
           >

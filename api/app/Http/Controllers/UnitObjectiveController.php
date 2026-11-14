@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\AnnualPlans\UnitObjectiveRequest;
 use App\Models\Unit;
 use App\Models\UnitObjective;
+use App\Services\AnnualPlans\ClosableClasses;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /**
@@ -39,6 +41,21 @@ class UnitObjectiveController extends Controller
         $objective->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * The classes «Lo terminé» offers for this objective: the recent ones of
+     * the plan's group and subject, or those matching `search` (title or
+     * YYYY-MM-DD date), each with what its closing recorded for the objective.
+     * Only the plan's owner uses «Lo terminé».
+     */
+    public function closableClasses(Request $request, UnitObjective $objective, ClosableClasses $classes): JsonResponse
+    {
+        $this->authorize('update', $objective->unit);
+
+        $validated = $request->validate(['search' => ['nullable', 'string', 'max:100']]);
+
+        return response()->json(['data' => $classes->forPicker($objective, $validated['search'] ?? null)]);
     }
 
     /**

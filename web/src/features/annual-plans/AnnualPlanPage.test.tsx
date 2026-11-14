@@ -19,6 +19,7 @@ vi.mock("./annualPlansApi", async (importOriginal) => {
     deleteObjective: vi.fn(),
     updateAnnualPlan: vi.fn(),
     updateClassObjectiveCoverage: vi.fn(),
+    fetchClosableClasses: vi.fn(),
   }
 })
 
@@ -215,8 +216,12 @@ describe("AnnualPlanPage", () => {
     expect(screen.getByLabelText("Escribir un objetivo")).toHaveFocus()
   })
 
-  it("«Lo terminé» changes the class record from «una parte» to «todo»", async () => {
+  it("«Lo terminé» preselects the class where «una parte» was recorded and records «todo» there", async () => {
     vi.mocked(annualPlansApi.updateClassObjectiveCoverage).mockResolvedValue()
+    vi.mocked(annualPlansApi.fetchClosableClasses).mockResolvedValue([
+      { id: 41, date: "2026-05-17", title: "Repaso", coverage: null },
+      { id: 40, date: "2026-05-10", title: "Ecuaciones I", coverage: "partial" },
+    ])
     renderPage()
     await screen.findByRole("heading", { name: "Matemática · 2°EMS-A" })
     await userEvent.click(screen.getByRole("tab", { name: "Unidades" }))
@@ -225,12 +230,52 @@ describe("AnnualPlanPage", () => {
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Lo terminé" }))
     const dialog = screen.getByRole("dialog")
-    expect(within(dialog).getByText(/Ecuaciones I/)).toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).getAllByRole("radio")).toHaveLength(2))
+    expect(annualPlansApi.fetchClosableClasses).toHaveBeenCalledWith(3, undefined)
+    const preview = within(dialog).getByRole("group", { name: "Qué va a cambiar" })
+    expect(preview).toHaveTextContent(/Ecuaciones I/)
+    expect(preview).toHaveTextContent("«Una parte» pasa a «Todo»")
     await userEvent.click(within(dialog).getByRole("button", { name: "Cambiar a «todo»" }))
     await waitFor(() =>
       expect(annualPlansApi.updateClassObjectiveCoverage).toHaveBeenCalledWith(40, 3, "full"),
     )
     expect(annualPlansApi.fetchAnnualPlan).toHaveBeenCalledTimes(2)
+  })
+
+  it("«Lo terminé» lets the teacher pick another class, even one without the objective, or search", async () => {
+    vi.mocked(annualPlansApi.updateClassObjectiveCoverage).mockResolvedValue()
+    vi.mocked(annualPlansApi.fetchClosableClasses).mockImplementation(async (_id, search) =>
+      search
+        ? [{ id: 55, date: "2026-04-02", title: "Ecuaciones con fracciones", coverage: "none" }]
+        : [
+            { id: 41, date: "2026-05-17", title: "Repaso", coverage: null },
+            { id: 40, date: "2026-05-10", title: "Ecuaciones I", coverage: "partial" },
+          ],
+    )
+    renderPage()
+    await screen.findByRole("heading", { name: "Matemática · 2°EMS-A" })
+    await userEvent.click(screen.getByRole("tab", { name: "Unidades" }))
+    await userEvent.click(screen.getAllByRole("button", { name: "Objetivos" })[1])
+    await userEvent.click(screen.getByRole("button", { name: "Lo terminé" }))
+    const dialog = screen.getByRole("dialog")
+    await waitFor(() => expect(within(dialog).getAllByRole("radio")).toHaveLength(2))
+
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Repaso/ }))
+    expect(within(dialog).getByRole("group", { name: "Qué va a cambiar" })).toHaveTextContent(
+      "Se suma este objetivo a esa clase con «Todo»",
+    )
+
+    await userEvent.type(within(dialog).getByLabelText("Buscar otra clase"), "fracciones")
+    await userEvent.click(within(dialog).getByRole("button", { name: "Buscar" }))
+    await waitFor(() => expect(annualPlansApi.fetchClosableClasses).toHaveBeenCalledWith(3, "fracciones"))
+    await userEvent.click(await within(dialog).findByRole("radio", { name: /Ecuaciones con fracciones/ }))
+    expect(within(dialog).getByRole("group", { name: "Qué va a cambiar" })).toHaveTextContent(
+      "«Nada» pasa a «Todo»",
+    )
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cambiar a «todo»" }))
+    await waitFor(() =>
+      expect(annualPlansApi.updateClassObjectiveCoverage).toHaveBeenCalledWith(55, 3, "full"),
+    )
   })
 
   it("asks before removing an objective", async () => {

@@ -278,9 +278,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/units/{unit}/objectives', [UnitObjectiveController::class, 'store']);
         Route::patch('/unit-objectives/{objective}', [UnitObjectiveController::class, 'update']);
         Route::delete('/unit-objectives/{objective}', [UnitObjectiveController::class, 'destroy']);
-        // «Lo terminé»: correct a closed class's record for one objective
-        // («una parte» → «todo»). The objective's state still derives only
-        // from the class record (P12-COB-02, screen 13 F-7).
+        // «Lo terminé»: pick a class of the plan's group and subject and
+        // record the objective «todo» there. The objective's state still
+        // derives only from the class records (P12-COB-02, screen 13 F-7).
+        Route::get('/unit-objectives/{objective}/closable-classes', [UnitObjectiveController::class, 'closableClasses'])
+            ->whereNumber('objective');
         Route::patch('/class-sessions/{classSession}/objectives/{objective}', [ClassSessionObjectiveController::class, 'update'])
             ->whereNumber(['classSession', 'objective']);
 

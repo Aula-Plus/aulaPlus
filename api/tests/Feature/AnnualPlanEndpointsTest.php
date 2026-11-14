@@ -389,33 +389,96 @@ it('does not let anyone else correct a class record', function (string $who) {
     $this->assertDatabaseHas('class_session_unit_objective', ['class_session_id' => $class->id, 'coverage' => 'partial']);
 })->with(['other teacher', 'director', 'psychopedagogue']);
 
-it('returns 404 for a class record of another school or an objective the class does not work', function () {
-    [, $teacher, , $objective, $class] = startedObjectiveSetup();
-    $otherObjective = makeObjective($objective->unit, 'Otro');
-
+it('records «todo» on a picked class that did not work the objective yet, keeping the other closings', function () {
+    [$school, $teacher, $plan, $objective, $class, $group] = startedObjectiveSetup();
+    // Finished in a later class of the same subject that had no link to it.
+    $later = ClassSession::factory()->create([
+        'school_id' => $school->id, 'group_id' => $group->id, 'subject_id' => $plan->subject_id, 'unit_id' => null,
+        'status' => ClassSessionStatus::Delivered, 'date' => '2026-06-02', 'title' => 'Repaso general',
+    ]);
     Sanctum::actingAs($teacher);
-    $this->patchJson("/api/v1/class-sessions/{$class->id}/objectives/{$otherObjective->id}", ['coverage' => 'full'])
-        ->assertNotFound();
+
+    $this->patchJson("/api/v1/class-sessions/{$later->id}/objectives/{$objective->id}", ['coverage' => 'full'])
+        ->assertOk()
+        ->assertJsonPath('data.previous_coverage', null)
+        ->assertJsonPath('data.coverage', 'full');
+
+    $this->assertDatabaseHas('class_session_unit_objective', [
+        'class_session_id' => $later->id, 'unit_objective_id' => $objective->id, 'coverage' => 'full',
+    ]);
+    // The first class's «una parte» is kept as it was.
+    $this->assertDatabaseHas('class_session_unit_objective', [
+        'class_session_id' => $class->id, 'unit_objective_id' => $objective->id, 'coverage' => 'partial',
+    ]);
+    $this->getJson("/api/v1/annual-plans/{$plan->id}")
+        ->assertJsonPath('data.units.0.objectives.0.status', 'given');
+});
+
+it('returns 404 for a class of another school', function () {
+    [, , , $objective, $class] = startedObjectiveSetup();
 
     Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->teacher()->create());
     $this->patchJson("/api/v1/class-sessions/{$class->id}/objectives/{$objective->id}", ['coverage' => 'full'])
         ->assertNotFound();
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes")->assertNotFound();
 });
 
-it('only corrects closed, non-cancelled class records with a valid value', function () {
+it('only records on non-cancelled classes that already happened, with a valid value', function () {
     [, $teacher, , $objective, $class] = startedObjectiveSetup();
     Sanctum::actingAs($teacher);
     $url = "/api/v1/class-sessions/{$class->id}/objectives/{$objective->id}";
 
     $this->patchJson($url, ['coverage' => 'done'])->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
 
-    $class->unitObjectives()->updateExistingPivot($objective->id, ['coverage' => null]);
+    $class->update(['date' => now()->addDays(3)->toDateString()]);
     $this->patchJson($url, ['coverage' => 'full'])->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
 
-    $class->unitObjectives()->updateExistingPivot($objective->id, ['coverage' => 'partial']);
-    $class->update(['status' => ClassSessionStatus::Cancelled]);
+    $class->update(['date' => '2026-05-10', 'status' => ClassSessionStatus::Cancelled]);
     $this->patchJson($url, ['coverage' => 'full'])->assertUnprocessable()->assertJsonValidationErrorFor('coverage');
+
+    $this->assertDatabaseHas('class_session_unit_objective', ['class_session_id' => $class->id, 'coverage' => 'partial']);
 });
+
+it('lists the recent classes of the plan\'s group and subject for «Lo terminé», with what each recorded', function () {
+    [$school, $teacher, $plan, $objective, $class, $group] = startedObjectiveSetup();
+    $make = fn (array $attrs) => ClassSession::factory()->create(array_merge([
+        'school_id' => $school->id, 'group_id' => $group->id, 'subject_id' => $plan->subject_id,
+        'unit_id' => null, 'status' => ClassSessionStatus::Delivered,
+    ], $attrs));
+    $recent = $make(['date' => '2026-06-02', 'title' => 'Sistemas de ecuaciones']);
+    $make(['date' => '2026-06-03', 'title' => 'Cancelada', 'status' => ClassSessionStatus::Cancelled]);
+    $make(['date' => now()->addDays(5)->toDateString(), 'title' => 'Futura', 'status' => ClassSessionStatus::Planned]);
+    $otherSubject = Subject::factory()->create(['school_id' => $school->id]);
+    $make(['date' => '2026-06-04', 'title' => 'Otra materia', 'subject_id' => $otherSubject->id]);
+    $otherGroup = Group::factory()->create(['school_id' => $school->id]);
+    $make(['date' => '2026-06-05', 'title' => 'Otro grupo', 'group_id' => $otherGroup->id]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes")->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonPath('data.0', ['id' => $recent->id, 'date' => '2026-06-02', 'title' => 'Sistemas de ecuaciones', 'coverage' => null])
+        ->assertJsonPath('data.1', ['id' => $class->id, 'date' => '2026-05-10', 'title' => 'Ecuaciones I', 'coverage' => 'partial']);
+
+    // «Buscar otra»: by title (case-insensitive) or by date.
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes?search=ecuaciones i")->assertOk()
+        ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $class->id);
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes?search=2026-06-02")->assertOk()
+        ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $recent->id);
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes?search=otra materia")->assertOk()
+        ->assertJsonCount(0, 'data');
+});
+
+it('only lets the plan owner list the classes for «Lo terminé»', function (string $who) {
+    [$school, , , $objective] = startedObjectiveSetup();
+    $user = match ($who) {
+        'other teacher' => User::factory()->forSchool($school)->teacher()->create(),
+        'director' => User::factory()->forSchool($school)->director()->create(),
+        'psychopedagogue' => User::factory()->forSchool($school)->psychopedagogue()->create(),
+    };
+    Sanctum::actingAs($user);
+
+    $this->getJson("/api/v1/unit-objectives/{$objective->id}/closable-classes")->assertForbidden();
+})->with(['other teacher', 'director', 'psychopedagogue']);
 
 it('never counts a cancelled class closed «todo» as given', function () {
     [, $teacher, $plan, $objective, $class] = startedObjectiveSetup();

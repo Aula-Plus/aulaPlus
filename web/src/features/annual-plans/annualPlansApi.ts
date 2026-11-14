@@ -175,9 +175,38 @@ export async function deleteObjective(objectiveId: number): Promise<void> {
 
 export type ObjectiveCoverage = "full" | "partial" | "none"
 
+/** Spanish label of what a class's closing recorded for an objective. */
+export const coverageLabels: Record<ObjectiveCoverage, string> = {
+  full: "Todo",
+  partial: "Una parte",
+  none: "Nada",
+}
+
+/** A class «Lo terminé» can record the objective on, with what it recorded. */
+export interface ClosableClass {
+  id: number
+  date: string | null
+  title: string | null
+  /** null: that class does not work this objective yet. */
+  coverage: ObjectiveCoverage | null
+}
+
 /**
- * Corrects what a closed class recorded for an objective («Lo terminé»:
- * «una parte» → «todo»). The objective's state still derives from the class.
+ * Classes of the plan's group and subject for «Lo terminé»: the recent ones,
+ * or those whose title contains `search` (or whose date is it, YYYY-MM-DD).
+ */
+export async function fetchClosableClasses(objectiveId: number, search?: string): Promise<ClosableClass[]> {
+  const { data } = await api.get<{ data: ClosableClass[] }>(
+    `/api/v1/unit-objectives/${objectiveId}/closable-classes`,
+    { params: search ? { search } : undefined },
+  )
+  return data.data
+}
+
+/**
+ * «Lo terminé»: records the objective «todo» on the picked class (the link is
+ * created if that class did not work it yet; other classes keep their
+ * record). The objective's state still derives from the classes.
  */
 export async function updateClassObjectiveCoverage(
   classSessionId: number,

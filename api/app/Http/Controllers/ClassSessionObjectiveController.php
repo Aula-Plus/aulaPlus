@@ -8,9 +8,10 @@ use App\Models\UnitObjective;
 use Illuminate\Http\JsonResponse;
 
 /**
- * What a closed class recorded for one of its objectives (screen 12,
- * «Lo terminé»). ClassSession has no other API yet: this only corrects an
- * existing record, it does not close classes.
+ * «Lo terminé» (screen 12): record one objective as «todo» on the class the
+ * teacher picked. The link is created if the class did not work the
+ * objective yet; every other class's record is kept. Closing a class as such
+ * belongs to the class screens (14–17).
  */
 class ClassSessionObjectiveController extends Controller
 {
@@ -19,14 +20,17 @@ class ClassSessionObjectiveController extends Controller
         ClassSession $classSession,
         UnitObjective $objective,
     ): JsonResponse {
-        $classSession->unitObjectives()->updateExistingPivot($objective->getKey(), [
-            'coverage' => $request->validated('coverage'),
+        $previous = $classSession->unitObjectives()->whereKey($objective->getKey())->first()?->pivot?->coverage;
+
+        $classSession->unitObjectives()->syncWithoutDetaching([
+            $objective->getKey() => ['coverage' => $request->validated('coverage')],
         ]);
 
         return response()->json([
             'data' => [
                 'class_session_id' => $classSession->id,
                 'unit_objective_id' => $objective->id,
+                'previous_coverage' => $previous,
                 'coverage' => $request->validated('coverage'),
             ],
         ]);

@@ -6,20 +6,23 @@ use App\Enums\ClassSessionStatus;
 use App\Enums\ObjectiveCoverage;
 use App\Models\ClassSession;
 use App\Models\UnitObjective;
+use App\Services\AnnualPlans\ClosableClasses;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
- * Marking an objective «todo» on a class that already recorded it when it
- * was closed (todo / una parte / nada). Screen 12's «Lo terminé» uses it to
- * turn «una parte» into «todo» on the class where it was recorded: the objective's
- * state keeps deriving only from the class record (P12-COB-02, screen 13
- * F-7), there is no separate checkbox.
+ * «Lo terminé» (screen 12): record an objective as «todo» on a class the
+ * teacher picks — the recent classes of the plan's group and subject, or one
+ * found by searching (ClickUp 1dfd3mc4bg8, PO 14/11). It works even if that
+ * class did not work the objective yet (the link is created), and it never
+ * touches any other class's closing record. The objective's state keeps
+ * deriving only from the class records (P12-COB-02, screen 13 F-7): there is
+ * no separate checkbox.
  *
- * Only the plan's owning teacher who also leads the class's group may do it
+ * Only the plan's owning teacher who also owns the class may do it
  * (UnitPolicy::update + ClassSessionPolicy::update). Both bindings are
- * tenant-scoped, and an objective the class does not work is a 404.
+ * tenant-scoped, and a class outside the plan's group and subject is a 404.
  */
 class UpdateClassObjectiveCoverageRequest extends FormRequest
 {
@@ -28,8 +31,10 @@ class UpdateClassObjectiveCoverageRequest extends FormRequest
         $class = $this->classSession();
         $objective = $this->objective();
 
-        abort_unless($class->unitObjectives()->whereKey($objective->getKey())->exists(), 404);
-        abort_unless($this->classBelongsToPlan($class, $objective), 404);
+        abort_unless(
+            app(ClosableClasses::class)->eligible($objective)->whereKey($class->getKey())->exists(),
+            404,
+        );
 
         return $this->user()->can('update', $class)
             && $this->user()->can('update', $objective->unit);
@@ -48,9 +53,8 @@ class UpdateClassObjectiveCoverageRequest extends FormRequest
     }
 
     /**
-     * Only an already closed record can be corrected here: closing a class
-     * for the first time belongs to the class screen, and a cancelled class
-     * never counts.
+     * A cancelled class never counts, and a class that has not happened yet
+     * cannot have finished anything.
      *
      * @return array<int, callable>
      */
@@ -61,13 +65,14 @@ class UpdateClassObjectiveCoverageRequest extends FormRequest
                 if ($validator->errors()->isNotEmpty()) {
                     return;
                 }
-                if ($this->classSession()->status === ClassSessionStatus::Cancelled) {
+                $class = $this->classSession();
+                if ($class->status === ClassSessionStatus::Cancelled) {
                     $validator->errors()->add('coverage', 'A cancelled class cannot record coverage.');
 
                     return;
                 }
-                if ($this->currentCoverage() === null) {
-                    $validator->errors()->add('coverage', 'This class has not been closed for this objective yet.');
+                if ($class->date !== null && $class->date->isAfter(now()->endOfDay())) {
+                    $validator->errors()->add('coverage', 'A class that has not happened yet cannot record coverage.');
                 }
             },
         ];
@@ -87,39 +92,5 @@ class UpdateClassObjectiveCoverageRequest extends FormRequest
         $objective = $this->route('objective');
 
         return $objective;
-    }
-
-    /**
-     * The class must be eligible for the objective's plan: same group, and,
-     * when it hangs from a unit, a unit of a plan of that same group and
-     * subject (ClickUp 1dfd3mc4bg8, PO 12/11). Both are tenant-scoped
-     * already; this keeps a link built wrongly from correcting another
-     * group's or subject's record.
-     */
-    protected function classBelongsToPlan(ClassSession $class, UnitObjective $objective): bool
-    {
-        $plan = $objective->unit?->annualPlan;
-
-        if ($plan === null || $class->group_id !== $plan->group_id) {
-            return false;
-        }
-
-        if ($class->unit_id === null) {
-            return true;
-        }
-
-        $classPlan = $class->unit?->annualPlan;
-
-        return $classPlan !== null
-            && $classPlan->group_id === $plan->group_id
-            && $classPlan->subject_id === $plan->subject_id;
-    }
-
-    protected function currentCoverage(): ?string
-    {
-        /** @var UnitObjective|null $linked */
-        $linked = $this->classSession()->unitObjectives()->whereKey($this->objective()->getKey())->first();
-
-        return $linked?->pivot?->coverage;
     }
 }
