@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * tenant-scoped — does not use BelongsToSchool / school_id. `planner_family`
  * says which unit-planner fields it brings (null = only the common ones).
  */
-#[Fillable(['name', 'planner_family'])]
+#[Fillable(['name', 'planner_family', 'education_levels'])]
 class CurricularFramework extends Model
 {
     /** @use HasFactory<CurricularFrameworkFactory> */
@@ -23,13 +23,19 @@ class CurricularFramework extends Model
 
     protected function casts(): array
     {
-        return ['planner_family' => PlannerFamily::class];
+        return ['planner_family' => PlannerFamily::class, 'education_levels' => 'array'];
     }
 
-    /** ANEP articulation is mandatory for every private school (screen 23). */
     public function isAnep(): bool
     {
         return $this->planner_family === PlannerFamily::Anep;
+    }
+
+    /** Whether the program applies to an education level (null levels = any). */
+    public function appliesToLevel(?string $levelKey): bool
+    {
+        return $levelKey === null || $this->education_levels === null
+            || in_array($levelKey, $this->education_levels, true);
     }
 
     public function catalogs(): HasMany
@@ -45,7 +51,7 @@ class CurricularFramework extends Model
     public function schools(): BelongsToMany
     {
         return $this->belongsToMany(School::class, 'school_curricular_framework')
-            ->withPivot(['level_from', 'level_to', 'active', 'configuration'])
+            ->withPivot(['level_from', 'level_to', 'active', 'mandatory', 'configuration'])
             ->withTimestamps();
     }
 

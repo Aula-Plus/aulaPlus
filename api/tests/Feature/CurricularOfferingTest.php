@@ -5,6 +5,7 @@ use App\Enums\AIProposalType;
 use App\Enums\PlannerFamily;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
+use App\Models\Assessment;
 use App\Models\AuditLog;
 use App\Models\CurricularFramework;
 use App\Models\CurricularOffering;
@@ -17,6 +18,7 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Support\Tenancy;
 use Database\Seeders\CurricularFrameworkSeeder;
+use Database\Seeders\OfficialScaleSeeder;
 use Laravel\Sanctum\Sanctum;
 
 // ClickUp 1dfd3mc4bgf — screen 23 › «Oferta curricular» and «Planificadores».
@@ -29,9 +31,19 @@ function curricularScenario(): array
     $school = School::factory()->create();
     $director = User::factory()->forSchool($school)->director()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
-    $group = Group::factory()->create(['school_id' => $school->id, 'name' => '5.°A']);
+    $group = Group::factory()->atLevel('primary')->create(['school_id' => $school->id, 'name' => '5.°A']);
     $subject = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Matemática']);
     $group->teachers()->attach($teacher, ['subject_id' => $subject->id]);
+
+    $anep = CurricularFramework::factory()->anep()->create(['name' => 'ANEP EBI', 'education_levels' => ['primary']]);
+    $cambridge = CurricularFramework::factory()->family(PlannerFamily::Cambridge)->create(['name' => 'Cambridge Primary', 'education_levels' => ['primary']]);
+    $myp = CurricularFramework::factory()->family(PlannerFamily::IbMyp)->create(['name' => 'IB MYP', 'education_levels' => ['primary', 'lower_secondary']]);
+    // The school follows the three (Aula+ activates them); ANEP is its mandatory regime.
+    $school->curricularFrameworks()->attach([
+        $anep->id => ['active' => true, 'mandatory' => true],
+        $cambridge->id => ['active' => true, 'mandatory' => false],
+        $myp->id => ['active' => true, 'mandatory' => false],
+    ]);
 
     return [
         'school' => $school,
@@ -39,9 +51,9 @@ function curricularScenario(): array
         'teacher' => $teacher,
         'group' => $group,
         'subject' => $subject,
-        'anep' => CurricularFramework::factory()->anep()->create(['name' => 'ANEP EBI']),
-        'cambridge' => CurricularFramework::factory()->family(PlannerFamily::Cambridge)->create(['name' => 'Cambridge Lower Secondary']),
-        'myp' => CurricularFramework::factory()->family(PlannerFamily::IbMyp)->create(['name' => 'IB MYP']),
+        'anep' => $anep,
+        'cambridge' => $cambridge,
+        'myp' => $myp,
     ];
 }
 
@@ -50,48 +62,89 @@ function offeringUrl(Group $group, Subject $subject, string $suffix = 'curricula
     return "/api/v1/groups/{$group->id}/subjects/{$subject->id}/{$suffix}";
 }
 
-it('lists one row per group-subject taught, with the programs it follows', function () {
+it('lists one row per group-subject taught, always with the mandatory program of its level, locked', function () {
     $s = curricularScenario();
+    // Active for the school but for another level, and not active at all: never offered to 5.°A.
+    $bachillerato = CurricularFramework::factory()->anep()->create(['name' => 'ANEP Bachillerato', 'education_levels' => ['upper_secondary']]);
+    $s['school']->curricularFrameworks()->attach($bachillerato, ['active' => true, 'mandatory' => true]);
+    CurricularFramework::factory()->create(['name' => 'IB DP', 'education_levels' => ['primary']]);
     Sanctum::actingAs($s['director']);
 
     $response = $this->getJson('/api/v1/curricular-offerings')->assertOk();
 
     $response->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.group.name', '5.°A')
+        ->assertJsonPath('data.0.group.level', 'Primaria')
         ->assertJsonPath('data.0.subject.name', 'Matemática')
-        ->assertJsonPath('data.0.frameworks', []);
-    expect(collect($response->json('frameworks'))->pluck('name'))->toContain('ANEP EBI', 'IB MYP');
+        ->assertJsonPath('data.0.frameworks', [
+            ['id' => $s['anep']->id, 'name' => 'ANEP EBI', 'planner_family' => 'anep', 'locked' => true],
+        ]);
+    expect(collect($response->json('data.0.available_frameworks'))->pluck('name')->all())
+        ->toBe(['ANEP EBI', 'Cambridge Primary', 'IB MYP']);
 });
 
-it('lets direction set several programs for one group-subject, always with ANEP', function () {
+it('lets direction add programs to a group-subject and always keeps the mandatory one', function () {
     $s = curricularScenario();
     Sanctum::actingAs($s['director']);
 
+    // Even if the editor does not send it, ANEP stays.
     $this->putJson(offeringUrl($s['group'], $s['subject']), [
-        'curricular_framework_ids' => [$s['anep']->id, $s['cambridge']->id],
+        'curricular_framework_ids' => [$s['cambridge']->id],
     ])->assertOk()
         ->assertJsonPath('data.frameworks.0.name', 'ANEP EBI')
-        ->assertJsonPath('data.frameworks.1.name', 'Cambridge Lower Secondary');
+        ->assertJsonPath('data.frameworks.0.locked', true)
+        ->assertJsonPath('data.frameworks.1.name', 'Cambridge Primary')
+        ->assertJsonPath('data.frameworks.1.locked', false);
 
     // Replacing the combination removes what is no longer there.
     $this->putJson(offeringUrl($s['group'], $s['subject']), [
         'curricular_framework_ids' => [$s['anep']->id],
     ])->assertOk()->assertJsonCount(1, 'data.frameworks');
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => []])
+        ->assertOk()->assertJsonPath('data.frameworks.0.name', 'ANEP EBI');
 
-    expect(CurricularOffering::withoutGlobalScopes()->count())->toBe(1);
+    expect(CurricularOffering::withoutGlobalScopes()->pluck('curricular_framework_id')->all())->toBe([$s['anep']->id]);
     expect(AuditLog::query()->where('auditable_type', (new CurricularOffering)->getMorphClass())->where('action', 'deleted')->count())->toBe(1);
 });
 
-it('refuses an offering without ANEP, with repeats or with no program', function () {
+it('refuses programs the school does not follow, of another level, or repeated', function () {
     $s = curricularScenario();
+    $notActive = CurricularFramework::factory()->create(['name' => 'IGCSE']);
+    $otherLevel = CurricularFramework::factory()->create(['name' => 'IB DP', 'education_levels' => ['upper_secondary']]);
+    $s['school']->curricularFrameworks()->attach($otherLevel, ['active' => true]);
     Sanctum::actingAs($s['director']);
 
-    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['cambridge']->id]])
-        ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids');
-    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => []])
-        ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids');
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$notActive->id]])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids.0');
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$otherLevel->id]])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids.0');
     $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['anep']->id, $s['anep']->id]])
         ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids.0');
+    expect(CurricularOffering::withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('makes a group without a level still include one of the school\'s mandatory programs', function () {
+    $s = curricularScenario();
+    $s['group']->update(['education_level_id' => null]);
+    Sanctum::actingAs($s['director']);
+
+    $this->getJson('/api/v1/curricular-offerings')->assertOk()->assertJsonPath('data.0.frameworks', []);
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['cambridge']->id]])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids');
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['anep']->id, $s['cambridge']->id]])
+        ->assertOk()->assertJsonCount(2, 'data.frameworks');
+});
+
+it('has no locked program for a school without a mandatory regime', function () {
+    $s = curricularScenario();
+    $s['school']->curricularFrameworks()->updateExistingPivot($s['anep']->id, ['mandatory' => false]);
+    Sanctum::actingAs($s['director']);
+
+    $this->getJson('/api/v1/curricular-offerings')->assertOk()->assertJsonPath('data.0.frameworks', []);
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['cambridge']->id]])
+        ->assertOk()->assertJsonPath('data.frameworks.0.name', 'Cambridge Primary')->assertJsonCount(1, 'data.frameworks');
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => []])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_framework_ids');
 });
 
 it('keeps the screen to direction: teachers and psychopedagogy cannot read or edit it', function () {
@@ -166,7 +219,9 @@ it('shows each framework with its catalog fields and locks the ones the program 
 
     $data = collect($this->getJson('/api/v1/planner-settings')->assertOk()->json('data'))->keyBy('family');
 
-    expect($data->keys()->all())->toBe(['common', 'anep', 'ib_myp', 'ib_pyp', 'cambridge']);
+    expect($data->keys()->all())->toBe(['common', 'anep', 'ib_myp', 'ib_pyp', 'cambridge', 'igcse', 'ib_dp']);
+    // IGCSE and IB DP start with only the common fields; the school adds its own.
+    expect($data['igcse']['fields'])->toBe([])->and($data['ib_dp']['fields'])->toBe([]);
     expect(collect($data['common']['fields'])->pluck('official_name')->all())->toContain(
         'Duración en horas', 'Contenidos', 'Pregunta problematizadora', 'Diferenciación', 'Notas del docente',
     );
@@ -201,12 +256,25 @@ it('adds, edits and removes fields of the school, for every framework or for one
     $s = curricularScenario();
     Sanctum::actingAs($s['director']);
 
-    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'Hilo conductor', 'type' => 'short_text'])->assertCreated();
+    $this->postJson('/api/v1/planner-settings/custom-fields', [
+        'name' => 'Hilo conductor', 'type' => 'short_text', 'purpose' => 'ai',
+        'description' => 'La idea que atraviesa todas las clases de la unidad.',
+    ])->assertCreated();
     $this->postJson('/api/v1/planner-settings/custom-fields', [
         'name' => 'Salida didáctica', 'type' => 'list', 'family' => 'ib_myp', 'options' => ['Sí', 'No'], 'required_by_school' => true,
+        'purpose' => 'record',
     ])->assertCreated();
+    // An own field for IB DP, which brings no fields of its own.
+    $this->postJson('/api/v1/planner-settings/custom-fields', [
+        'name' => 'Theory of Knowledge', 'type' => 'long_text', 'family' => 'ib_dp', 'purpose' => 'ai',
+    ])->assertCreated();
+    // It must say whether it is for the AI or only for the record.
+    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'X', 'type' => 'short_text'])
+        ->assertUnprocessable()->assertJsonValidationErrors('purpose');
+    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'X', 'type' => 'short_text', 'purpose' => 'both'])
+        ->assertUnprocessable()->assertJsonValidationErrors('purpose');
     // List types need options; text types take none; Aula+'s automatic fields are not for schools.
-    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'X', 'type' => 'list'])
+    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'X', 'type' => 'list', 'purpose' => 'ai'])
         ->assertUnprocessable()->assertJsonValidationErrors('options');
     $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'X', 'type' => 'automatic'])
         ->assertUnprocessable()->assertJsonValidationErrors('type');
@@ -215,10 +283,14 @@ it('adds, edits and removes fields of the school, for every framework or for one
 
     $data = collect($this->getJson('/api/v1/planner-settings')->json('data'))->keyBy('family');
     expect($data['common']['custom_fields'][0]['school_name'])->toBe('Hilo conductor');
+    expect($data['common']['custom_fields'][0]['description'])->toBe('La idea que atraviesa todas las clases de la unidad.');
+    expect($data['common']['custom_fields'][0]['purpose'])->toBe('ai');
     expect($data['ib_myp']['custom_fields'][0]['required_by_school'])->toBeTrue();
+    expect($data['ib_myp']['custom_fields'][0]['purpose'])->toBe('record');
+    expect($data['ib_dp']['custom_fields'][0]['school_name'])->toBe('Theory of Knowledge');
 
     $id = $data['common']['custom_fields'][0]['id'];
-    $this->putJson("/api/v1/planner-settings/custom-fields/{$id}", ['name' => 'Eje del año', 'type' => 'long_text'])->assertOk()
+    $this->putJson("/api/v1/planner-settings/custom-fields/{$id}", ['name' => 'Eje del año', 'type' => 'long_text', 'purpose' => 'record'])->assertOk()
         ->assertJsonPath('data.0.custom_fields.0.school_name', 'Eje del año');
     $this->deleteJson("/api/v1/planner-settings/custom-fields/{$id}")->assertOk()
         ->assertJsonPath('data.0.custom_fields', []);
@@ -227,10 +299,10 @@ it('adds, edits and removes fields of the school, for every framework or for one
 it('resolves the unit planner of a group-subject: common fields plus those of its frameworks', function () {
     $s = curricularScenario();
     Sanctum::actingAs($s['director']);
-    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['anep']->id, $s['myp']->id]])->assertOk();
+    $this->putJson(offeringUrl($s['group'], $s['subject']), ['curricular_framework_ids' => [$s['myp']->id]])->assertOk();
     $notes = PlannerFieldDefinition::query()->where('key', 'teacher_notes')->firstOrFail();
     $this->putJson("/api/v1/planner-settings/fields/{$notes->id}", ['school_name' => null, 'shown' => false])->assertOk();
-    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'Hilo conductor', 'type' => 'short_text'])->assertCreated();
+    $this->postJson('/api/v1/planner-settings/custom-fields', ['name' => 'Hilo conductor', 'type' => 'short_text', 'purpose' => 'ai'])->assertCreated();
 
     // The teacher of Matemática in 5.°A sees it, like screen 13 will.
     Sanctum::actingAs($s['teacher']);
@@ -287,5 +359,33 @@ it('backfills the planner family of the known frameworks', function () {
     $this->seed(CurricularFrameworkSeeder::class);
 
     expect(CurricularFramework::query()->where('name', 'ANEP Bachillerato')->value('planner_family'))->toBe(PlannerFamily::Anep);
-    expect(CurricularFramework::query()->where('name', 'IB DP')->value('planner_family'))->toBeNull();
+    expect(CurricularFramework::query()->where('name', 'IB DP')->value('planner_family'))->toBe(PlannerFamily::IbDp);
+    expect(CurricularFramework::query()->where('name', 'IGCSE')->value('planner_family'))->toBe(PlannerFamily::Igcse);
+    expect(CurricularFramework::query()->where('name', 'ANEP EBI')->first()->education_levels)
+        ->toBe(['initial', 'primary', 'lower_secondary']);
+});
+
+it('records results with the scale of the row\'s programs, not the group\'s frameworks', function () {
+    $this->seed(OfficialScaleSeeder::class);
+    $school = School::factory()->create();
+    $ebi = CurricularFramework::query()->where('name', 'ANEP EBI')->firstOrFail();
+    $cambridge = CurricularFramework::query()->where('name', 'Cambridge Primary')->firstOrFail();
+    $school->curricularFrameworks()->attach([
+        $ebi->id => ['active' => true, 'mandatory' => true],
+        $cambridge->id => ['active' => true, 'mandatory' => false],
+    ]);
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->atLevel('primary')->create(['school_id' => $school->id]);
+    // The group as a whole is linked to Cambridge only (no official scale).
+    $group->curricularFrameworks()->attach($cambridge);
+    $subject = leadGroup($group, $teacher);
+    $assessment = Assessment::factory()->create([
+        'group_id' => $group->id, 'teacher_id' => $teacher->id, 'subject_id' => $subject->id,
+    ]);
+    Sanctum::actingAs($teacher);
+
+    // The row 5.°A · subject carries ANEP EBI (mandatory), so its Primaria scale applies.
+    $this->getJson("/api/v1/assessments/{$assessment->id}/result-scale")->assertOk()
+        ->assertJsonPath('data.mode', 'scale')
+        ->assertJsonPath('data.scale.framework.name', 'ANEP EBI');
 });

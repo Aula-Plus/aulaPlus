@@ -8,12 +8,12 @@ use App\Models\AIProposal;
 use App\Models\AnnualPlan;
 use App\Models\CurricularFramework;
 use App\Models\CurricularItem;
-use App\Models\CurricularOffering;
 use App\Models\Group;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\CurricularStructure\CurricularOfferings;
 use Closure;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
@@ -122,8 +122,8 @@ class BuildProposalContext
 
     /**
      * The programs the request is about. When it is tied to a subject and the
-     * school set that group-subject's «Oferta curricular» (screen 23, ClickUp
-     * 1dfd3mc4bgf), those programs — the right one for Matemática in 5.°A even
+     * group-subject has an effective «Oferta curricular» (screen 23, ClickUp
+     * 1dfd3mc4bgf: stored + mandatory programs of its level), those programs — the right one for Matemática in 5.°A even
      * if the group follows others in other subjects. Otherwise the group's.
      *
      * @return Collection<int, CurricularFramework>
@@ -132,9 +132,7 @@ class BuildProposalContext
     {
         if ($subject !== null) {
             $offered = CurricularFramework::query()
-                ->whereIn('id', CurricularOffering::query()
-                    ->forGroupSubject($group->id, $subject->id)
-                    ->select('curricular_framework_id'))
+                ->whereKey(app(CurricularOfferings::class)->effectiveIdsFor($group, $subject)->all())
                 ->with('catalogs.items')
                 ->orderBy('id')
                 ->get();

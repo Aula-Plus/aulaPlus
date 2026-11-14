@@ -3,7 +3,6 @@
 namespace App\Services\CurricularStructure;
 
 use App\Enums\PlannerFamily;
-use App\Models\CurricularOffering;
 use App\Models\Group;
 use App\Models\PlannerFieldDefinition;
 use App\Models\SchoolPlannerField;
@@ -51,21 +50,15 @@ class PlannerFields
 
     /**
      * The planner a unit of this group-subject shows: the common fields, then
-     * the fields of each framework the group-subject follows (offering), with
+     * the fields of each framework the group-subject follows (effective
+     * offering: stored + mandatory, CurricularOfferings), with
      * the school's own fields after their family. Hidden fields are left out.
      *
      * @return array{frameworks: list<array<string, mixed>>, fields: list<array<string, mixed>>}
      */
     public function forGroupSubject(Group $group, Subject $subject): array
     {
-        $frameworks = CurricularOffering::query()
-            ->forGroupSubject($group->id, $subject->id)
-            ->with('curricularFramework')
-            ->orderBy('id')
-            ->get()
-            ->map->curricularFramework
-            ->filter()
-            ->values();
+        $frameworks = app(CurricularOfferings::class)->effectiveFor($group, $subject);
 
         $families = $frameworks
             ->map(fn ($framework) => $framework->planner_family)
@@ -128,6 +121,8 @@ class PlannerFields
             'key' => $definition->key,
             'official_name' => $definition->official_name,
             'school_name' => $override?->name,
+            'description' => null,
+            'purpose' => null,
             'type' => $definition->type->value,
             'options' => $definition->options,
             'required_by_program' => $definition->required_by_program,
@@ -149,6 +144,8 @@ class PlannerFields
             'key' => 'school_'.$field->id,
             'official_name' => null,
             'school_name' => $field->name,
+            'description' => $field->description,
+            'purpose' => $field->purpose,
             'type' => $field->type?->value,
             'options' => $field->options,
             'required_by_program' => false,

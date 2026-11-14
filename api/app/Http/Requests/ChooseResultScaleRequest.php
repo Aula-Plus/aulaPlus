@@ -30,7 +30,7 @@ class ChooseResultScaleRequest extends FormRequest
     {
         $group = $this->assessment()->group;
         $valid = $group
-            ? app(ResultScales::class)->primaryScalesForGroup($group)->pluck('id')->all()
+            ? app(ResultScales::class)->primaryScalesForGroup($group, $this->assessment()->subject)->pluck('id')->all()
             : [];
 
         return [

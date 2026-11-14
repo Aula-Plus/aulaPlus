@@ -16,4 +16,7 @@ enum PlannerFamily: string
     case IbMyp = 'ib_myp';
     case IbPyp = 'ib_pyp';
     case Cambridge = 'cambridge';
+    // Start with only the common fields; the school adds its own (PO 13/11).
+    case Igcse = 'igcse';
+    case IbDp = 'ib_dp';
 }

@@ -6,7 +6,6 @@ import {
   fetchCurricularOfferings,
   updateCurricularOffering,
   type CurricularOfferingRow,
-  type FrameworkOption,
 } from "./schoolStructureApi"
 
 function rowKey(row: CurricularOfferingRow): string {
@@ -15,11 +14,13 @@ function rowKey(row: CurricularOfferingRow): string {
 
 /**
  * Screen 23 › «Oferta curricular»: one row per group-subject with the programs
- * it follows. A row may have several (ANEP + Cambridge); ANEP is always there.
+ * it follows. A row may have several (ANEP + Cambridge). The editor offers only
+ * the programs the school follows for the group's level; the ones of the
+ * school's regime come already checked and cannot be removed (`locked`). Why
+ * they are there is never explained on screen (PO 13/11).
  */
 export function CurricularOfferingTab() {
   const [rows, setRows] = useState<CurricularOfferingRow[] | null>(null)
-  const [frameworks, setFrameworks] = useState<FrameworkOption[]>([])
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [selected, setSelected] = useState<number[]>([])
@@ -28,10 +29,7 @@ export function CurricularOfferingTab() {
 
   useEffect(() => {
     fetchCurricularOfferings()
-      .then(({ rows: loaded, frameworks: options }) => {
-        setRows(loaded)
-        setFrameworks(options)
-      })
+      .then(setRows)
       .catch(() => setError("No pudimos cargar la oferta curricular."))
   }, [])
 
@@ -45,15 +43,7 @@ export function CurricularOfferingTab() {
     setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]))
   }
 
-  const includesAnep = frameworks.some(
-    (framework) => framework.planner_family === "anep" && selected.includes(framework.id),
-  )
-
   async function save(row: CurricularOfferingRow) {
-    if (!includesAnep) {
-      setRowError("Tiene que quedar un programa de ANEP: la articulación con ANEP no se puede sacar.")
-      return
-    }
     setSaving(true)
     setRowError(null)
     try {
@@ -61,7 +51,7 @@ export function CurricularOfferingTab() {
       setRows((current) => current?.map((item) => (rowKey(item) === rowKey(row) ? updated : item)) ?? null)
       setEditing(null)
     } catch {
-      setRowError("No pudimos guardar los programas. Revisá que haya un programa de ANEP.")
+      setRowError("No pudimos guardar los programas.")
     } finally {
       setSaving(false)
     }
@@ -95,7 +85,10 @@ export function CurricularOfferingTab() {
                 <TableRow key={rowKey(row)}>
                   <TableCell>
                     {row.group.name}
-                    <span className="block text-xs text-muted-foreground">{row.group.school_year}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {row.group.level ? `${row.group.level} · ` : ""}
+                      {row.group.school_year}
+                    </span>
                   </TableCell>
                   <TableCell>{row.subject.name}</TableCell>
                   <TableCell>
@@ -104,11 +97,12 @@ export function CurricularOfferingTab() {
                         <legend className="sr-only">
                           Programas de {row.subject.name} en {row.group.name}
                         </legend>
-                        {frameworks.map((framework) => (
+                        {row.available_frameworks.map((framework) => (
                           <label key={framework.id} className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"
-                              checked={selected.includes(framework.id)}
+                              checked={framework.locked || selected.includes(framework.id)}
+                              disabled={framework.locked}
                               onChange={() => toggle(framework.id)}
                             />
                             {framework.name}
@@ -119,7 +113,12 @@ export function CurricularOfferingTab() {
                     ) : row.frameworks.length > 0 ? (
                       row.frameworks.map((framework) => framework.name).join(" + ")
                     ) : (
-                      <span className="text-muted-foreground">Sin programa asignado</span>
+                      <span className="text-muted-foreground">
+                        Sin programa asignado
+                        {row.group.level === null && (
+                          <span className="block text-xs">Asigná el nivel del grupo en Grupos para ver sus programas.</span>
+                        )}
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -145,8 +144,8 @@ export function CurricularOfferingTab() {
         </Table>
       )}
       <p className="px-6 py-4 text-sm text-muted-foreground">
-        Un grupo-materia puede tener varios programas a la vez, sin duplicar grupos. La articulación con ANEP
-        está siempre: no se puede sacar.
+        Un grupo-materia puede tener varios programas a la vez, sin duplicar grupos. Se ofrecen los programas
+        que sigue el colegio para el nivel de cada grupo.
       </p>
     </SectionCard>
   )

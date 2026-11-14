@@ -347,6 +347,7 @@ Se agregan acá a medida que aparecen.
 
 | Producto (UI, español) | Código (inglés) | Notas |
 |---|---|---|
-| Oferta curricular | `CurricularOffering` (`curricular_offerings`) | Un programa que sigue un grupo-materia; varios por grupo-materia, siempre con uno de ANEP (pantalla 23). |
-| Marco / programa (ANEP, IB MYP, Cambridge…) | `CurricularFramework` | Catálogo global. `planner_family` dice qué campos del planificador trae. |
+| Oferta curricular | `CurricularOffering` (`curricular_offerings`) | Un programa que sigue un grupo-materia; varios por grupo-materia (pantalla 23). La oferta efectiva (`CurricularOfferings::effectiveFor`) = lo guardado + los programas obligatorios del nivel del grupo; decide lo que recibe la IA y la escala de resultados. |
+| Régimen obligatorio | `school_curricular_framework.mandatory` | Programa que Aula+ carga para el colegio y no se puede sacar de la oferta. Hoy ANEP para todos (Uruguay, P23-DEC-01); es dato por colegio, no regla fija, y nunca se explica en pantalla. |
+| Marco / programa (ANEP, IB MYP, Cambridge…) | `CurricularFramework` | Catálogo global. `planner_family` dice qué campos del planificador trae; `education_levels`, a qué niveles aplica. Lo activa Aula+ por colegio, a pedido (P23-DEC-01). |
 | Planificador de unidad | planner (`PlannerFieldDefinition`, `SchoolPlannerField`) | Campos del catálogo (base común + los que pide cada programa) y los propios del colegio (pantallas 23 y 13). |

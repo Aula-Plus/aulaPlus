@@ -14,12 +14,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A school's planner configuration (screen 23 › Planificadores). With
  * `planner_field_definition_id`: the school's name for a catalog field and
  * whether it is shown. Without it: a field of the school's own, with its
- * `name`, `type`, `options`, and `family` (null = every framework).
+ * `name`, `type`, `options`, `family` (null = every framework), a short
+ * `description` of what it means for the school, and its `purpose`: `ai`
+ * (the AI reads it) or `record` (only kept). How the AI uses them is decided
+ * in the AI task (ClickUp 86e3jujh0); here the school only records them.
  */
 #[Fillable([
     'planner_field_definition_id',
     'family',
     'name',
+    'description',
+    'purpose',
     'type',
     'options',
     'shown',
@@ -28,6 +33,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class SchoolPlannerField extends Model
 {
+    public const PURPOSES = ['ai', 'record'];
+
     use Auditable, BelongsToSchool;
 
     protected function casts(): array

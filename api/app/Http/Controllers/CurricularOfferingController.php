@@ -7,6 +7,7 @@ use App\Models\CurricularFramework;
 use App\Models\CurricularOffering;
 use App\Models\Group;
 use App\Models\Subject;
+use App\Services\CurricularStructure\CurricularOfferings;
 use App\Services\CurricularStructure\PlannerFields;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
@@ -20,11 +21,15 @@ use Illuminate\Support\Facades\DB;
  */
 class CurricularOfferingController extends Controller
 {
-    public function index(): JsonResponse
+    protected CurricularOfferings $offerings;
+
+    public function index(CurricularOfferings $offerings): JsonResponse
     {
         $this->authorize('manage', CurricularOffering::class);
 
-        $offerings = CurricularOffering::query()->with('curricularFramework')->orderBy('id')->get()
+        $this->offerings = $offerings;
+
+        $stored = CurricularOffering::query()->with('curricularFramework')->orderBy('id')->get()
             ->groupBy(fn (CurricularOffering $offering) => $offering->group_id.'-'.$offering->subject_id);
 
         // Group (tenant-scoped) constrains the pivot rows to this school.
@@ -35,7 +40,7 @@ class CurricularOfferingController extends Controller
             ->get()
             ->map(fn ($row) => $row->group_id.'-'.$row->subject_id);
 
-        $pairs = $taught->concat($offerings->keys())->unique()
+        $pairs = $taught->concat($stored->keys())->unique()
             ->map(fn (string $pair) => array_map('intval', explode('-', $pair)));
 
         $groups = Group::query()->whereKey($pairs->pluck(0)->all())->get()->keyBy('id');
@@ -46,21 +51,25 @@ class CurricularOfferingController extends Controller
             ->map(fn (array $pair) => $this->row(
                 $groups[$pair[0]],
                 $subjects[$pair[1]],
-                $offerings->get($pair[0].'-'.$pair[1], collect()),
             ))
             ->sortBy(fn (array $row) => [$row['group']['school_year'] * -1, $row['group']['name'], $row['subject']['name']])
             ->values()
             ->all();
 
-        return response()->json([
-            'data' => $rows,
-            'frameworks' => $this->frameworks(),
-        ]);
+        return response()->json(['data' => $rows]);
     }
 
-    public function update(UpdateCurricularOfferingRequest $request, Group $group, Subject $subject): JsonResponse
-    {
-        $ids = collect($request->validated('curricular_framework_ids'))->map(fn ($id) => (int) $id)->unique();
+    public function update(
+        UpdateCurricularOfferingRequest $request,
+        Group $group,
+        Subject $subject,
+        CurricularOfferings $offerings,
+    ): JsonResponse {
+        $this->offerings = $offerings;
+        // The mandatory programs of the group's level are always kept.
+        $ids = collect($request->validated('curricular_framework_ids'))->map(fn ($id) => (int) $id)
+            ->concat($offerings->mandatoryFor($group)->pluck('id'))
+            ->unique();
 
         DB::transaction(function () use ($group, $subject, $ids): void {
             $current = CurricularOffering::query()->forGroupSubject($group->id, $subject->id)->get();
@@ -77,10 +86,7 @@ class CurricularOfferingController extends Controller
                 ]));
         });
 
-        $offerings = CurricularOffering::query()->forGroupSubject($group->id, $subject->id)
-            ->with('curricularFramework')->orderBy('id')->get();
-
-        return response()->json(['data' => $this->row($group, $subject, $offerings)]);
+        return response()->json(['data' => $this->row($group, $subject)]);
     }
 
     /**
@@ -95,32 +101,44 @@ class CurricularOfferingController extends Controller
     }
 
     /**
-     * @param  Collection<int, CurricularOffering>  $offerings
+     * A row: its effective programs (stored + mandatory, the mandatory ones
+     * flagged `locked`) and the programs its editor may offer.
+     *
      * @return array<string, mixed>
      */
-    protected function row(Group $group, Subject $subject, Collection $offerings): array
+    protected function row(Group $group, Subject $subject): array
     {
+        $group->loadMissing('educationLevel');
+        $mandatory = $this->offerings->mandatoryFor($group)->pluck('id');
+
         return [
-            'group' => ['id' => $group->id, 'name' => $group->name, 'school_year' => (int) $group->school_year],
+            'group' => [
+                'id' => $group->id,
+                'name' => $group->name,
+                'school_year' => (int) $group->school_year,
+                'level' => $group->educationLevel?->label,
+            ],
             'subject' => ['id' => $subject->id, 'name' => $subject->name],
-            'frameworks' => $offerings->map(fn (CurricularOffering $offering) => [
-                'id' => $offering->curricular_framework_id,
-                'name' => $offering->curricularFramework?->name,
-                'planner_family' => $offering->curricularFramework?->planner_family?->value,
-            ])->values()->all(),
+            'frameworks' => $this->offerings->effectiveFor($group, $subject)
+                ->map(fn (CurricularFramework $framework) => $this->framework($framework, $mandatory))
+                ->values()->all(),
+            'available_frameworks' => $this->offerings->eligibleFor($group)
+                ->map(fn (CurricularFramework $framework) => $this->framework($framework, $mandatory))
+                ->values()->all(),
         ];
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @param  Collection<int, int>  $mandatory
+     * @return array<string, mixed>
      */
-    protected function frameworks(): array
+    protected function framework(CurricularFramework $framework, Collection $mandatory): array
     {
-        return CurricularFramework::query()->orderBy('name')->get()
-            ->map(fn (CurricularFramework $framework) => [
-                'id' => $framework->id,
-                'name' => $framework->name,
-                'planner_family' => $framework->planner_family?->value,
-            ])->all();
+        return [
+            'id' => $framework->id,
+            'name' => $framework->name,
+            'planner_family' => $framework->planner_family?->value,
+            'locked' => $mandatory->contains($framework->id),
+        ];
     }
 }

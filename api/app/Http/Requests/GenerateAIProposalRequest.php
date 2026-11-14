@@ -6,10 +6,10 @@ use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
 use App\Enums\Role;
 use App\Models\AIProposal;
-use App\Models\CurricularOffering;
 use App\Models\Group;
 use App\Models\Subject;
 use App\Models\Unit;
+use App\Services\CurricularStructure\CurricularOfferings;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -173,10 +173,9 @@ class GenerateAIProposalRequest extends FormRequest
         return function (string $attribute, mixed $value, callable $fail): void {
             // The group's frameworks, or one of the programs the school set
             // for this group-subject in «Oferta curricular» (screen 23).
-            $offered = CurricularOffering::query()
-                ->forGroupSubject($this->group()->id, (int) $this->input('parameters.subject_id'))
-                ->where('curricular_framework_id', $value)
-                ->exists();
+            $subject = Subject::query()->find((int) $this->input('parameters.subject_id'));
+            $offered = $subject !== null
+                && app(CurricularOfferings::class)->effectiveIdsFor($this->group(), $subject)->contains((int) $value);
 
             if (! $offered && ! $this->group()->curricularFrameworks()->whereKey($value)->exists()) {
                 $fail('The selected curricular framework is not available for this group.');

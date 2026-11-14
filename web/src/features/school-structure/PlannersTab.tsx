@@ -3,6 +3,7 @@ import { Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
@@ -14,6 +15,7 @@ import {
   type CustomFieldInput,
   type PlannerFamily,
   type PlannerFamilySettings,
+  type PlannerFieldPurpose,
   type PlannerField,
   type PlannerFieldType,
 } from "./schoolStructureApi"
@@ -24,9 +26,16 @@ const plannerFamilyLabels: Record<PlannerFamily, string> = {
   ib_pyp: "IB PYP",
   cambridge: "Cambridge",
   anep: "ANEP (MCN/EBI y EMS)",
+  igcse: "IGCSE",
+  ib_dp: "IB DP",
 }
 
-const FAMILY_ORDER: PlannerFamily[] = ["common", "ib_myp", "ib_pyp", "cambridge", "anep"]
+const FAMILY_ORDER: PlannerFamily[] = ["common", "ib_myp", "ib_pyp", "cambridge", "igcse", "ib_dp", "anep"]
+
+const purposeLabels: Record<PlannerFieldPurpose, string> = {
+  ai: "Para la IA",
+  record: "Solo para registro",
+}
 
 const plannerFieldTypeLabels: Record<PlannerFieldType, string> = {
   short_text: "Texto corto",
@@ -211,9 +220,11 @@ function CustomFieldRow({
       <TableCell className="text-muted-foreground">Campo del colegio</TableCell>
       <TableCell>
         {field.school_name}
+        {field.description && <span className="block text-xs text-muted-foreground">{field.description}</span>}
         {field.options && (
           <span className="block text-xs text-muted-foreground">{field.options.join(" · ")}</span>
         )}
+        {field.purpose && <span className="block text-xs text-muted-foreground">{purposeLabels[field.purpose]}</span>}
       </TableCell>
       <TableCell>{plannerFieldTypeLabels[field.type]}</TableCell>
       <TableCell>{field.required_by_school ? "Obligatorio para el colegio" : "Opcional"}</TableCell>
@@ -240,6 +251,8 @@ function AddCustomField({
   onSaved: (settings: PlannerFamilySettings[]) => void
 }) {
   const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [purpose, setPurpose] = useState<PlannerFieldPurpose>("ai")
   const [type, setType] = useState<CustomFieldInput["type"]>("short_text")
   const [options, setOptions] = useState("")
   const [required, setRequired] = useState(false)
@@ -268,6 +281,8 @@ function AddCustomField({
       onSaved(
         await createCustomField({
           name: name.trim(),
+          description: description.trim() || null,
+          purpose,
           type,
           family: family === "common" ? null : family,
           options: needsOptions ? parsed : undefined,
@@ -275,6 +290,8 @@ function AddCustomField({
         }),
       )
       setName("")
+      setDescription("")
+      setPurpose("ai")
       setOptions("")
       setRequired(false)
     } catch {
@@ -301,6 +318,31 @@ function AddCustomField({
             onChange={(event) => setName(event.target.value)}
           />
         </div>
+        <div className="grid gap-2">
+          <Label htmlFor="custom-field-description">Qué significa para el colegio</Label>
+          <Textarea
+            id="custom-field-description"
+            value={description}
+            maxLength={300}
+            rows={2}
+            placeholder="Una explicación corta, para que todos lo completen igual."
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </div>
+        <fieldset className="grid gap-1 text-sm">
+          <legend className="mb-1 font-medium">Uso del campo</legend>
+          {(Object.keys(purposeLabels) as PlannerFieldPurpose[]).map((item) => (
+            <label key={item} className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="custom-field-purpose"
+                checked={purpose === item}
+                onChange={() => setPurpose(item)}
+              />
+              {purposeLabels[item]}
+            </label>
+          ))}
+        </fieldset>
         <div className="grid gap-2">
           <Label htmlFor="custom-field-type">Tipo</Label>
           <select

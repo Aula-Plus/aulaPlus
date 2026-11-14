@@ -19,15 +19,14 @@ function renderPage(role: Role) {
   )
 }
 
-const frameworks = [
-  { id: 1, name: "ANEP EBI", planner_family: "anep" as const },
-  { id: 2, name: "Cambridge Lower Secondary", planner_family: "cambridge" as const },
-]
+const anep = { id: 1, name: "ANEP EBI", planner_family: "anep" as const, locked: true }
+const cambridge = { id: 2, name: "Cambridge Primary", planner_family: "cambridge" as const, locked: false }
 
 const row = {
-  group: { id: 10, name: "5.°A", school_year: 2026 },
+  group: { id: 10, name: "5.°A", school_year: 2026, level: "Primaria" },
   subject: { id: 20, name: "Matemática" },
-  frameworks: [] as typeof frameworks,
+  frameworks: [anep],
+  available_frameworks: [anep, cambridge],
 }
 
 function plannerSettings(): PlannerFamilySettings[] {
@@ -38,6 +37,8 @@ function plannerSettings(): PlannerFamilySettings[] {
     key,
     official_name: name,
     school_name: null,
+    description: null,
+    purpose: null,
     type: "short_text" as const,
     options: null,
     required_by_program: locked,
@@ -50,6 +51,8 @@ function plannerSettings(): PlannerFamilySettings[] {
     { family: "ib_myp", fields: [field(2, "key_concept", "Concepto clave", true)], custom_fields: [] },
     { family: "ib_pyp", fields: [], custom_fields: [] },
     { family: "cambridge", fields: [], custom_fields: [] },
+    { family: "igcse", fields: [], custom_fields: [] },
+    { family: "ib_dp", fields: [], custom_fields: [] },
   ]
 }
 
@@ -67,37 +70,36 @@ describe("SchoolStructurePage", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it("lets direction give a group-subject ANEP plus another program", async () => {
-    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue({ rows: [row], frameworks })
+  it("shows the row with its locked program and lets direction add another one of the group's level", async () => {
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([row])
     const update = vi
       .spyOn(structureApi, "updateCurricularOffering")
-      .mockResolvedValue({ ...row, frameworks })
+      .mockResolvedValue({ ...row, frameworks: [anep, cambridge] })
 
     renderPage("director")
-    await userEvent.click(await screen.findByRole("button", { name: "Editar programas" }))
-    await userEvent.click(screen.getByLabelText("ANEP EBI"))
-    await userEvent.click(screen.getByLabelText("Cambridge Lower Secondary"))
+    expect(await screen.findByText("ANEP EBI")).toBeInTheDocument()
+    expect(screen.queryByText("Sin programa asignado")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Editar programas" }))
+    // Only the programs offered for the group's level, the locked one checked and fixed.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2)
+    expect(screen.getByLabelText("ANEP EBI")).toBeChecked()
+    expect(screen.getByLabelText("ANEP EBI")).toBeDisabled()
+    await userEvent.click(screen.getByLabelText("Cambridge Primary"))
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }))
 
     expect(update).toHaveBeenCalledWith(10, 20, [1, 2])
-    expect(await screen.findByText("ANEP EBI + Cambridge Lower Secondary")).toBeInTheDocument()
+    expect(await screen.findByText("ANEP EBI + Cambridge Primary")).toBeInTheDocument()
   })
 
-  it("does not save an offering without ANEP", async () => {
-    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue({ rows: [row], frameworks })
-    const update = vi.spyOn(structureApi, "updateCurricularOffering")
-
+  it("never explains on screen why a program is fixed", async () => {
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([row])
     renderPage("director")
-    await userEvent.click(await screen.findByRole("button", { name: "Editar programas" }))
-    await userEvent.click(screen.getByLabelText("Cambridge Lower Secondary"))
-    await userEvent.click(screen.getByRole("button", { name: "Guardar" }))
-
-    expect(screen.getByRole("alert")).toHaveTextContent(/programa de ANEP/)
-    expect(update).not.toHaveBeenCalled()
+    await screen.findByText("ANEP EBI")
+    expect(screen.queryByText(/ANEP está siempre|no se puede sacar|Uruguay/)).not.toBeInTheDocument()
   })
 
   it("renames a common field and never lets a program field be hidden", async () => {
-    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue({ rows: [], frameworks })
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([])
     vi.spyOn(structureApi, "fetchPlannerSettings").mockResolvedValue(plannerSettings())
     const update = vi.spyOn(structureApi, "updatePlannerField").mockResolvedValue(plannerSettings())
 
@@ -114,7 +116,7 @@ describe("SchoolStructurePage", () => {
   })
 
   it("adds a list field of the school for one framework", async () => {
-    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue({ rows: [], frameworks })
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([])
     vi.spyOn(structureApi, "fetchPlannerSettings").mockResolvedValue(plannerSettings())
     const create = vi.spyOn(structureApi, "createCustomField").mockResolvedValue(plannerSettings())
 
@@ -122,16 +124,38 @@ describe("SchoolStructurePage", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Planificadores" }))
     await userEvent.click(await screen.findByRole("button", { name: "IB MYP" }))
     await userEvent.type(screen.getByLabelText("Nombre del campo"), "Salida didáctica")
+    await userEvent.type(screen.getByLabelText("Qué significa para el colegio"), "Si la unidad incluye una salida.")
+    await userEvent.click(screen.getByLabelText("Solo para registro"))
     await userEvent.selectOptions(screen.getByLabelText("Tipo"), "list")
     await userEvent.type(screen.getByLabelText("Opciones, separadas por coma"), "Sí, No")
     await userEvent.click(screen.getByRole("button", { name: "Agregar" }))
 
     expect(create).toHaveBeenCalledWith({
       name: "Salida didáctica",
+      description: "Si la unidad incluye una salida.",
+      purpose: "record",
       type: "list",
       family: "ib_myp",
       options: ["Sí", "No"],
       required_by_school: false,
     })
+  })
+
+  it("lets the school add its own fields to IGCSE and IB DP, which start with only the common base", async () => {
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([])
+    vi.spyOn(structureApi, "fetchPlannerSettings").mockResolvedValue(plannerSettings())
+    const create = vi.spyOn(structureApi, "createCustomField").mockResolvedValue(plannerSettings())
+
+    renderPage("director")
+    await userEvent.click(screen.getByRole("tab", { name: "Planificadores" }))
+    await userEvent.click(await screen.findByRole("button", { name: "IB DP" }))
+    expect(screen.getByText("Va solo en las materias que siguen IB DP.")).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText("Nombre del campo"), "Theory of Knowledge")
+    await userEvent.click(screen.getByRole("button", { name: "Agregar" }))
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Theory of Knowledge", family: "ib_dp", purpose: "ai", description: null }),
+    )
+    expect(screen.getByRole("button", { name: "IGCSE" })).toBeInTheDocument()
   })
 })

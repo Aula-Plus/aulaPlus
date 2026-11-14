@@ -8,6 +8,8 @@ use App\Models\Group;
 use App\Models\OfficialScale;
 use App\Models\School;
 use App\Models\SchoolScaleEquivalence;
+use App\Models\Subject;
+use App\Services\CurricularStructure\CurricularOfferings;
 use Illuminate\Support\Collection;
 
 /**
@@ -35,13 +37,19 @@ class ResultScales
     public const PRIMARY_LEVEL_KEY = 'primary';
 
     /**
-     * Every official Primaria scale a group may record with: the scales of
-     * its own frameworks or, when it has none, of its school's active ones.
+     * Every official Primaria scale a group-subject may record with. With a
+     * subject, the scales of that row's «Oferta curricular» (stored +
+     * mandatory programs, CurricularOfferings) — the same programs the AI
+     * receives (PO answer of 13/11, ClickUp 1dfd3mc4bgf); the group's own
+     * frameworks no longer decide it. Only without a subject (older
+     * assessments) or with an empty offering (a school with no mandatory
+     * regime and nothing set), the group's frameworks or, when it has none,
+     * the school's active ones, as before.
      * Empty for any group that is not Primaria.
      *
      * @return Collection<int, OfficialScale>
      */
-    public function primaryScalesForGroup(Group $group): Collection
+    public function primaryScalesForGroup(Group $group, ?Subject $subject = null): Collection
     {
         $group->loadMissing('educationLevel');
 
@@ -49,7 +57,13 @@ class ResultScales
             return collect();
         }
 
-        $frameworkIds = $group->curricularFrameworks()->pluck('curricular_frameworks.id');
+        $frameworkIds = $subject !== null
+            ? app(CurricularOfferings::class)->effectiveIdsFor($group, $subject)
+            : collect();
+
+        if ($frameworkIds->isEmpty()) {
+            $frameworkIds = $group->curricularFrameworks()->pluck('curricular_frameworks.id');
+        }
 
         if ($frameworkIds->isEmpty()) {
             $frameworkIds = $this->activeFrameworkIds($group->school_id);
@@ -88,7 +102,9 @@ class ResultScales
             return ['scale' => $scale, 'choices' => collect()];
         }
 
-        $candidates = $assessment->group ? $this->primaryScalesForGroup($assessment->group) : collect();
+        $candidates = $assessment->group
+            ? $this->primaryScalesForGroup($assessment->group, $assessment->subject)
+            : collect();
 
         return $candidates->count() > 1
             ? ['scale' => null, 'choices' => $candidates]
