@@ -47,6 +47,7 @@ export function TodayInCalendar({ user }: { user: User }) {
   // hidden per person («Ocultar»), the same preference as the Calendar's.
   const showsTotal = isPsychopedagogue(user)
   const [totalOn, setTotalOn] = useState<boolean | null>(null)
+  const [totalError, setTotalError] = useState<string | null>(null)
   const [items, setItems] = useState<CalendarItem[] | null>(null)
   const [assessmentsToday, setAssessmentsToday] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -84,11 +85,13 @@ export function TodayInCalendar({ user }: { user: User }) {
 
   async function switchTotal(on: boolean) {
     setTotalOn(on)
+    setTotalError(null)
     try {
       const saved = await updateUserPreferences({ show_today_assessments_total: on })
       setTotalOn(saved.show_today_assessments_total)
     } catch {
       setTotalOn(!on)
+      setTotalError("No pudimos guardar el cambio.")
     }
   }
 
@@ -139,6 +142,11 @@ export function TodayInCalendar({ user }: { user: User }) {
               >
                 Mostrar las evaluaciones de hoy
               </button>
+            </p>
+          )}
+          {totalError && (
+            <p role="alert" className="px-6 pb-2 text-sm text-destructive">
+              {totalError}
             </p>
           )}
           {items === null ? (

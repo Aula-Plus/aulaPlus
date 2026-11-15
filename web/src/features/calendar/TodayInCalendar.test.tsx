@@ -169,6 +169,20 @@ describe("TodayInCalendar", () => {
     expect(await screen.findByRole("link", { name: "3 evaluaciones hoy" })).toBeInTheDocument()
   })
 
+  it("tells Psychopedagogy when hiding the total could not be saved", async () => {
+    vi.useRealTimers()
+    const user = userEvent.setup()
+    threeAssessmentsToday()
+    vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: true })
+    vi.spyOn(preferencesApi, "updateUserPreferences").mockRejectedValue(new Error("offline"))
+
+    renderBlock(psycho)
+
+    await user.click(await screen.findByRole("button", { name: "Ocultar" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("No pudimos guardar el cambio.")
+    expect(screen.getByRole("link", { name: "3 evaluaciones hoy" })).toBeInTheDocument()
+  })
+
   it("starts with the total hidden when the person turned it off", async () => {
     threeAssessmentsToday()
     vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: false })
