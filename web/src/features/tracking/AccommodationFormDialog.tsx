@@ -18,6 +18,7 @@ import {
   type AccommodationCategory,
   type AssessmentType,
   type StaffMember,
+  type StudentBarrier,
   type Subject,
 } from "@/types"
 import { fetchFollowUpCandidates } from "./scheduledFollowUpsApi"
@@ -97,7 +98,16 @@ interface AccommodationFormDialogProps {
    * UX only — the server decides from the caller's role.
    */
   proposal?: boolean
+  /**
+   * «Ajustes y PTP» (screen 06, ClickUp 1dfd3mc4bgc): a new accommodation
+   * registered from psychopedagogy's inbox also offers its optional barrier —
+   * one of the student's barriers or a new one — linked right after saving.
+   */
+  withBarrier?: boolean
 }
+
+const NEW_BARRIER = "new"
+const NO_BARRIER = ""
 
 /**
  * Create/edit dialog for an Accommodation (docs/prompts/24 §4) — the first
@@ -132,6 +142,7 @@ export function AccommodationFormDialog({
   accommodation,
   onSaved,
   proposal = false,
+  withBarrier = false,
 }: AccommodationFormDialogProps) {
   const isEdit = Boolean(accommodation)
   // A proposal under review is always active; only a confirmed (or directly
@@ -143,6 +154,13 @@ export function AccommodationFormDialog({
   const [formError, setFormError] = useState<string | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [reviewers, setReviewers] = useState<StaffMember[]>([])
+  const asksBarrier = withBarrier && !isEdit && !proposal
+  const [barriers, setBarriers] = useState<StudentBarrier[]>([])
+  const [barrierChoice, setBarrierChoice] = useState<string>(NO_BARRIER)
+  const [newBarrier, setNewBarrier] = useState("")
+  // The accommodation saved but its barrier link failed: saving again would
+  // create it twice, so the form only offers closing.
+  const [linkFailed, setLinkFailed] = useState(false)
 
   const {
     register,
@@ -208,6 +226,17 @@ export function AccommodationFormDialog({
       .catch(() => setReviewers([]))
   }, [open, asksReview, studentId])
 
+  useEffect(() => {
+    if (!open || !asksBarrier) return
+    setBarrierChoice(NO_BARRIER)
+    setNewBarrier("")
+    setLinkFailed(false)
+    trackingApi
+      .fetchStudentBarriers(studentId)
+      .then(setBarriers)
+      .catch(() => setBarriers([]))
+  }, [open, asksBarrier, studentId])
+
   // Reset the fields whenever the dialog (re)opens: to the edited row's values,
   // or back to blanks for a new accommodation.
   useEffect(() => {
@@ -231,6 +260,10 @@ export function AccommodationFormDialog({
 
   async function onSubmit(values: AccommodationValues) {
     setFormError(null)
+    if (asksBarrier && barrierChoice === NEW_BARRIER && !newBarrier.trim()) {
+      setFormError("Describí la barrera nueva o elegí «Sin barrera».")
+      return
+    }
     const input = {
       type: values.type,
       description: values.description,
@@ -255,7 +288,23 @@ export function AccommodationFormDialog({
       if (accommodation) {
         await trackingApi.updateAccommodation(accommodation.id, input)
       } else {
-        await trackingApi.createAccommodation(studentId, input)
+        const created = await trackingApi.createAccommodation(studentId, input)
+        if (asksBarrier && barrierChoice !== NO_BARRIER) {
+          try {
+            const barrierId =
+              barrierChoice === NEW_BARRIER
+                ? (await trackingApi.createStudentBarrier(studentId, { description: newBarrier.trim() })).id
+                : Number(barrierChoice)
+            await trackingApi.linkAccommodationToBarrier(barrierId, created.id)
+          } catch {
+            onSaved()
+            setLinkFailed(true)
+            setFormError(
+              "El ajuste quedó guardado, pero no pudimos vincular la barrera. Vinculala desde la ficha del alumno.",
+            )
+            return
+          }
+        }
       }
       onSaved()
       onOpenChange(false)
@@ -482,6 +531,32 @@ export function AccommodationFormDialog({
               </fieldset>
             </>
           )}
+          {asksBarrier && (
+            <div className="grid gap-2">
+              <Label htmlFor="accommodation-barrier">Barrera (opcional)</Label>
+              <SingleSelect
+                id="accommodation-barrier"
+                options={[
+                  { value: NO_BARRIER, label: "Sin barrera" },
+                  ...barriers.map((barrier) => ({ value: String(barrier.id), label: barrier.description })),
+                  { value: NEW_BARRIER, label: "Registrar una barrera nueva" },
+                ]}
+                value={barrierChoice}
+                onChange={setBarrierChoice}
+                placeholder="Sin barrera"
+              />
+              {barrierChoice === NEW_BARRIER && (
+                <>
+                  <Label htmlFor="accommodation-new-barrier">Barrera nueva</Label>
+                  <Textarea
+                    id="accommodation-new-barrier"
+                    value={newBarrier}
+                    onChange={(event) => setNewBarrier(event.target.value)}
+                  />
+                </>
+              )}
+            </div>
+          )}
           {offersActive && (
             <div className="grid gap-1">
               <div className="flex items-center gap-2">
@@ -504,7 +579,7 @@ export function AccommodationFormDialog({
             </p>
           )}
           <div className="flex gap-2">
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || linkFailed}>
               {proposal
                 ? isSubmitting
                   ? "Enviando…"

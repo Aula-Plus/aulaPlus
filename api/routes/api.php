@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccommodationController;
+use App\Http\Controllers\AccommodationInboxController;
 use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AccommodationProposalController;
 use App\Http\Controllers\AccommodationReviewController;
@@ -46,6 +47,8 @@ use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignController;
 use App\Http\Controllers\ScreeningTestResultController;
 use App\Http\Controllers\ScreeningTestTypeController;
+use App\Http\Controllers\StudentAnnualReviewController;
+use App\Http\Controllers\StudentBarrierController;
 use App\Http\Controllers\StudentCommentController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentHistoryController;
@@ -113,6 +116,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/accommodations/{accommodation}/proposal/reject', [AccommodationReviewController::class, 'reject']);
         Route::get('/students/{student}/accommodation-proposals', [AccommodationReviewController::class, 'index']);
         Route::get('/accommodations/{accommodation}/proposal/history', [AccommodationReviewController::class, 'history']);
+
+        // «Ajustes y PTP» (screen 06, ClickUp 1dfd3mc4bgc): psychopedagogy's
+        // inbox of every accommodation of the school, the yearly review, and
+        // registering a barrier from «Nuevo ajuste».
+        Route::get('/accommodation-inbox', [AccommodationInboxController::class, 'index']);
+        Route::get('/annual-reviews', [StudentAnnualReviewController::class, 'index']);
+        Route::get('/annual-reviews/pending', [StudentAnnualReviewController::class, 'pending']);
+        Route::post('/students/{student}/annual-review', [StudentAnnualReviewController::class, 'store']);
+        Route::get('/students/{student}/barriers', [StudentBarrierController::class, 'index']);
+        Route::post('/students/{student}/barriers', [StudentBarrierController::class, 'store']);
 
         Route::get('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'index']);
         Route::post('/barriers/{barrier}/accommodations', [BarrierAccommodationController::class, 'store']);

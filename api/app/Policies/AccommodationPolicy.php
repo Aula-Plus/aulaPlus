@@ -29,6 +29,10 @@ use App\Models\User;
  * - resubmit/withdraw a proposal: direction only.
  * - viewProposals (a student's proposals list) / viewReviewHistory:
  *   school-wide roles.
+ * - viewInbox («Ajustes y PTP», screen 06, ClickUp 1dfd3mc4bgc): the
+ *   school-wide list of every accommodation next to its student is
+ *   psychopedagogy's alone (P06-DEC-07). A teacher never sees that roster
+ *   (the screen's red line); direction reads accommodations in each file.
  *
  * Whether a proposal is in a state that allows a step is a business-state
  * precondition checked by the workflow (422), not here (403).
@@ -97,6 +101,11 @@ class AccommodationPolicy
     public function viewProposals(User $user): bool
     {
         return $user->hasAnyRole(Role::schoolWideValues());
+    }
+
+    public function viewInbox(User $user): bool
+    {
+        return $this->isPsychopedagogue($user);
     }
 
     public function viewReviewHistory(User $user, Accommodation $accommodation): bool

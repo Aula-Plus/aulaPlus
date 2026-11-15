@@ -162,10 +162,10 @@ skeleton is done, until explicitly asked:
   `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
   full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
   scope is creating/listing classes and the class-closing flow (screens 14–17).
-- "PTP y enriquecimiento" (screen 9 of the living document) — explicitly deferred:
-  it's unclear whether it's a new entity or a relabeling of
-  Accommodation/Barrier, and it depends on the annual-plan/curriculum module
-  above.
+- ~~"PTP y enriquecimiento"~~ — no longer deferred (ClickUp 1dfd3mc4bgc): it is
+  defined by screen 06 «Ajustes y PTP» of the living document (screen 09 is only
+  a pointer to it). The inbox and «Revisión anual» are built; the PTP itself is
+  the next delivery of that task.
 
 ## Working in this repo
 
