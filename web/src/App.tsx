@@ -32,6 +32,7 @@ import { AnnualPlanPage } from "@/features/annual-plans/AnnualPlanPage"
 import { CalendarPage } from "@/features/calendar/CalendarPage"
 import { GroupComparisonPage } from "@/features/group-comparison/GroupComparisonPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
+import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
 
 function App() {
   return (
@@ -214,6 +215,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupComparisonPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Ajustes y PTP (screen 06): psychopedagogy's inbox; other roles get its note. */}
+          <Route
+            path="/ajustes-y-ptp"
+            element={
+              <ProtectedLayout>
+                <AccommodationsPtpPage />
               </ProtectedLayout>
             }
           />

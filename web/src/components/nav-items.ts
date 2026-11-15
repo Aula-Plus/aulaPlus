@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Columns2,
   GraduationCap,
+  ListChecks,
   Eye,
   MessageSquare,
   Home,
@@ -22,6 +23,7 @@ import {
 import type { User } from "@/types"
 import {
   canCompareGroups,
+  canOpenAccommodationsInbox,
   canEditScreeningTestDesign,
   canManageGradesVisibility,
   canManageAlertSettings,
@@ -80,6 +82,11 @@ export function buildNavSections(
         // Screen 05: comparing whole groups is an institutional reading, so
         // only Psicopedagogía and Dirección get it (P05-DEC-04).
         ...(canCompareGroups(user) ? [{ to: "/comparativa", label: "Comparativa", icon: Columns2 }] : []),
+        // Screen 06 — Ajustes y PTP (ClickUp 1dfd3mc4bgc): psychopedagogy's
+        // own inbox of every accommodation; nobody else enters (P06-DEC-07).
+        ...(canOpenAccommodationsInbox(user)
+          ? [{ to: "/ajustes-y-ptp", label: "Ajustes y PTP", icon: ListChecks }]
+          : []),
         // One screen for the alerts that reach the user and their own scheduled
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr).
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },

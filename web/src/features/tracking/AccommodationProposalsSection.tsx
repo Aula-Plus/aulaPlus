@@ -172,7 +172,7 @@ function todayIso(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-function ProposalItem({
+export function ProposalItem({
   proposal,
   onEdit,
   onStepDone,

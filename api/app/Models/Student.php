@@ -111,6 +111,15 @@ class Student extends Model
         return $this->hasMany(Accommodation::class);
     }
 
+    /**
+     * Yearly reviews of the student's accommodations (screen 06 «Revisión
+     * anual», ClickUp 1dfd3mc4bgc).
+     */
+    public function annualReviews(): HasMany
+    {
+        return $this->hasMany(StudentAnnualReview::class);
+    }
+
     public function barriers(): HasMany
     {
         return $this->hasMany(Barrier::class);
