@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\Role;
 use App\Http\Requests\StoreStudentBarrierRequest;
+use App\Models\Accommodation;
 use App\Models\Barrier;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +19,7 @@ class StudentBarrierController extends Controller
 {
     public function index(Student $student): JsonResponse
     {
-        abort_unless(auth()->user()->hasRole(Role::Psychopedagogue->value), 403);
+        $this->authorize('viewInbox', Accommodation::class);
 
         return response()->json([
             'data' => $student->barriers()

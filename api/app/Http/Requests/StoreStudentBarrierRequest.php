@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\Role;
+use App\Models\Accommodation;
 use App\Models\Barrier;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -18,7 +18,7 @@ class StoreStudentBarrierRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->hasRole(Role::Psychopedagogue->value)
+        return $this->user()->can('viewInbox', Accommodation::class)
             && $this->user()->can('create', Barrier::class);
     }
 

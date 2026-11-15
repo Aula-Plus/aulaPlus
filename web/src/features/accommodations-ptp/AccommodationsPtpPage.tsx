@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { Plus } from "lucide-react"
 import { Badge, type BadgeTone } from "@/components/ui/badge"
@@ -19,6 +19,7 @@ import { ProposalItem } from "@/features/tracking/AccommodationProposalsSection"
 import { describeAccommodationScope } from "@/features/tracking/accommodationScope"
 import * as trackingApi from "@/features/tracking/trackingApi"
 import { isDirector, isPsychopedagogue } from "@/lib/permissions"
+import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { formatShortDate } from "@/lib/utils"
 import {
   accommodationCategoryLabels,
@@ -36,6 +37,7 @@ import {
   fetchAccommodationInbox,
   fetchAnnualReviews,
   markAnnualReview,
+  type AccommodationInbox,
   type InboxFilters,
 } from "./accommodationsPtpApi"
 
@@ -187,6 +189,7 @@ function StudentPickerDialog({
   const [students, setStudents] = useState<Student[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState("")
+  const currentYear = getCurrentSchoolYear()
 
   useEffect(() => {
     fetchStudents().then(
@@ -201,13 +204,13 @@ function StudentPickerDialog({
   const options = useMemo(
     () =>
       (students ?? []).map((student) => {
-        const group = student.groups.at(-1)
+        const group = student.groups.find((candidate) => candidate.school_year === currentYear)
         return {
           value: String(student.id),
           label: group ? `${student.full_name} — ${group.name}` : student.full_name,
         }
       }),
-    [students],
+    [students, currentYear],
   )
 
   return (
@@ -255,6 +258,11 @@ function AdjustmentsTab({ refreshKey, onChanged }: { refreshKey: number; onChang
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const [editing, setEditing] = useState<AccommodationInboxRow | null>(null)
+  const [page, setPage] = useState(1)
+  const [meta, setMeta] = useState<AccommodationInbox["meta"] | null>(null)
+  // Only the latest request may update the list: a slower answer to an older
+  // filter combination is dropped instead of overwriting the current one.
+  const requestId = useRef(0)
 
   useEffect(() => {
     fetchGroups()
@@ -267,17 +275,38 @@ function AdjustmentsTab({ refreshKey, onChanged }: { refreshKey: number; onChang
       ...(status ? { status: status as AccommodationInboxStatus } : {}),
       ...(groupId ? { group_id: Number(groupId) } : {}),
       ...(category ? { category: category as InboxFilters["category"] } : {}),
+      ...(page > 1 ? { page } : {}),
     }
+    const id = ++requestId.current
     fetchAccommodationInbox(filters).then(
       (inbox) => {
+        if (id !== requestId.current) return
         setRows(inbox.data)
+        setMeta(inbox.meta)
         setReports(inbox.report_proposals)
         setVersion((current) => current + 1)
         setError(null)
       },
-      () => setError("No pudimos cargar los ajustes del colegio."),
+      () => {
+        if (id !== requestId.current) return
+        setError("No pudimos cargar los ajustes del colegio.")
+      },
     )
-  }, [status, groupId, category])
+  }, [status, groupId, category, page])
+
+  useEffect(() => {
+    return () => {
+      // Drop any answer that arrives after the tab is gone.
+      requestId.current += 1
+    }
+  }, [])
+
+  function changeFilter(set: (value: string) => void) {
+    return (value: string) => {
+      set(value)
+      setPage(1)
+    }
+  }
 
   useEffect(() => {
     load()
@@ -300,7 +329,7 @@ function AdjustmentsTab({ refreshKey, onChanged }: { refreshKey: number; onChang
                 ...STATUS_ORDER.map((value) => ({ value, label: accommodationInboxStatusLabels[value] })),
               ]}
               value={status}
-              onChange={setStatus}
+              onChange={changeFilter(setStatus)}
               placeholder="Todos"
             />
           </div>
@@ -313,7 +342,7 @@ function AdjustmentsTab({ refreshKey, onChanged }: { refreshKey: number; onChang
                 ...groups.map((group) => ({ value: String(group.id), label: group.name })),
               ]}
               value={groupId}
-              onChange={setGroupId}
+              onChange={changeFilter(setGroupId)}
               placeholder="Todos"
             />
           </div>
@@ -327,7 +356,7 @@ function AdjustmentsTab({ refreshKey, onChanged }: { refreshKey: number; onChang
                 { value: "none", label: "Sin tipo" },
               ]}
               value={category}
-              onChange={setCategory}
+              onChange={changeFilter(setCategory)}
               placeholder="Todos"
             />
           </div>
@@ -358,6 +387,34 @@ function AdjustmentsTab({ refreshKey, onChanged }: { refreshKey: number; onChang
               />
             ))}
           </ul>
+        )}
+        {meta && meta.last_page > 1 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <span>
+              Página {meta.current_page} de {meta.last_page} ({meta.total}{" "}
+              {meta.total === 1 ? "ajuste" : "ajustes"})
+            </span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(Math.max(1, meta.current_page - 1))}
+                disabled={meta.current_page <= 1}
+              >
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(Math.min(meta.last_page, meta.current_page + 1))}
+                disabled={meta.current_page >= meta.last_page}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         )}
         <p className="mt-4 text-xs text-muted-foreground">
           Cada ajuste dice su nombre, su tipo, a qué materias se aplica, de dónde salió, quién lo

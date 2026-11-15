@@ -34,6 +34,7 @@ class AccommodationInboxRequest extends FormRequest
                 Rule::exists('groups', 'id')->where('school_id', $this->user()->school_id),
             ],
             'category' => ['sometimes', 'string', Rule::in([...AccommodationCategory::values(), 'none'])],
+            'page' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 }

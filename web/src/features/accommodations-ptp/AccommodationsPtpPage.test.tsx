@@ -79,6 +79,7 @@ describe("AccommodationsPtpPage", () => {
           barriers: [],
         }),
       ],
+      meta: { current_page: 1, last_page: 1, total: 2 },
       report_proposals: [
         {
           report_id: 4,
@@ -112,7 +113,11 @@ describe("AccommodationsPtpPage", () => {
   it("switches an accommodation off from the inbox", async () => {
     const user = userEvent.setup()
     vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([])
-    vi.spyOn(ptpApi, "fetchAccommodationInbox").mockResolvedValue({ data: [row({})], report_proposals: [] })
+    vi.spyOn(ptpApi, "fetchAccommodationInbox").mockResolvedValue({
+      data: [row({})],
+      meta: { current_page: 1, last_page: 1, total: 1 },
+      report_proposals: [],
+    })
     const update = vi.spyOn(trackingApi, "updateAccommodation").mockResolvedValue(row({ active: false }))
 
     renderPage("psychopedagogue")
@@ -162,6 +167,31 @@ describe("AccommodationsPtpPage", () => {
     expect(mark).toHaveBeenCalledWith(12)
     expect(await screen.findAllByText(/· Laura Ferrando$/)).toHaveLength(2)
     expect(screen.queryByRole("button", { name: "Marcar revisado hoy" })).not.toBeInTheDocument()
+  })
+
+  it("pages through the inbox and keeps the filters", async () => {
+    vi.spyOn(groupsApi, "fetchGroups").mockResolvedValue([])
+    const fetchInbox = vi
+      .spyOn(ptpApi, "fetchAccommodationInbox")
+      .mockResolvedValueOnce({
+        data: [row({})],
+        meta: { current_page: 1, last_page: 2, total: 51 },
+        report_proposals: [],
+      })
+      .mockResolvedValueOnce({
+        data: [row({ id: 9, type: "Segunda página" })],
+        meta: { current_page: 2, last_page: 2, total: 51 },
+        report_proposals: [],
+      })
+
+    renderPage("psychopedagogue")
+
+    expect(await screen.findByText("Página 1 de 2 (51 ajustes)")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Siguiente" }))
+
+    expect(await screen.findByText(/Segunda página/)).toBeInTheDocument()
+    expect(fetchInbox).toHaveBeenLastCalledWith({ page: 2 })
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled()
   })
 
   it.each([

@@ -2,6 +2,7 @@
 
 use App\Enums\AccommodationReviewStatus;
 use App\Enums\ReportDocumentStatus;
+use App\Http\Controllers\AccommodationInboxController;
 use App\Models\Accommodation;
 use App\Models\AccommodationProposal;
 use App\Models\Barrier;
@@ -91,6 +92,68 @@ it('lists every accommodation of the school for psychopedagogy, with status, stu
         ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.type', 'Sin tipo');
     $this->getJson('/api/v1/accommodation-inbox?status=anything')->assertUnprocessable();
     $this->getJson('/api/v1/accommodation-inbox?group_id='.Group::factory()->create()->id)->assertUnprocessable();
+});
+
+it('leaves out the accommodations and report proposals of withdrawn (soft-deleted) students', function () {
+    ['school' => $school, 'psycho' => $psycho, 'tobias' => $tobias, 'lucia' => $lucia] = inboxScenario();
+    Accommodation::factory()->create(['school_id' => $school->id, 'student_id' => $tobias->id, 'type' => 'Sigue']);
+    Accommodation::factory()->create(['school_id' => $school->id, 'student_id' => $lucia->id, 'type' => 'Egresado']);
+    Tenancy::forSchool($school, function () use ($lucia, $psycho): void {
+        $report = ReportDocument::create([
+            'student_id' => $lucia->id, 'uploaded_by_id' => $psycho->id,
+            'path' => 'x.pdf', 'original_name' => 'x.pdf', 'format' => 'pdf', 'size' => 10,
+            'status' => ReportDocumentStatus::Proposed, 'pages' => ['x'], 'anonymized_pages' => ['x'],
+        ]);
+        AccommodationProposal::create([
+            'report_document_id' => $report->id, 'student_id' => $lucia->id, 'type' => 'Tiempo extendido',
+            'category' => 'access', 'description' => 'x', 'focus_area' => 'lectura', 'basis' => 'explicit',
+        ]);
+        $lucia->delete();
+    });
+
+    Sanctum::actingAs($psycho);
+
+    $this->getJson('/api/v1/accommodation-inbox')->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.type', 'Sigue')
+        ->assertJsonPath('data.0.student.id', $tobias->id)
+        ->assertJsonCount(0, 'report_proposals');
+});
+
+it('filters the status in SQL and paginates the inbox', function () {
+    ['school' => $school, 'psycho' => $psycho, 'director' => $director, 'tobias' => $tobias] = inboxScenario();
+    Accommodation::factory()->count(AccommodationInboxController::PER_PAGE + 2)
+        ->create(['school_id' => $school->id, 'student_id' => $tobias->id]);
+    Accommodation::factory()->proposal()->create([
+        'school_id' => $school->id, 'student_id' => $tobias->id, 'type' => 'Pendiente', 'proposed_by_id' => $director->id,
+    ]);
+    Accommodation::factory()->create(['school_id' => $school->id, 'student_id' => $tobias->id, 'type' => 'Baja', 'active' => false]);
+    // Legacy external approval never granted: not effective, so «De baja» in SQL as in PHP.
+    Accommodation::factory()->create([
+        'school_id' => $school->id, 'student_id' => $tobias->id, 'type' => 'Sin aprobar',
+        'requires_external_approval' => true, 'approved' => null,
+    ]);
+
+    Sanctum::actingAs($psycho);
+
+    $this->getJson('/api/v1/accommodation-inbox')->assertOk()
+        ->assertJsonCount(AccommodationInboxController::PER_PAGE, 'data')
+        ->assertJsonPath('meta.current_page', 1)
+        ->assertJsonPath('meta.last_page', 2)
+        ->assertJsonPath('meta.total', AccommodationInboxController::PER_PAGE + 5);
+    $this->getJson('/api/v1/accommodation-inbox?page=2')->assertOk()
+        ->assertJsonCount(5, 'data')
+        ->assertJsonPath('meta.current_page', 2);
+
+    $this->getJson('/api/v1/accommodation-inbox?status=pending')->assertOk()
+        ->assertJsonCount(1, 'data')->assertJsonPath('data.0.inbox_status', 'pending')
+        ->assertJsonPath('meta.total', 1);
+    $inactive = $this->getJson('/api/v1/accommodation-inbox?status=inactive')->assertOk()->json('data');
+    expect(collect($inactive)->pluck('type')->all())->toEqualCanonicalizing(['Baja', 'Sin aprobar'])
+        ->and(collect($inactive)->pluck('inbox_status')->unique()->all())->toBe(['inactive']);
+    $this->getJson('/api/v1/accommodation-inbox?status=in_force')->assertOk()
+        ->assertJsonPath('meta.total', AccommodationInboxController::PER_PAGE + 2);
+    $this->getJson('/api/v1/accommodation-inbox?page=0')->assertUnprocessable();
 });
 
 it('keeps the inbox away from teachers and direction', function () {

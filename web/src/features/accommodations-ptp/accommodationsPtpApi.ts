@@ -15,10 +15,13 @@ export interface InboxFilters {
   status?: AccommodationInboxStatus
   group_id?: number
   category?: AccommodationCategory | "none"
+  page?: number
 }
 
 export interface AccommodationInbox {
   data: AccommodationInboxRow[]
+  /** 50 accommodations per page (AccommodationInboxController::PER_PAGE). */
+  meta: { current_page: number; last_page: number; total: number }
   report_proposals: InboxReportProposals[]
 }
 

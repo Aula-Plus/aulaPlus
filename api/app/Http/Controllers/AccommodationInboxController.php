@@ -38,12 +38,19 @@ class AccommodationInboxController extends Controller
 {
     public const STATUSES = ['in_force', 'pending', 'returned', 'rejected', 'inactive'];
 
+    public const PER_PAGE = 50;
+
     public function index(AccommodationInboxRequest $request): JsonResponse
     {
         $filters = $request->validated();
         $year = SchoolTime::today()->year;
 
+        // Only students still on the roll: a withdrawn (soft-deleted) student's
+        // accommodations stay in the database but leave the inbox, as they
+        // already leave the annual review (whereHas honours SoftDeletes and
+        // the SchoolScope).
         $query = Accommodation::query()
+            ->whereHas('student')
             ->where(fn (Builder $review) => $review
                 ->whereNull('review_status')
                 ->orWhere('review_status', '!=', AccommodationReviewStatus::Withdrawn->value))
@@ -72,7 +79,28 @@ class AccommodationInboxController extends Controller
                 ->where('group_student.school_year', $year));
         }
 
-        $rows = $query->get()
+        // The status filter runs in SQL (mirror of status()), so a daily
+        // «Pendiente» look never hydrates every accommodation of the school.
+        match ($filters['status'] ?? null) {
+            'pending' => $query->where('review_status', AccommodationReviewStatus::Pending->value),
+            'returned' => $query->where('review_status', AccommodationReviewStatus::Returned->value),
+            'rejected' => $query->where('review_status', AccommodationReviewStatus::Rejected->value),
+            'in_force' => $query->effective(),
+            // Confirmed but not effective, spelled out instead of NOT(effective)
+            // so a NULL `approved` doesn't fall out through SQL's three-valued logic.
+            'inactive' => $query->confirmed()->where(fn (Builder $off) => $off
+                ->where('accommodations.active', false)
+                ->orWhere(fn (Builder $unapproved) => $unapproved
+                    ->where('accommodations.requires_external_approval', true)
+                    ->where(fn (Builder $approval) => $approval
+                        ->whereNull('accommodations.approved')
+                        ->orWhere('accommodations.approved', false)))),
+            default => null,
+        };
+
+        $page = $query->paginate(self::PER_PAGE);
+
+        $rows = $page->getCollection()
             ->map(fn (Accommodation $accommodation): array => [
                 ...(new AccommodationResource($accommodation))->resolve($request),
                 'inbox_status' => $this->status($accommodation),
@@ -83,11 +111,15 @@ class AccommodationInboxController extends Controller
                     ->values(),
                 'confirmed_by_name' => $this->confirmedBy($accommodation),
             ])
-            ->when(isset($filters['status']), fn ($rows) => $rows->where('inbox_status', $filters['status']))
             ->values();
 
         return response()->json([
             'data' => $rows,
+            'meta' => [
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+                'total' => $page->total(),
+            ],
             'report_proposals' => $this->reportProposals($filters, $year),
         ]);
     }
@@ -141,6 +173,7 @@ class AccommodationInboxController extends Controller
         }
 
         $query = AccommodationProposal::query()
+            ->whereHas('student')
             ->where('status', ProposalStatus::Pending->value)
             ->with([
                 'reportDocument:id,created_at',
