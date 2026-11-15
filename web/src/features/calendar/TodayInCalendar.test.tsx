@@ -1,12 +1,15 @@
 import { render, screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { CalendarItem, User } from "@/types"
 import * as calendarApi from "./calendarApi"
+import * as preferencesApi from "@/features/preferences/preferencesApi"
 import { TodayInCalendar } from "./TodayInCalendar"
 
 const teacher: User = { id: 4, name: "Mariana López", email: "m@e.com", roles: ["teacher"] }
 const director: User = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+const psycho: User = { id: 2, name: "Laura Ferrando", email: "l@e.com", roles: ["psychopedagogue"] }
 
 function item(overrides: Partial<CalendarItem>): CalendarItem {
   return {
@@ -118,16 +121,21 @@ describe("TodayInCalendar", () => {
     expect(await screen.findByText("Hoy no hay nada en tu calendario.")).toBeInTheDocument()
   })
 
-  it("gives Direction and Psychopedagogy the total of today's assessments, opening the filtered calendar", async () => {
-    vi.spyOn(calendarApi, "fetchCalendar").mockImplementation(async (_from, _to, types) =>
+  function threeAssessmentsToday() {
+    return vi.spyOn(calendarApi, "fetchCalendar").mockImplementation(async (_from, _to, types) =>
       types?.includes("assessment")
         ? [1, 2, 3].map((id) =>
             item({ key: `assessment-${id}`, type: "assessment", id, title: `Escrito ${id}`, can_edit: false }),
           )
         : [],
     )
+  }
 
-    renderBlock(director)
+  it("gives Psychopedagogy the total of today's assessments, opening the filtered calendar", async () => {
+    threeAssessmentsToday()
+    vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: true })
+
+    renderBlock(psycho)
 
     const link = await screen.findByRole("link", { name: "3 evaluaciones hoy" })
     expect(link).toHaveAttribute(
@@ -136,6 +144,51 @@ describe("TodayInCalendar", () => {
     )
     // Only the total on the Inicio: no titles, groups or grades.
     expect(screen.queryByText("Escrito 1")).not.toBeInTheDocument()
+    // The rest of the day is empty: the empty text doesn't contradict the total.
+    expect(screen.getByText("Fuera de eso, hoy no tenés nada más en tu calendario.")).toBeInTheDocument()
+  })
+
+  it("lets Psychopedagogy hide the total and show it again, saving the preference", async () => {
+    vi.useRealTimers()
+    const user = userEvent.setup()
+    threeAssessmentsToday()
+    vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: true })
+    const update = vi
+      .spyOn(preferencesApi, "updateUserPreferences")
+      .mockImplementation(async (input) => input)
+
+    renderBlock(psycho)
+
+    await user.click(await screen.findByRole("button", { name: "Ocultar" }))
+    expect(update).toHaveBeenCalledWith({ show_today_assessments_total: false })
+    expect(screen.queryByRole("link", { name: /evaluaciones hoy/ })).not.toBeInTheDocument()
+    expect(screen.getByText("Hoy no hay nada en tu calendario.")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Mostrar las evaluaciones de hoy" }))
+    expect(update).toHaveBeenLastCalledWith({ show_today_assessments_total: true })
+    expect(await screen.findByRole("link", { name: "3 evaluaciones hoy" })).toBeInTheDocument()
+  })
+
+  it("starts with the total hidden when the person turned it off", async () => {
+    threeAssessmentsToday()
+    vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: false })
+
+    renderBlock(psycho)
+
+    expect(await screen.findByRole("button", { name: "Mostrar las evaluaciones de hoy" })).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /evaluaciones hoy/ })).not.toBeInTheDocument()
+  })
+
+  it("no longer gives Direction the total (ClickUp 1dfd3mc4zpk)", async () => {
+    const fetch = threeAssessmentsToday()
+    const preferences = vi.spyOn(preferencesApi, "fetchUserPreferences")
+
+    renderBlock(director)
+
+    expect(await screen.findByText("Hoy no hay nada en tu calendario.")).toBeInTheDocument()
+    expect(screen.queryByText(/evaluaciones? hoy/)).not.toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(preferences).not.toHaveBeenCalled()
   })
 
   it("never adds the assessments total for a teacher", async () => {

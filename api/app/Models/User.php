@@ -44,6 +44,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'disabled_at' => 'datetime',
+            'show_today_assessments_total' => 'boolean',
         ];
     }
 

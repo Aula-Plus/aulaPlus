@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { CalendarItem, User } from "@/types"
 import * as calendarApi from "./calendarApi"
+import * as preferencesApi from "@/features/preferences/preferencesApi"
 import { CalendarPage } from "./CalendarPage"
 
 let currentUser: User = { id: 4, name: "Mariana López", email: "m@e.com", roles: ["teacher"] }
@@ -280,5 +281,42 @@ describe("CalendarPage", () => {
     resolveOld([item({ key: "class-8", id: 8, date: "2026-12-17", title: "Historia" })])
     await waitFor(() => expect(screen.queryByText("Historia")).not.toBeInTheDocument())
     expect(screen.getByText("Geografía")).toBeInTheDocument()
+  })
+
+  it("lets Psychopedagogy switch the Inicio's assessments total from the filters (ClickUp 1dfd3mc4zpk)", async () => {
+    vi.useRealTimers()
+    const user = userEvent.setup()
+    currentUser = { id: 2, name: "Laura Ferrando", email: "l@e.com", roles: ["psychopedagogue"] }
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+    vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: true })
+    const update = vi
+      .spyOn(preferencesApi, "updateUserPreferences")
+      .mockImplementation(async (input) => input)
+
+    renderPage()
+
+    const box = await screen.findByRole("checkbox", { name: "Mostrar el total de evaluaciones de hoy en el Inicio" })
+    await waitFor(() => expect(box).toBeChecked())
+    await user.click(box)
+
+    expect(update).toHaveBeenCalledWith({ show_today_assessments_total: false })
+    await waitFor(() => expect(box).not.toBeChecked())
+  })
+
+  it("tells Direction what it can do, without the switch (ClickUp 1dfd3mc4zpk)", async () => {
+    currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+    const preferences = vi.spyOn(preferencesApi, "fetchUserPreferences")
+
+    renderPage()
+
+    expect(
+      await screen.findByText(
+        "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional y qué es; lo ven todos y se quita desde la vista Lista.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/nunca para mirar un caso/)).not.toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: /total de evaluaciones/ })).not.toBeInTheDocument()
+    expect(preferences).not.toHaveBeenCalled()
   })
 })

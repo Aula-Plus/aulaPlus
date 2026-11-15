@@ -4,7 +4,8 @@ import { CalendarDays } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { isTeacher } from "@/lib/permissions"
+import { isPsychopedagogue, isTeacher } from "@/lib/permissions"
+import { fetchUserPreferences, updateUserPreferences } from "@/features/preferences/preferencesApi"
 import { calendarItemTypeLabels, type CalendarItem, type CalendarItemType, type User } from "@/types"
 import { fetchCalendar } from "./calendarApi"
 import { toDay } from "./calendarDates"
@@ -25,9 +26,10 @@ const TEACHER_TYPES: readonly CalendarItemType[] = [
 
 /**
  * Psychopedagogy and Direction: meetings, closings and institutional events
- * (P01-HOY-01). The school's assessments of the day are only a total
- * («3 evaluaciones hoy», PO answer of 12/11) that opens the Calendar's list
- * of today filtered by assessments — no names, no grades here.
+ * (P01-HOY-01). Only Psychopedagogy gets the school's assessments of the day,
+ * as a total («3 evaluaciones hoy») that opens the Calendar's list of today
+ * filtered by assessments — no names, no grades here. Direction no longer gets
+ * it (ClickUp 1dfd3mc4zpk, 13/11): it checks them from the Calendar.
  */
 const STAFF_TYPES: readonly CalendarItemType[] = ["meeting", "period_closing", "institutional"]
 
@@ -41,6 +43,10 @@ const STAFF_TYPES: readonly CalendarItemType[] = ["meeting", "period_closing", "
 export function TodayInCalendar({ user }: { user: User }) {
   const headingId = useId()
   const teacher = isTeacher(user)
+  // ClickUp 1dfd3mc4zpk: the total is Psychopedagogy's, shown by default and
+  // hidden per person («Ocultar»), the same preference as the Calendar's.
+  const showsTotal = isPsychopedagogue(user)
+  const [totalOn, setTotalOn] = useState<boolean | null>(null)
   const [items, setItems] = useState<CalendarItem[] | null>(null)
   const [assessmentsToday, setAssessmentsToday] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +61,14 @@ export function TodayInCalendar({ user }: { user: User }) {
       .catch(() => {
         if (active) setError("No pudimos cargar tu calendario de hoy.")
       })
-    if (!teacher) {
+    if (showsTotal) {
+      fetchUserPreferences()
+        .then((preferences) => {
+          if (active) setTotalOn(preferences.show_today_assessments_total)
+        })
+        .catch(() => {
+          if (active) setTotalOn(true)
+        })
       fetchCalendar(today, today, ["assessment"])
         .then((loaded) => {
           if (active) setAssessmentsToday(loaded.length)
@@ -67,7 +80,19 @@ export function TodayInCalendar({ user }: { user: User }) {
     return () => {
       active = false
     }
-  }, [teacher, today])
+  }, [teacher, showsTotal, today])
+
+  async function switchTotal(on: boolean) {
+    setTotalOn(on)
+    try {
+      const saved = await updateUserPreferences({ show_today_assessments_total: on })
+      setTotalOn(saved.show_today_assessments_total)
+    } catch {
+      setTotalOn(!on)
+    }
+  }
+
+  const totalShown = showsTotal && totalOn === true && assessmentsToday !== null && assessmentsToday > 0
 
   const assessmentsLink = `/calendario?vista=lista&desde=${today}&hasta=${today}&tipos=assessment`
 
@@ -91,18 +116,43 @@ export function TodayInCalendar({ user }: { user: User }) {
             </Link>
           }
         >
-          {!teacher && assessmentsToday !== null && assessmentsToday > 0 && (
-            <p className="px-6 pb-2 text-sm">
+          {totalShown && (
+            <p className="flex flex-wrap items-center gap-3 px-6 pb-2 text-sm">
               <Link to={assessmentsLink} className="font-medium text-primary underline-offset-4 hover:underline">
                 {assessmentsToday === 1 ? "1 evaluación hoy" : `${assessmentsToday} evaluaciones hoy`}
               </Link>
+              <button
+                type="button"
+                onClick={() => void switchTotal(false)}
+                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Ocultar
+              </button>
+            </p>
+          )}
+          {showsTotal && totalOn === false && (
+            <p className="px-6 pb-2 text-sm">
+              <button
+                type="button"
+                onClick={() => void switchTotal(true)}
+                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Mostrar las evaluaciones de hoy
+              </button>
             </p>
           )}
           {items === null ? (
             <p className="px-6 text-muted-foreground">Cargando…</p>
           ) : items.length === 0 ? (
             <div className="px-6">
-              <EmptyState icon={CalendarDays} message="Hoy no hay nada en tu calendario." />
+              <EmptyState
+                icon={CalendarDays}
+                message={
+                  totalShown
+                    ? "Fuera de eso, hoy no tenés nada más en tu calendario."
+                    : "Hoy no hay nada en tu calendario."
+                }
+              />
             </div>
           ) : (
             <Table>
