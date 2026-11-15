@@ -381,3 +381,11 @@ export function hasTimetable(user: User | null): boolean {
 export function canCompareGroups(user: User | null): boolean {
   return isSchoolWideStaff(user)
 }
+
+/**
+ * Screen 06 «Ajustes y PTP» (ClickUp 1dfd3mc4bgc): only Psicopedagogía enters
+ * (P06-DEC-07). Mirror of `AccommodationPolicy::viewInbox`.
+ */
+export function canOpenAccommodationsInbox(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}

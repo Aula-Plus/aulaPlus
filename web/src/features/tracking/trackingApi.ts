@@ -13,6 +13,7 @@ import type {
   GroupTracking,
   Role,
   StudentHistoryFilters,
+  StudentBarrier,
   StudentHistoryPage,
   StudentTracking,
   TeamSummary,
@@ -259,6 +260,24 @@ export async function fetchBarrierAccommodations(
 ): Promise<BarrierAccommodationLink[]> {
   const { data } = await api.get<{ data: BarrierAccommodationLink[] }>(
     `/api/v1/barriers/${barrierId}/accommodations`,
+  )
+  return data.data
+}
+
+/** The student's active barriers (psychopedagogy only, «Nuevo ajuste» of screen 06). */
+export async function fetchStudentBarriers(studentId: number): Promise<StudentBarrier[]> {
+  const { data } = await api.get<{ data: StudentBarrier[] }>(`/api/v1/students/${studentId}/barriers`)
+  return data.data
+}
+
+/** Registers a barrier for the student (psychopedagogy only, screen 06). */
+export async function createStudentBarrier(
+  studentId: number,
+  input: { description: string; coping_strategy?: string | null },
+): Promise<StudentBarrier> {
+  const { data } = await api.post<{ data: StudentBarrier }>(
+    `/api/v1/students/${studentId}/barriers`,
+    input,
   )
   return data.data
 }

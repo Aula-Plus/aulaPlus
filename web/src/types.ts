@@ -669,6 +669,54 @@ export interface AccommodationScope {
   assessment_types: AssessmentType[] | null
 }
 
+/** A student's learning barrier, as «Nuevo ajuste» of screen 06 lists it. */
+export interface StudentBarrier {
+  id: number
+  description: string
+  coping_strategy: string | null
+}
+
+/**
+ * Where an accommodation stands in psychopedagogy's inbox («Ajustes y PTP»,
+ * screen 06, ClickUp 1dfd3mc4bgc), derived by the server.
+ */
+export type AccommodationInboxStatus = "in_force" | "pending" | "returned" | "rejected" | "inactive"
+
+export const accommodationInboxStatusLabels: Record<AccommodationInboxStatus, string> = {
+  in_force: "Vigente",
+  pending: "Pendiente de confirmar",
+  returned: "Devuelta para corregir",
+  rejected: "Rechazado",
+  inactive: "De baja",
+}
+
+export interface AccommodationInboxRow extends Accommodation {
+  inbox_status: AccommodationInboxStatus
+  student: { id: number; name: string }
+  group: { id: number; name: string } | null
+  barriers: { id: number; description: string }[]
+  /** «Confirmó»: who confirmed it, or who registered it already in force. */
+  confirmed_by_name: string | null
+}
+
+/** A report whose AI-read accommodations still wait for psychopedagogy. */
+export interface InboxReportProposals {
+  report_id: number
+  student: { id: number; name: string }
+  group: { id: number; name: string } | null
+  uploaded_on: string | null
+  pending_count: number
+}
+
+/** One row of «Revisión anual» (screen 06). */
+export interface AnnualReviewRow {
+  student: { id: number; name: string }
+  group: { id: number; name: string } | null
+  accommodations_in_force_count: number
+  last_review: { reviewed_on: string; reviewed_by_name: string | null; school_year: number } | null
+  reviewed_this_year: boolean
+}
+
 export interface Accommodation extends AccommodationScope {
   id: number
   student_id: number

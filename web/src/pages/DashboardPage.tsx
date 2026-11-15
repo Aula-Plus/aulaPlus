@@ -5,6 +5,7 @@ import { FollowUpNotices } from "@/features/tracking/FollowUpNotices"
 import { FollowUpsSectionView } from "@/features/tracking/FollowUpsSection"
 import { useFollowUpsInbox } from "@/features/tracking/useFollowUpsInbox"
 import { TodayInCalendar } from "@/features/calendar/TodayInCalendar"
+import { AnnualReviewTask } from "@/features/accommodations-ptp/AnnualReviewTask"
 import { formatLongDate } from "@/lib/utils"
 
 /**
@@ -25,6 +26,9 @@ import { formatLongDate } from "@/lib/utils"
  * from the Calendar — the teacher's classes with time, group, subject and
  * room. Tasks and follow-ups are not repeated there: they stay in their own
  * card below.
+ *
+ * Psychopedagogy also gets the single «Revisión anual: N alumnos» task row
+ * (P01-DEC-06, ClickUp 1dfd3mc4bgc), apart from the follow-ups.
  */
 export function DashboardPage() {
   const { user } = useAuth()
@@ -43,6 +47,7 @@ export function DashboardPage() {
         <FollowUpNotices inbox={inbox} showError />
       </AlertsSection>
       <FollowUpsSectionView inbox={inbox} compact />
+      <AnnualReviewTask user={user} />
     </div>
   )
 }
