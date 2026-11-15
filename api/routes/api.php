@@ -65,6 +65,7 @@ use App\Http\Controllers\UnitController;
 use App\Http\Controllers\UnitObjectiveController;
 use App\Http\Controllers\UsageJourneyStepController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserPreferencesController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -234,6 +235,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/students/{student}/scheduled-follow-ups', [ScheduledFollowUpController::class, 'store']);
         Route::get('/students/{student}/follow-up-candidates', [ScheduledFollowUpController::class, 'candidates']);
         Route::get('/scheduled-follow-ups/mine', [ScheduledFollowUpController::class, 'mine']);
+        // The person's own display preferences (ClickUp 1dfd3mc4zpk).
+        Route::get('/me/preferences', [UserPreferencesController::class, 'show']);
+        Route::patch('/me/preferences', [UserPreferencesController::class, 'update']);
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
         Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->whereUuid('notification');

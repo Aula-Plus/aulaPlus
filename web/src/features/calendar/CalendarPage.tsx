@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageInstitutionalEvents, hasTimetable, isDirector, isPsychopedagogue } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { fetchUserPreferences, updateUserPreferences } from "@/features/preferences/preferencesApi"
 import {
   calendarItemSourceLabels,
   calendarItemTypeLabels,
@@ -60,7 +61,7 @@ function roleDescription(user: User | null): string {
 
 function roleNote(user: User | null): string {
   if (isDirector(user)) {
-    return "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas, nunca para mirar un caso. Un evento institucional tiene fecha, hora opcional y qué es; lo ven todos y se quita desde la vista Lista."
+    return "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional y qué es; lo ven todos y se quita desde la vista Lista."
   }
   if (isPsychopedagogue(user)) {
     return "Ves todas las evaluaciones del colegio y tu agenda. Una reunión con equipo tratante aparece solo para quienes están citados."
@@ -318,6 +319,8 @@ function CalendarBoard({ user }: { user: User | null }) {
           )
         })}
       </div>
+
+      {isPsychopedagogue(user) && <TodayTotalSwitch />}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -624,5 +627,58 @@ function ListTable({
         })}
       </TableBody>
     </Table>
+  )
+}
+
+/**
+ * Psychopedagogy's switch for the «N evaluaciones hoy» total of its Inicio
+ * (ClickUp 1dfd3mc4zpk), next to the type filters. Same per-person preference
+ * as «Ocultar» / «Mostrar las evaluaciones de hoy» in the Inicio, kept on the
+ * server.
+ */
+function TodayTotalSwitch() {
+  const [on, setOn] = useState<boolean | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    fetchUserPreferences()
+      .then((preferences) => {
+        if (active) setOn(preferences.show_today_assessments_total)
+      })
+      .catch(() => {
+        if (active) setOn(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function change(next: boolean) {
+    setOn(next)
+    setError(null)
+    try {
+      const saved = await updateUserPreferences({ show_today_assessments_total: next })
+      setOn(saved.show_today_assessments_total)
+    } catch {
+      setOn(!next)
+      setError("No pudimos guardar el cambio.")
+    }
+  }
+
+  return (
+    <div className="grid gap-1">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="size-4"
+          checked={on ?? true}
+          disabled={on === null}
+          onChange={(event) => void change(event.target.checked)}
+        />
+        Mostrar el total de evaluaciones de hoy en el Inicio
+      </label>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
   )
 }
