@@ -101,6 +101,12 @@ class Group extends Model
         return $this->hasMany(ClassSession::class);
     }
 
+    /** Loading re-enabled by direction in this group of a closed year (screen 26). */
+    public function writeWindows(): HasMany
+    {
+        return $this->hasMany(GroupWriteWindow::class);
+    }
+
     public function comments(): MorphMany
     {
         return $this->morphMany(Comment::class, 'commentable');

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Group;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,6 +17,13 @@ class GroupResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        // Screen 26: a group of a closed year is read-only, unless direction
+        // enabled loading in it until a date. UX hint only — the
+        // `group.writable` middleware is what rejects the writes.
+        $calendar = app(SchoolYearCalendar::class);
+        $yearClosed = $calendar->isInClosedYear($this->resource);
+        $window = $yearClosed ? $calendar->activeWindow($this->resource) : null;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -33,6 +41,9 @@ class GroupResource extends JsonResource
                 'label' => $this->schoolGrade->label,
             ] : null,
             'school_year' => $this->school_year,
+            'year_closed' => $yearClosed,
+            'read_only' => $yearClosed && $window === null,
+            'writable_until' => $window?->until_on->toDateString(),
             'group_profile' => $this->group_profile,
             'related_documents' => $this->related_documents,
             // Aggregate count of students with active tracking, added by

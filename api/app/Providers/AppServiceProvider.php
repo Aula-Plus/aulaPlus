@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Contracts\StatusChangeNotifier;
 use App\Listeners\LogLoginUsageEvent;
 use App\Notifications\LogNotifier;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use App\Support\Tenancy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -37,6 +38,9 @@ class AppServiceProvider extends ServiceProvider
         // Only implementation for now; swapping the real channel in later
         // (email/push) means rebinding this line, no caller changes.
         $this->app->bind(StatusChangeNotifier::class, LogNotifier::class);
+
+        // Screen 26: the last closed year is read once per request (or job).
+        $this->app->scoped(SchoolYearCalendar::class);
     }
 
     /**

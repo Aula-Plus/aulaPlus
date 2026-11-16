@@ -43,6 +43,7 @@ use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\PlannerSettingsController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
+use App\Http\Controllers\SchoolYearController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignController;
 use App\Http\Controllers\ScreeningTestResultController;
@@ -139,7 +140,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/students/{student}/comments', [StudentCommentController::class, 'index']);
         Route::post('/students/{student}/comments', [StudentCommentController::class, 'store']);
         Route::get('/groups/{group}/comments', [GroupCommentController::class, 'index']);
-        Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store']);
+        Route::post('/groups/{group}/comments', [GroupCommentController::class, 'store'])
+            ->middleware('group.writable');
         // «Compartir con» (ClickUp 86e3qkwnv): psychopedagogy shares an
         // extract of a student observation; recipients read only the extract.
         Route::get('/students/{student}/comment-shares', [CommentShareController::class, 'index']);
@@ -289,9 +291,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // docente.md). The assistant proposes drafts; the teacher applies or
         // discards. Only generation is throttled (cost control, per school).
         Route::post('/groups/{group}/assistant/generate', [AIProposalController::class, 'generate'])
+            ->middleware('group.writable')
             ->middleware('throttle:ai-proposal-generate');
         Route::get('/ai-proposals/{ai_proposal}', [AIProposalController::class, 'show']);
-        Route::post('/ai-proposals/{ai_proposal}/apply', [AIProposalController::class, 'apply']);
+        Route::post('/ai-proposals/{ai_proposal}/apply', [AIProposalController::class, 'apply'])
+            ->middleware('group.writable');
         Route::post('/ai-proposals/{ai_proposal}/discard', [AIProposalController::class, 'discard']);
 
         // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8). The teacher builds
@@ -300,21 +304,30 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and coverage are derived (AnnualPlanProgress), never written.
         Route::get('/annual-plans', [AnnualPlanController::class, 'index']);
         Route::get('/annual-plans/options', [AnnualPlanController::class, 'options']);
-        Route::post('/annual-plans', [AnnualPlanController::class, 'store']);
+        Route::post('/annual-plans', [AnnualPlanController::class, 'store'])
+            ->middleware('group.writable');
         Route::get('/annual-plans/{annualPlan}', [AnnualPlanController::class, 'show'])->whereNumber('annualPlan');
-        Route::patch('/annual-plans/{annualPlan}', [AnnualPlanController::class, 'update'])->whereNumber('annualPlan');
-        Route::post('/annual-plans/{annualPlan}/units', [UnitController::class, 'store']);
-        Route::patch('/units/{unit}', [UnitController::class, 'update']);
-        Route::delete('/units/{unit}', [UnitController::class, 'destroy']);
-        Route::post('/units/{unit}/objectives', [UnitObjectiveController::class, 'store']);
-        Route::patch('/unit-objectives/{objective}', [UnitObjectiveController::class, 'update']);
-        Route::delete('/unit-objectives/{objective}', [UnitObjectiveController::class, 'destroy']);
+        Route::patch('/annual-plans/{annualPlan}', [AnnualPlanController::class, 'update'])
+            ->middleware('group.writable')->whereNumber('annualPlan');
+        Route::post('/annual-plans/{annualPlan}/units', [UnitController::class, 'store'])
+            ->middleware('group.writable');
+        Route::patch('/units/{unit}', [UnitController::class, 'update'])
+            ->middleware('group.writable');
+        Route::delete('/units/{unit}', [UnitController::class, 'destroy'])
+            ->middleware('group.writable');
+        Route::post('/units/{unit}/objectives', [UnitObjectiveController::class, 'store'])
+            ->middleware('group.writable');
+        Route::patch('/unit-objectives/{objective}', [UnitObjectiveController::class, 'update'])
+            ->middleware('group.writable');
+        Route::delete('/unit-objectives/{objective}', [UnitObjectiveController::class, 'destroy'])
+            ->middleware('group.writable');
         // «Lo terminé»: pick a class of the plan's group and subject and
         // record the objective «todo» there. The objective's state still
         // derives only from the class records (P12-COB-02, screen 13 F-7).
         Route::get('/unit-objectives/{objective}/closable-classes', [UnitObjectiveController::class, 'closableClasses'])
             ->whereNumber('objective');
         Route::patch('/class-sessions/{classSession}/objectives/{objective}', [ClassSessionObjectiveController::class, 'update'])
+            ->middleware('group.writable')
             ->whereNumber(['classSession', 'objective']);
 
         // Session 6: assessments CRUD + per-student results (docs/prompts/
@@ -322,14 +335,19 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // (Assessment had a model/policy but no endpoints) and adds the
         // AssessmentResult entity that Perfil de alumno's chart consumes.
         Route::get('/groups/{group}/assessments', [AssessmentController::class, 'index']);
-        Route::post('/groups/{group}/assessments', [AssessmentController::class, 'store']);
-        Route::patch('/assessments/{assessment}', [AssessmentController::class, 'update']);
-        Route::delete('/assessments/{assessment}', [AssessmentController::class, 'destroy']);
+        Route::post('/groups/{group}/assessments', [AssessmentController::class, 'store'])
+            ->middleware('group.writable');
+        Route::patch('/assessments/{assessment}', [AssessmentController::class, 'update'])
+            ->middleware('group.writable');
+        Route::delete('/assessments/{assessment}', [AssessmentController::class, 'destroy'])
+            ->middleware('group.writable');
 
         Route::get('/assessments/{assessment}/results', [AssessmentResultController::class, 'index']);
         Route::get('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'scale']);
-        Route::put('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'chooseScale']);
-        Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store']);
+        Route::put('/assessments/{assessment}/result-scale', [AssessmentResultController::class, 'chooseScale'])
+            ->middleware('group.writable');
+        Route::post('/assessments/{assessment}/results', [AssessmentResultController::class, 'store'])
+            ->middleware('group.writable');
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
 
         // Session 13: screening tests ("pruebas de sondeo", docs/prompts/
@@ -347,12 +365,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/screening-test-designs/{design}/revert', [ScreeningTestDesignController::class, 'revert']);
 
         Route::get('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'index']);
-        Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store']);
-        Route::post('/screening-test-applications/{application}/recalculate', [ScreeningTestApplicationController::class, 'recalculate']);
+        Route::post('/groups/{group}/screening-test-applications', [ScreeningTestApplicationController::class, 'store'])
+            ->middleware('group.writable');
+        Route::post('/screening-test-applications/{application}/recalculate', [ScreeningTestApplicationController::class, 'recalculate'])
+            ->middleware('group.writable');
         Route::get('/screening-test-applications/{application}/roster', [ScreeningTestApplicationController::class, 'roster']);
         Route::get('/screening-test-applications/{application}/results', [ScreeningTestApplicationController::class, 'results']);
 
-        Route::patch('/screening-test-results/{result}', [ScreeningTestResultController::class, 'update']);
+        Route::patch('/screening-test-results/{result}', [ScreeningTestResultController::class, 'update'])
+            ->middleware('group.writable');
 
         // Session 10: performance timeline (docs/prompts/20-linea-tiempo-
         // alumno.md). Read-only aggregator over the results line + six mark
@@ -395,7 +416,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
         Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);
         Route::get('/class-sessions/suggested-slot', [ClassSessionScheduleController::class, 'suggestedSlot']);
-        Route::patch('/class-sessions/{classSession}', [ClassSessionScheduleController::class, 'update']);
+        Route::patch('/class-sessions/{classSession}', [ClassSessionScheduleController::class, 'update'])
+            ->middleware('group.writable');
         Route::get('/timetable-slots', [TimetableSlotController::class, 'index']);
         Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
         Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
@@ -404,6 +426,19 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Session: user management (docs/superpowers/specs/2026-09-15-user-
         // management-design.md). Director-only staff onboarding + lifecycle.
         Route::get('/users', [UserController::class, 'index']);
+        // Screen 26 «Año y calendario» (ClickUp 1dfd3mc4bh7): direction
+        // closes the year and opens the next one, sets the periods per
+        // program and enables loading in a group of a closed year.
+        Route::get('/school-year', [SchoolYearController::class, 'show']);
+        Route::put('/school-years/{schoolYear}', [SchoolYearController::class, 'update']);
+        Route::post('/school-years/{schoolYear}/periods', [SchoolYearController::class, 'storePeriod']);
+        Route::patch('/school-periods/{period}', [SchoolYearController::class, 'updatePeriod']);
+        Route::delete('/school-periods/{period}', [SchoolYearController::class, 'destroyPeriod']);
+        Route::post('/school-years/{schoolYear}/close', [SchoolYearController::class, 'close']);
+        Route::post('/school-years/{schoolYear}/open-next', [SchoolYearController::class, 'openNext']);
+        Route::post('/school-years/{schoolYear}/write-windows', [SchoolYearController::class, 'storeWriteWindow']);
+        Route::post('/group-write-windows/{window}/end', [SchoolYearController::class, 'endWriteWindow']);
+
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/{user}', [UserController::class, 'show']);
         Route::patch('/users/{user}', [UserController::class, 'update']);

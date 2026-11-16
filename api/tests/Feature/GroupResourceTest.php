@@ -34,6 +34,10 @@ it('serializes a group with its teachers', function () {
         ],
         'school_grade' => null,
         'school_year' => 2026,
+        // Screen 26: no closed year yet, so the group is writable.
+        'year_closed' => false,
+        'read_only' => false,
+        'writable_until' => null,
         'group_profile' => null,
         'related_documents' => null,
         'teachers' => [['id' => $teacher->id, 'name' => 'Ana Pérez']],

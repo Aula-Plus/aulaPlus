@@ -73,6 +73,14 @@ export interface Group {
   /** Optional grade; only suggests a level, never forces it. */
   school_grade: LevelRef | null
   school_year: number
+  /**
+   * Screen 26: the group's year is closed (history). `read_only` unless
+   * direction enabled loading in it until `writable_until`. UX hint only —
+   * the server rejects the writes. Optional: not every payload carries it.
+   */
+  year_closed?: boolean
+  read_only?: boolean
+  writable_until?: string | null
   group_profile: unknown | null
   related_documents: unknown | null
   teachers: { id: number; name: string }[]

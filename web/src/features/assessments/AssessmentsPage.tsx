@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
+import { ClosedYearNotice } from "@/features/school-year/ClosedYearNotice"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SingleSelect } from "@/components/ui/single-select"
@@ -130,7 +131,8 @@ export function AssessmentsPage() {
       .catch(() => undefined)
   }, [groupId, loadAssessments, user?.id])
 
-  const canManage = canManageAssessments(user, group)
+  // A group of a closed year is read-only (screen 26) unless direction re-enabled loading.
+  const canManage = canManageAssessments(user, group) && !group?.read_only
 
   async function onCreate(values: AssessmentValues) {
     setFormError(null)
@@ -175,6 +177,8 @@ export function AssessmentsPage() {
         backLabel="Volver al perfil del grupo"
         title={`Evaluaciones — ${group.name}`}
       />
+
+      <ClosedYearNotice group={group} />
 
       {canManage && (
         <Card>
