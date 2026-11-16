@@ -16,6 +16,7 @@ use App\Models\Subject;
 use App\Services\ResultScales;
 use App\Support\SchoolTime;
 use App\Support\Tenancy;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -62,6 +63,9 @@ class IndicatorData
 
     /** @var array<int, int>|null */
     protected ?array $equivalences = null;
+
+    /** @var array<int, Collection<int, object>> per subject id */
+    protected array $subjectAggregates = [];
 
     /** @var list<int> indicator ids being calculated (cycle guard) */
     protected array $stack = [];
@@ -185,25 +189,96 @@ class IndicatorData
     public function levels(string $type, int $id): array
     {
         $levelIds = match (IndicatorSourceType::tryFrom($type)) {
-            IndicatorSourceType::Subject => $this->subjectResults($id)->pluck('official_scale_level_id'),
+            IndicatorSourceType::Subject => $this->subjectAggregate($id)->pluck('level_id'),
             IndicatorSourceType::Assessment => AssessmentResult::query()->where('assessment_id', $id)->pluck('official_scale_level_id'),
             default => collect(),
         };
+
+        return $this->levelsOfScalesOf($levelIds);
+    }
+
+    /**
+     * {@see self::levels()} for many assessments at once (the assessments a
+     * crossing can read, P30-CRU-01): three queries whatever their number.
+     *
+     * @param  list<int>  $assessmentIds
+     * @return array<int, list<array{id: int, name: string, position: int}>> keyed by assessment id
+     */
+    public function levelsOfAssessments(array $assessmentIds): array
+    {
+        if ($assessmentIds === []) {
+            return [];
+        }
+
+        $pairs = collect();
+        foreach (array_chunk($assessmentIds, 1000) as $chunk) {
+            $pairs = $pairs->merge(AssessmentResult::query()
+                ->whereIn('assessment_id', $chunk)
+                ->whereNotNull('official_scale_level_id')
+                ->distinct()
+                ->toBase()
+                ->get(['assessment_id', 'official_scale_level_id']));
+        }
+
+        if ($pairs->isEmpty()) {
+            return [];
+        }
+
+        $scaleOfLevel = OfficialScaleLevel::query()
+            ->whereIn('id', $pairs->pluck('official_scale_level_id')->unique()->values())
+            ->pluck('official_scale_id', 'id');
+        $levelsOfScale = $this->levelsOfScales($scaleOfLevel->unique()->values());
+
+        return $pairs->groupBy('assessment_id')
+            ->map(fn (Collection $rows): array => $rows
+                ->map(fn (object $row) => $scaleOfLevel[(int) $row->official_scale_level_id] ?? null)
+                ->filter()->unique()->sort()->values()
+                ->flatMap(fn ($scaleId) => $levelsOfScale[(int) $scaleId] ?? [])
+                ->values()
+                ->all())
+            ->all();
+    }
+
+    /**
+     * Every level of the scales the given levels belong to, in the scale's
+     * order.
+     *
+     * @param  Collection<int, mixed>  $levelIds
+     * @return list<array{id: int, name: string, position: int}>
+     */
+    protected function levelsOfScalesOf(Collection $levelIds): array
+    {
         $levelIds = $levelIds->filter()->unique()->values();
 
         if ($levelIds->isEmpty()) {
             return [];
         }
 
-        $scaleIds = OfficialScaleLevel::query()->whereIn('id', $levelIds)->pluck('official_scale_id')->unique();
+        $scaleIds = OfficialScaleLevel::query()->whereIn('id', $levelIds)->pluck('official_scale_id')->unique()->sort()->values();
+
+        return collect($this->levelsOfScales($scaleIds))->flatten(1)->values()->all();
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $scaleIds
+     * @return array<int, list<array{id: int, name: string, position: int}>> keyed by scale id, in scale-id order
+     */
+    protected function levelsOfScales(Collection $scaleIds): array
+    {
+        if ($scaleIds->isEmpty()) {
+            return [];
+        }
 
         return OfficialScaleLevel::query()
             ->whereIn('official_scale_id', $scaleIds)
             ->orderBy('official_scale_id')
             ->orderBy('position')
             ->get()
-            ->map(fn (OfficialScaleLevel $level): array => ['id' => $level->id, 'name' => $level->name, 'position' => (int) $level->position])
-            ->values()
+            ->groupBy('official_scale_id')
+            ->map(fn (Collection $levels): array => $levels
+                ->map(fn (OfficialScaleLevel $level): array => ['id' => $level->id, 'name' => $level->name, 'position' => (int) $level->position])
+                ->values()
+                ->all())
             ->all();
     }
 
@@ -289,32 +364,101 @@ class IndicatorData
     }
 
     /**
-     * @return Collection<int, object>
+     * This year's loaded results of a subject for the roster, as a base query
+     * (no models are hydrated). The roster is a subquery, not a list of ids.
      */
-    protected function subjectResults(int $subjectId)
+    protected function subjectQuery(int $subjectId): QueryBuilder
     {
         return AssessmentResult::query()
             ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
             ->join('groups', 'groups.id', '=', 'assessments.group_id')
             ->where('assessments.subject_id', $subjectId)
             ->where('groups.school_year', $this->year)
-            ->whereIn('assessment_results.student_id', array_keys($this->roster()))
+            ->whereIn('assessment_results.student_id', fn (QueryBuilder $roster) => $roster
+                ->select('group_student.student_id')
+                ->from('group_student')
+                ->join('groups as roster_groups', 'roster_groups.id', '=', 'group_student.group_id')
+                ->where('roster_groups.school_id', Tenancy::schoolId())
+                ->where('group_student.school_year', $this->year))
             ->where(fn ($loaded) => $loaded
                 ->whereNotNull('assessment_results.score')
                 ->orWhereNotNull('assessment_results.official_scale_level_id'))
-            ->orderByDesc('assessments.administered_at')
-            ->orderByDesc('assessment_results.id')
-            ->select(['assessment_results.student_id', 'assessment_results.score', 'assessment_results.official_scale_level_id'])
-            ->get()
             ->toBase();
     }
 
     /**
+     * Per student and level of progress: the sum and count of the numeric
+     * scores and how many results there are. Aggregated in SQL and memoized,
+     * so «Datos» reads each subject once.
+     *
+     * @return Collection<int, object{student_id: int, level_id: int|null, score_sum: mixed, score_count: int, row_count: int}>
+     */
+    protected function subjectAggregate(int $subjectId): Collection
+    {
+        return $this->subjectAggregates[$subjectId] ??= $this->subjectQuery($subjectId)
+            ->groupBy('assessment_results.student_id', 'assessment_results.official_scale_level_id')
+            ->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, SUM(assessment_results.score) as score_sum, COUNT(assessment_results.score) as score_count, COUNT(*) as row_count')
+            ->get();
+    }
+
+    /**
+     * The average of the numbers (scores, or levels through the school's
+     * equivalence), else the latest level of progress — the same rule as
+     * {@see self::fromResults()}, computed in SQL.
+     *
      * @return array<int, array<string, mixed>>
      */
     protected function subject(int $subjectId): array
     {
-        return $this->fromResults($this->subjectResults($subjectId));
+        $equivalences = $this->equivalences();
+        $totals = [];
+
+        foreach ($this->subjectAggregate($subjectId) as $row) {
+            $studentId = (int) $row->student_id;
+            $totals[$studentId] ??= ['sum' => 0.0, 'count' => 0];
+            $totals[$studentId]['sum'] += (float) ($row->score_sum ?? 0);
+            $totals[$studentId]['count'] += (int) $row->score_count;
+
+            // Results with only a level count through the equivalence.
+            $levelOnly = (int) $row->row_count - (int) $row->score_count;
+            if ($row->level_id !== null && $levelOnly > 0 && isset($equivalences[(int) $row->level_id])) {
+                $totals[$studentId]['sum'] += (float) $equivalences[(int) $row->level_id] * $levelOnly;
+                $totals[$studentId]['count'] += $levelOnly;
+            }
+        }
+
+        if ($totals === []) {
+            return [];
+        }
+
+        // The latest level-only result of each student (newest first).
+        $ranked = $this->subjectQuery($subjectId)
+            ->whereNull('assessment_results.score')
+            ->whereNotNull('assessment_results.official_scale_level_id')
+            ->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, ROW_NUMBER() OVER (PARTITION BY assessment_results.student_id ORDER BY assessments.administered_at DESC, assessment_results.id DESC) as position_in_student');
+        $latestLevelIds = DB::query()->fromSub($ranked, 'ranked')->where('position_in_student', 1)->pluck('level_id', 'student_id');
+        $levels = $latestLevelIds->isEmpty()
+            ? collect()
+            : OfficialScaleLevel::query()->whereIn('id', $latestLevelIds->unique()->values())->get()->keyBy('id');
+
+        $values = [];
+
+        foreach ($totals as $studentId => $total) {
+            $level = $levels->get((int) ($latestLevelIds[$studentId] ?? 0));
+
+            if ($total['count'] === 0 && $level === null) {
+                continue;
+            }
+
+            $values[$studentId] = [
+                'value' => $total['count'] === 0 ? null : round($total['sum'] / $total['count'], 2),
+                'level' => $level === null ? null : ['id' => $level->id, 'name' => $level->name, 'position' => (int) $level->position],
+                'band' => null,
+                'year' => $this->year,
+            ];
+        }
+
+        return $values;
     }
 
     /**

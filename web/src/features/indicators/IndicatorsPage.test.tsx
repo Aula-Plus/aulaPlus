@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
 import type { Role } from "@/types"
-import { parseTemplateCsv } from "./csvTemplate"
+import { buildTemplateCsv, parseTemplateCsv } from "./csvTemplate"
 import * as api from "./indicatorsApi"
 import { IndicatorsPage } from "./IndicatorsPage"
 import { previewText } from "./indicatorText"
@@ -321,5 +321,16 @@ describe("screen 30 helpers", () => {
       ],
       bad: 1,
     })
+  })
+
+  it("builds the template the way Excel in Spanish opens it, and reads it back", () => {
+    const csv = buildTemplateCsv([
+      { student_id: 21, name: "Martínez; Lucía", group_name: "5.°A", value: 7.5 },
+      { student_id: 22, name: "Federico", group_name: "5.°A", value: null },
+    ])
+
+    expect(csv.startsWith("\uFEFFid_alumno;alumno;grupo;valor\r\n")).toBe(true)
+    expect(csv).toContain('21;"Martínez; Lucía";5.°A;7,5')
+    expect(parseTemplateCsv(csv)).toEqual({ values: [{ student_id: 21, value: 7.5 }], bad: 0 })
   })
 })

@@ -19,6 +19,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Support\Tenancy;
 use Database\Seeders\OfficialScaleSeeder;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -394,4 +395,82 @@ it('records «se toma todos los años» on a screening, defaulting from its freq
 
     $this->patchJson("/api/v1/screening-test-types/{$id}", ['taken_every_year' => false])->assertOk()
         ->assertJsonPath('data.taken_every_year', false);
+});
+
+it('does not let an indicator drop or rename a band a crossing uses, and refuses repeated band names', function () {
+    ['psycho' => $psycho, 'reading' => $reading] = indicatorScenario();
+    Sanctum::actingAs($psycho);
+    $indicator = $this->postJson('/api/v1/indicators', readingIndicatorPayload($reading->id))->assertCreated()->json('data.id');
+    $this->postJson('/api/v1/crossings', ['name' => 'Lectura baja', 'reading' => 'El equipo revisa la herramienta.', 'conditions' => [
+        ['source' => ['type' => 'indicator', 'id' => $indicator], 'operator' => 'band', 'value' => 'Bajo'],
+    ]])->assertCreated();
+
+    $renamed = readingIndicatorPayload($reading->id);
+    $renamed['bands'][0]['name'] = 'Bajo rendimiento';
+    $this->patchJson("/api/v1/indicators/{$indicator}", $renamed)
+        ->assertUnprocessable()->assertJsonValidationErrors('bands');
+    expect(Indicator::query()->find($indicator)->bands[0]['name'])->toBe('Bajo');
+
+    // A band no crossing uses can still change.
+    $other = readingIndicatorPayload($reading->id);
+    $other['bands'][1]['name'] = 'Intermedio';
+    $this->patchJson("/api/v1/indicators/{$indicator}", $other)->assertOk();
+
+    $repeated = readingIndicatorPayload($reading->id);
+    $repeated['bands'][1]['name'] = 'Esperado';
+    $this->postJson('/api/v1/indicators', $repeated)
+        ->assertUnprocessable()->assertJsonValidationErrors('bands.1.name');
+});
+
+it('lists the assessments with their levels in a fixed number of queries, and averages mixed results', function () {
+    ['psycho' => $psycho, 'school' => $school, 'a' => $a, 'studentsA' => $studentsA, 'scale' => $scale] = indicatorScenario();
+    $math = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Matemática']);
+    SchoolScaleEquivalence::query()->create(['school_id' => $school->id, 'official_scale_level_id' => $scale->levels[1]->id, 'numeric_grade' => 4]);
+
+    $countLevelQueries = function () use ($psycho): array {
+        Sanctum::actingAs($psycho);
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $this->getJson('/api/v1/indicator-data')->assertOk();
+        $count = collect(DB::getQueryLog())
+            ->filter(fn (array $query) => str_contains($query['query'], 'official_scale_levels') || str_contains($query['query'], 'assessment_results'))
+            ->count();
+        DB::disableQueryLog();
+
+        return [$count, $response];
+    };
+
+    $addAssessment = function (string $date, array $results) use ($a, $school, $math): Assessment {
+        $test = Assessment::factory()->for($a)->create(['school_id' => $school->id, 'subject_id' => $math->id, 'administered_at' => $date]);
+        foreach ($results as [$student, $score, $levelId]) {
+            AssessmentResult::factory()->for($test)->for($student)->create(['school_id' => $school->id, 'score' => $score, 'official_scale_level_id' => $levelId]);
+        }
+
+        return $test;
+    };
+
+    $levelTest = $addAssessment(now()->subDays(3)->toDateString(), [[$studentsA[0], null, $scale->levels[1]->id]]);
+    $addAssessment(now()->subDays(5)->toDateString(), [[$studentsA[0], 6, null], [$studentsA[1], 7, null]]);
+    [$before] = $countLevelQueries();
+
+    foreach (range(1, 5) as $day) {
+        $addAssessment(now()->subDays(20 + $day)->toDateString(), [[$studentsA[0], 8, null], [$studentsA[2], null, $scale->levels[2]->id]]);
+    }
+    [$after, $response] = $countLevelQueries();
+
+    expect($after)->toBe($before);
+    $assessments = collect($response->json('data.assessments'))->keyBy('id');
+    expect(collect($assessments[$levelTest->id]['levels'])->pluck('id')->all())->toBe($scale->levels->pluck('id')->all());
+
+    // Student 0 in Matemática: 6 and five 8s, plus a level worth 4 → (6 + 40 + 4) / 7.
+    $this->postJson('/api/v1/crossings/preview', ['conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id], 'operator' => 'above', 'value' => 7.13],
+    ]])->assertOk()->assertJsonPath('data.total', 1);
+    $this->postJson('/api/v1/crossings/preview', ['conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id], 'operator' => 'above', 'value' => 7.15],
+    ]])->assertOk()->assertJsonPath('data.total', 0);
+    // Student 2 has only levels without equivalence: their latest level, no number.
+    $this->postJson('/api/v1/crossings/preview', ['conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id], 'operator' => 'level', 'value' => $scale->levels[2]->id],
+    ]])->assertOk()->assertJsonPath('data.total', 1);
 });

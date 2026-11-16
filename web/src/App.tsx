@@ -210,7 +210,7 @@ function App() {
               </ProtectedLayout>
             }
           />
-          {/* Comparativa por año de cursada (screen 05): Psicopedagogía y Dirección. */}
+          {/* Indicadores y cruces (screen 30): Psicopedagogía y Dirección. */}
           <Route
             path="/indicadores-y-cruces"
             element={
@@ -219,6 +219,7 @@ function App() {
               </ProtectedLayout>
             }
           />
+          {/* Comparativa por año de cursada (screen 05): Psicopedagogía y Dirección. */}
           <Route
             path="/comparativa"
             element={

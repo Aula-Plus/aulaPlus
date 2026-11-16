@@ -2,11 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\CrossingOperator;
 use App\Enums\IndicatorCalculation;
 use App\Enums\IndicatorDisplayPlace;
 use App\Enums\IndicatorSourceType;
 use App\Enums\ZScorePopulation;
 use App\Http\Requests\Concerns\ValidatesScreeningBands;
+use App\Models\Crossing;
 use App\Models\Indicator;
 use App\Services\Indicators\IndicatorData;
 use Illuminate\Foundation\Http\FormRequest;
@@ -52,6 +54,9 @@ class SaveIndicatorRequest extends FormRequest
             'base_100' => ['sometimes', 'boolean'],
             'z_population' => ['nullable', Rule::enum(ZScorePopulation::class)],
             ...$this->bandRules(),
+            // A crossing names the band it reads: two bands with the same
+            // name would make it ambiguous.
+            'bands.*.name' => ['required', 'string', 'max:60', 'distinct'],
             'display_places' => ['sometimes', 'array'],
             'display_places.*' => ['distinct', Rule::enum(IndicatorDisplayPlace::class)],
             'teacher_visible' => ['sometimes', 'boolean'],
@@ -63,6 +68,7 @@ class SaveIndicatorRequest extends FormRequest
         return [
             fn (Validator $validator) => $this->validateBandOrder($validator),
             fn (Validator $validator) => $this->validateInputs($validator),
+            fn (Validator $validator) => $this->validateBandsUsedByCrossings($validator),
         ];
     }
 
@@ -150,6 +156,36 @@ class SaveIndicatorRequest extends FormRequest
             if (count(array_unique($bounded)) > 1) {
                 $validator->errors()->add('inputs', 'A datum with a scale cannot be combined with one without (a Z score, a difference).');
             }
+        }
+    }
+
+    /**
+     * A crossing's band condition names the band it reads, so editing an
+     * indicator cannot drop or rename a band a crossing uses: the crossing
+     * would silently stop matching anyone. Change the crossing first.
+     */
+    protected function validateBandsUsedByCrossings(Validator $validator): void
+    {
+        /** @var Indicator|null $self */
+        $self = $this->route('indicator');
+
+        if (! $self instanceof Indicator || $validator->errors()->isNotEmpty()) {
+            return;
+        }
+
+        $names = array_map(static fn (array $band): string => trim((string) ($band['name'] ?? '')), array_values((array) $this->input('bands', [])));
+
+        $missing = Crossing::query()->get()
+            ->flatMap(fn (Crossing $crossing) => collect($crossing->conditions ?? [])
+                ->filter(fn (array $condition): bool => ($condition['source']['type'] ?? null) === IndicatorSourceType::Indicator->value
+                    && (int) ($condition['source']['id'] ?? 0) === $self->id
+                    && ($condition['operator'] ?? null) === CrossingOperator::Band->value)
+                ->map(fn (array $condition): string => (string) $condition['value']))
+            ->unique()
+            ->reject(fn (string $band): bool => in_array($band, $names, true));
+
+        if ($missing->isNotEmpty()) {
+            $validator->errors()->add('bands', 'A band used by a crossing cannot be removed or renamed: '.$missing->implode(', ').'.');
         }
     }
 

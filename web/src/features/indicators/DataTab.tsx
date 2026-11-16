@@ -13,7 +13,7 @@ import {
   type ExternalMeasureRoster,
   type IndicatorDataCatalog,
 } from "./indicatorsApi"
-import { parseTemplateCsv, TEMPLATE_HEADER } from "./csvTemplate"
+import { buildTemplateCsv, parseTemplateCsv, TEMPLATE_HEADER } from "./csvTemplate"
 import { coverageText, scaleText, sourceLabel } from "./indicatorText"
 
 type LoadMode = "template" | "csv" | "manual"
@@ -186,13 +186,7 @@ function ExternalLoadDialog({
     if (id === null) return
     try {
       const data = roster && measureId === id ? roster : await fetchExternalMeasureRoster(id, groupId ? Number(groupId) : undefined)
-      const lines = [
-        TEMPLATE_HEADER.join(","),
-        ...data.rows.map((row) =>
-          [row.student_id, csvCell(row.name), csvCell(row.group_name), row.value ?? ""].join(","),
-        ),
-      ]
-      triggerDownload(`plantilla_${slug(data.measure.name)}.csv`, lines.join("\n"))
+      triggerDownload(`plantilla_${slug(data.measure.name)}.csv`, buildTemplateCsv(data.rows))
       setMessage("Plantilla descargada. Completá la columna «valor» y cargala desde Excel (CSV).")
     } catch {
       setError("No pudimos armar la plantilla.")
@@ -435,10 +429,6 @@ function ExternalLoadDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function csvCell(value: string): string {
-  return /[",;\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 }
 
 function slug(value: string): string {

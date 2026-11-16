@@ -71,21 +71,26 @@ class DataCatalog
      */
     public function assessments(): array
     {
-        return Assessment::query()
+        $assessments = Assessment::query()
             ->join('groups', 'groups.id', '=', 'assessments.group_id')
             ->leftJoin('subjects', 'subjects.id', '=', 'assessments.subject_id')
             ->where('groups.school_year', $this->data->schoolYear())
             ->orderBy('groups.name')
             ->orderBy('subjects.name')
             ->orderBy('assessments.administered_at')
-            ->get(['assessments.id', 'assessments.type', 'assessments.administered_at', 'groups.name as group_name', 'subjects.name as subject_name'])
+            ->get(['assessments.id', 'assessments.type', 'assessments.administered_at', 'groups.name as group_name', 'subjects.name as subject_name']);
+
+        // The levels of every assessment in a fixed number of queries.
+        $levels = $this->data->levelsOfAssessments($assessments->pluck('id')->map(fn ($id): int => (int) $id)->all());
+
+        return $assessments
             ->map(fn ($assessment): array => [
                 'id' => $assessment->id,
                 'type' => $assessment->type?->value,
                 'administered_at' => $assessment->administered_at?->toDateString(),
                 'group_name' => $assessment->group_name,
                 'subject_name' => $assessment->subject_name,
-                'levels' => $this->data->levels(IndicatorSourceType::Assessment->value, $assessment->id),
+                'levels' => $levels[$assessment->id] ?? [],
             ])
             ->values()
             ->all();

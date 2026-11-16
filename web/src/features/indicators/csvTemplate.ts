@@ -2,13 +2,39 @@
 export const TEMPLATE_HEADER = ["id_alumno", "alumno", "grupo", "valor"]
 
 /**
+ * The Aula+ template as Excel in Spanish (Uruguay) opens it: `;` as the list
+ * separator (the comma is the decimal one), decimals with a comma, CRLF line
+ * ends and a UTF-8 BOM so accents read right.
+ */
+export function buildTemplateCsv(
+  rows: { student_id: number; name: string; group_name: string; value: number | null }[],
+): string {
+  const lines = [
+    TEMPLATE_HEADER.join(";"),
+    ...rows.map((row) =>
+      [row.student_id, csvCell(row.name), csvCell(row.group_name), row.value === null ? "" : String(row.value).replace(".", ",")].join(
+        ";",
+      ),
+    ),
+  ]
+  return "\uFEFF" + lines.join("\r\n")
+}
+
+function csvCell(value: string): string {
+  return /[",;\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+}
+
+/**
  * Reads the Aula+ template saved as CSV (comma, semicolon or tab): the
  * «id_alumno» and «valor» columns. Rows without a student id or with a value
  * that is not a number are counted as bad; rows with an empty value are left
  * alone.
  */
 export function parseTemplateCsv(text: string): { values: { student_id: number; value: number }[]; bad: number } {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "")
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "")
   if (lines.length === 0) return { values: [], bad: 0 }
   const separator = lines[0].includes(";") ? ";" : lines[0].includes("\t") ? "\t" : ","
   const header = splitCsvLine(lines[0], separator).map((cell) => cell.trim().toLowerCase())
