@@ -1305,7 +1305,8 @@ export interface CommentSharedNotice {
 export interface AlertOverdueNotice {
   type: "alert_overdue"
   alert_id: number
-  student_id: number
+  /** Null for an alert not about a student («Lo que recibe la IA» marks). */
+  student_id: number | null
   due_date: string | null
 }
 

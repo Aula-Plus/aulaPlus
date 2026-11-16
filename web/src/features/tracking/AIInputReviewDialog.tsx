@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -58,17 +58,29 @@ export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputRevi
   const [formError, setFormError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  // Only the latest request may update the view: switching subjects fires a
+  // new GET, and a slower earlier response must not show another subject's
+  // lines under the selector (a mark made from there would carry the wrong
+  // subject to the team notice).
+  const latestRequest = useRef(0)
+
   const load = useCallback(async () => {
+    const request = ++latestRequest.current
     setError(null)
     try {
-      setReview(await aiInputApi.fetchAIInputReview(groupId, subjectId))
+      const data = await aiInputApi.fetchAIInputReview(groupId, subjectId)
+      if (request === latestRequest.current) setReview(data)
     } catch {
-      setError("No pudimos cargar lo que recibiría la IA.")
+      if (request === latestRequest.current) setError("No pudimos cargar lo que recibiría la IA.")
     }
   }, [groupId, subjectId])
 
   useEffect(() => {
     if (open) load()
+    // Closing the dialog or unmounting discards any request still in flight.
+    return () => {
+      latestRequest.current++
+    }
   }, [open, load])
 
   function openForm(form: ActiveForm) {
@@ -167,6 +179,11 @@ export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputRevi
                       {line.mark.marked_by ? ` por ${line.mark.marked_by.name}` : ""}
                       {line.mark.created_at ? ` el ${formatShortDate(line.mark.created_at)}` : ""}
                       {line.mark.comment ? `: «${line.mark.comment}»` : ""}. Se resuelve cambiando el ajuste.
+                    </p>
+                  )}
+                  {line.mark && canMark && (
+                    <p role="note" className="mt-2 rounded-md bg-muted p-2 text-xs">
+                      Ser más específico en la acción pedagógica del ajuste ayuda a la IA a decidir mejor.
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-2">

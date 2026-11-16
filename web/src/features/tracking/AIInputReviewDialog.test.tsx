@@ -132,4 +132,44 @@ describe("AIInputReviewDialog", () => {
     expect(within(item).queryByRole("button")).not.toBeInTheDocument()
     expect(screen.getByText("Dirección la abre solo para leer: no marca líneas.")).toBeInTheDocument()
   })
+
+  it("on a marked line, tells Psicopedagogía that a more specific action helps the AI", async () => {
+    const marked = line({
+      sent: false,
+      mark: { id: 9, comment: null, subject_name: null, marked_by: null, created_at: "2026-11-10T10:00:00Z" },
+    })
+    vi.spyOn(aiInputApi, "fetchAIInputReview").mockResolvedValue(review({ lines: [marked, line({ key: "b".repeat(64), action: "Leer las consignas en voz alta" })] }))
+
+    renderDialog()
+
+    const markedItem = (await screen.findByText("Dar 15 minutos más en escritos")).closest("li")!
+    expect(within(markedItem).getByRole("note")).toHaveTextContent(
+      "Ser más específico en la acción pedagógica del ajuste ayuda a la IA a decidir mejor.",
+    )
+    const unmarkedItem = screen.getByText("Leer las consignas en voz alta").closest("li")!
+    expect(within(unmarkedItem).queryByRole("note")).not.toBeInTheDocument()
+  })
+
+  it("ignores a slower response for a subject that is no longer chosen", async () => {
+    let resolveBiology: (value: AIInputReview) => void = () => {}
+    vi.spyOn(aiInputApi, "fetchAIInputReview").mockImplementation((_group, subjectId) =>
+      subjectId === 2
+        ? new Promise<AIInputReview>((resolve) => {
+            resolveBiology = resolve
+          })
+        : Promise.resolve(review({ lines: [line({ action: "Todas las líneas" })] })),
+    )
+    const user = userEvent.setup()
+
+    renderDialog()
+    await screen.findByText("Todas las líneas")
+    await user.selectOptions(screen.getByLabelText("Materia (opcional)"), "2")
+    await user.selectOptions(screen.getByLabelText("Materia (opcional)"), "")
+
+    resolveBiology(review({ lines: [line({ action: "Solo Biología" })] }))
+
+    await waitFor(() => expect(screen.getByText("Todas las líneas")).toBeInTheDocument())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText("Solo Biología")).not.toBeInTheDocument()
+  })
 })
