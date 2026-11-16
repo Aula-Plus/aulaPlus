@@ -20,3 +20,7 @@ Schedule::command('alerts:difficulty-signals')->daily();
 // the same alert when its deadline passed while still pending — no second
 // alert is created.
 Schedule::command('alerts:overdue')->daily();
+
+// «Lo que recibe la IA» (ClickUp 1dfd3mc2wx2): a «La IA lo entendió mal» mark
+// still pending a week later raises one alert for whoever marked it.
+Schedule::command('alerts:ai-input-marks')->daily();

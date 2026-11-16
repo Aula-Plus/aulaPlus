@@ -67,7 +67,7 @@ export function GroupOpenAlerts({ groupId, studentNames }: GroupOpenAlertsProps)
             className="flex items-start justify-between gap-4 rounded-md border p-3 text-sm"
           >
             <div>
-              <p className="font-medium">{studentNames[alert.student_id] ?? "Alumno"}</p>
+              <p className="font-medium">{(alert.student_id !== null ? studentNames[alert.student_id] : undefined) ?? "Alumno"}</p>
               <p>
                 {alertTypeLabels[alert.type]}
                 {alert.type === "difficulty_signal" && alert.comment_category_name

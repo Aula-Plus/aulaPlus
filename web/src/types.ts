@@ -183,13 +183,19 @@ export const commentSignalLabels: Record<CommentSignal, string> = {
 }
 
 /** Mirror of `App\Enums\AlertType`. */
-export type AlertType = "performance" | "planning_attendance" | "escalated_overdue" | "difficulty_signal"
+export type AlertType =
+  | "performance"
+  | "planning_attendance"
+  | "escalated_overdue"
+  | "difficulty_signal"
+  | "ai_input_mark"
 
 export const alertTypeLabels: Record<AlertType, string> = {
   performance: "Rendimiento",
   planning_attendance: "Planificación / asistencia",
   escalated_overdue: "Alerta escalada con plazo vencido",
   difficulty_signal: "Señal de dificultad",
+  ai_input_mark: "Lo que recibe la IA: marca pendiente",
 }
 
 /** Mirror of `App\Enums\AlertOutcome` — the three ways out of an alert (ClickUp 86e3jpzdp). */
@@ -258,7 +264,8 @@ export const alertSeverityLabels: Record<AlertSeverity, string> = {
 
 export interface Alert {
   id: number
-  student_id: number
+  /** `null` only on «Lo que recibe la IA» alerts, which are about a group's input. */
+  student_id: number | null
   /** Present on the "my alerts" list (`GET /api/v1/alerts`). */
   student_name?: string | null
   /** The subject a sustained-low-performance alert was met in (ClickUp 86e3jpzcv). */
@@ -267,6 +274,8 @@ export interface Alert {
   /** «Señal de dificultad» alerts: the category the signals were counted in (ClickUp 86e3qkwpn). */
   comment_category_id?: number | null
   comment_category_name?: string | null
+  /** «Lo que recibe la IA» alerts (ClickUp 1dfd3mc2wx2): the pending mark. */
+  ai_input_mark?: AlertAIInputMark | null
   type: AlertType
   severity: AlertSeverity
   description: string
@@ -579,6 +588,45 @@ export interface GroupAccommodationSummaryEntry {
   type: string
   category: AccommodationCategory
   student_count: number
+}
+
+/** The mark a «Lo que recibe la IA» alert is about. */
+export interface AlertAIInputMark {
+  id: number
+  group_id: number
+  group_name: string | null
+  action: string | null
+}
+
+/**
+ * One line of «Lo que recibe la IA» (ClickUp 1dfd3mc2wx2, P03-AJU-03), exactly
+ * as the AI receives it, plus what the review view needs. `"all"` means every
+ * subject / every assessment type.
+ */
+export interface AIInputLine {
+  key: string
+  action: string
+  category: AccommodationCategory | null
+  subjects: string[] | "all"
+  assessment_types: AssessmentType[] | "all"
+  /** `false` while a «La IA lo entendió mal» mark withholds it. */
+  sent: boolean
+  mark: {
+    id: number
+    comment: string | null
+    subject_name: string | null
+    marked_by: { id: number; name: string } | null
+    created_at: string | null
+  } | null
+  /** «Ver ajuste de origen». */
+  origins: { accommodation_id: number; student_id: number; student_name: string | null }[]
+}
+
+export interface AIInputReview {
+  subject: { id: number; name: string } | null
+  subjects: { id: number; name: string }[]
+  lines: AIInputLine[]
+  can: { mark: boolean }
 }
 
 /**
