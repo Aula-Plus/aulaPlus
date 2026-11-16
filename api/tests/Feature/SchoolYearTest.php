@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Accommodation;
+use App\Models\AIProposal;
 use App\Models\AnnualPlan;
 use App\Models\Assessment;
 use App\Models\ClassSession;
@@ -11,11 +12,15 @@ use App\Models\School;
 use App\Models\SchoolPeriod;
 use App\Models\SchoolYear;
 use App\Models\ScreeningTestApplication;
+use App\Models\ScreeningTestResult;
 use App\Models\Student;
+use App\Models\Unit;
+use App\Models\UnitObjective;
 use App\Models\User;
 use App\Services\SchoolYears\SchoolYearCalendar;
 use App\Support\Tenancy;
 use Database\Seeders\CurricularFrameworkSeeder;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 /*
@@ -484,3 +489,100 @@ it('done-criterion: close 2026 on 01/12, open 2027, and the 5.°A student keeps 
         ->and($student->fresh()->groupForYear(2026)?->id)->toBe($group->id)
         ->and(Accommodation::query()->inForceOn('2027-03-05')->whereKey($accommodation->id)->exists())->toBeTrue();
 });
+
+it('keeps listing the closed year\'s groups and enabling loading in them once the next year is open', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['teacher' => $teacher, 'group' => $group, 'assessment' => $assessment, 'student' => $student] = teacherGroup($school);
+    Group::factory()->create(['school_id' => $school->id, 'school_year' => 2027, 'name' => '3°EMS-A']);
+    closeYear($year);
+    SchoolYear::query()->forceCreate(['school_id' => $school->id, 'year' => 2027, 'status' => 'open']);
+    $this->travelTo('2027-02-10 12:00:00');
+
+    Sanctum::actingAs($director);
+    $response = $this->getJson('/api/v1/school-year')->assertOk()
+        ->assertJsonPath('data.year.year', 2027)
+        ->assertJsonPath('data.year.status', 'open');
+    expect(collect($response->json('data.closed_year_groups'))->pluck('id')->all())->toBe([$group->id]);
+
+    $current = SchoolYear::query()->where('school_id', $school->id)->where('year', 2027)->sole();
+    $this->postJson("/api/v1/school-years/{$current->id}/write-windows", [
+        'group_id' => $group->id, 'reason' => 'Exámenes de febrero', 'until_on' => '2027-02-28',
+    ])->assertCreated()->assertJsonPath('data.write_windows.0.active', true);
+
+    Sanctum::actingAs($teacher);
+    postResult($assessment, $student)->assertOk();
+});
+
+it('resolves the windows in force of a groups listing in a fixed number of queries', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    $groups = Group::factory()->count(6)->create(['school_id' => $school->id, 'school_year' => 2026]);
+    closeYear($year);
+    Tenancy::useSchool($school);
+    GroupWriteWindow::query()->create([
+        'group_id' => $groups[0]->id, 'reason' => 'Exámenes de febrero', 'until_on' => '2027-02-28', 'enabled_by_id' => $director->id,
+    ]);
+    Sanctum::actingAs($director);
+
+    DB::enableQueryLog();
+    $response = $this->getJson('/api/groups')->assertOk();
+    $windowQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], 'group_write_windows'))
+        ->count();
+    DB::disableQueryLog();
+
+    expect($windowQueries)->toBe(1);
+    $byId = collect($response->json('data'))->keyBy('id');
+    expect($byId[$groups[0]->id]['read_only'])->toBeFalse()
+        ->and($byId[$groups[0]->id]['writable_until'])->toBe('2027-02-28')
+        ->and($byId[$groups[1]->id]['read_only'])->toBeTrue();
+});
+
+// Every group-data write route behind `group.writable` answers 403
+// `school_year_closed` for a group of a closed year — including the nested
+// resolvers (class session → objective, result → application → group) — and
+// lets the request through to the endpoint once loading is enabled.
+dataset('closed-year write routes', [
+    'AI generate' => fn () => ['post', fn (array $c) => "/api/v1/groups/{$c['group']->id}/assistant/generate"],
+    'AI apply' => fn () => ['post', fn (array $c) => "/api/v1/ai-proposals/{$c['proposal']->id}/apply"],
+    'Lo terminé' => fn () => ['patch', fn (array $c) => "/api/v1/class-sessions/{$c['session']->id}/objectives/{$c['objective']->id}"],
+    'screening result' => fn () => ['patch', fn (array $c) => "/api/v1/screening-test-results/{$c['result']->id}"],
+    'result scale' => fn () => ['put', fn (array $c) => "/api/v1/assessments/{$c['assessment']->id}/result-scale"],
+    'update unit' => fn () => ['patch', fn (array $c) => "/api/v1/units/{$c['unit']->id}"],
+    'delete unit' => fn () => ['delete', fn (array $c) => "/api/v1/units/{$c['unit']->id}"],
+    'add objective' => fn () => ['post', fn (array $c) => "/api/v1/units/{$c['unit']->id}/objectives"],
+    'update objective' => fn () => ['patch', fn (array $c) => "/api/v1/unit-objectives/{$c['objective']->id}"],
+    'delete objective' => fn () => ['delete', fn (array $c) => "/api/v1/unit-objectives/{$c['objective']->id}"],
+]);
+
+it('blocks every group-data write of a closed year until loading is enabled', function (string $method, Closure $url) {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['teacher' => $teacher, 'group' => $group, 'assessment' => $assessment] = teacherGroup($school);
+    Tenancy::useSchool($school);
+    $plan = AnnualPlan::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id, 'subject_id' => $assessment->subject_id]);
+    $unit = Unit::factory()->create(['annual_plan_id' => $plan->id]);
+    $objective = UnitObjective::query()->create(['unit_id' => $unit->id, 'description' => 'Objetivo', 'position' => 1]);
+    $context = [
+        'group' => $group,
+        'assessment' => $assessment,
+        'unit' => $unit,
+        'objective' => $objective,
+        'session' => ClassSession::factory()->create(['school_id' => $school->id, 'group_id' => $group->id]),
+        'proposal' => AIProposal::factory()->create(['school_id' => $school->id, 'group_id' => $group->id, 'requested_by_id' => $teacher->id]),
+        'result' => ScreeningTestResult::factory()->create([
+            'screening_test_application_id' => ScreeningTestApplication::factory()->create(['school_id' => $school->id, 'group_id' => $group->id])->id,
+            'student_id' => Student::factory()->create(['school_id' => $school->id])->id,
+        ]),
+    ];
+    closeYear($year);
+    Sanctum::actingAs($teacher);
+
+    $this->json(strtoupper($method), $url($context), [])
+        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+
+    GroupWriteWindow::query()->create([
+        'group_id' => $group->id, 'reason' => 'Exámenes de febrero', 'until_on' => '2027-02-28', 'enabled_by_id' => $director->id,
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+
+    expect($this->json(strtoupper($method), $url($context), [])->getContent())->not->toContain('school_year_closed');
+})->with('closed-year write routes');

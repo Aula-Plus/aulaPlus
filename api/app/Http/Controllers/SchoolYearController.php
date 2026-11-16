@@ -147,6 +147,7 @@ class SchoolYearController extends Controller
             'until_on' => $request->validated('until_on'),
             'enabled_by_id' => $request->user()->id,
         ]);
+        $this->calendar->forget();
 
         return response()->json(['data' => $this->payload($schoolYear)], 201);
     }
@@ -158,6 +159,7 @@ class SchoolYearController extends Controller
 
         if ($window->isActive()) {
             $window->update(['ended_at' => now(), 'ended_by_id' => $request->user()->id]);
+            $this->calendar->forget();
         }
 
         return response()->json(['data' => $this->payload($year)]);
@@ -201,7 +203,10 @@ class SchoolYearController extends Controller
                 ->inForceOn($today)
                 ->count(),
             'programs' => $this->programs($year, $today),
-            'closed_year_groups' => $year->isClosed() ? $this->closedYearGroups($year) : [],
+            // Still listed once the next year is open: loading can be enabled
+            // in a group of a closed year at any time (e.g. «Exámenes de
+            // febrero» after 2027 was opened).
+            'closed_year_groups' => $this->closedYearGroups((int) $year->school_id),
             'write_windows' => $this->writeWindows($year),
         ];
     }
@@ -250,12 +255,22 @@ class SchoolYearController extends Controller
     }
 
     /**
+     * The groups of every closed year (up to the last one closed, the same
+     * rule as SchoolYearCalendar::isInClosedYear), newest year first.
+     *
      * @return list<array{id: int, name: string, school_year: int}>
      */
-    protected function closedYearGroups(SchoolYear $year): array
+    protected function closedYearGroups(int $schoolId): array
     {
-        return Group::query()->where('school_id', $year->school_id)
-            ->where('school_year', $year->year)
+        $lastClosed = $this->calendar->lastClosedYear($schoolId);
+        if ($lastClosed === null) {
+            return [];
+        }
+
+        return Group::query()->where('school_id', $schoolId)
+            ->whereNotNull('school_year')
+            ->where('school_year', '<=', $lastClosed)
+            ->orderByDesc('school_year')
             ->orderBy('name')
             ->get(['id', 'name', 'school_year'])
             ->map(fn (Group $group) => ['id' => $group->id, 'name' => $group->name, 'school_year' => (int) $group->school_year])

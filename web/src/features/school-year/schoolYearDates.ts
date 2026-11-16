@@ -17,9 +17,3 @@ export function sameDateNextYear(iso: string): string {
   return `${next}-${pad(month)}-${pad(Math.min(day, lastDay))}`
 }
 
-/** Today as YYYY-MM-DD in the browser's local calendar. */
-export function todayIso(): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}

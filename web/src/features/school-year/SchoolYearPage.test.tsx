@@ -179,6 +179,26 @@ describe("SchoolYearPage («Año y calendario»)", () => {
     expect(within(list).getByText("Vigente")).toBeInTheDocument()
   })
 
+  it("still enables loading in a 2026 group once 2027 is open", async () => {
+    const state: SchoolYearState = {
+      ...openYear(),
+      year: { ...openYear().year, id: 8, year: 2027 },
+      next_year: 2028,
+      closed_year_groups: [{ id: 5, name: "2°EMS-A", school_year: 2026 }],
+    }
+    vi.spyOn(schoolYearApi, "fetchSchoolYear").mockResolvedValue(state)
+    const create = vi.spyOn(schoolYearApi, "createWriteWindow").mockResolvedValue(state)
+    renderPage()
+
+    await userEvent.selectOptions(await screen.findByLabelText("Grupo"), "5")
+    expect(screen.getByRole("option", { name: "2°EMS-A (2026)" })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText("Motivo"), "Exámenes de febrero")
+    await userEvent.type(screen.getByLabelText("Hasta"), "2027-02-28")
+    await userEvent.click(screen.getByRole("button", { name: "Habilitar la carga" }))
+
+    expect(create).toHaveBeenCalledWith(8, { group_id: 5, reason: "Exámenes de febrero", until_on: "2027-02-28" })
+  })
+
   it("is closed to every role but direction", () => {
     const fetch = vi.spyOn(schoolYearApi, "fetchSchoolYear")
     renderPage("psychopedagogue")

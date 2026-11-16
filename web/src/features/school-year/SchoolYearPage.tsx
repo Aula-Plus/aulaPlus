@@ -201,7 +201,7 @@ export function SchoolYearPage() {
         )}
       </SectionCard>
 
-      {(!isOpen || state.write_windows.length > 0) && (
+      {(!isOpen || state.closed_year_groups.length > 0 || state.write_windows.length > 0) && (
         <WriteWindowsCard
           state={state}
           onCreate={(input) =>
@@ -500,6 +500,7 @@ function OpenYearPanel({
   const { year, next_year: nextYear } = state
   const [choosing, setChoosing] = useState(false)
   const [choices, setChoices] = useState<Record<number, Choice>>({})
+  const [opening, setOpening] = useState(false)
   const programs: SchoolProgram[] = state.programs.filter((program) => program.periods.length > 0)
 
   function choiceFor(periodId: number, startsOn: string): Choice {
@@ -600,7 +601,17 @@ function OpenYearPanel({
             </fieldset>
           ))}
           <div className="flex gap-2">
-            <Button disabled={incomplete} onClick={() => void onOpen(decisions)}>
+            <Button
+              disabled={incomplete || opening}
+              onClick={async () => {
+                setOpening(true)
+                try {
+                  await onOpen(decisions)
+                } finally {
+                  setOpening(false)
+                }
+              }}
+            >
               Abrir el año {nextYear}
             </Button>
             <Button variant="outline" onClick={() => setChoosing(false)}>
@@ -625,7 +636,10 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
   const [groupId, setGroupId] = useState("")
   const [reason, setReason] = useState("")
   const [until, setUntil] = useState("")
-  const closed = state.year.status === "closed"
+  // Loading can be enabled in a group of a closed year even after the next
+  // year was opened (e.g. «Exámenes de febrero»), so the form follows the
+  // groups the server lists, not the current year's status.
+  const canEnable = state.closed_year_groups.length > 0
 
   return (
     <SectionCard title="Carga en grupos del año cerrado">
@@ -635,7 +649,7 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
         al pasar la fecha el grupo vuelve solo a ser de lectura.
       </p>
 
-      {closed && (
+      {canEnable && (
         <form
           className="mb-4 grid gap-3 sm:grid-cols-4 sm:items-end"
           onSubmit={async (event) => {
@@ -659,7 +673,7 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
               <option value="">Elegí un grupo</option>
               {state.closed_year_groups.map((group) => (
                 <option key={group.id} value={group.id}>
-                  {group.name}
+                  {group.name} ({group.school_year})
                 </option>
               ))}
             </select>
