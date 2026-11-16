@@ -33,6 +33,7 @@ import { CalendarPage } from "@/features/calendar/CalendarPage"
 import { GroupComparisonPage } from "@/features/group-comparison/GroupComparisonPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
+import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
 
 function App() {
   return (
@@ -210,6 +211,14 @@ function App() {
             }
           />
           {/* Comparativa por año de cursada (screen 05): Psicopedagogía y Dirección. */}
+          <Route
+            path="/indicadores-y-cruces"
+            element={
+              <ProtectedLayout>
+                <IndicatorsPage />
+              </ProtectedLayout>
+            }
+          />
           <Route
             path="/comparativa"
             element={

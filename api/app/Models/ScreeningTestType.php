@@ -24,6 +24,7 @@ use Illuminate\Support\Collection;
     'levels',
     'frequency',
     'frequency_years',
+    'taken_every_year',
     'teacher_visible',
     'active',
     'created_by_id',
@@ -40,6 +41,7 @@ class ScreeningTestType extends Model
             'levels' => 'array',
             'frequency' => ScreeningFrequency::class,
             'frequency_years' => 'integer',
+            'taken_every_year' => 'boolean',
             'teacher_visible' => 'boolean',
         ];
     }

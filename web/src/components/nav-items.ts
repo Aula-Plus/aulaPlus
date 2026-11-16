@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarRange,
   CalendarDays,
+  ChartScatter,
   ClipboardList,
   Columns2,
   GraduationCap,
@@ -24,6 +25,7 @@ import type { User } from "@/types"
 import {
   canCompareGroups,
   canOpenAccommodationsInbox,
+  canOpenIndicators,
   canEditScreeningTestDesign,
   canManageGradesVisibility,
   canManageAlertSettings,
@@ -104,6 +106,11 @@ export function buildNavSections(
         // who both edit designs (screen 08).
         ...(canEditScreeningTestDesign(user)
           ? [{ to: "/pruebas-de-sondeo/tipos", label: "Screenings", icon: ClipboardList }]
+          : []),
+        // Screen 30 «Indicadores y cruces», right after the screenings
+        // (P30-DEC-01): Psicopedagogía and Dirección only.
+        ...(canOpenIndicators(user)
+          ? [{ to: "/indicadores-y-cruces", label: "Indicadores y cruces", icon: ChartScatter }]
           : []),
         // Read-only subjects list for everyone but the director (who manages
         // it under Administración): teachers open their subject's program PDF

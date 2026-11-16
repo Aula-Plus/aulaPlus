@@ -383,6 +383,15 @@ export function canCompareGroups(user: User | null): boolean {
 }
 
 /**
+ * Screen 30 «Indicadores y cruces» (ClickUp 1dfd3mc4bgp): Psicopedagogía and
+ * Dirección only (P30-*-01). Mirror of `IndicatorPolicy` / `CrossingPolicy` /
+ * `ExternalMeasurePolicy`.
+ */
+export function canOpenIndicators(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
+}
+
+/**
  * Screen 06 «Ajustes y PTP» (ClickUp 1dfd3mc4bgc): only Psicopedagogía enters
  * (P06-DEC-07). Mirror of `AccommodationPolicy::viewInbox`.
  */
