@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
+import { ClosedYearNotice } from "@/features/school-year/ClosedYearNotice"
 import { RowLink } from "@/components/ui/row-link"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -87,6 +88,8 @@ export function GroupTrackingPage() {
           <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Screenings</RowLink>
         )}
       </PageHeader>
+
+      <ClosedYearNotice group={group} />
 
       <GroupOpenAlerts
         groupId={group.id}

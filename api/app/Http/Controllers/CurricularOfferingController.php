@@ -9,6 +9,7 @@ use App\Models\Group;
 use App\Models\Subject;
 use App\Services\CurricularStructure\CurricularOfferings;
 use App\Services\CurricularStructure\PlannerFields;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -123,6 +124,10 @@ class CurricularOfferingController extends Controller
                 'name' => $group->name,
                 'school_year' => (int) $group->school_year,
                 'level' => $group->educationLevel?->label,
+                // Screen 26: a closed year's offer is read-only unless
+                // direction enabled loading in the group. UX hint only — the
+                // `group.writable` middleware rejects the write.
+                'read_only' => app(SchoolYearCalendar::class)->isReadOnly($group),
             ],
             'subject' => ['id' => $subject->id, 'name' => $subject->name],
             'frameworks' => $this->offerings->effectiveFor($group, $subject, $stored)

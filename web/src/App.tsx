@@ -15,6 +15,7 @@ import { GroupTrackingPage } from "@/features/tracking/GroupTrackingPage"
 import { LimitsPage } from "@/features/users/LimitsPage"
 import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
 import { OfficialScalesPage } from "@/features/official-scales/OfficialScalesPage"
+import { SchoolYearPage } from "@/features/school-year/SchoolYearPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
@@ -193,6 +194,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <OfficialScalesPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Año y calendario (screen 26): direction closes and opens the year. */}
+          <Route
+            path="/administracion/ano-y-calendario"
+            element={
+              <ProtectedLayout>
+                <SchoolYearPage />
               </ProtectedLayout>
             }
           />

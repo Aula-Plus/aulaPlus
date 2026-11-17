@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureGroupIsWritable;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // AppServiceProvider). Individual endpoints may still layer a
         // stricter throttle on top (e.g. /login's throttle:login).
         $middleware->throttleApi();
+
+        // Screen 26: rejects writes to a group of a closed school year.
+        $middleware->alias(['group.writable' => EnsureGroupIsWritable::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -12,7 +12,9 @@ import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canManageGroups } from "@/lib/permissions"
 import { GroupTeacherAssignments } from "@/features/subjects/GroupTeacherAssignments"
-import type { EducationLevelOption } from "@/types"
+import { ClosedYearNotice } from "@/features/school-year/ClosedYearNotice"
+import { closedYearError } from "@/features/school-year/closedYearError"
+import type { EducationLevelOption, Group } from "@/types"
 import { GroupLevelFields } from "./GroupLevelFields"
 import * as groupsApi from "./groupsApi"
 
@@ -38,6 +40,10 @@ export function GroupFormPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [levels, setLevels] = useState<EducationLevelOption[]>([])
+  // Screen 26: a closed year's structure is read-only unless direction
+  // enabled loading in the group (UX only; the server decides).
+  const [loaded, setLoaded] = useState<Group | null>(null)
+  const readOnly = Boolean(loaded?.read_only)
 
   const {
     register,
@@ -66,6 +72,7 @@ export function GroupFormPage() {
   useEffect(() => {
     if (!id) return
     groupsApi.fetchGroup(Number(id)).then((group) => {
+      setLoaded(group)
       reset({
         name: group.name,
         // A group created before levels existed stays "Sin nivel" until one is
@@ -95,8 +102,8 @@ export function GroupFormPage() {
       }
       outletContext?.onSaved()
       navigate("/clases", { replace: true })
-    } catch {
-      setFormError("No pudimos guardar el grupo.")
+    } catch (caught) {
+      setFormError(closedYearError(caught) ?? "No pudimos guardar el grupo.")
     }
   }
 
@@ -108,8 +115,8 @@ export function GroupFormPage() {
       await groupsApi.deleteGroup(Number(id))
       outletContext?.onSaved()
       navigate("/clases", { replace: true })
-    } catch {
-      setFormError("No pudimos eliminar el grupo.")
+    } catch (caught) {
+      setFormError(closedYearError(caught) ?? "No pudimos eliminar el grupo.")
       setIsDeleting(false)
     }
   }
@@ -122,9 +129,11 @@ export function GroupFormPage() {
     <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar grupo" : "Nuevo grupo"}</DialogTitle>
+          <DialogTitle>{isEdit ? (readOnly ? "Grupo" : "Editar grupo") : "Nuevo grupo"}</DialogTitle>
         </DialogHeader>
+        {loaded && <ClosedYearNotice group={loaded} />}
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
+          <fieldset disabled={readOnly} className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="name">Nombre</Label>
             <Input id="name" {...register("name")} />
@@ -141,21 +150,26 @@ export function GroupFormPage() {
           />
           <div className="grid gap-2">
             <Label htmlFor="school_year">Año lectivo</Label>
-            <Input id="school_year" type="number" {...register("school_year")} />
+            {/* A closed year's group stays in its year, even with loading enabled. */}
+            <Input id="school_year" type="number" readOnly={Boolean(loaded?.year_closed)} {...register("school_year")} />
             {errors.school_year && (
               <p className="text-sm text-destructive">{errors.school_year.message}</p>
             )}
           </div>
+          </fieldset>
           {formError && (
             <p role="alert" className="text-sm text-destructive">
               {formError}
             </p>
           )}
           <div className="flex gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando…" : "Guardar"}
-            </Button>
-            {isEdit && (
+            {!readOnly && (
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Guardando…" : "Guardar"}
+              </Button>
+            )}
+            {/* A closed year's group is history: never deleted (screen 26). */}
+            {isEdit && !loaded?.year_closed && (
               <ConfirmDialog
                 trigger={
                   <Button type="button" variant="destructive" disabled={isDeleting}>
@@ -177,7 +191,7 @@ export function GroupFormPage() {
           Sesión 2). It needs a real groupId, so it renders only when editing.
         */}
         {isEdit && id && (
-          <GroupTeacherAssignments groupId={Number(id)} canManage={canManageGroups(user)} />
+          <GroupTeacherAssignments groupId={Number(id)} canManage={canManageGroups(user) && !readOnly} />
         )}
       </DialogContent>
     </Dialog>

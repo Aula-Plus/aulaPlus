@@ -272,6 +272,14 @@ export function canViewOfficialScales(user: User | null): boolean {
 }
 
 /**
+ * Screen 26 «Año y calendario» (ClickUp 1dfd3mc4bh7): direction only. Mirror
+ * of SchoolYearPolicy — UX only.
+ */
+export function canManageSchoolYear(user: User | null): boolean {
+  return isDirector(user)
+}
+
+/**
  * Show the create/edit-accommodation UI (docs/prompts/24 §3). Deliberately
  * gated on the SAME roles that may already SEE accommodations
  * (`canViewClinicalProfileUX` → school-wide staff), not on the looser backend

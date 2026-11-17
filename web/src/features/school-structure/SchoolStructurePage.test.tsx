@@ -91,6 +91,16 @@ describe("SchoolStructurePage", () => {
     expect(await screen.findByText("ANEP EBI + Cambridge Primary")).toBeInTheDocument()
   })
 
+  it("keeps the offer of a closed year's group for reading only (screen 26)", async () => {
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([
+      { ...row, group: { ...row.group, school_year: 2025, read_only: true } },
+    ])
+    renderPage("director")
+
+    expect(await screen.findByText("Año cerrado: solo lectura")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Editar programas" })).not.toBeInTheDocument()
+  })
+
   it("never explains on screen why a program is fixed", async () => {
     vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([row])
     renderPage("director")
