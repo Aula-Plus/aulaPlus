@@ -71,6 +71,22 @@ describe("AIInputReviewDialog", () => {
     await waitFor(() => expect(fetch).toHaveBeenLastCalledWith(5, 2))
   })
 
+  it("hides the mark actions while another subject is loading", async () => {
+    let resolveSecond: (value: ReturnType<typeof review>) => void = () => {}
+    vi.spyOn(aiInputApi, "fetchAIInputReview")
+      .mockResolvedValueOnce(review())
+      .mockReturnValueOnce(new Promise((resolve) => (resolveSecond = resolve)))
+    const user = userEvent.setup()
+
+    renderDialog()
+    await screen.findByRole("button", { name: "La IA lo entendió mal" })
+    await user.selectOptions(screen.getByLabelText("Materia (opcional)"), "2")
+
+    expect(screen.queryByRole("button", { name: "La IA lo entendió mal" })).not.toBeInTheDocument()
+    resolveSecond(review())
+    expect(await screen.findByRole("button", { name: "La IA lo entendió mal" })).toBeInTheDocument()
+  })
+
   it("lets Psicopedagogía mark a line, warning not to write names or health data", async () => {
     vi.spyOn(aiInputApi, "fetchAIInputReview").mockResolvedValue(review())
     const mark = vi.spyOn(aiInputApi, "markAIInputLine").mockResolvedValue()
@@ -80,6 +96,9 @@ describe("AIInputReviewDialog", () => {
     await user.click(await screen.findByRole("button", { name: "La IA lo entendió mal" }))
 
     expect(screen.getByRole("note")).toHaveTextContent("No escribas nombres de alumnos ni datos de salud.")
+    expect(screen.getByLabelText("Comentario (opcional)")).toHaveAccessibleDescription(
+      "Nos sirve mucho saber qué entendió mal la IA: contalo en una frase si podés.",
+    )
     await user.type(screen.getByLabelText("Comentario (opcional)"), "Lo tomó para todo el curso")
     await user.click(screen.getByRole("button", { name: "Marcar la línea" }))
 

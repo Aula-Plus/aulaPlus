@@ -51,6 +51,10 @@ function assessmentTypesText(line: AIInputLine): string | null {
 export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputReviewDialogProps) {
   const [subjectId, setSubjectId] = useState<number | null>(null)
   const [review, setReview] = useState<AIInputReview | null>(null)
+  // The subject the shown review was loaded for. While another subject is
+  // loading, the lines on screen belong to the previous one, so marking is
+  // disabled: a mark made from there would be saved with the new subject.
+  const [reviewSubjectId, setReviewSubjectId] = useState<number | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [active, setActive] = useState<ActiveForm | null>(null)
   const [comment, setComment] = useState("")
@@ -69,7 +73,10 @@ export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputRevi
     setError(null)
     try {
       const data = await aiInputApi.fetchAIInputReview(groupId, subjectId)
-      if (request === latestRequest.current) setReview(data)
+      if (request === latestRequest.current) {
+        setReview(data)
+        setReviewSubjectId(subjectId)
+      }
     } catch {
       if (request === latestRequest.current) setError("No pudimos cargar lo que recibiría la IA.")
     }
@@ -112,6 +119,7 @@ export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputRevi
   }
 
   const canMark = review?.can.mark ?? false
+  const isStale = review !== null && reviewSubjectId !== subjectId
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -198,7 +206,7 @@ export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputRevi
                       </Link>
                     ))}
                   </div>
-                  {canMark && active?.key !== line.key && (
+                  {canMark && !isStale && active?.key !== line.key && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {line.mark ? (
                         <Button
@@ -221,16 +229,20 @@ export function AIInputReviewDialog({ groupId, open, onOpenChange }: AIInputRevi
                       )}
                     </div>
                   )}
-                  {canMark && active?.key === line.key && (
+                  {canMark && !isStale && active?.key === line.key && (
                     <div className="mt-3 grid gap-2">
                       <p role="note" className="rounded-md bg-muted p-3 text-sm">
                         No escribas nombres de alumnos ni datos de salud.
                       </p>
                       <Label htmlFor={`ai-input-comment-${line.key}`}>Comentario (opcional)</Label>
+                      <p id={`ai-input-comment-hint-${line.key}`} className="text-xs text-muted-foreground">
+                        Nos sirve mucho saber qué entendió mal la IA: contalo en una frase si podés.
+                      </p>
                       <Textarea
                         id={`ai-input-comment-${line.key}`}
                         rows={3}
                         maxLength={500}
+                        aria-describedby={`ai-input-comment-hint-${line.key}`}
                         value={comment}
                         onChange={(event) => setComment(event.target.value)}
                       />
