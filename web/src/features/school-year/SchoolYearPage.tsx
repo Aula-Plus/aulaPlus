@@ -10,14 +10,21 @@ import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { NoAccessPage } from "@/pages/NoAccessPage"
+import { calendarBodyLabels, type CalendarBody } from "@/types"
 import * as schoolYearApi from "./schoolYearApi"
-import type { CarryAction, PeriodState, SchoolProgram, SchoolYearState } from "./schoolYearApi"
+import type { CarryAction, PeriodCalendar, PeriodState, PeriodTarget, SchoolYearState } from "./schoolYearApi"
 import { formatDay, sameDateNextYear } from "./schoolYearDates"
 
 const PERIOD_STATE_LABELS: Record<PeriodState, string> = {
   past: "Terminado",
   current: "En curso",
   upcoming: "Próximo",
+}
+
+/** A row's name: its body («Cambridge») or, split by program, its program. */
+function calendarLabel(calendar: PeriodCalendar): string {
+  if (calendar.name) return calendar.name
+  return calendar.body ? calendarBodyLabels[calendar.body] : "Programa"
 }
 
 /** The first validation message the server sent, mapped to Spanish where known. */
@@ -34,6 +41,13 @@ function errorText(error: unknown, fallback: string): string {
     "The next school year is already open.": "El año siguiente ya está abierto.",
     "Loading can only be enabled in a group of a closed year.":
       "Solo se puede habilitar la carga en un grupo de un año cerrado.",
+    "The next school year is already open: closing cannot be undone.":
+      "El año siguiente ya está abierto: el cierre ya no se puede deshacer.",
+    "The school year is not closed.": "El año no está cerrado.",
+    "The programs have different periods: make them the same before joining.":
+      "Los programas tienen períodos distintos: para volver a una sola fila, tienen que tener los mismos.",
+    "The school has only one program of this body.": "El colegio tiene un solo programa de este organismo.",
+    "The periods of a closed school year cannot change.": "Los períodos de un año cerrado no cambian.",
   }
   return (message && known[message]) || fallback
 }
@@ -42,7 +56,8 @@ function errorText(error: unknown, fallback: string): string {
  * Screen 26 «Año y calendario», route `/administracion/ano-y-calendario`
  * (ClickUp 1dfd3mc4bh7). Direction only (UX gate; SchoolYearPolicy decides).
  *
- * - The year's state, its periods per program — each program its own scheme,
+ * - The year's state, its periods per body of the offer (Cambridge and IB can
+ *   be split by program) — each row its own scheme,
  *   name and start date (P26-ANO-02, P26-DEC-04) — and the closing card that
  *   says what happens before the button (P26-ANO-03, P26-DEC-02).
  * - Closing deletes and moves nothing: the groups stay as history, read-only,
@@ -102,8 +117,8 @@ export function SchoolYearPage() {
 
   const { year } = state
   const isOpen = year.status === "open"
-  const currentPeriods = state.programs.flatMap((program) =>
-    program.periods.filter((period) => period.state === "current").map((period) => ({ program, period })),
+  const currentPeriods = state.calendars.flatMap((calendar) =>
+    calendar.periods.filter((period) => period.state === "current").map((period) => ({ calendar, period })),
   )
 
   return (
@@ -119,7 +134,7 @@ export function SchoolYearPage() {
 
       {currentPeriods.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          {currentPeriods.map(({ program, period }) => `${program.name}: ${period.name} en curso`).join(" · ")}
+          {currentPeriods.map(({ calendar, period }) => `${calendarLabel(calendar)}: ${period.name} en curso`).join(" · ")}
         </p>
       )}
 
@@ -170,6 +185,20 @@ export function SchoolYearPage() {
           run(() => schoolYearApi.updatePeriod(periodId, input), "No pudimos guardar el período. Revisá que la fecha sea de este año.")
         }
         onDelete={(periodId) => run(() => schoolYearApi.deletePeriod(periodId), "No pudimos quitar el período.")}
+        onSplit={(body) =>
+          run(
+            () => schoolYearApi.splitBody(year.id, body),
+            "No pudimos separar por programa.",
+            `${calendarBodyLabels[body]} quedó separado por programa.`,
+          )
+        }
+        onJoin={(body) =>
+          run(
+            () => schoolYearApi.joinBody(year.id, body),
+            "No pudimos volver a una sola fila.",
+            `${calendarBodyLabels[body]} volvió a una sola fila.`,
+          )
+        }
       />
 
       <SectionCard title="Abrir y cerrar el año">
@@ -190,6 +219,13 @@ export function SchoolYearPage() {
         ) : (
           <OpenYearPanel
             state={state}
+            onReopen={() =>
+              run(
+                () => schoolYearApi.reopenYear(year.id),
+                "No pudimos deshacer el cierre.",
+                `Se deshizo el cierre: el año ${year.year} está abierto otra vez.`,
+              )
+            }
             onOpen={(decisions) =>
               run(
                 () => schoolYearApi.openNextYear(year.id, decisions),
@@ -222,35 +258,90 @@ export function SchoolYearPage() {
 
 interface PeriodsCardProps {
   state: SchoolYearState
-  onCreate: (input: { curricular_framework_id: number; name: string; starts_on: string }) => Promise<boolean>
+  onCreate: (input: PeriodTarget & { name: string; starts_on: string }) => Promise<boolean>
   onUpdate: (periodId: number, input: { name: string; starts_on: string }) => Promise<boolean>
   onDelete: (periodId: number) => Promise<boolean>
+  onSplit: (body: CalendarBody) => Promise<boolean>
+  onJoin: (body: CalendarBody) => Promise<boolean>
 }
 
-function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) {
+function targetFor(calendar: PeriodCalendar): PeriodTarget | null {
+  if (calendar.curricular_framework_id !== null) return { curricular_framework_id: calendar.curricular_framework_id }
+  return calendar.body ? { calendar_body: calendar.body } : null
+}
+
+/**
+ * One row per body of the school's offer — ANEP Bachillerato, ANEP Ciclo
+ * Básico y Primaria, Cambridge, IB (Eitán 17/11) —; Cambridge and IB can be
+ * «Separar por programa», each program then with its own periods.
+ */
+function PeriodsCard({ state, onCreate, onUpdate, onDelete, onSplit, onJoin }: PeriodsCardProps) {
   const editable = state.year.status === "open"
-  const [programId, setProgramId] = useState("")
+  const [calendarKey, setCalendarKey] = useState("")
   const [name, setName] = useState("")
   const [startsOn, setStartsOn] = useState("")
   const [editing, setEditing] = useState<{ id: number; name: string; starts_on: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const selected = state.calendars.find((calendar) => calendar.key === calendarKey)
 
   async function add() {
-    if (!programId || !name.trim() || !startsOn) return
-    const ok = await onCreate({ curricular_framework_id: Number(programId), name: name.trim(), starts_on: startsOn })
+    const target = selected ? targetFor(selected) : null
+    if (!target || !name.trim() || !startsOn) return
+    const ok = await onCreate({ ...target, name: name.trim(), starts_on: startsOn })
     if (ok) {
       setName("")
       setStartsOn("")
     }
   }
 
+  async function guarded(action: () => Promise<boolean>) {
+    setBusy(true)
+    try {
+      await action()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function labelCell(calendar: PeriodCalendar, first: boolean) {
+    if (!first) return <TableCell />
+    const isBodyRow = calendar.curricular_framework_id === null
+    return (
+      <TableCell className="font-medium">
+        {calendarLabel(calendar)}
+        {isBodyRow && calendar.programs.length > 1 && (
+          <span className="block text-xs font-normal text-muted-foreground">{calendar.programs.join(", ")}</span>
+        )}
+        {!isBodyRow && calendar.body && (
+          <span className="block text-xs font-normal text-muted-foreground">
+            {calendarBodyLabels[calendar.body]}, separado por programa
+          </span>
+        )}
+        {editable && calendar.can_split && calendar.body && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-1"
+            disabled={busy}
+            onClick={() => guarded(() => onSplit(calendar.body as CalendarBody))}
+          >
+            Separar por programa
+          </Button>
+        )}
+      </TableCell>
+    )
+  }
+
   return (
     <SectionCard title="Períodos">
       <p className="mb-3 text-sm text-muted-foreground">
-        Cada programa tiene su esquema; no se fuerza uno único. Un período dura hasta que empieza el
-        siguiente del mismo programa. Los períodos no cambian el corte de «Visibilidad de
+        Una fila por organismo de la oferta curricular del colegio; cada uno tiene su esquema y no se
+        fuerza uno único. En Cambridge e IB, «Separar por programa» sirve cuando un programa tiene otro
+        calendario: cada programa empieza con los períodos que tenía la fila. Un período dura hasta que
+        empieza el siguiente de la misma fila. Los períodos no cambian el corte de «Visibilidad de
         calificaciones».
       </p>
-      {state.programs.length === 0 ? (
+      {state.calendars.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           El colegio todavía no tiene programas activos (se activan en Colegio y estructura).
         </p>
@@ -258,7 +349,7 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Programa</TableHead>
+              <TableHead>Organismo o programa</TableHead>
               <TableHead>Período</TableHead>
               <TableHead>Desde</TableHead>
               <TableHead>Estado</TableHead>
@@ -266,19 +357,19 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {state.programs.map((program) =>
-              program.periods.length === 0 ? (
-                <TableRow key={`p-${program.id}`}>
-                  <TableCell className="font-medium">{program.name}</TableCell>
+            {state.calendars.map((calendar) =>
+              calendar.periods.length === 0 ? (
+                <TableRow key={calendar.key}>
+                  {labelCell(calendar, true)}
                   <TableCell colSpan={editable ? 4 : 3} className="text-muted-foreground">
                     Sin períodos cargados.
                   </TableCell>
                 </TableRow>
               ) : (
-                program.periods.map((period, index) =>
+                calendar.periods.map((period, index) =>
                   editing?.id === period.id ? (
                     <TableRow key={period.id}>
-                      <TableCell className="font-medium">{index === 0 ? program.name : ""}</TableCell>
+                      {labelCell(calendar, index === 0)}
                       <TableCell>
                         <Input
                           aria-label="Nombre del período"
@@ -314,7 +405,7 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
                     </TableRow>
                   ) : (
                     <TableRow key={period.id}>
-                      <TableCell className="font-medium">{index === 0 ? program.name : ""}</TableCell>
+                      {labelCell(calendar, index === 0)}
                       <TableCell>{period.name}</TableCell>
                       <TableCell>{formatDay(period.starts_on)}</TableCell>
                       <TableCell>
@@ -329,7 +420,7 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
                           <Button
                             size="sm"
                             variant="outline"
-                            aria-label={`Editar ${period.name} de ${program.name}`}
+                            aria-label={`Editar ${period.name} de ${calendarLabel(calendar)}`}
                             onClick={() => setEditing({ id: period.id, name: period.name, starts_on: period.starts_on })}
                           >
                             Editar
@@ -337,7 +428,7 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
                           <Button
                             size="sm"
                             variant="outline"
-                            aria-label={`Quitar ${period.name} de ${program.name}`}
+                            aria-label={`Quitar ${period.name} de ${calendarLabel(calendar)}`}
                             onClick={() => onDelete(period.id)}
                           >
                             Quitar
@@ -353,7 +444,17 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
         </Table>
       )}
 
-      {editable && state.programs.length > 0 && (
+      {editable && state.split_bodies.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {state.split_bodies.map((body) => (
+            <Button key={body} size="sm" variant="outline" disabled={busy} onClick={() => guarded(() => onJoin(body))}>
+              Volver a una fila: {calendarBodyLabels[body]}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {editable && state.calendars.length > 0 && (
         <form
           className="mt-4 grid gap-3 sm:grid-cols-4 sm:items-end"
           onSubmit={(event) => {
@@ -362,19 +463,21 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
           }}
         >
           <div className="grid gap-1">
-            <Label htmlFor="period-program">Programa</Label>
+            <Label htmlFor="period-calendar">Organismo o programa</Label>
             <select
-              id="period-program"
+              id="period-calendar"
               className="h-9 rounded-md border px-2"
-              value={programId}
-              onChange={(event) => setProgramId(event.target.value)}
+              value={calendarKey}
+              onChange={(event) => setCalendarKey(event.target.value)}
             >
-              <option value="">Elegí un programa</option>
-              {state.programs.map((program) => (
-                <option key={program.id} value={program.id}>
-                  {program.name}
-                </option>
-              ))}
+              <option value="">Elegí uno</option>
+              {state.calendars
+                .filter((calendar) => targetFor(calendar) !== null)
+                .map((calendar) => (
+                  <option key={calendar.key} value={calendar.key}>
+                    {calendarLabel(calendar)}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="grid gap-1">
@@ -391,7 +494,7 @@ function PeriodsCard({ state, onCreate, onUpdate, onDelete }: PeriodsCardProps) 
             <Label htmlFor="period-start">Desde</Label>
             <Input id="period-start" type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
           </div>
-          <Button type="submit" disabled={!programId || !name.trim() || !startsOn}>
+          <Button type="submit" disabled={!selected || !name.trim() || !startsOn}>
             Agregar período
           </Button>
         </form>
@@ -416,10 +519,17 @@ function CloseYearPanel({ state, onSaveDate, onClose }: CloseYearPanelProps) {
 
   return (
     <div className="grid gap-4 text-sm">
+      {year.reopened_at && (
+        <p className="text-muted-foreground">
+          Se deshizo el cierre el {formatDay(year.reopened_at)}
+          {year.reopened_by_name ? ` (lo hizo ${year.reopened_by_name})` : ""}.
+        </p>
+      )}
       {/* P26-DEC-02: the consequence is written above the button. */}
       <p>
         Antes de cerrar, esto es lo que pasa: no se borra ni se mueve nada. Los grupos {year.year} quedan
-        como historia y pasan a ser solo para leer; cada alumno queda sin grupo hasta que se arman los
+        como historia y pasan a ser solo para leer, también su estructura (docentes, oferta curricular y
+        nivel); cada alumno queda sin grupo hasta que se arman los
         grupos de {state.next_year} en Colegio y estructura. Los ajustes pasan solos al año nuevo,
         porque son del alumno: pasan {state.carried_accommodations}{" "}
         {state.carried_accommodations === 1 ? "ajuste vigente" : "ajustes vigentes"}.
@@ -444,8 +554,8 @@ function CloseYearPanel({ state, onSaveDate, onClose }: CloseYearPanelProps) {
       {confirming ? (
         <div className="grid gap-3 rounded-md border border-destructive/40 p-3" role="group" aria-label="Confirmar el cierre">
           <p className="font-medium">
-            ¿Cerrar el año {year.year}? Los grupos {year.year} quedan para leer y no se puede volver a
-            abrir el año desde acá.
+            ¿Cerrar el año {year.year}? Los grupos {year.year} quedan para leer: sus datos y su estructura.
+            Mientras no se abra el año {state.next_year}, Dirección puede deshacer el cierre.
           </p>
           <div className="flex gap-2">
             <Button
@@ -493,15 +603,19 @@ interface Choice {
 function OpenYearPanel({
   state,
   onOpen,
+  onReopen,
 }: {
   state: SchoolYearState
   onOpen: (decisions: schoolYearApi.CarryDecision[]) => Promise<boolean>
+  onReopen: () => Promise<boolean>
 }) {
   const { year, next_year: nextYear } = state
   const [choosing, setChoosing] = useState(false)
   const [choices, setChoices] = useState<Record<number, Choice>>({})
   const [opening, setOpening] = useState(false)
-  const programs: SchoolProgram[] = state.programs.filter((program) => program.periods.length > 0)
+  const [confirmingUndo, setConfirmingUndo] = useState(false)
+  const [undoing, setUndoing] = useState(false)
+  const programs: PeriodCalendar[] = state.calendars.filter((calendar) => calendar.periods.length > 0)
 
   function choiceFor(periodId: number, startsOn: string): Choice {
     return choices[periodId] ?? { action: "same_date", startsOn: sameDateNextYear(startsOn) }
@@ -531,9 +645,41 @@ function OpenYearPanel({
         Colegio y estructura.
       </p>
 
-      {!choosing ? (
-        <div>
+      {confirmingUndo ? (
+        <div className="grid gap-3 rounded-md border border-destructive/40 p-3" role="group" aria-label="Confirmar deshacer el cierre">
+          <p className="font-medium">
+            ¿Deshacer el cierre del año {year.year}? El año vuelve a estar abierto y sus grupos se pueden
+            cargar y corregir otra vez. No se borra nada, y queda registrado quién lo hizo y cuándo.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="destructive"
+              disabled={undoing}
+              onClick={async () => {
+                setUndoing(true)
+                try {
+                  await onReopen()
+                } finally {
+                  setUndoing(false)
+                  setConfirmingUndo(false)
+                }
+              }}
+            >
+              Sí, deshacer el cierre
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmingUndo(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : !choosing ? (
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => setChoosing(true)}>Abrir el año {nextYear}</Button>
+          {year.can_reopen && (
+            <Button variant="outline" onClick={() => setConfirmingUndo(true)}>
+              Deshacer el cierre
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid gap-4">
@@ -544,14 +690,14 @@ function OpenYearPanel({
             <p className="text-muted-foreground">El año {year.year} no tenía períodos cargados.</p>
           )}
           {programs.map((program) => (
-            <fieldset key={program.id} className="grid gap-2 rounded-md border p-3">
-              <legend className="px-1 font-medium">{program.name}</legend>
+            <fieldset key={program.key} className="grid gap-2 rounded-md border p-3">
+              <legend className="px-1 font-medium">{calendarLabel(program)}</legend>
               {program.periods.map((period) => {
                 const choice = choiceFor(period.id, period.starts_on)
                 const same = sameDateNextYear(period.starts_on)
                 const group = `carry-${period.id}`
                 return (
-                  <div key={period.id} className="grid gap-1" role="radiogroup" aria-label={`${period.name} de ${program.name}`}>
+                  <div key={period.id} className="grid gap-1" role="radiogroup" aria-label={`${period.name} de ${calendarLabel(program)}`}>
                     <span>
                       {period.name} · desde el {formatDay(period.starts_on)}
                     </span>
@@ -578,7 +724,7 @@ function OpenYearPanel({
                         <Input
                           type="date"
                           className="w-auto"
-                          aria-label={`Nueva fecha de ${period.name} de ${program.name}`}
+                          aria-label={`Nueva fecha de ${period.name} de ${calendarLabel(program)}`}
                           min={`${nextYear}-01-01`}
                           max={`${nextYear}-12-31`}
                           value={choice.startsOn}
@@ -636,6 +782,7 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
   const [groupId, setGroupId] = useState("")
   const [reason, setReason] = useState("")
   const [until, setUntil] = useState("")
+  const [busy, setBusy] = useState(false)
   // Loading can be enabled in a group of a closed year even after the next
   // year was opened (e.g. «Exámenes de febrero»), so the form follows the
   // groups the server lists, not the current year's status.
@@ -644,9 +791,11 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
   return (
     <SectionCard title="Carga en grupos del año cerrado">
       <p className="mb-3 text-sm text-muted-foreground">
-        Con el año cerrado, sus grupos son solo para leer. Dirección puede habilitar la carga en un grupo
-        puntual, con un motivo y una fecha hasta la que vale; queda registrado quién, cuándo y por qué, y
-        al pasar la fecha el grupo vuelve solo a ser de lectura.
+        Con el año cerrado, sus grupos son solo para leer, también su estructura. Dirección puede
+        habilitar la carga en un grupo puntual, con un motivo y una fecha hasta la que vale: mientras
+        dure, también se puede corregir su estructura (el grupo, sus docentes, su oferta curricular y su
+        nivel). Queda registrado quién, cuándo y por qué, y al pasar la fecha el grupo vuelve solo a ser
+        de lectura.
       </p>
 
       {canEnable && (
@@ -654,11 +803,16 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
           className="mb-4 grid gap-3 sm:grid-cols-4 sm:items-end"
           onSubmit={async (event) => {
             event.preventDefault()
-            if (!groupId || !reason.trim() || !until) return
-            if (await onCreate({ group_id: Number(groupId), reason: reason.trim(), until_on: until })) {
-              setGroupId("")
-              setReason("")
-              setUntil("")
+            if (!groupId || !reason.trim() || !until || busy) return
+            setBusy(true)
+            try {
+              if (await onCreate({ group_id: Number(groupId), reason: reason.trim(), until_on: until })) {
+                setGroupId("")
+                setReason("")
+                setUntil("")
+              }
+            } finally {
+              setBusy(false)
             }
           }}
         >
@@ -692,7 +846,7 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
             <Label htmlFor="window-until">Hasta</Label>
             <Input id="window-until" type="date" value={until} onChange={(event) => setUntil(event.target.value)} />
           </div>
-          <Button type="submit" disabled={!groupId || !reason.trim() || !until}>
+          <Button type="submit" disabled={!groupId || !reason.trim() || !until || busy}>
             Habilitar la carga
           </Button>
         </form>
@@ -719,7 +873,19 @@ function WriteWindowsCard({ state, onCreate, onEnd }: WriteWindowsCardProps) {
               <div className="flex items-center gap-2">
                 <Badge tone={window.active ? "success" : "neutral"}>{window.active ? "Vigente" : "Solo lectura"}</Badge>
                 {window.active && (
-                  <Button size="sm" variant="outline" onClick={() => onEnd(window.id)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true)
+                      try {
+                        await onEnd(window.id)
+                      } finally {
+                        setBusy(false)
+                      }
+                    }}
+                  >
                     Terminar ahora
                   </Button>
                 )}

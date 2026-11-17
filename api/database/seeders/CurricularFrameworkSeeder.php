@@ -53,6 +53,22 @@ class CurricularFrameworkSeeder extends Seeder
         'IB DP' => ['upper_secondary'],
     ];
 
+    /**
+     * The body whose calendar each program follows (App\Enums\CalendarBody;
+     * screen 26 › Períodos: one row per body). Keep in sync with the
+     * 2026_11_17 migration, which backfills it.
+     */
+    public const BODIES = [
+        'ANEP EBI' => 'anep_basic',
+        'ANEP Bachillerato' => 'anep_upper_secondary',
+        'Cambridge Primary' => 'cambridge',
+        'Cambridge Lower Secondary' => 'cambridge',
+        'IGCSE' => 'cambridge',
+        'IB PYP' => 'ib',
+        'IB MYP' => 'ib',
+        'IB DP' => 'ib',
+    ];
+
     public function run(): void
     {
         foreach (self::NAMES as $name) {
@@ -61,6 +77,7 @@ class CurricularFrameworkSeeder extends Seeder
                 [
                     'planner_family' => self::FAMILIES[$name] ?? null,
                     'education_levels' => self::LEVELS[$name] ?? null,
+                    'calendar_body' => self::BODIES[$name] ?? null,
                 ],
             );
         }

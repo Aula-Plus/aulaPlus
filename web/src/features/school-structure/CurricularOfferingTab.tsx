@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { closedYearError } from "@/features/school-year/closedYearError"
 import {
   fetchCurricularOfferings,
   updateCurricularOffering,
@@ -50,8 +51,8 @@ export function CurricularOfferingTab() {
       const updated = await updateCurricularOffering(row.group.id, row.subject.id, selected)
       setRows((current) => current?.map((item) => (rowKey(item) === rowKey(row) ? updated : item)) ?? null)
       setEditing(null)
-    } catch {
-      setRowError("No pudimos guardar los programas.")
+    } catch (caught) {
+      setRowError(closedYearError(caught) ?? "No pudimos guardar los programas.")
     } finally {
       setSaving(false)
     }
@@ -131,6 +132,9 @@ export function CurricularOfferingTab() {
                           Cancelar
                         </Button>
                       </div>
+                    ) : row.group.read_only ? (
+                      // Screen 26: a closed year's offer stays for reading.
+                      <span className="text-xs text-muted-foreground">Año cerrado: solo lectura</span>
                     ) : (
                       <Button size="sm" variant="outline" onClick={() => startEditing(row)}>
                         Editar programas

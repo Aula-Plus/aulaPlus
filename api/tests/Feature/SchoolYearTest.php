@@ -4,6 +4,7 @@ use App\Models\Accommodation;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
 use App\Models\Assessment;
+use App\Models\AuditLog;
 use App\Models\ClassSession;
 use App\Models\CurricularFramework;
 use App\Models\Group;
@@ -21,6 +22,7 @@ use App\Services\SchoolYears\SchoolYearCalendar;
 use App\Support\Tenancy;
 use Database\Seeders\CurricularFrameworkSeeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Sanctum;
 
 /*
@@ -41,7 +43,7 @@ function framework(string $name): CurricularFramework
 
 /**
  * A school with ANEP Bachillerato and ANEP EBI (Ciclo Básico y Primaria)
- * active, its 2026 year open with periods for both, and a director.
+ * active, its 2026 year open with periods for both bodies, and a director.
  *
  * @return array{school: School, director: User, year: SchoolYear}
  */
@@ -56,13 +58,13 @@ function schoolWithYear(): array
     foreach ([['Trimestre 1', '2026-03-02'], ['Trimestre 2', '2026-06-01'], ['Trimestre 3', '2026-09-14']] as [$name, $date]) {
         SchoolPeriod::query()->forceCreate([
             'school_id' => $school->id, 'school_year_id' => $year->id,
-            'curricular_framework_id' => framework('ANEP Bachillerato')->id, 'name' => $name, 'starts_on' => $date,
+            'calendar_body' => 'anep_upper_secondary', 'name' => $name, 'starts_on' => $date,
         ]);
     }
     foreach ([['Semestre 1', '2026-03-02'], ['Semestre 2', '2026-07-27']] as [$name, $date]) {
         SchoolPeriod::query()->forceCreate([
             'school_id' => $school->id, 'school_year_id' => $year->id,
-            'curricular_framework_id' => framework('ANEP EBI')->id, 'name' => $name, 'starts_on' => $date,
+            'calendar_body' => 'anep_basic', 'name' => $name, 'starts_on' => $date,
         ]);
     }
 
@@ -101,7 +103,7 @@ function postResult(Assessment $assessment, Student $student)
 
 // ── Reading the year ────────────────────────────────────────────────────────
 
-it('shows direction the open year with each program\'s periods separately', function () {
+it('shows direction the open year with each body\'s periods separately', function () {
     ['school' => $school, 'director' => $director] = schoolWithYear();
     Group::factory()->count(2)->create(['school_id' => $school->id, 'school_year' => 2026]);
     Sanctum::actingAs($director);
@@ -114,10 +116,12 @@ it('shows direction the open year with each program\'s periods separately', func
         ->assertJsonPath('data.next_year', 2027)
         ->assertJsonPath('data.active_groups', 2);
 
-    $programs = collect($response->json('data.programs'))->keyBy('name');
-    expect($programs->keys()->all())->toBe(['ANEP Bachillerato', 'ANEP EBI'])
-        ->and(collect($programs['ANEP Bachillerato']['periods'])->pluck('state')->all())->toBe(['past', 'past', 'current'])
-        ->and(collect($programs['ANEP EBI']['periods'])->firstWhere('state', 'current')['name'])->toBe('Semestre 2');
+    $calendars = collect($response->json('data.calendars'))->keyBy('body');
+    expect($calendars->keys()->all())->toBe(['anep_basic', 'anep_upper_secondary'])
+        ->and($calendars['anep_upper_secondary']['programs'])->toBe(['ANEP Bachillerato'])
+        ->and($calendars['anep_upper_secondary']['can_split'])->toBeFalse()
+        ->and(collect($calendars['anep_upper_secondary']['periods'])->pluck('state')->all())->toBe(['past', 'past', 'current'])
+        ->and(collect($calendars['anep_basic']['periods'])->firstWhere('state', 'current')['name'])->toBe('Semestre 2');
 });
 
 it('starts a school that never used the screen with this year open', function () {
@@ -150,8 +154,9 @@ it('keeps the screen for direction only', function (string $role) {
     $this->getJson('/api/v1/school-year')->assertForbidden();
     $this->putJson("/api/v1/school-years/{$year->id}", ['closing_enabled_from' => '2026-12-01'])->assertForbidden();
     $this->postJson("/api/v1/school-years/{$year->id}/periods", [
-        'curricular_framework_id' => framework('ANEP EBI')->id, 'name' => 'X', 'starts_on' => '2026-10-01',
+        'calendar_body' => 'anep_basic', 'name' => 'X', 'starts_on' => '2026-10-01',
     ])->assertForbidden();
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", ['confirm' => true])->assertForbidden();
     $this->patchJson("/api/v1/school-periods/{$period->id}", ['name' => 'X'])->assertForbidden();
     $this->deleteJson("/api/v1/school-periods/{$period->id}")->assertForbidden();
     $this->postJson("/api/v1/school-years/{$year->id}/close", ['confirm' => true])->assertForbidden();
@@ -172,18 +177,18 @@ it('never lets a director touch another school\'s year', function () {
     $this->deleteJson("/api/v1/school-periods/{$period->id}")->assertNotFound();
 
     // Their own screen shows their own year, never the other school's periods.
-    $this->getJson('/api/v1/school-year')->assertOk()->assertJsonPath('data.programs', []);
+    $this->getJson('/api/v1/school-year')->assertOk()->assertJsonPath('data.calendars', []);
     expect($year->fresh()->status->value)->toBe('open');
 });
 
 // ── Periods ─────────────────────────────────────────────────────────────────
 
-it('lets direction add, rename and remove a period of an active program', function () {
+it('lets direction add, rename and remove a period of a body in the offer', function () {
     ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
     Sanctum::actingAs($director);
 
     $this->postJson("/api/v1/school-years/{$year->id}/periods", [
-        'curricular_framework_id' => framework('ANEP EBI')->id, 'name' => 'Semestre 3', 'starts_on' => '2026-11-30',
+        'calendar_body' => 'anep_basic', 'name' => 'Semestre 3', 'starts_on' => '2026-11-30',
     ])->assertCreated();
     $period = SchoolPeriod::query()->where('name', 'Semestre 3')->firstOrFail();
     expect($period->school_id)->toBe($school->id);
@@ -195,7 +200,7 @@ it('lets direction add, rename and remove a period of an active program', functi
     $this->assertModelMissing($period);
 });
 
-it('validates the period: active program, a name and a date within the year', function () {
+it('validates the period: a row of the offer, a name and a date within the year', function () {
     ['director' => $director, 'year' => $year] = schoolWithYear();
     Sanctum::actingAs($director);
 
@@ -204,8 +209,25 @@ it('validates the period: active program, a name and a date within the year', fu
     ])->assertUnprocessable()->assertJsonValidationErrors(['curricular_framework_id', 'starts_on']);
 
     $this->postJson("/api/v1/school-years/{$year->id}/periods", [
-        'curricular_framework_id' => framework('ANEP EBI')->id, 'starts_on' => '2026-03-01',
+        'calendar_body' => 'anep_basic', 'starts_on' => '2026-03-01',
     ])->assertUnprocessable()->assertJsonValidationErrors(['name']);
+
+    // A body the school does not have, an unknown body, or both at once.
+    $this->postJson("/api/v1/school-years/{$year->id}/periods", [
+        'calendar_body' => 'ib', 'name' => 'Term 1', 'starts_on' => '2026-03-01',
+    ])->assertUnprocessable()->assertJsonValidationErrors(['calendar_body']);
+    $this->postJson("/api/v1/school-years/{$year->id}/periods", [
+        'calendar_body' => 'unesco', 'name' => 'Term 1', 'starts_on' => '2026-03-01',
+    ])->assertUnprocessable()->assertJsonValidationErrors(['calendar_body']);
+    $this->postJson("/api/v1/school-years/{$year->id}/periods", [
+        'calendar_body' => 'anep_basic', 'curricular_framework_id' => framework('ANEP EBI')->id,
+        'name' => 'X', 'starts_on' => '2026-03-01',
+    ])->assertUnprocessable()->assertJsonValidationErrors(['calendar_body']);
+
+    // An ANEP program follows its body's row: never periods of its own.
+    $this->postJson("/api/v1/school-years/{$year->id}/periods", [
+        'curricular_framework_id' => framework('ANEP EBI')->id, 'name' => 'X', 'starts_on' => '2026-03-01',
+    ])->assertUnprocessable()->assertJsonValidationErrors(['curricular_framework_id']);
 });
 
 it('does not change the periods of a closed year', function () {
@@ -428,7 +450,7 @@ it('opens 2027 carrying each period as chosen: same date, other date or not carr
 
     $next = SchoolYear::query()->where('year', 2027)->sole();
     expect($next->opened_by_id)->toBe($director->id)
-        ->and($next->periods()->orderBy('starts_on')->get()->map(fn ($p) => [$p->name, $p->starts_on->toDateString()])->all())
+        ->and($next->periods()->orderBy('starts_on')->orderBy('name')->get()->map(fn ($p) => [$p->name, $p->starts_on->toDateString()])->all())
         ->toBe([
             ['Semestre 1', '2027-03-02'],
             ['Trimestre 1', '2027-03-02'],
@@ -586,3 +608,354 @@ it('blocks every group-data write of a closed year until loading is enabled', fu
 
     expect($this->json(strtoupper($method), $url($context), [])->getContent())->not->toContain('school_year_closed');
 })->with('closed-year write routes');
+
+// ── Periods per body: Cambridge and IB, «Separar por programa» ───────────────
+
+/**
+ * The school of schoolWithYear() plus Cambridge Primary, Cambridge Lower
+ * Secondary and IB MYP in its offer (IB DP stays out of it).
+ *
+ * @return array{school: School, director: User, year: SchoolYear}
+ */
+function schoolWithCambridgeAndIb(): array
+{
+    $context = schoolWithYear();
+    foreach (['Cambridge Primary', 'Cambridge Lower Secondary', 'IB MYP'] as $name) {
+        $context['school']->curricularFrameworks()->attach(framework($name), ['active' => true]);
+    }
+    foreach ([['Term 1', '2026-03-02'], ['Term 2', '2026-08-03']] as [$name, $date]) {
+        SchoolPeriod::query()->forceCreate([
+            'school_id' => $context['school']->id, 'school_year_id' => $context['year']->id,
+            'calendar_body' => 'cambridge', 'name' => $name, 'starts_on' => $date,
+        ]);
+    }
+
+    return $context;
+}
+
+it('shows one row per body of the offer: ANEP Bachillerato, ANEP Ciclo Básico y Primaria, Cambridge and IB', function () {
+    ['director' => $director] = schoolWithCambridgeAndIb();
+    Sanctum::actingAs($director);
+
+    $calendars = collect($this->getJson('/api/v1/school-year')->assertOk()->json('data.calendars'));
+
+    expect($calendars->pluck('key')->all())->toBe(['body:anep_basic', 'body:anep_upper_secondary', 'body:cambridge', 'body:ib']);
+    $byBody = $calendars->keyBy('body');
+    expect($byBody['cambridge']['programs'])->toBe(['Cambridge Lower Secondary', 'Cambridge Primary'])
+        ->and($byBody['cambridge']['can_split'])->toBeTrue()
+        ->and(collect($byBody['cambridge']['periods'])->pluck('name')->all())->toBe(['Term 1', 'Term 2'])
+        // Only one IB program in the offer: nothing to separate.
+        ->and($byBody['ib']['programs'])->toBe(['IB MYP'])
+        ->and($byBody['ib']['can_split'])->toBeFalse()
+        ->and($byBody['ib']['periods'])->toBe([]);
+});
+
+it('splits Cambridge by program, each program starting with the body\'s periods, and joins it back', function () {
+    ['director' => $director, 'year' => $year] = schoolWithCambridgeAndIb();
+    Sanctum::actingAs($director);
+
+    $response = $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertOk()
+        ->assertJsonPath('data.split_bodies', ['cambridge']);
+    $rows = collect($response->json('data.calendars'))->where('body', 'cambridge')->values();
+    expect($rows->pluck('name')->all())->toBe(['Cambridge Lower Secondary', 'Cambridge Primary'])
+        ->and($rows->every(fn ($row) => collect($row['periods'])->pluck('name')->all() === ['Term 1', 'Term 2']))->toBeTrue()
+        ->and($year->periods()->where('calendar_body', 'cambridge')->count())->toBe(0);
+
+    // Once split, periods go to a program, not to the body.
+    $primary = framework('Cambridge Primary');
+    $this->postJson("/api/v1/school-years/{$year->id}/periods", [
+        'calendar_body' => 'cambridge', 'name' => 'Term 3', 'starts_on' => '2026-10-05',
+    ])->assertUnprocessable()->assertJsonValidationErrors(['calendar_body']);
+    $this->postJson("/api/v1/school-years/{$year->id}/periods", [
+        'curricular_framework_id' => $primary->id, 'name' => 'Term 3', 'starts_on' => '2026-10-05',
+    ])->assertCreated();
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertUnprocessable();
+
+    // Joining would lose Primary's Term 3: blocked until both match.
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/join")
+        ->assertUnprocessable()->assertJsonValidationErrors(['body']);
+    $year->periods()->where('curricular_framework_id', $primary->id)->where('name', 'Term 3')->sole()->delete();
+
+    $response = $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/join")->assertOk()
+        ->assertJsonPath('data.split_bodies', []);
+    $cambridge = collect($response->json('data.calendars'))->where('body', 'cambridge')->values();
+    expect($cambridge)->toHaveCount(1)
+        ->and($cambridge[0]['key'])->toBe('body:cambridge')
+        ->and(collect($cambridge[0]['periods'])->pluck('name')->all())->toBe(['Term 1', 'Term 2']);
+});
+
+it('splits only Cambridge or IB with two programs in the offer, in an open year, and only for direction', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithCambridgeAndIb();
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertForbidden();
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertForbidden();
+
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/anep_basic/split")->assertUnprocessable();
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/ib/split")->assertUnprocessable();
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/join")->assertUnprocessable();
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/unesco/split")->assertNotFound();
+
+    closeYear($year);
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertUnprocessable();
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertNotFound();
+
+    expect($year->fresh()->split_calendar_bodies)->toBeNull();
+});
+
+it('keeps Cambridge split when opening the next year, carrying each program\'s periods', function () {
+    ['director' => $director, 'year' => $year] = schoolWithCambridgeAndIb();
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/school-years/{$year->id}/calendar-bodies/cambridge/split")->assertOk();
+    closeYear($year);
+
+    $decisions = $year->periods()->pluck('id')->map(fn ($id) => ['id' => $id, 'action' => 'same_date'])->all();
+    $response = $this->postJson("/api/v1/school-years/{$year->id}/open-next", ['periods' => $decisions])->assertCreated()
+        ->assertJsonPath('data.split_bodies', ['cambridge']);
+
+    $byKey = collect($response->json('data.calendars'))->keyBy('key');
+    expect(collect($byKey['program:'.framework('Cambridge Primary')->id]['periods'])->pluck('starts_on')->all())
+        ->toBe(['2027-03-02', '2027-08-03'])
+        ->and(collect($byKey['body:anep_basic']['periods'])->pluck('name')->all())->toBe(['Semestre 1', 'Semestre 2']);
+});
+
+// ── Group structure of a closed year (Eitán 17/11) ──────────────────────────
+
+/**
+ * @return array<string, array{0: string, 1: Closure}>
+ */
+dataset('closed-year structure routes', [
+    'edit the group' => fn () => ['patch', fn (array $c) => ["/api/groups/{$c['group']->id}", ['name' => '2°EMS-B']]],
+    'add a teacher' => fn () => ['post', fn (array $c) => ["/api/v1/groups/{$c['group']->id}/teacher-assignments", ['teacher_id' => $c['newTeacher']->id, 'subject_id' => $c['subject']->id]]],
+    'remove a teacher' => fn () => ['delete', fn (array $c) => ["/api/v1/groups/{$c['group']->id}/teacher-assignments", ['teacher_id' => $c['teacher']->id, 'subject_id' => $c['subject']->id]]],
+    'curricular offer' => fn () => ['put', fn (array $c) => ["/api/v1/groups/{$c['group']->id}/subjects/{$c['subject']->id}/curricular-offering", ['curricular_framework_ids' => [framework('ANEP Bachillerato')->id]]]],
+    'level' => fn () => ['put', fn (array $c) => ["/api/v1/groups/{$c['group']->id}/level", ['education_level_id' => $c['level'], 'school_grade_id' => null]]],
+]);
+
+it('keeps a closed year\'s group structure read-only, and lets direction correct it while loading is enabled', function (string $method, Closure $request) {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['teacher' => $teacher, 'group' => $group, 'assessment' => $assessment] = teacherGroup($school);
+    $group->update(['education_level_id' => DB::table('education_levels')->where('key', 'upper_secondary')->value('id')]);
+    $context = [
+        'group' => $group,
+        'teacher' => $teacher,
+        'newTeacher' => User::factory()->forSchool($school)->teacher()->create(),
+        'subject' => $assessment->subject,
+        'level' => DB::table('education_levels')->where('key', 'lower_secondary')->value('id'),
+    ];
+    closeYear($year);
+    [$url, $payload] = $request($context);
+    Sanctum::actingAs($director);
+
+    $this->json(strtoupper($method), $url, $payload)
+        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    expect($group->fresh()->name)->toBe('2°EMS-A');
+
+    $window = GroupWriteWindow::query()->forceCreate([
+        'school_id' => $school->id, 'group_id' => $group->id, 'reason' => 'Corregir docentes', 'until_on' => '2027-02-28',
+        'enabled_by_id' => $director->id,
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+
+    $this->json(strtoupper($method), $url, $payload)->assertSuccessful();
+
+    // Who, when and on which group, tied to the enablement (and so its why).
+    $log = AuditLog::query()->where('auditable_type', GroupWriteWindow::class)
+        ->where('auditable_id', $window->id)->where('action', 'updated')->sole();
+    expect($log->user_id)->toBe($director->id)
+        ->and($log->created_at)->not->toBeNull()
+        ->and($log->changes['loaded_under_window']['group_id'])->toBe($group->id)
+        ->and($log->changes['loaded_under_window']['method'])->toBe(strtoupper($method));
+
+    // Past its date the structure is read-only again by itself.
+    $this->travelTo('2027-03-01 12:00:00');
+    $this->json(strtoupper($method), $url, $payload)->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+})->with('closed-year structure routes');
+
+it('never deletes, moves or adds a group of a closed year, not even with loading enabled', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['group' => $group] = teacherGroup($school);
+    $open = Group::factory()->create(['school_id' => $school->id, 'school_year' => 2027]);
+    closeYear($year);
+    Sanctum::actingAs($director);
+
+    $this->deleteJson("/api/groups/{$group->id}")->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+
+    GroupWriteWindow::query()->forceCreate([
+        'school_id' => $school->id, 'group_id' => $group->id, 'reason' => 'Corregir', 'until_on' => '2027-02-28',
+        'enabled_by_id' => $director->id,
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+
+    $this->deleteJson("/api/groups/{$group->id}")->assertForbidden();
+    $this->assertModelExists($group);
+    $this->patchJson("/api/groups/{$group->id}", ['school_year' => 2027])
+        ->assertUnprocessable()->assertJsonValidationErrors(['school_year']);
+    $this->patchJson("/api/groups/{$group->id}", ['school_year' => 2026, 'name' => '2°EMS-B'])->assertOk();
+    $this->patchJson("/api/groups/{$open->id}", ['school_year' => 2026])
+        ->assertUnprocessable()->assertJsonValidationErrors(['school_year']);
+    $this->postJson('/api/groups', [
+        'name' => 'Nuevo', 'school_year' => 2026,
+        'education_level_id' => DB::table('education_levels')->where('key', 'primary')->value('id'),
+    ])->assertUnprocessable()->assertJsonValidationErrors(['school_year']);
+    $this->postJson('/api/groups', [
+        'name' => 'Nuevo', 'school_year' => 2027,
+        'education_level_id' => DB::table('education_levels')->where('key', 'primary')->value('id'),
+    ])->assertCreated();
+
+    expect($group->fresh()->school_year)->toBe(2026)->and($open->fresh()->school_year)->toBe(2027);
+});
+
+it('keeps the structure endpoints for their roles and school while loading is enabled', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['teacher' => $teacher, 'group' => $group] = teacherGroup($school);
+    closeYear($year);
+    GroupWriteWindow::query()->forceCreate([
+        'school_id' => $school->id, 'group_id' => $group->id, 'reason' => 'Corregir', 'until_on' => '2027-02-28',
+        'enabled_by_id' => $director->id,
+    ]);
+
+    foreach ([$teacher, User::factory()->forSchool($school)->psychopedagogue()->create()] as $user) {
+        Sanctum::actingAs($user);
+        $this->patchJson("/api/groups/{$group->id}", ['name' => 'X'])->assertForbidden();
+        $this->postJson("/api/v1/groups/{$group->id}/teacher-assignments", ['teacher_id' => $teacher->id, 'subject_id' => 1])->assertForbidden();
+    }
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    $this->patchJson("/api/groups/{$group->id}", ['name' => 'X'])->assertNotFound();
+    expect($group->fresh()->name)->toBe('2°EMS-A');
+});
+
+it('tells the curricular offer screen which groups are read-only', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['group' => $group] = teacherGroup($school);
+    closeYear($year);
+    Sanctum::actingAs($director);
+
+    $row = collect($this->getJson('/api/v1/curricular-offerings')->assertOk()->json('data'))
+        ->firstWhere('group.id', $group->id);
+    expect($row['group']['read_only'])->toBeTrue();
+});
+
+it('blocks turning an accommodation off for an assessment of a closed year', function () {
+    ['school' => $school, 'year' => $year] = schoolWithYear();
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student] = teacherGroup($school);
+    $accommodation = Accommodation::factory()->create(['student_id' => $student->id, 'school_id' => $school->id, 'starts_on' => '2026-04-01']);
+    closeYear($year);
+    Sanctum::actingAs($teacher);
+
+    $this->postJson("/api/v1/accommodations/{$accommodation->id}/instance-overrides", [
+        'assessment_id' => $assessment->id, 'reason' => 'No aplica',
+    ])->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    $this->assertDatabaseCount('accommodation_instance_overrides', 0);
+});
+
+// ── «Deshacer el cierre» ────────────────────────────────────────────────────
+
+it('lets direction undo the closing after confirming, recording who and when', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['teacher' => $teacher, 'assessment' => $assessment, 'student' => $student] = teacherGroup($school);
+    $year->update(['closing_enabled_from' => '2026-11-01']);
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/school-years/{$year->id}/close", ['confirm' => true])->assertOk()
+        ->assertJsonPath('data.year.can_reopen', true);
+
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", [])
+        ->assertUnprocessable()->assertJsonValidationErrors(['confirm']);
+
+    $this->travelTo('2026-12-02 09:30:00');
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", ['confirm' => true])->assertOk()
+        ->assertJsonPath('data.year.status', 'open')
+        ->assertJsonPath('data.year.can_reopen', false)
+        ->assertJsonPath('data.year.can_close', true)
+        ->assertJsonPath('data.year.reopened_by_name', $director->name);
+
+    $fresh = $year->fresh();
+    expect($fresh->reopened_by_id)->toBe($director->id)
+        ->and($fresh->reopened_at->toDateString())->toBe('2026-12-02')
+        ->and($fresh->closed_at)->toBeNull()
+        ->and($year->periods()->count())->toBe(5)
+        ->and(AuditLog::query()->where('auditable_type', SchoolYear::class)->where('auditable_id', $year->id)->count())->toBeGreaterThanOrEqual(2);
+
+    // The groups are writable again.
+    Sanctum::actingAs($teacher);
+    postResult($assessment, $student)->assertOk();
+
+    // Not closed any more: nothing to undo.
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", ['confirm' => true])->assertUnprocessable();
+});
+
+it('does not undo the closing once the next year is open', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    closeYear($year);
+    $next = SchoolYear::query()->forceCreate(['school_id' => $school->id, 'year' => 2027, 'status' => 'open']);
+    Sanctum::actingAs($director);
+
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", ['confirm' => true])
+        ->assertUnprocessable()->assertJsonValidationErrors(['year']);
+    $this->getJson('/api/v1/school-year')->assertJsonPath('data.year.year', 2027)->assertJsonPath('data.year.can_reopen', false);
+
+    expect($year->fresh()->status->value)->toBe('closed')->and($next->fresh()->status->value)->toBe('open');
+});
+
+it('never lets anyone else undo the closing', function () {
+    ['school' => $school, 'year' => $year] = schoolWithYear();
+    closeYear($year);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", ['confirm' => true])->assertForbidden();
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    $this->postJson("/api/v1/school-years/{$year->id}/reopen", ['confirm' => true])->assertNotFound();
+
+    expect($year->fresh()->status->value)->toBe('closed');
+});
+
+// ── First visit ─────────────────────────────────────────────────────────────
+
+it('creates no year when someone other than direction opens the screen', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+
+    $this->getJson('/api/v1/school-year')->assertForbidden();
+    expect(SchoolYear::query()->withoutGlobalScopes()->where('school_id', $school->id)->exists())->toBeFalse();
+});
+
+it('starts on the groups\' year on a first visit in February, not on the new calendar year', function () {
+    $school = School::factory()->create();
+    Group::factory()->create(['school_id' => $school->id, 'school_year' => 2026]);
+    Group::factory()->create(['school_id' => $school->id, 'school_year' => 2028]);
+    $this->travelTo('2027-02-10 12:00:00');
+    Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
+
+    $this->getJson('/api/v1/school-year')->assertOk()->assertJsonPath('data.year.year', 2026);
+});
+
+// ── Route guard ─────────────────────────────────────────────────────────────
+
+it('puts every write route on a group or its data behind group.writable', function () {
+    // Writes that are deliberately not blocked by a closed year (the
+    // student's own record has no group parameter and carries over by
+    // itself): discarding an AI proposal changes nothing of the group.
+    $exempt = [
+        'POST api/v1/ai-proposals/{ai_proposal}/discard',
+    ];
+    $parameters = ['group', 'assessment', 'annualPlan', 'unit', 'objective', 'classSession', 'application', 'result', 'ai_proposal'];
+
+    $writes = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn ($route) => array_intersect($route->methods(), ['POST', 'PUT', 'PATCH', 'DELETE']) !== [])
+        ->filter(fn ($route) => array_intersect($route->parameterNames(), $parameters) !== []);
+    expect($writes->count())->toBeGreaterThan(20);
+
+    $missing = $writes
+        ->reject(fn ($route) => in_array('group.writable', $route->gatherMiddleware(), true))
+        ->map(fn ($route) => collect($route->methods())->intersect(['POST', 'PUT', 'PATCH', 'DELETE'])->first().' '.$route->uri())
+        ->reject(fn (string $route) => in_array($route, $exempt, true))
+        ->values()->all();
+
+    expect($missing)->toBe([]);
+});

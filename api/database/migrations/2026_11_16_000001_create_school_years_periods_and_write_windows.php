@@ -10,10 +10,14 @@ use Illuminate\Support\Facades\Schema;
  * - `school_years`: one row per school and calendar year, open or closed.
  *   Direction picks the day from which closing is enabled
  *   (`closing_enabled_from`). Closing deletes or moves nothing: the year's
- *   groups stay as history and become read-only.
- * - `school_periods`: the year's periods per program (curricular framework),
- *   each with a name and a start date. Independent from the «Visibilidad de
- *   calificaciones» cutoff (PA-040).
+ *   groups stay as history and become read-only. «Deshacer el cierre» records
+ *   who and when (`reopened_by_id`, `reopened_at`). `split_calendar_bodies`
+ *   lists the bodies (Cambridge, IB) direction split by program this year.
+ * - `school_periods`: the year's periods per body (`calendar_body`, e.g. ANEP
+ *   Bachillerato or Cambridge) or, for a body split by program or a program
+ *   with no body, per program (`curricular_framework_id`) — exactly one of
+ *   the two. Each has a name and a start date. Independent from the
+ *   «Visibilidad de calificaciones» cutoff (PA-040).
  * - `group_write_windows`: direction re-enables loading in one group of a
  *   closed year, with a reason and an until-date, recording who and when. A
  *   window past its date no longer counts; ending it early keeps the row.
@@ -32,6 +36,9 @@ return new class extends Migration
             $table->foreignId('opened_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('closed_at')->nullable();
             $table->foreignId('closed_by_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('reopened_at')->nullable();
+            $table->foreignId('reopened_by_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->json('split_calendar_bodies')->nullable();
             $table->timestamps();
 
             $table->unique(['school_id', 'year']);
@@ -41,11 +48,13 @@ return new class extends Migration
             $table->id();
             $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->foreignId('school_year_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('curricular_framework_id')->constrained()->cascadeOnDelete();
+            $table->string('calendar_body')->nullable();
+            $table->foreignId('curricular_framework_id')->nullable()->constrained()->cascadeOnDelete();
             $table->string('name', 80);
             $table->date('starts_on');
             $table->timestamps();
 
+            $table->index(['school_year_id', 'calendar_body', 'starts_on']);
             $table->index(['school_year_id', 'curricular_framework_id', 'starts_on']);
         });
 

@@ -1983,3 +1983,16 @@ export type AssessmentResultScale =
         equivalences: { level_id: number; numeric_grade: number }[]
       }
     }
+
+/**
+ * Screen 26 › Períodos: the body whose calendar a program follows
+ * (`App\Enums\CalendarBody`), one row each.
+ */
+export type CalendarBody = "anep_basic" | "anep_upper_secondary" | "cambridge" | "ib"
+
+export const calendarBodyLabels: Record<CalendarBody, string> = {
+  anep_basic: "ANEP Ciclo Básico y Primaria",
+  anep_upper_secondary: "ANEP Bachillerato",
+  cambridge: "Cambridge",
+  ib: "IB",
+}

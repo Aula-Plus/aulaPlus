@@ -41,17 +41,29 @@ class SchoolYearCalendar
 
     /**
      * The school's current year: the latest one recorded. A school that never
-     * used the screen starts with today's calendar year, open.
+     * used the screen starts with its groups' latest year that is not in the
+     * future (so a first visit in January or February still opens on the year
+     * that is ending), or today's calendar year without groups — open.
+     * Callers authorize before calling it (it may create that first row).
      */
     public function current(?int $schoolId = null): SchoolYear
     {
         $schoolId ??= Tenancy::schoolId();
 
         $latest = SchoolYear::query()->where('school_id', $schoolId)->orderByDesc('year')->first();
+        if ($latest !== null) {
+            return $latest;
+        }
 
-        return $latest ?? SchoolYear::query()->forceCreate([
+        $today = SchoolTime::today()->year;
+        $groupsYear = Group::query()->where('school_id', $schoolId)
+            ->whereNotNull('school_year')
+            ->where('school_year', '<=', $today)
+            ->max('school_year');
+
+        return SchoolYear::query()->forceCreate([
             'school_id' => $schoolId,
-            'year' => SchoolTime::today()->year,
+            'year' => $groupsYear !== null ? (int) $groupsYear : $today,
             'status' => SchoolYearStatus::Open,
         ]);
     }

@@ -18,39 +18,58 @@ function openYear(overrides: Partial<SchoolYearState["year"]> = {}): SchoolYearS
       can_close: false,
       closed_at: null,
       closed_by_name: null,
+      can_reopen: false,
+      reopened_at: null,
+      reopened_by_name: null,
       ...overrides,
     },
     next_year: 2027,
     previous: { year: 2025, status: "closed", closed_at: "2025-12-15T15:00:00+00:00" },
     active_groups: 7,
     carried_accommodations: 27,
-    programs: [
+    calendars: [
       {
-        id: 2,
-        name: "ANEP Bachillerato",
+        key: "body:anep_upper_secondary",
+        body: "anep_upper_secondary",
+        curricular_framework_id: null,
+        name: null,
+        programs: ["ANEP Bachillerato"],
+        can_split: false,
         periods: [
           { id: 21, name: "Trimestre 2", starts_on: "2026-06-01", state: "past" },
           { id: 22, name: "Trimestre 3", starts_on: "2026-09-14", state: "current" },
         ],
       },
       {
-        id: 1,
-        name: "ANEP EBI",
+        key: "body:anep_basic",
+        body: "anep_basic",
+        curricular_framework_id: null,
+        name: null,
+        programs: ["ANEP EBI"],
+        can_split: false,
         periods: [{ id: 11, name: "Semestre 2", starts_on: "2026-07-27", state: "current" }],
       },
     ],
+    split_bodies: [],
     closed_year_groups: [],
     write_windows: [],
   }
 }
 
-function closedYear(): SchoolYearState {
-  const state = openYear({ status: "closed", can_close: false, closed_at: "2026-12-01T13:00:00+00:00", closed_by_name: "Laura" })
+function closedYear(overrides: Partial<SchoolYearState["year"]> = {}): SchoolYearState {
+  const state = openYear({
+    status: "closed",
+    can_close: false,
+    closed_at: "2026-12-01T13:00:00+00:00",
+    closed_by_name: "Laura",
+    can_reopen: true,
+    ...overrides,
+  })
   return {
     ...state,
-    programs: state.programs.map((program) => ({
-      ...program,
-      periods: program.periods.map((period) => ({ ...period, state: "past" as const })),
+    calendars: state.calendars.map((calendar) => ({
+      ...calendar,
+      periods: calendar.periods.map((period) => ({ ...period, state: "past" as const })),
     })),
     closed_year_groups: [{ id: 5, name: "2°EMS-A", school_year: 2026 }],
   }
@@ -70,17 +89,17 @@ function renderPage(role: Role = "director") {
 afterEach(() => vi.restoreAllMocks())
 
 describe("SchoolYearPage («Año y calendario»)", () => {
-  it("shows the open year with each program's periods separately", async () => {
+  it("shows the open year with one row of periods per body", async () => {
     vi.spyOn(schoolYearApi, "fetchSchoolYear").mockResolvedValue(openYear())
     renderPage()
 
     expect(await screen.findByText("Año 2026 abierto")).toBeInTheDocument()
     expect(screen.getByText("2025 · cerrado el 15/12/2025")).toBeInTheDocument()
-    expect(screen.getByText(/ANEP Bachillerato: Trimestre 3 en curso · ANEP EBI: Semestre 2 en curso/)).toBeInTheDocument()
+    expect(screen.getByText(/ANEP Bachillerato: Trimestre 3 en curso · ANEP Ciclo Básico y Primaria: Semestre 2 en curso/)).toBeInTheDocument()
     const table = screen.getByRole("table")
     expect(within(table).getByText("14/09/2026")).toBeInTheDocument()
     expect(within(table).getAllByText("En curso")).toHaveLength(2)
-    expect(within(table).getByText("ANEP EBI")).toBeInTheDocument()
+    expect(within(table).getByText("ANEP Ciclo Básico y Primaria")).toBeInTheDocument()
   })
 
   it("writes the consequence before the button and keeps it disabled until the chosen date", async () => {
@@ -134,7 +153,7 @@ describe("SchoolYearPage («Año y calendario»)", () => {
     const date = screen.getByLabelText("Nueva fecha de Trimestre 2 de ANEP Bachillerato")
     await userEvent.clear(date)
     await userEvent.type(date, "2027-06-07")
-    const semestre = screen.getByRole("radiogroup", { name: "Semestre 2 de ANEP EBI" })
+    const semestre = screen.getByRole("radiogroup", { name: "Semestre 2 de ANEP Ciclo Básico y Primaria" })
     await userEvent.click(within(semestre).getByLabelText("No pasa"))
 
     await userEvent.click(screen.getAllByRole("button", { name: "Abrir el año 2027" }).at(-1)!)
@@ -197,6 +216,96 @@ describe("SchoolYearPage («Año y calendario»)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Habilitar la carga" }))
 
     expect(create).toHaveBeenCalledWith(8, { group_id: 5, reason: "Exámenes de febrero", until_on: "2027-02-28" })
+  })
+
+  it("splits Cambridge by program and joins it back", async () => {
+    const cambridge: SchoolYearState["calendars"][number] = {
+      key: "body:cambridge",
+      body: "cambridge",
+      curricular_framework_id: null,
+      name: null,
+      programs: ["Cambridge Lower Secondary", "Cambridge Primary"],
+      can_split: true,
+      periods: [{ id: 31, name: "Term 1", starts_on: "2026-03-02", state: "past" }],
+    }
+    const base = openYear()
+    const split: SchoolYearState = {
+      ...base,
+      split_bodies: ["cambridge"],
+      calendars: [
+        ...base.calendars,
+        ...[["Cambridge Lower Secondary", 41], ["Cambridge Primary", 42]].map(([name, id]) => ({
+          key: `program:${id}`,
+          body: "cambridge" as const,
+          curricular_framework_id: id as number,
+          name: name as string,
+          programs: [name as string],
+          can_split: false,
+          periods: [{ id: (id as number) * 10, name: "Term 1", starts_on: "2026-03-02", state: "past" as const }],
+        })),
+      ],
+    }
+    vi.spyOn(schoolYearApi, "fetchSchoolYear").mockResolvedValue({ ...base, calendars: [...base.calendars, cambridge] })
+    const splitBody = vi.spyOn(schoolYearApi, "splitBody").mockResolvedValue(split)
+    const joinBody = vi.spyOn(schoolYearApi, "joinBody").mockResolvedValue(base)
+    renderPage()
+
+    expect(await screen.findByText("Cambridge Lower Secondary, Cambridge Primary")).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: "Separar por programa" })).toHaveLength(1)
+    await userEvent.click(screen.getByRole("button", { name: "Separar por programa" }))
+
+    expect(splitBody).toHaveBeenCalledWith(7, "cambridge")
+    expect(await screen.findByText("Cambridge quedó separado por programa.")).toBeInTheDocument()
+    expect(screen.getAllByText("Cambridge, separado por programa")).toHaveLength(2)
+
+    // A new period goes to one program of the split body.
+    const create = vi.spyOn(schoolYearApi, "createPeriod").mockResolvedValue(split)
+    await userEvent.selectOptions(screen.getByLabelText("Organismo o programa"), "program:42")
+    await userEvent.type(screen.getByLabelText("Nombre"), "Term 2")
+    await userEvent.type(screen.getByLabelText("Desde"), "2026-08-03")
+    await userEvent.click(screen.getByRole("button", { name: "Agregar período" }))
+    expect(create).toHaveBeenCalledWith(7, { curricular_framework_id: 42, name: "Term 2", starts_on: "2026-08-03" })
+
+    await userEvent.click(screen.getByRole("button", { name: "Volver a una fila: Cambridge" }))
+    expect(joinBody).toHaveBeenCalledWith(7, "cambridge")
+  })
+
+  it("adds a period to a body row", async () => {
+    vi.spyOn(schoolYearApi, "fetchSchoolYear").mockResolvedValue(openYear())
+    const create = vi.spyOn(schoolYearApi, "createPeriod").mockResolvedValue(openYear())
+    renderPage()
+
+    await userEvent.selectOptions(await screen.findByLabelText("Organismo o programa"), "body:anep_basic")
+    await userEvent.type(screen.getByLabelText("Nombre"), "Semestre 3")
+    await userEvent.type(screen.getByLabelText("Desde"), "2026-11-30")
+    await userEvent.click(screen.getByRole("button", { name: "Agregar período" }))
+
+    expect(create).toHaveBeenCalledWith(7, { calendar_body: "anep_basic", name: "Semestre 3", starts_on: "2026-11-30" })
+  })
+
+  it("undoes the closing after confirming", async () => {
+    vi.spyOn(schoolYearApi, "fetchSchoolYear").mockResolvedValue(closedYear())
+    const reopen = vi
+      .spyOn(schoolYearApi, "reopenYear")
+      .mockResolvedValue(openYear({ can_close: true, reopened_at: "2026-12-02T12:30:00+00:00", reopened_by_name: "Laura" }))
+    renderPage()
+
+    await userEvent.click(await screen.findByRole("button", { name: "Deshacer el cierre" }))
+    expect(reopen).not.toHaveBeenCalled()
+    expect(screen.getByText(/queda registrado quién lo hizo y cuándo/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Sí, deshacer el cierre" }))
+
+    expect(reopen).toHaveBeenCalledWith(7)
+    expect(await screen.findByText("Año 2026 abierto")).toBeInTheDocument()
+    expect(screen.getByText("Se deshizo el cierre el 02/12/2026 (lo hizo Laura).")).toBeInTheDocument()
+  })
+
+  it("does not offer undoing the closing once it cannot be undone", async () => {
+    vi.spyOn(schoolYearApi, "fetchSchoolYear").mockResolvedValue(closedYear({ can_reopen: false }))
+    renderPage()
+
+    expect(await screen.findByRole("button", { name: "Abrir el año 2027" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Deshacer el cierre" })).not.toBeInTheDocument()
   })
 
   it("is closed to every role but direction", () => {

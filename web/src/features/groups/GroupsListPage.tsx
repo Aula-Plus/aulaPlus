@@ -282,8 +282,11 @@ export function GroupsListPage() {
                       {canScreen && (
                         <RowLink to={`/clases/${group.id}/pruebas-de-sondeo`}>Screenings</RowLink>
                       )}
-                      {canManage && <RowLink to={`/clases/${group.id}`}>Editar</RowLink>}
-                      {canSetLevelOnly && (
+                      {canManage && (
+                        <RowLink to={`/clases/${group.id}`}>{group.read_only ? "Ver estructura" : "Editar"}</RowLink>
+                      )}
+                      {/* Screen 26: a closed year's level is read-only too. */}
+                      {canSetLevelOnly && !group.read_only && (
                         <Button type="button" size="sm" variant="ghost" onClick={() => setLevelGroup(group)}>
                           Elegir nivel
                         </Button>

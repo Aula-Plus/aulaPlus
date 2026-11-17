@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\CalendarBody;
 use App\Http\Controllers\AccommodationController;
 use App\Http\Controllers\AccommodationInboxController;
 use App\Http\Controllers\AccommodationInstanceOverrideController;
@@ -99,7 +100,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/me', CurrentUserController::class)->name('me');
     Route::get('/teachers', TeacherOptionsController::class);
-    Route::apiResource('groups', GroupController::class);
+    // Screen 26: a closed year's group structure is read-only too (Eitán
+    // 17/11), unless direction enabled loading in that group.
+    Route::apiResource('groups', GroupController::class)
+        ->middlewareFor(['update', 'destroy'], 'group.writable');
     Route::apiResource('students', StudentController::class);
 
     // Versioned routes start here (session 3): approval/validation flows and
@@ -175,7 +179,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/reports/{report}/proposals', [AccommodationProposalController::class, 'store']);
         Route::post('/accommodation-proposals/{proposal}/review', [AccommodationProposalController::class, 'review']);
         Route::get('/education-levels', [EducationLevelController::class, 'index']);
-        Route::put('/groups/{group}/level', [GroupLevelController::class, 'update']);
+        Route::put('/groups/{group}/level', [GroupLevelController::class, 'update'])
+            ->middleware('group.writable');
         Route::get('/group-level-setting', [GroupLevelController::class, 'showSetting']);
         Route::put('/group-level-setting', [GroupLevelController::class, 'updateSetting']);
         Route::get('/ai-report-setting', [AiReportSettingsController::class, 'show']);
@@ -267,7 +272,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // 1dfd3mc4bgf): direction configures; the resolved planner of a
         // group-subject is what its units show (screen 13).
         Route::get('/curricular-offerings', [CurricularOfferingController::class, 'index']);
-        Route::put('/groups/{group}/subjects/{subject}/curricular-offering', [CurricularOfferingController::class, 'update']);
+        Route::put('/groups/{group}/subjects/{subject}/curricular-offering', [CurricularOfferingController::class, 'update'])
+            ->middleware('group.writable');
         Route::get('/groups/{group}/subjects/{subject}/planner-fields', [CurricularOfferingController::class, 'planner']);
         Route::get('/planner-settings', [PlannerSettingsController::class, 'show']);
         Route::put('/planner-settings/fields/{definition}', [PlannerSettingsController::class, 'updateField']);
@@ -389,7 +395,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/students/{student}/accommodations', [AccommodationController::class, 'store']);
         Route::patch('/accommodations/{accommodation}', [AccommodationController::class, 'update']);
 
-        Route::post('/accommodations/{accommodation}/instance-overrides', [AccommodationInstanceOverrideController::class, 'store']);
+        // On an assessment of the group (`assessment_id` in the body).
+        Route::post('/accommodations/{accommodation}/instance-overrides', [AccommodationInstanceOverrideController::class, 'store'])
+            ->middleware('group.writable');
         Route::get('/assessments/{assessment}/instance-overrides', [AccommodationInstanceOverrideController::class, 'index']);
 
         // Subjects ("materias") catalog — director-managed, read by all staff.
@@ -404,8 +412,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Director-managed teacher-subject assignments per group.
         Route::get('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'index']);
-        Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store']);
-        Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy']);
+        Route::post('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'store'])
+            ->middleware('group.writable');
+        Route::delete('/groups/{group}/teacher-assignments', [GroupTeacherAssignmentController::class, 'destroy'])
+            ->middleware('group.writable');
 
         // Calendar (screen 21, ClickUp 1dfd3mc4bgh): each person's dates in
         // time (the Inicio's «Hoy en tu calendario» reads the same feed),
@@ -434,7 +444,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/school-years/{schoolYear}/periods', [SchoolYearController::class, 'storePeriod']);
         Route::patch('/school-periods/{period}', [SchoolYearController::class, 'updatePeriod']);
         Route::delete('/school-periods/{period}', [SchoolYearController::class, 'destroyPeriod']);
+        Route::post('/school-years/{schoolYear}/calendar-bodies/{body}/split', [SchoolYearController::class, 'splitBody'])
+            ->whereIn('body', array_column(CalendarBody::cases(), 'value'));
+        Route::post('/school-years/{schoolYear}/calendar-bodies/{body}/join', [SchoolYearController::class, 'joinBody'])
+            ->whereIn('body', array_column(CalendarBody::cases(), 'value'));
         Route::post('/school-years/{schoolYear}/close', [SchoolYearController::class, 'close']);
+        Route::post('/school-years/{schoolYear}/reopen', [SchoolYearController::class, 'reopen']);
         Route::post('/school-years/{schoolYear}/open-next', [SchoolYearController::class, 'openNext']);
         Route::post('/school-years/{schoolYear}/write-windows', [SchoolYearController::class, 'storeWriteWindow']);
         Route::post('/group-write-windows/{window}/end', [SchoolYearController::class, 'endWriteWindow']);

@@ -4,6 +4,7 @@ import { SingleSelect } from "@/components/ui/single-select"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import type { GroupTeacherAssignment, Subject } from "@/types"
+import { closedYearError } from "@/features/school-year/closedYearError"
 import * as subjectsApi from "./subjectsApi"
 
 interface TeacherOption {
@@ -54,8 +55,8 @@ export function GroupTeacherAssignments({ groupId, canManage }: Props) {
       setTeacherId("")
       setSubjectId("")
       await loadAssignments()
-    } catch {
-      setError("No pudimos crear la asignación.")
+    } catch (caught) {
+      setError(closedYearError(caught) ?? "No pudimos crear la asignación.")
     }
   }
 
@@ -67,8 +68,8 @@ export function GroupTeacherAssignments({ groupId, canManage }: Props) {
         subject_id: a.subject_id,
       })
       await loadAssignments()
-    } catch {
-      setError("No pudimos eliminar la asignación.")
+    } catch (caught) {
+      setError(closedYearError(caught) ?? "No pudimos eliminar la asignación.")
     }
   }
 

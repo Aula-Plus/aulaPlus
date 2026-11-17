@@ -2,15 +2,20 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\AuditAction;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
 use App\Models\Assessment;
+use App\Models\AuditLog;
 use App\Models\ClassSession;
 use App\Models\Group;
+use App\Models\GroupWriteWindow;
 use App\Models\ScreeningTestApplication;
 use App\Models\ScreeningTestResult;
 use App\Models\Unit;
 use App\Models\UnitObjective;
+use App\Services\SchoolYears\SchoolYearCalendar;
+use App\Support\StudentFileHistory;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -24,9 +29,18 @@ use Symfony\Component\HttpFoundation\Response;
  * for a create) and asks GroupPolicy::writeInYear, which rejects writes to a
  * group of a closed year unless direction enabled loading in it.
  *
+ * It covers the group's data and, since Eitán's answer of 17/11, its
+ * structure too (the group itself, its teachers, its curricular offer and its
+ * level).
+ *
  * It only ever denies: when no group can be resolved (e.g. a record from
  * another school, hidden by the tenant scope) it lets the request through so
  * the endpoint's own Policy answers as usual (404/403).
+ *
+ * A write that goes through only because direction enabled loading in the
+ * group leaves one row in the audit trail on that enablement: who (the
+ * user), when, on which group and route — the why is the enablement's
+ * reason. The record itself is audited as usual where its model is.
  */
 class EnsureGroupIsWritable
 {
@@ -34,17 +48,41 @@ class EnsureGroupIsWritable
     {
         $group = $this->groupFor($request);
 
-        if ($group !== null && $request->user() !== null) {
-            $decision = Gate::forUser($request->user())->inspect('writeInYear', $group);
-            if ($decision->denied()) {
-                return response()->json([
-                    'message' => $decision->message(),
-                    'code' => $decision->code(),
-                ], $decision->status() ?? 403);
-            }
+        if ($group === null || $request->user() === null) {
+            return $next($request);
         }
 
-        return $next($request);
+        $decision = Gate::forUser($request->user())->inspect('writeInYear', $group);
+        if ($decision->denied()) {
+            return response()->json([
+                'message' => $decision->message(),
+                'code' => $decision->code(),
+            ], $decision->status() ?? 403);
+        }
+
+        $calendar = app(SchoolYearCalendar::class);
+        $window = $calendar->isInClosedYear($group) ? $calendar->activeWindow($group) : null;
+
+        $response = $next($request);
+
+        if ($window !== null && $response->isSuccessful()) {
+            $this->recordUse($request, $window, $group);
+        }
+
+        return $response;
+    }
+
+    private function recordUse(Request $request, GroupWriteWindow $window, Group $group): void
+    {
+        $base = StudentFileHistory::baseAttributes($window, AuditAction::Updated);
+
+        AuditLog::create([...$base, 'changes' => [
+            'loaded_under_window' => [
+                'group_id' => $group->id,
+                'method' => $request->method(),
+                'route' => $request->route()?->uri(),
+            ],
+        ]]);
     }
 
     private function groupFor(Request $request): ?Group
@@ -77,6 +115,11 @@ class EnsureGroupIsWritable
 
         if ($request->filled('group_id') && is_numeric($request->input('group_id'))) {
             return Group::query()->find((int) $request->input('group_id'));
+        }
+
+        // E.g. turning an accommodation off for one assessment of the group.
+        if ($request->filled('assessment_id') && is_numeric($request->input('assessment_id'))) {
+            return Assessment::query()->find((int) $request->input('assessment_id'))?->group;
         }
 
         return null;
