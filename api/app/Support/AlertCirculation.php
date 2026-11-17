@@ -34,6 +34,9 @@ use Illuminate\Support\Collection;
  *   ClickUp 86e3qkwpn, {@see AlertRouting::allowsTeachers()}), never a
  *   teacher at all: only psychopedagogy or direction.
  *
+ * A «Lo que recibe la IA» alert has no student: it can be handed to any
+ * active psychopedagogy/direction colleague ({@see self::isAboutNoStudent()}).
+ *
  * An alert whose student was removed (soft-deleted) reaches nobody new: there
  * is no student left to see, so nobody can receive it. Whoever has it can
  * still take it, leave it in observation, note it or close it.
@@ -44,6 +47,14 @@ class AlertCirculation
 
     public function canReceive(User $actor, User $candidate, Alert $alert): bool
     {
+        if ($this->isAboutNoStudent($alert)) {
+            return $candidate->id !== $actor->id
+                && $candidate->school_id === $alert->school_id
+                && $candidate->disabled_at === null
+                && $candidate->password !== null
+                && $this->isSchoolWide($candidate);
+        }
+
         $student = $alert->student;
 
         return $student !== null
@@ -69,6 +80,18 @@ class AlertCirculation
      */
     public function candidates(User $actor, Alert $alert): Collection
     {
+        if ($this->isAboutNoStudent($alert)) {
+            return User::query()
+                ->where('school_id', $alert->school_id)
+                ->whereKeyNot($actor->id)
+                ->whereNull('disabled_at')
+                ->whereNotNull('password')
+                ->whereHas('roles', fn (Builder $roles) => $roles->whereIn('name', Role::schoolWideValues()))
+                ->with('roles:id,name')
+                ->orderBy('name')
+                ->get();
+        }
+
         $student = $alert->student;
 
         if ($student === null || $student->school_id !== $alert->school_id) {
@@ -99,6 +122,16 @@ class AlertCirculation
             ->with('roles:id,name')
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * A «Lo que recibe la IA» alert (ClickUp 1dfd3mc2wx2) is about a group's
+     * input, not a student: it can be handed to psychopedagogy or direction
+     * (who see every group), never to a teacher.
+     */
+    protected function isAboutNoStudent(Alert $alert): bool
+    {
+        return $alert->student_id === null && $alert->ai_input_mark_id !== null;
     }
 
     protected function isSchoolWide(User $user): bool

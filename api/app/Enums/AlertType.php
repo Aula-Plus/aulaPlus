@@ -35,4 +35,15 @@ enum AlertType: string
      * teachers ({@see AlertRouting::allowedRecipients()}).
      */
     case DifficultySignal = 'difficulty_signal';
+
+    /**
+     * A «La IA lo entendió mal» mark on «Lo que recibe la IA» still pending a
+     * week later (ClickUp 1dfd3mc2wx2, P03-AJU-03), raised by
+     * `alerts:ai-input-marks` for whoever marked the line. The first alert
+     * that is not about a student: it carries the mark (`ai_input_mark_id`),
+     * never the line or the comment, reaches that person only (no role
+     * snapshot) and never a teacher. It closes on its own when the mark
+     * closes. Not configurable by the school.
+     */
+    case AIInputMark = 'ai_input_mark';
 }

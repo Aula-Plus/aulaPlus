@@ -188,6 +188,9 @@ function alertHeading(alert: Alert): string {
   if (alert.type === "difficulty_signal") {
     return `${alertTypeLabels[alert.type]}${alert.comment_category_name ? ` — ${alert.comment_category_name}` : ""}`
   }
+  if (alert.type === "ai_input_mark") {
+    return `${alertTypeLabels[alert.type]}${alert.ai_input_mark?.action ? ` — «${alert.ai_input_mark.action}»` : ""}`
+  }
   return alertTypeLabels[alert.type]
 }
 
@@ -324,6 +327,12 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           <Link to={`/alumnos/${alert.student_id}/seguimiento`} className="font-medium hover:underline">
             {alert.student_name}
           </Link>
+        ) : alert.ai_input_mark ? (
+          // «Lo que recibe la IA» alerts are about a group's input, not a
+          // student: they lead back to the group profile, where the line is.
+          <Link to={`/clases/${alert.ai_input_mark.group_id}/seguimiento`} className="font-medium hover:underline">
+            {alert.ai_input_mark.group_name ?? "Grupo"}
+          </Link>
         ) : null}
         <span className="text-sm text-muted-foreground">
           {alertHeading(alert)}
@@ -413,7 +422,7 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
           }}
         />
       )}
-      {choosing === "follow-up" && (
+      {choosing === "follow-up" && alert.student_id !== null && (
         <div className="mt-3">
           <NewFollowUpForm
             studentId={alert.student_id}

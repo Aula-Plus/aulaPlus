@@ -25,6 +25,8 @@ class AlertResource extends JsonResource
         'actions.actor:id,name',
         'actions.assignee:id,name',
         'followUps:id,alert_id,student_id,due_date,resolved',
+        'aiInputMark:id,group_id,line',
+        'aiInputMark.group:id,name',
     ];
 
     /**
@@ -43,6 +45,15 @@ class AlertResource extends JsonResource
             // «Señal de dificultad» alerts (ClickUp 86e3qkwpn): the category only.
             'comment_category_id' => $this->comment_category_id,
             'comment_category_name' => $this->whenLoaded('commentCategory', fn () => $this->commentCategory?->name),
+            // «Lo que recibe la IA» alerts (ClickUp 1dfd3mc2wx2): the group and
+            // the marked action, to find the line again. Whoever sees this
+            // alert is psychopedagogy/direction, who see every group.
+            'ai_input_mark' => $this->whenLoaded('aiInputMark', fn () => $this->aiInputMark ? [
+                'id' => $this->aiInputMark->id,
+                'group_id' => $this->aiInputMark->group_id,
+                'group_name' => $this->aiInputMark->group?->name,
+                'action' => $this->aiInputMark->line['action'] ?? null,
+            ] : null),
             'source_alert_id' => $this->source_alert_id,
             'type' => $this->type->value,
             'severity' => $this->severity->value,
