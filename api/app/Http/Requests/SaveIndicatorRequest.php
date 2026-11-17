@@ -2,15 +2,16 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\CrossingOperator;
 use App\Enums\IndicatorCalculation;
 use App\Enums\IndicatorDisplayPlace;
 use App\Enums\IndicatorSourceType;
 use App\Enums\ZScorePopulation;
 use App\Http\Requests\Concerns\ValidatesScreeningBands;
-use App\Models\Crossing;
+use App\Http\Requests\Concerns\ValidatesSubjectGrades;
 use App\Models\Indicator;
+use App\Services\Indicators\CrossingBandUsage;
 use App\Services\Indicators\IndicatorData;
+use App\Services\Indicators\SubjectGrades;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -21,14 +22,15 @@ use Illuminate\Validation\Validator;
  * rules as a screening design: 2 to 5, increasing), where it shows and
  * whether teachers see it. Authorization delegates to IndicatorPolicy.
  *
- * Checked here as well: each datum exists in this school; the number of data
- * matches the calculation; an average or difference never mixes a bounded
+ * Checked here as well: each datum exists in this school; a subject says
+ * which of its grades it reads (ValidatesSubjectGrades, every grade by
+ * default); the number of data matches the calculation; an average or difference never mixes a bounded
  * scale with an unbounded one; and an indicator never uses itself, directly
  * or through another indicator.
  */
 class SaveIndicatorRequest extends FormRequest
 {
-    use ValidatesScreeningBands;
+    use ValidatesScreeningBands, ValidatesSubjectGrades;
 
     public function authorize(): bool
     {
@@ -48,9 +50,10 @@ class SaveIndicatorRequest extends FormRequest
             'name' => [$this->is('*/indicators/preview') ? 'nullable' : 'required', 'string', 'max:120'],
             'calculation' => ['required', Rule::enum(IndicatorCalculation::class)],
             'inputs' => ['required', 'array', 'min:1', 'max:6'],
-            'inputs.*' => ['required', 'array:type,id'],
+            'inputs.*' => ['required', 'array:type,id,grades'],
             'inputs.*.type' => ['required', 'string', Rule::in(IndicatorSourceType::indicatorInputValues())],
             'inputs.*.id' => ['required', 'integer'],
+            ...$this->subjectGradesRules('inputs.*'),
             'base_100' => ['sometimes', 'boolean'],
             'z_population' => ['nullable', Rule::enum(ZScorePopulation::class)],
             ...$this->bandRules(),
@@ -97,18 +100,29 @@ class SaveIndicatorRequest extends FormRequest
     }
 
     /**
-     * @return list<array{type: string, id: int}>
+     * Each input as `{type, id}`, plus `grades` for a subject.
+     *
+     * @return list<array{type: string, id: int, grades?: array{rule: string, category: string|null}}>
      */
     protected function inputs(): array
     {
-        return array_values(array_map(static fn (array $input): array => [
+        return array_values(array_map(static fn (array $input): array => array_filter([
             'type' => (string) $input['type'],
             'id' => (int) $input['id'],
-        ], (array) $this->input('inputs', [])));
+            'grades' => SubjectGrades::forSource((string) $input['type'], $input['grades'] ?? null),
+        ], static fn ($value): bool => $value !== null), (array) $this->input('inputs', [])));
     }
 
     protected function validateInputs(Validator $validator): void
     {
+        if ($validator->errors()->isNotEmpty()) {
+            return;
+        }
+
+        foreach (array_values((array) $this->input('inputs')) as $index => $input) {
+            $this->validateSubjectGrades($validator, "inputs.{$index}", $input);
+        }
+
         if ($validator->errors()->isNotEmpty()) {
             return;
         }
@@ -123,7 +137,10 @@ class SaveIndicatorRequest extends FormRequest
             return;
         }
 
-        if (count(array_unique(array_map(static fn (array $input): string => $input['type'].':'.$input['id'], $inputs))) !== count($inputs)) {
+        // The same subject under two grade rules is two data (e.g. the
+        // written average minus the oral one).
+        $keys = array_map(static fn (array $input): string => $input['type'].':'.$input['id'].':'.SubjectGrades::fromArray($input['grades'] ?? null)->key(), $inputs);
+        if (count(array_unique($keys)) !== count($inputs)) {
             $validator->errors()->add('inputs', 'The same datum is used twice.');
 
             return;
@@ -160,9 +177,8 @@ class SaveIndicatorRequest extends FormRequest
     }
 
     /**
-     * A crossing's band condition names the band it reads, so editing an
-     * indicator cannot drop or rename a band a crossing uses: the crossing
-     * would silently stop matching anyone. Change the crossing first.
+     * Editing an indicator cannot drop or rename a band a crossing uses
+     * (CrossingBandUsage): change the crossing first.
      */
     protected function validateBandsUsedByCrossings(Validator $validator): void
     {
@@ -175,18 +191,7 @@ class SaveIndicatorRequest extends FormRequest
 
         $names = array_map(static fn (array $band): string => trim((string) ($band['name'] ?? '')), array_values((array) $this->input('bands', [])));
 
-        $missing = Crossing::query()->get()
-            ->flatMap(fn (Crossing $crossing) => collect($crossing->conditions ?? [])
-                ->filter(fn (array $condition): bool => ($condition['source']['type'] ?? null) === IndicatorSourceType::Indicator->value
-                    && (int) ($condition['source']['id'] ?? 0) === $self->id
-                    && ($condition['operator'] ?? null) === CrossingOperator::Band->value)
-                ->map(fn (array $condition): string => (string) $condition['value']))
-            ->unique()
-            ->reject(fn (string $band): bool => in_array($band, $names, true));
-
-        if ($missing->isNotEmpty()) {
-            $validator->errors()->add('bands', 'A band used by a crossing cannot be removed or renamed: '.$missing->implode(', ').'.');
-        }
+        CrossingBandUsage::validate($validator, IndicatorSourceType::Indicator->value, $self->id, $names);
     }
 
     /**

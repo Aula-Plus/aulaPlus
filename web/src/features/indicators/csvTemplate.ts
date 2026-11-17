@@ -24,39 +24,57 @@ function csvCell(value: string): string {
   return /[",;\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 }
 
+/** One row of an uploaded CSV: who it is, as the file says it, and the value. */
+export interface TemplateRow {
+  /** The Aula+ code («id_alumno»), when the file has it. */
+  student_id: number | null
+  name: string | null
+  group: string | null
+  value: number
+}
+
 /**
- * Reads the Aula+ template saved as CSV (comma, semicolon or tab): the
- * «id_alumno» and «valor» columns. Rows without a student id or with a value
- * that is not a number are counted as bad; rows with an empty value are left
- * alone.
+ * Reads the Aula+ template saved as CSV (comma, semicolon or tab), or any
+ * sheet with the same column names: «valor» and who the row is — the
+ * «id_alumno» code or, when the file has no code, the «alumno» name (and
+ * «grupo», when there is one). Who a name is gets resolved by the server,
+ * which asks when a name is repeated (PO answer of 17/11). Rows with a code
+ * that is not a number, without a code or a name, or with a value that is
+ * not a number are counted as bad; rows with an empty value are left alone.
  */
-export function parseTemplateCsv(text: string): { values: { student_id: number; value: number }[]; bad: number } {
+export function parseTemplateCsv(text: string): { rows: TemplateRow[]; bad: number } {
   const lines = text
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .filter((line) => line.trim() !== "")
-  if (lines.length === 0) return { values: [], bad: 0 }
+  if (lines.length === 0) return { rows: [], bad: 0 }
   const separator = lines[0].includes(";") ? ";" : lines[0].includes("\t") ? "\t" : ","
   const header = splitCsvLine(lines[0], separator).map((cell) => cell.trim().toLowerCase())
   const idColumn = header.indexOf("id_alumno")
+  const nameColumn = header.indexOf("alumno")
+  const groupColumn = header.indexOf("grupo")
   const valueColumn = header.indexOf("valor")
-  if (idColumn === -1 || valueColumn === -1) return { values: [], bad: lines.length - 1 }
+  if (valueColumn === -1 || (idColumn === -1 && nameColumn === -1)) return { rows: [], bad: lines.length - 1 }
 
-  const values: { student_id: number; value: number }[] = []
+  const rows: TemplateRow[] = []
   let bad = 0
   for (const line of lines.slice(1)) {
     const cells = splitCsvLine(line, separator)
-    const rawValue = (cells[valueColumn] ?? "").trim()
+    const cell = (column: number) => (column === -1 ? "" : (cells[column] ?? "").trim())
+    const rawValue = cell(valueColumn)
     if (rawValue === "") continue
-    const studentId = Number((cells[idColumn] ?? "").trim())
+    const rawId = cell(idColumn)
+    const studentId = rawId === "" ? null : Number(rawId)
+    const name = cell(nameColumn)
     const value = Number(rawValue.replace(",", "."))
-    if (!Number.isInteger(studentId) || studentId <= 0 || Number.isNaN(value)) {
+    const badId = studentId !== null && (!Number.isInteger(studentId) || studentId <= 0)
+    if (badId || (studentId === null && name === "") || Number.isNaN(value)) {
       bad++
       continue
     }
-    values.push({ student_id: studentId, value })
+    rows.push({ student_id: studentId, name: name || null, group: cell(groupColumn) || null, value })
   }
-  return { values, bad }
+  return { rows, bad }
 }
 
 function splitCsvLine(line: string, separator: string): string[] {

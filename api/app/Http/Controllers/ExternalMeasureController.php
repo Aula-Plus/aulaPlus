@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Indicators\MatchTemplateStudents;
+use App\Http\Requests\MatchExternalMeasureStudentsRequest;
 use App\Http\Requests\SaveExternalMeasureRequest;
 use App\Http\Requests\StoreExternalMeasureValuesRequest;
 use App\Models\ExternalMeasure;
@@ -11,6 +13,7 @@ use App\Services\Indicators\IndicatorData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -88,6 +91,19 @@ class ExternalMeasureController extends Controller
     }
 
     /**
+     * POST /external-measures/{id}/match-students — who each row of an
+     * uploaded CSV is: by its Aula+ code, else by name (and group). A name
+     * shared by several students comes back `ambiguous` with each one's code
+     * so the person picks (PO answer of 17/11); nothing is saved here.
+     */
+    public function matchStudents(MatchExternalMeasureStudentsRequest $request, ExternalMeasure $externalMeasure): JsonResponse
+    {
+        $match = new MatchTemplateStudents(app(IndicatorData::class));
+
+        return response()->json(['data' => ['rows' => $match($request->rows())]]);
+    }
+
+    /**
      * PUT /external-measures/{id}/values — load values for a school year
      * (this one by default). Rows of another school's student or outside the
      * scale are skipped and counted back.
@@ -102,35 +118,38 @@ class ExternalMeasureController extends Controller
         $cleared = 0;
         $skipped = 0;
 
-        foreach ($rows as $row) {
-            $studentId = (int) $row['student_id'];
-            $value = $row['value'];
+        // All or nothing: a file never stays half loaded.
+        DB::transaction(function () use ($rows, $known, $externalMeasure, $year, $request, &$saved, &$cleared, &$skipped): void {
+            foreach ($rows as $row) {
+                $studentId = (int) $row['student_id'];
+                $value = $row['value'];
 
-            if (! $known->has($studentId)) {
-                $skipped++;
+                if (! $known->has($studentId)) {
+                    $skipped++;
 
-                continue;
+                    continue;
+                }
+
+                $key = ['external_measure_id' => $externalMeasure->id, 'student_id' => $studentId, 'school_year' => $year];
+
+                if ($value === null || $value === '') {
+                    $cleared += ExternalMeasureValue::query()->where($key)->delete();
+
+                    continue;
+                }
+
+                $value = (float) $value;
+
+                if ($value < $externalMeasure->scale_min || $value > $externalMeasure->scale_max) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                ExternalMeasureValue::query()->updateOrCreate($key, ['value' => $value, 'loaded_by_id' => $request->user()->id]);
+                $saved++;
             }
-
-            $key = ['external_measure_id' => $externalMeasure->id, 'student_id' => $studentId, 'school_year' => $year];
-
-            if ($value === null || $value === '') {
-                $cleared += ExternalMeasureValue::query()->where($key)->delete();
-
-                continue;
-            }
-
-            $value = (float) $value;
-
-            if ($value < $externalMeasure->scale_min || $value > $externalMeasure->scale_max) {
-                $skipped++;
-
-                continue;
-            }
-
-            ExternalMeasureValue::query()->updateOrCreate($key, ['value' => $value, 'loaded_by_id' => $request->user()->id]);
-            $saved++;
-        }
+        });
 
         return response()->json(['data' => [
             'saved' => $saved,

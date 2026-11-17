@@ -369,6 +369,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::delete('/external-measures/{externalMeasure}', [ExternalMeasureController::class, 'destroy']);
         Route::get('/external-measures/{externalMeasure}/values', [ExternalMeasureController::class, 'values']);
         Route::put('/external-measures/{externalMeasure}/values', [ExternalMeasureController::class, 'storeValues']);
+        Route::post('/external-measures/{externalMeasure}/match-students', [ExternalMeasureController::class, 'matchStudents']);
         Route::get('/indicators', [IndicatorController::class, 'index']);
         Route::post('/indicators', [IndicatorController::class, 'store']);
         Route::post('/indicators/preview', [IndicatorController::class, 'preview']);

@@ -1,5 +1,5 @@
 import { api } from "@/lib/api"
-import type { ScreeningColor } from "@/types"
+import type { AssessmentType, ScreeningColor } from "@/types"
 
 /**
  * Screen 30 «Indicadores y cruces» (ClickUp 1dfd3mc4bgp). Mirrors of the
@@ -20,6 +20,15 @@ export type IndicatorDisplayPlace =
   | "profile_band"
   | "group_points"
 export type CrossingOperator = "band" | "level" | "below" | "above"
+
+/** Mirror of `App\Enums\SubjectGradeRule`: which of the year's grades a subject datum reads. */
+export type SubjectGradeRule = "all" | "all_except_category" | "category_average" | "latest" | "latest_of_category"
+
+/** The category is an assessment type (Escrita, Oral…). */
+export interface SubjectGrades {
+  rule: SubjectGradeRule
+  category: AssessmentType | null
+}
 
 export interface Scale {
   min: number
@@ -78,6 +87,8 @@ export interface IndicatorDataCatalog {
 export interface SourceRef {
   type: SourceType
   id: number
+  /** Only a subject: which grades it reads (every grade when absent). */
+  grades?: SubjectGrades
 }
 
 export interface Population {
@@ -156,6 +167,25 @@ export interface ExternalMeasureRoster {
   measure: ExternalMeasure
   school_year: number
   rows: { student_id: number; name: string; group_name: string; value: number | null }[]
+}
+
+/** Who a CSV row is (`POST /external-measures/{id}/match-students`). */
+export interface TemplateRowIdentity {
+  student_id: number | null
+  name: string | null
+  group: string | null
+}
+
+export interface StudentCandidate {
+  student_id: number
+  name: string
+  group_name: string
+}
+
+export interface StudentMatch {
+  status: "matched" | "ambiguous" | "unknown"
+  student_id: number | null
+  candidates: StudentCandidate[]
 }
 
 export interface ChartAxis {
@@ -254,6 +284,13 @@ export async function saveExternalMeasureValues(
     { values },
   )
   return data.data
+}
+
+export async function matchTemplateStudents(id: number, rows: TemplateRowIdentity[]): Promise<StudentMatch[]> {
+  const { data } = await api.post<{ data: { rows: StudentMatch[] } }>(`/api/v1/external-measures/${id}/match-students`, {
+    rows,
+  })
+  return data.data.rows
 }
 
 export async function fetchChart(x: SourceRef, y: SourceRef, groupId?: number): Promise<ChartData> {

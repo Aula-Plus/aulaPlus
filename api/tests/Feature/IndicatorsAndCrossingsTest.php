@@ -474,3 +474,290 @@ it('lists the assessments with their levels in a fixed number of queries, and av
         ['source' => ['type' => 'subject', 'id' => $math->id], 'operator' => 'level', 'value' => $scale->levels[2]->id],
     ]])->assertOk()->assertJsonPath('data.total', 1);
 });
+
+/**
+ * Matemática in 5.°A with grades of three categories, oldest first:
+ * student 0 → written 4 (day −30), oral 10 (day −20), written 6 (day −10);
+ * student 1 → written 8 (day −30), oral 2 (day −20).
+ */
+function mathByCategory(array $scenario): Subject
+{
+    ['school' => $school, 'a' => $a, 'studentsA' => $studentsA] = $scenario;
+    $math = Subject::factory()->create(['school_id' => $school->id, 'name' => 'Matemática']);
+    foreach ([
+        [30, 'written', [[$studentsA[0], 4], [$studentsA[1], 8]]],
+        [20, 'oral', [[$studentsA[0], 10], [$studentsA[1], 2]]],
+        [10, 'written', [[$studentsA[0], 6]]],
+    ] as [$daysAgo, $type, $results]) {
+        $test = Assessment::factory()->for($a)->create([
+            'school_id' => $school->id, 'subject_id' => $math->id, 'type' => $type, 'administered_at' => now()->subDays($daysAgo)->toDateString(),
+        ]);
+        foreach ($results as [$student, $score]) {
+            AssessmentResult::factory()->for($test)->for($student)->create(['school_id' => $school->id, 'score' => $score, 'official_scale_level_id' => null]);
+        }
+    }
+
+    return $math;
+}
+
+it('lets the creator say exactly which grades of a subject a crossing reads', function () {
+    $scenario = indicatorScenario();
+    $math = mathByCategory($scenario);
+    Sanctum::actingAs($scenario['psycho']);
+
+    $count = fn (?array $grades, string $operator, float $value): int => $this->postJson('/api/v1/crossings/preview', ['conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id, ...($grades === null ? [] : ['grades' => $grades])], 'operator' => $operator, 'value' => $value],
+    ]])->assertOk()->json('data.total');
+
+    // Every grade (default, as before): student 0 → 6.67, student 1 → 5.
+    expect($count(null, 'above', 6))->toBe(1)
+        ->and($count(['rule' => 'all', 'category' => null], 'above', 6.6))->toBe(1)
+        ->and($count(['rule' => 'all', 'category' => null], 'above', 6.7))->toBe(0)
+        // All but oral: student 0 → 5, student 1 → 8.
+        ->and($count(['rule' => 'all_except_category', 'category' => 'oral'], 'above', 7))->toBe(1)
+        ->and($count(['rule' => 'all_except_category', 'category' => 'oral'], 'below', 5.5))->toBe(1)
+        // Average of oral only: 10 and 2.
+        ->and($count(['rule' => 'category_average', 'category' => 'oral'], 'above', 9))->toBe(1)
+        ->and($count(['rule' => 'category_average', 'category' => 'oral'], 'below', 3))->toBe(1)
+        // Latest of the year: student 0's written 6, student 1's oral 2.
+        ->and($count(['rule' => 'latest', 'category' => null], 'below', 3))->toBe(1)
+        ->and($count(['rule' => 'latest', 'category' => null], 'above', 5.5))->toBe(1)
+        // Latest written: student 0 → 6, student 1 → 8.
+        ->and($count(['rule' => 'latest_of_category', 'category' => 'written'], 'above', 5.5))->toBe(2)
+        ->and($count(['rule' => 'latest_of_category', 'category' => 'written'], 'above', 7))->toBe(1)
+        // A category nobody has: no datum.
+        ->and($count(['rule' => 'category_average', 'category' => 'project'], 'above', 0))->toBe(0);
+
+    // Saved and shown with the rule that applies.
+    $this->postJson('/api/v1/crossings', ['name' => 'Oral bajo', 'reading' => 'El equipo mira la oralidad.', 'conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'category_average', 'category' => 'oral']], 'operator' => 'below', 'value' => 3],
+    ]])->assertCreated()
+        ->assertJsonPath('data.conditions.0.source.grades', ['rule' => 'category_average', 'category' => 'oral'])
+        ->assertJsonPath('data.preview.total', 1);
+
+    // Without a rule, a subject condition says it reads every grade.
+    $this->postJson('/api/v1/crossings', ['name' => 'Promedio bajo', 'reading' => 'x', 'conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id], 'operator' => 'below', 'value' => 6],
+    ]])->assertCreated()->assertJsonPath('data.conditions.0.source.grades', ['rule' => 'all', 'category' => null]);
+});
+
+it('uses the chosen grades in an indicator, and the same subject under two rules is two data', function () {
+    $scenario = indicatorScenario();
+    $math = mathByCategory($scenario);
+    Sanctum::actingAs($scenario['director']);
+
+    $payload = readingIndicatorPayload(0, [
+        'name' => 'Escrito menos oral',
+        'calculation' => 'difference',
+        'inputs' => [
+            ['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'category_average', 'category' => 'written']],
+            ['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'category_average', 'category' => 'oral']],
+        ],
+        'bands' => [
+            ['name' => 'Oral más alto', 'color' => 'yellow', 'max' => 0, 'meaning' => 'x'],
+            ['name' => 'Escrito más alto', 'color' => 'blue', 'max' => null, 'meaning' => 'x'],
+        ],
+    ]);
+
+    // Student 0: 5 − 10 = −5; student 1: 8 − 2 = 6.
+    $this->postJson('/api/v1/indicators', $payload)->assertCreated()
+        ->assertJsonPath('data.inputs.0.grades', ['rule' => 'category_average', 'category' => 'written'])
+        ->assertJsonPath('data.inputs.1.grades', ['rule' => 'category_average', 'category' => 'oral'])
+        ->assertJsonPath('data.summary.students_with_data', 2)
+        ->assertJsonPath('data.summary.bands.0.count', 1)
+        ->assertJsonPath('data.summary.bands.1.count', 1);
+
+    // The very same rule twice is the same datum twice.
+    $twice = $payload;
+    $twice['inputs'][1] = $twice['inputs'][0];
+    $this->postJson('/api/v1/indicators', $twice)->assertUnprocessable()->assertJsonValidationErrors('inputs');
+});
+
+it('reads the latest level of progress of a category for Primaria', function () {
+    $scenario = indicatorScenario();
+    ['school' => $school, 'a' => $a, 'studentsA' => $studentsA, 'language' => $language, 'scale' => $scale, 'psycho' => $psycho] = $scenario;
+    // The scenario's assessment (10 days ago) gives student 0 level 1. An
+    // older oral one gives them level 4.
+    Assessment::query()->where('subject_id', $language->id)->update(['type' => 'written']);
+    $oral = Assessment::factory()->for($a)->create(['school_id' => $school->id, 'subject_id' => $language->id, 'type' => 'oral', 'administered_at' => now()->subDays(40)->toDateString()]);
+    AssessmentResult::factory()->for($oral)->for($studentsA[0])->create(['school_id' => $school->id, 'score' => null, 'official_scale_level_id' => $scale->levels[3]->id]);
+    Sanctum::actingAs($psycho);
+
+    $level = fn (?array $grades, int $levelIndex): int => $this->postJson('/api/v1/crossings/preview', ['conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $language->id, 'grades' => $grades], 'operator' => 'level', 'value' => $scale->levels[$levelIndex]->id],
+    ]])->assertOk()->json('data.total');
+
+    // Latest of the year (and every grade): level 1 for student 0 and 5.°B's first.
+    expect($level(['rule' => 'latest', 'category' => null], 0))->toBe(2)
+        ->and($level(null, 0))->toBe(2)
+        // Latest oral: only student 0, at level 4.
+        ->and($level(['rule' => 'latest_of_category', 'category' => 'oral'], 3))->toBe(1)
+        ->and($level(['rule' => 'latest_of_category', 'category' => 'oral'], 0))->toBe(0);
+});
+
+it('validates the grade rule of a subject datum', function () {
+    $scenario = indicatorScenario();
+    $math = mathByCategory($scenario);
+    Sanctum::actingAs($scenario['psycho']);
+
+    $preview = fn (array $source) => $this->postJson('/api/v1/crossings/preview', ['conditions' => [
+        ['source' => $source, 'operator' => 'below', 'value' => 5],
+    ]]);
+
+    $preview(['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'category_average', 'category' => null]])
+        ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.source.grades.category');
+    $preview(['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'latest', 'category' => 'oral']])
+        ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.source.grades.category');
+    $preview(['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'median', 'category' => null]])
+        ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.source.grades.rule');
+    $preview(['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'category_average', 'category' => 'exam']])
+        ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.source.grades.category');
+    $preview(['type' => 'subject', 'id' => $math->id, 'grades' => ['category' => 'oral']])
+        ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.source.grades.rule');
+    $preview(['type' => 'screening', 'id' => $scenario['reading']->id, 'grades' => ['rule' => 'all', 'category' => null]])
+        ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.source.grades');
+
+    $this->postJson('/api/v1/indicators/preview', readingIndicatorPayload(0, ['inputs' => [
+        ['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'all_except_category', 'category' => null]],
+    ]]))->assertUnprocessable()->assertJsonValidationErrors('inputs.0.grades.category');
+});
+
+it('keeps the behaviour of subject data saved before the grade rule, reversibly', function () {
+    $scenario = indicatorScenario();
+    $math = mathByCategory($scenario);
+    $indicator = Indicator::factory()->create(['school_id' => $scenario['school']->id, 'inputs' => [['type' => 'subject', 'id' => $math->id], ['type' => 'screening', 'id' => $scenario['reading']->id]]]);
+    $crossing = Crossing::factory()->create(['school_id' => $scenario['school']->id, 'conditions' => [
+        ['source' => ['type' => 'subject', 'id' => $math->id], 'operator' => 'above', 'value' => 6],
+    ]]);
+    $migration = require database_path('migrations/2026_11_17_000001_add_grade_rule_to_subject_data.php');
+
+    $migration->up();
+    expect($indicator->fresh()->inputs)->toBe([
+        ['type' => 'subject', 'id' => $math->id, 'grades' => ['rule' => 'all', 'category' => null]],
+        ['type' => 'screening', 'id' => $scenario['reading']->id],
+    ])->and($crossing->fresh()->conditions[0]['source']['grades'])->toBe(['rule' => 'all', 'category' => null]);
+
+    Sanctum::actingAs($scenario['psycho']);
+    $this->getJson('/api/v1/crossings')->assertOk()->assertJsonPath('data.0.preview.total', 1);
+
+    $migration->down();
+    expect($indicator->fresh()->inputs[0])->toBe(['type' => 'subject', 'id' => $math->id])
+        ->and($crossing->fresh()->conditions[0]['source'])->toBe(['type' => 'subject', 'id' => $math->id]);
+});
+
+it('does not let a new screening design or a revert drop a band a crossing uses', function () {
+    ['psycho' => $psycho, 'director' => $director, 'reading' => $reading] = indicatorScenario();
+    Sanctum::actingAs($psycho);
+    $this->postJson('/api/v1/crossings', ['name' => 'Lectura inicial', 'reading' => 'El equipo mira la lectura.', 'conditions' => [
+        ['source' => ['type' => 'screening', 'id' => $reading->id], 'operator' => 'band', 'value' => 'Inicial'],
+    ]])->assertCreated();
+
+    $bands = fn (string $first): array => [
+        ['name' => $first, 'color' => 'red', 'max' => 39, 'meaning' => 'x'],
+        ['name' => 'En proceso', 'color' => 'yellow', 'max' => 59, 'meaning' => 'x'],
+        ['name' => 'Adecuado', 'color' => 'green', 'max' => null, 'meaning' => 'x'],
+    ];
+
+    $this->postJson("/api/v1/screening-test-types/{$reading->id}/designs", ['bands' => $bands('Bajo')])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['bands', 'used_by_crossings'])
+        ->assertJsonPath('errors.used_by_crossings', ['Lectura inicial']);
+    expect($reading->fresh()->currentApprovedDesign()->bandList()[0]['name'])->toBe('Inicial');
+
+    // Repeated band names are refused too.
+    $repeated = $bands('Inicial');
+    $repeated[1]['name'] = 'Inicial';
+    $this->postJson("/api/v1/screening-test-types/{$reading->id}/designs", ['bands' => $repeated])
+        ->assertUnprocessable()->assertJsonValidationErrors('bands.1.name');
+
+    // A design that keeps the band is saved; then the crossing moves to a band
+    // only the new design has, and going back would drop it.
+    $new = $bands('Inicial');
+    $new[1]['name'] = 'Intermedio';
+    $design = $this->postJson("/api/v1/screening-test-types/{$reading->id}/designs", ['bands' => $new])->assertCreated()->json('data.id');
+    $crossing = Crossing::query()->firstOrFail();
+    $crossing->update(['conditions' => [['source' => ['type' => 'screening', 'id' => $reading->id], 'operator' => 'band', 'value' => 'Intermedio']]]);
+
+    Sanctum::actingAs($director);
+    $this->postJson("/api/v1/screening-test-designs/{$design}/revert")
+        ->assertUnprocessable()->assertJsonPath('errors.used_by_crossings', ['Lectura inicial']);
+    expect(ScreeningTestDesign::query()->find($design)->reverted_at)->toBeNull();
+});
+
+it('tells which crossing to change first when an indicator loses a band', function () {
+    ['psycho' => $psycho, 'reading' => $reading] = indicatorScenario();
+    Sanctum::actingAs($psycho);
+    $indicator = $this->postJson('/api/v1/indicators', readingIndicatorPayload($reading->id))->assertCreated()->json('data.id');
+    $this->postJson('/api/v1/crossings', ['name' => 'Lectura baja', 'reading' => 'x', 'conditions' => [
+        ['source' => ['type' => 'indicator', 'id' => $indicator], 'operator' => 'band', 'value' => 'Bajo'],
+    ]])->assertCreated();
+
+    $renamed = readingIndicatorPayload($reading->id);
+    $renamed['bands'][0]['name'] = 'Bajo rendimiento';
+    $this->patchJson("/api/v1/indicators/{$indicator}", $renamed)
+        ->assertUnprocessable()->assertJsonPath('errors.used_by_crossings', ['Lectura baja']);
+});
+
+it('asks which student a CSV row is when a name is repeated, offering only this school\'s roster', function () {
+    ['director' => $director, 'school' => $school, 'a' => $a, 'b' => $b, 'studentsA' => $studentsA, 'studentsB' => $studentsB, 'year' => $year] = indicatorScenario();
+    $studentsA[1]->update(['full_name' => 'Sofía Pérez']);
+    $studentsB[0]->update(['full_name' => 'Sofia  PEREZ']);
+    $studentsA[2]->update(['full_name' => 'Juan Gómez']);
+    $studentsB[1]->update(['full_name' => 'Juan Gómez']);
+    // Same name in another school, and a student of this school without a group this year.
+    $otherSchool = School::factory()->create();
+    $foreign = Student::factory()->create(['school_id' => $otherSchool->id, 'full_name' => 'Sofía Pérez']);
+    $foreignGroup = Group::factory()->create(['school_id' => $otherSchool->id, 'school_year' => $year]);
+    $foreignGroup->students()->attach($foreign->id, ['school_year' => $year]);
+    Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Sofía Pérez']);
+    $measure = ExternalMeasure::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs($director);
+
+    $rows = $this->postJson("/api/v1/external-measures/{$measure->id}/match-students", ['rows' => [
+        ['student_id' => null, 'name' => 'sofía pérez', 'group' => null],
+        ['student_id' => null, 'name' => 'Juan Gómez', 'group' => '5.°B'],
+        ['student_id' => $studentsA[0]->id, 'name' => null, 'group' => null],
+        ['student_id' => $foreign->id, 'name' => null, 'group' => null],
+        ['student_id' => null, 'name' => 'Nadie Así', 'group' => null],
+    ]])->assertOk()->json('data.rows');
+
+    expect($rows[0]['status'])->toBe('ambiguous')
+        ->and(collect($rows[0]['candidates'])->pluck('student_id')->all())->toBe([$studentsA[1]->id, $studentsB[0]->id])
+        ->and(collect($rows[0]['candidates'])->pluck('group_name')->all())->toBe(['5.°A', '5.°B'])
+        // The group in the file resolves the repeated name.
+        ->and($rows[1])->toBe(['status' => 'matched', 'student_id' => $studentsB[1]->id, 'candidates' => []])
+        ->and($rows[2])->toBe(['status' => 'matched', 'student_id' => $studentsA[0]->id, 'candidates' => []])
+        // Another school's code is never matched nor offered.
+        ->and($rows[3]['status'])->toBe('unknown')
+        ->and($rows[4]['status'])->toBe('unknown');
+    expect(collect($rows)->pluck('candidates')->flatten(1)->pluck('student_id')->all())->not->toContain($foreign->id);
+
+    // Invalid input.
+    $this->postJson("/api/v1/external-measures/{$measure->id}/match-students", ['rows' => [['student_id' => null, 'name' => ' ', 'group' => null]]])
+        ->assertUnprocessable()->assertJsonValidationErrors('rows.0');
+    $this->postJson("/api/v1/external-measures/{$measure->id}/match-students", ['rows' => []])
+        ->assertUnprocessable()->assertJsonValidationErrors('rows');
+    $this->postJson("/api/v1/external-measures/{$measure->id}/match-students", ['rows' => [['student_id' => 'abc']]])
+        ->assertUnprocessable()->assertJsonValidationErrors('rows.0.student_id');
+});
+
+it('closes the CSV student matching to teachers and to other schools', function () {
+    ['teacher' => $teacher, 'school' => $school, 'studentsA' => $studentsA] = indicatorScenario();
+    $measure = ExternalMeasure::factory()->create(['school_id' => $school->id]);
+    $body = ['rows' => [['student_id' => null, 'name' => $studentsA[0]->full_name, 'group' => null]]];
+
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/external-measures/{$measure->id}/match-students", $body)->assertForbidden();
+
+    $other = School::factory()->create();
+    Tenancy::forget();
+    Sanctum::actingAs(User::factory()->forSchool($other)->psychopedagogue()->create());
+    $this->postJson("/api/v1/external-measures/{$measure->id}/match-students", $body)->assertNotFound();
+
+    // Their own datum: this school's names are never matched nor offered.
+    Tenancy::useSchool($other->id);
+    $own = ExternalMeasure::factory()->create(['school_id' => $other->id]);
+    Tenancy::forget();
+    $this->postJson("/api/v1/external-measures/{$own->id}/match-students", $body)->assertOk()
+        ->assertJsonPath('data.rows.0', ['status' => 'unknown', 'student_id' => null, 'candidates' => []]);
+});

@@ -4,8 +4,10 @@ namespace App\Http\Requests;
 
 use App\Enums\CrossingOperator;
 use App\Enums\IndicatorSourceType;
+use App\Http\Requests\Concerns\ValidatesSubjectGrades;
 use App\Models\Crossing;
 use App\Services\Indicators\IndicatorData;
+use App\Services\Indicators\SubjectGrades;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -21,9 +23,14 @@ use Illuminate\Validation\Validator;
  *   a Primaria scale (PO decision 6);
  * - `below` / `above`: a number, for any datum with numbers — the grade in an
  *   assessment included (PO decision 2).
+ *
+ * A subject also says which of its grades it reads (`source.grades`,
+ * ValidatesSubjectGrades; every grade by default — PO answer of 17/11).
  */
 class SaveCrossingRequest extends FormRequest
 {
+    use ValidatesSubjectGrades;
+
     public function authorize(): bool
     {
         $crossing = $this->route('crossing');
@@ -46,9 +53,10 @@ class SaveCrossingRequest extends FormRequest
             'reading' => [$preview ? 'nullable' : 'required', 'string', 'max:2000'],
             'conditions' => ['required', 'array', 'min:1', 'max:2'],
             'conditions.*' => ['required', 'array:source,operator,value'],
-            'conditions.*.source' => ['required', 'array:type,id'],
+            'conditions.*.source' => ['required', 'array:type,id,grades'],
             'conditions.*.source.type' => ['required', 'string', Rule::in(IndicatorSourceType::values())],
             'conditions.*.source.id' => ['required', 'integer'],
+            ...$this->subjectGradesRules('conditions.*.source'),
             'conditions.*.operator' => ['required', Rule::enum(CrossingOperator::class)],
             'conditions.*.value' => ['required'],
         ];
@@ -62,15 +70,20 @@ class SaveCrossingRequest extends FormRequest
     /**
      * The validated conditions, normalised.
      *
-     * @return list<array{source: array{type: string, id: int}, operator: string, value: string|int|float}>
+     * @return list<array{source: array{type: string, id: int, grades?: array{rule: string, category: string|null}}, operator: string, value: string|int|float}>
      */
     public function conditions(): array
     {
         return array_values(array_map(static function (array $condition): array {
             $operator = (string) $condition['operator'];
+            $type = (string) $condition['source']['type'];
 
             return [
-                'source' => ['type' => (string) $condition['source']['type'], 'id' => (int) $condition['source']['id']],
+                'source' => array_filter([
+                    'type' => $type,
+                    'id' => (int) $condition['source']['id'],
+                    'grades' => SubjectGrades::forSource($type, $condition['source']['grades'] ?? null),
+                ], static fn ($value): bool => $value !== null),
                 'operator' => $operator,
                 'value' => match ($operator) {
                     CrossingOperator::Band->value => (string) $condition['value'],
@@ -93,6 +106,8 @@ class SaveCrossingRequest extends FormRequest
             $type = (string) $condition['source']['type'];
             $id = (int) $condition['source']['id'];
             $value = $condition['value'];
+
+            $this->validateSubjectGrades($validator, "conditions.{$index}.source", (array) $condition['source']);
 
             if (! $data->exists($type, $id)) {
                 $validator->errors()->add("conditions.{$index}.source.id", 'The datum does not exist.');

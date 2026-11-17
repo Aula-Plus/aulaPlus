@@ -25,11 +25,14 @@ import {
 } from "./indicatorsApi"
 import {
   calculationLabels,
+  DEFAULT_GRADES,
   displayPlaceLabels,
   populationText,
   sourceLabel,
   zPopulationLabels,
 } from "./indicatorText"
+import { GradeRuleFields } from "./GradeRuleFields"
+import { indicatorSaveError } from "./saveErrors"
 
 const CALCULATIONS = Object.keys(calculationLabels) as IndicatorCalculation[]
 const DISPLAY_PLACES = Object.keys(displayPlaceLabels) as IndicatorDisplayPlace[]
@@ -41,6 +44,11 @@ const inputRange: Record<IndicatorCalculation, [number, number]> = {
   z_score: [1, 1],
   average: [2, 6],
   difference: [2, 2],
+}
+
+/** A new datum reference: a subject starts reading every grade of the year. */
+function newRef(type: SourceRef["type"], id: number): SourceRef {
+  return type === "subject" ? { type, id, grades: DEFAULT_GRADES } : { type, id }
 }
 
 const emptyBand = (color: ScreeningColor, max: number | null): IndicatorBand => ({ name: "", color, max, meaning: "" })
@@ -144,7 +152,7 @@ export function IndicatorsTab({ catalog, onChanged }: { catalog: IndicatorDataCa
                   <TableCell>
                     {calculationLabels[indicator.calculation]}
                     {indicator.base_100 ? ", en base 100" : ""}:{" "}
-                    {indicator.inputs.map((input) => sourceLabel(input.type, input.name)).join(" · ")}
+                    {indicator.inputs.map((input) => sourceLabel(input.type, input.name, input.grades ?? null)).join(" · ")}
                     {indicator.z_population && ` (${zPopulationLabels[indicator.z_population].toLowerCase()})`}
                   </TableCell>
                   <TableCell>{indicator.bands.map((band) => band.name).join(" · ")}</TableCell>
@@ -170,7 +178,9 @@ export function IndicatorsTab({ catalog, onChanged }: { catalog: IndicatorDataCa
                           input: {
                             name: indicator.name,
                             calculation: indicator.calculation,
-                            inputs: indicator.inputs.map(({ type, id }) => ({ type, id })),
+                            inputs: indicator.inputs.map(({ type, id, grades }) =>
+                              type === "subject" ? { type, id, grades: grades ?? DEFAULT_GRADES } : { type, id },
+                            ),
                             base_100: indicator.base_100,
                             z_population: indicator.z_population,
                             bands: indicator.bands,
@@ -267,8 +277,12 @@ function IndicatorForm({
   function setInputAt(index: number, value: string) {
     const [type, rawId] = value.split(":")
     const next = [...input.inputs]
-    next[index] = { type: type as SourceRef["type"], id: Number(rawId) }
+    next[index] = newRef(type as SourceRef["type"], Number(rawId))
     update({ inputs: next })
+  }
+
+  function setGradesAt(index: number, grades: SourceRef["grades"]) {
+    update({ inputs: input.inputs.map((ref, position) => (position === index ? { ...ref, grades } : ref)) })
   }
 
   function check(): string | null {
@@ -279,7 +293,19 @@ function IndicatorForm({
         : `${calculationLabels[input.calculation]} usa entre ${min} y ${max} datos.`
     }
     if (input.bands.length < 2 || input.bands.length > 5) return "Un indicador tiene de 2 a 5 franjas."
+    const refKeys = input.inputs.map((ref) => `${ref.type}:${ref.id}:${ref.grades ? `${ref.grades.rule}:${ref.grades.category ?? ""}` : ""}`)
+    if (new Set(refKeys).size !== refKeys.length) return "El mismo dato está dos veces."
+    if (input.calculation === "average" || input.calculation === "difference") {
+      const bounded = input.inputs.map(
+        (ref) => catalog.sources.find((source) => source.type === ref.type && source.id === ref.id)?.scale != null,
+      )
+      if (new Set(bounded).size > 1) {
+        return "No se puede combinar un dato con escala con uno sin escala fija (un puntaje Z, una diferencia)."
+      }
+    }
     if (input.bands.some((band) => !band.name.trim())) return "Cada franja necesita un nombre."
+    const bandNames = input.bands.map((band) => band.name.trim())
+    if (new Set(bandNames).size !== bandNames.length) return "Dos franjas no pueden llamarse igual."
     if (input.bands.some((band) => !band.meaning.trim())) return "«Qué significa» es obligatorio en cada franja."
     const cuts = input.bands.slice(0, -1).map((band) => band.max)
     if (cuts.some((cut) => cut === null || Number.isNaN(cut))) return "Cada franja menos la última necesita hasta dónde llega."
@@ -311,8 +337,8 @@ function IndicatorForm({
     setBusy(true)
     try {
       setSummary(await previewIndicator(payload()))
-    } catch {
-      setError("No pudimos calcular la vista previa. Revisá los datos y las franjas.")
+    } catch (err) {
+      setError(indicatorSaveError(err, "No pudimos calcular la vista previa. Revisá los datos y las franjas."))
     } finally {
       setBusy(false)
     }
@@ -326,8 +352,8 @@ function IndicatorForm({
     try {
       await saveIndicator(payload(), id)
       await onSaved()
-    } catch {
-      setError("No pudimos guardar el indicador. Revisá los datos y las franjas.")
+    } catch (err) {
+      setError(indicatorSaveError(err))
       setBusy(false)
     }
   }
@@ -364,7 +390,7 @@ function IndicatorForm({
         <fieldset className="grid gap-2">
           <legend className="text-sm font-medium">Con qué datos</legend>
           {input.inputs.map((ref, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={index} className="flex flex-wrap items-center gap-2">
               <select
                 aria-label={`Dato ${index + 1}`}
                 className="h-9 flex-1 rounded-md border bg-background px-2 text-sm"
@@ -377,6 +403,13 @@ function IndicatorForm({
                   </option>
                 ))}
               </select>
+              {ref.type === "subject" && (
+                <GradeRuleFields
+                  label={`dato ${index + 1}`}
+                  grades={ref.grades}
+                  onChange={(grades) => setGradesAt(index, grades)}
+                />
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -394,12 +427,18 @@ function IndicatorForm({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => update({ inputs: [...input.inputs, { type: options[0].type, id: options[0].id }] })}
+                onClick={() => update({ inputs: [...input.inputs, newRef(options[0].type, options[0].id)] })}
               >
                 <Plus aria-hidden="true" />
                 Agregar dato
               </Button>
             </div>
+          )}
+          {input.inputs.some((ref) => ref.type === "subject") && (
+            <p className="text-xs text-muted-foreground">
+              En cada materia elegí qué calificaciones se usan. En Primaria sin equivalencia configurada se usa el
+              último nivel de avance de esas calificaciones.
+            </p>
           )}
           {options.length === 0 && (
             <p className="text-sm text-muted-foreground">Todavía no hay datos con números para calcular.</p>

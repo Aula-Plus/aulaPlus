@@ -9,11 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   createExternalMeasure,
   fetchExternalMeasureRoster,
+  matchTemplateStudents,
   saveExternalMeasureValues,
   type ExternalMeasureRoster,
   type IndicatorDataCatalog,
+  type StudentCandidate,
 } from "./indicatorsApi"
-import { buildTemplateCsv, parseTemplateCsv, TEMPLATE_HEADER } from "./csvTemplate"
+import { buildTemplateCsv, parseTemplateCsv, TEMPLATE_HEADER, type TemplateRow } from "./csvTemplate"
 import { coverageText, scaleText, sourceLabel } from "./indicatorText"
 
 type LoadMode = "template" | "csv" | "manual"
@@ -82,8 +84,9 @@ export function DataTab({ catalog, onChanged }: { catalog: IndicatorDataCatalog;
       <p className="mt-3 text-xs text-muted-foreground">
         De {catalog.roster_count} alumnos de {catalog.school_year}. Los screenings vienen de sus tomas y las notas de
         Evaluaciones. Un screening que se toma todos los años usa la toma de este año; los que no son anuales usan la
-        última y muestran de qué año es. En Primaria con escala, la materia se lee por nivel de avance, salvo que el
-        colegio haya configurado su equivalencia. Siempre se guarda el número original. Un indicador ya armado también
+        última y muestran de qué año es. Acá cada materia cuenta todas las calificaciones del año; en cada indicador o
+        cruce se elige cuáles usa (todas, todas menos una categoría, una categoría o solo la última). En Primaria con
+        escala, la materia se lee por nivel de avance, salvo que el colegio haya configurado su equivalencia. Siempre se guarda el número original. Un indicador ya armado también
         es un dato para otro.
       </p>
 
@@ -100,6 +103,21 @@ export function DataTab({ catalog, onChanged }: { catalog: IndicatorDataCatalog;
 }
 
 const NEW_MEASURE = "new"
+
+/** «No cargar esta fila», in the select of a repeated name. */
+const SKIP_ROW = "skip"
+
+/** A CSV whose repeated names wait for the person to say who each row is. */
+interface PendingUpload {
+  measureId: number
+  values: { student_id: number; value: number }[]
+  ambiguous: { row: TemplateRow; candidates: StudentCandidate[] }[]
+  errors: number
+}
+
+function rowsText(count: number): string {
+  return `${count} ${count === 1 ? "fila con errores" : "filas con errores"}`
+}
 
 /**
  * Bringing a datum from outside: pick (or create) the datum and a group, then
@@ -128,6 +146,8 @@ function ExternalLoadDialog({
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<PendingUpload | null>(null)
+  const [choices, setChoices] = useState<Record<number, string>>({})
 
   const measureId = measureKey === NEW_MEASURE ? null : Number(measureKey)
 
@@ -196,23 +216,91 @@ function ExternalLoadDialog({
   async function uploadCsv(file: File) {
     setError(null)
     setMessage(null)
+    setPending(null)
     const id = await ensureMeasure()
     if (id === null) return
     setBusy(true)
     try {
-      const { values, bad } = parseTemplateCsv(await file.text())
-      if (values.length === 0) {
+      const { rows, bad } = parseTemplateCsv(await file.text())
+      if (rows.length === 0) {
         setError("El archivo no tiene filas con un alumno y un valor.")
         return
       }
-      const result = await saveExternalMeasureValues(id, values)
-      const skipped = result.skipped + bad
-      setMessage(
-        `${result.saved} ${result.saved === 1 ? "valor cargado" : "valores cargados"}` +
-          (skipped > 0 ? ` · ${skipped} ${skipped === 1 ? "fila con errores" : "filas con errores"}` : "") +
-          ".",
+      // Who each row is: by its code, else by name (and group). A repeated
+      // name is never guessed: the person picks (PO answer of 17/11).
+      const matches = await matchTemplateStudents(
+        id,
+        rows.map(({ student_id, name, group }) => ({ student_id, name, group })),
       )
-      await onChanged()
+      const values: PendingUpload["values"] = []
+      const ambiguous: PendingUpload["ambiguous"] = []
+      let errors = bad
+      matches.forEach((match, index) => {
+        const row = rows[index]
+        if (match.status === "matched" && match.student_id !== null) {
+          // The same student twice in the file: only the first row counts.
+          if (values.some((value) => value.student_id === match.student_id)) errors++
+          else values.push({ student_id: match.student_id, value: row.value })
+        } else if (match.status === "ambiguous") {
+          ambiguous.push({ row, candidates: match.candidates })
+        } else {
+          errors++
+        }
+      })
+      if (ambiguous.length > 0) {
+        setChoices({})
+        setPending({ measureId: id, values, ambiguous, errors })
+        return
+      }
+      await store(id, values, errors)
+    } catch {
+      setError("No pudimos cargar el archivo.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function store(id: number, values: PendingUpload["values"], errors: number) {
+    if (values.length === 0) {
+      setError(`No quedó ninguna fila para cargar${errors > 0 ? ` (${rowsText(errors)})` : ""}.`)
+      return
+    }
+    const result = await saveExternalMeasureValues(id, values)
+    const skipped = result.skipped + errors
+    setMessage(
+      `${result.saved} ${result.saved === 1 ? "valor cargado" : "valores cargados"}` +
+        (skipped > 0 ? ` · ${rowsText(skipped)}` : "") +
+        ".",
+    )
+    await onChanged()
+  }
+
+  async function confirmPending() {
+    if (!pending) return
+    setError(null)
+    if (pending.ambiguous.some((_, index) => !choices[index])) {
+      setError("Elegí a qué alumno corresponde cada fila, o «No cargar esta fila».")
+      return
+    }
+    const values = [...pending.values]
+    let skippedRows = 0
+    for (const [index, { row, candidates }] of pending.ambiguous.entries()) {
+      if (choices[index] === SKIP_ROW) {
+        skippedRows++
+        continue
+      }
+      const studentId = Number(choices[index])
+      if (values.some((value) => value.student_id === studentId)) {
+        const name = candidates.find((candidate) => candidate.student_id === studentId)?.name ?? row.name
+        setError(`«${name}» (código ${studentId}) quedó en dos filas. Elegí otro alumno o no cargues una de ellas.`)
+        return
+      }
+      values.push({ student_id: studentId, value: row.value })
+    }
+    setBusy(true)
+    try {
+      await store(pending.measureId, values, pending.errors + skippedRows)
+      setPending(null)
     } catch {
       setError("No pudimos cargar el archivo.")
     } finally {
@@ -351,9 +439,51 @@ function ExternalLoadDialog({
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Se usan las columnas «id_alumno» y «valor». Las filas sin un alumno válido o con un valor fuera de la
-                escala se cuentan y se avisan.
+                Se usan las columnas «valor» y el código del alumno («id_alumno»); si el archivo no trae el código, se
+                busca por «alumno» (y «grupo», si está). Si un nombre se repite, te preguntamos a cuál corresponde. Las
+                filas sin un alumno válido o con un valor fuera de la escala se cuentan y se avisan.
               </p>
+            </div>
+          )}
+
+          {mode === "csv" && pending && (
+            <div className="grid gap-3 rounded-md border p-3" aria-live="polite">
+              <p className="text-sm font-medium">
+                {pending.ambiguous.length === 1
+                  ? "Hay un nombre que se repite. Elegí a qué alumno corresponde la fila."
+                  : "Hay nombres que se repiten. Elegí a qué alumno corresponde cada fila."}
+              </p>
+              {pending.ambiguous.map(({ row, candidates }, index) => (
+                <label key={index} className="grid gap-1 text-sm">
+                  <span>
+                    «{row.name}»{row.group ? ` (${row.group})` : ""} · valor {String(row.value).replace(".", ",")}
+                  </span>
+                  <select
+                    aria-label={`Alumno de la fila «${row.name}» ${index + 1}`}
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    value={choices[index] ?? ""}
+                    onChange={(event) => setChoices((current) => ({ ...current, [index]: event.target.value }))}
+                  >
+                    <option value="" disabled>
+                      Elegí el alumno…
+                    </option>
+                    {candidates.map((candidate) => (
+                      <option key={candidate.student_id} value={String(candidate.student_id)}>
+                        {candidate.name} · {candidate.group_name} · código {candidate.student_id}
+                      </option>
+                    ))}
+                    <option value={SKIP_ROW}>No cargar esta fila</option>
+                  </select>
+                </label>
+              ))}
+              <div className="flex gap-2">
+                <Button type="button" disabled={busy} onClick={() => void confirmPending()}>
+                  {busy ? "Cargando…" : "Cargar"}
+                </Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => setPending(null)}>
+                  No cargar el archivo
+                </Button>
+              </div>
             </div>
           )}
 

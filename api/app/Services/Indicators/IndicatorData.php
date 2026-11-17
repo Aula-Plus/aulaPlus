@@ -3,6 +3,7 @@
 namespace App\Services\Indicators;
 
 use App\Enums\IndicatorSourceType;
+use App\Enums\SubjectGradeRule;
 use App\Models\Assessment;
 use App\Models\AssessmentResult;
 use App\Models\ExternalMeasure;
@@ -33,11 +34,14 @@ use Illuminate\Support\Facades\DB;
  *   year's take, and a student without one has no datum; any other uses the
  *   latest take of any year and says which year (PO decision, P30-DAT-02).
  *   The score is the original number, read with the design in force.
- * - Subject: this year's results in the subject. Numeric scores are
- *   averaged. A Primaria level of progress is a number only through the
- *   school's own equivalence (ResultScales::equivalences, screen 24); without
- *   it the datum is the latest level, which works like a band (PO decision 6).
- *   Aula+ never converts a level by itself (PA-088).
+ * - Subject: this year's results in the subject, the ones the creator chose
+ *   (SubjectGradeRule, PO answer of 17/11): every grade, every grade but one
+ *   category, one category, or only the latest grade (of the year or of a
+ *   category). Several grades are averaged. A Primaria level of progress is a
+ *   number only through the school's own equivalence
+ *   (ResultScales::equivalences, screen 24); without it the datum is the
+ *   latest level among the chosen grades, which works like a band (PO
+ *   decision 6). Aula+ never converts a level by itself (PA-088).
  * - External: this year's value, or the latest of any year when the datum is
  *   not taken every year.
  * - Indicator: its calculated value (IndicatorCalculator).
@@ -64,7 +68,7 @@ class IndicatorData
     /** @var array<int, int>|null */
     protected ?array $equivalences = null;
 
-    /** @var array<int, Collection<int, object>> per subject id */
+    /** @var array<string, Collection<int, object>> per subject id and grade rule */
     protected array $subjectAggregates = [];
 
     /** @var list<int> indicator ids being calculated (cycle guard) */
@@ -128,11 +132,16 @@ class IndicatorData
      * `['value' => float|null, 'level' => array|null, 'band' => string|null, 'year' => int|null]`;
      * students without one are absent.
      *
+     * A subject reads the grades `$grades` names (SubjectGrades; every grade
+     * when null).
+     *
+     * @param  array<string, mixed>|null  $grades
      * @return array<int, array{value: float|null, level: array{id: int, name: string, position: int}|null, band: string|null, year: int|null}>
      */
-    public function values(string $type, int $id): array
+    public function values(string $type, int $id, ?array $grades = null): array
     {
-        $key = $type.':'.$id;
+        $rule = SubjectGrades::fromArray($grades);
+        $key = $type.':'.$id.($type === IndicatorSourceType::Subject->value ? ':'.$rule->key() : '');
 
         if (array_key_exists($key, $this->memo)) {
             return $this->memo[$key];
@@ -140,7 +149,7 @@ class IndicatorData
 
         $values = match (IndicatorSourceType::tryFrom($type)) {
             IndicatorSourceType::Screening => $this->screening($id),
-            IndicatorSourceType::Subject => $this->subject($id),
+            IndicatorSourceType::Subject => $this->subject($id, $rule),
             IndicatorSourceType::External => $this->external($id),
             IndicatorSourceType::Indicator => $this->indicator($id),
             IndicatorSourceType::Assessment => $this->assessment($id),
@@ -189,7 +198,7 @@ class IndicatorData
     public function levels(string $type, int $id): array
     {
         $levelIds = match (IndicatorSourceType::tryFrom($type)) {
-            IndicatorSourceType::Subject => $this->subjectAggregate($id)->pluck('level_id'),
+            IndicatorSourceType::Subject => $this->subjectAggregate($id, new SubjectGrades)->pluck('level_id'),
             IndicatorSourceType::Assessment => AssessmentResult::query()->where('assessment_id', $id)->pluck('official_scale_level_id'),
             default => collect(),
         };
@@ -364,10 +373,11 @@ class IndicatorData
     }
 
     /**
-     * This year's loaded results of a subject for the roster, as a base query
-     * (no models are hydrated). The roster is a subquery, not a list of ids.
+     * This year's loaded results of a subject for the roster, the ones the
+     * grade rule keeps, as a base query (no models are hydrated). The roster
+     * is a subquery, not a list of ids.
      */
-    protected function subjectQuery(int $subjectId): QueryBuilder
+    protected function subjectQuery(int $subjectId, SubjectGrades $grades): QueryBuilder
     {
         return AssessmentResult::query()
             ->join('assessments', 'assessments.id', '=', 'assessment_results.assessment_id')
@@ -383,6 +393,9 @@ class IndicatorData
             ->where(fn ($loaded) => $loaded
                 ->whereNotNull('assessment_results.score')
                 ->orWhereNotNull('assessment_results.official_scale_level_id'))
+            ->when($grades->category !== null, fn ($query) => $grades->rule === SubjectGradeRule::AllExceptCategory
+                ? $query->where('assessments.type', '!=', $grades->category->value)
+                : $query->where('assessments.type', $grades->category->value))
             ->toBase();
     }
 
@@ -393,27 +406,32 @@ class IndicatorData
      *
      * @return Collection<int, object{student_id: int, level_id: int|null, score_sum: mixed, score_count: int, row_count: int}>
      */
-    protected function subjectAggregate(int $subjectId): Collection
+    protected function subjectAggregate(int $subjectId, SubjectGrades $grades): Collection
     {
-        return $this->subjectAggregates[$subjectId] ??= $this->subjectQuery($subjectId)
+        return $this->subjectAggregates[$subjectId.':'.$grades->key()] ??= $this->subjectQuery($subjectId, $grades)
             ->groupBy('assessment_results.student_id', 'assessment_results.official_scale_level_id')
             ->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, SUM(assessment_results.score) as score_sum, COUNT(assessment_results.score) as score_count, COUNT(*) as row_count')
             ->get();
     }
 
     /**
-     * The average of the numbers (scores, or levels through the school's
-     * equivalence), else the latest level of progress — the same rule as
-     * {@see self::fromResults()}, computed in SQL.
+     * The grades the rule keeps → one datum per student: the average of the
+     * numbers (scores, or levels through the school's equivalence), else the
+     * latest level of progress — the same rule as {@see self::fromResults()},
+     * computed in SQL. With a «latest» rule, only the newest result counts.
      *
      * @return array<int, array<string, mixed>>
      */
-    protected function subject(int $subjectId): array
+    protected function subject(int $subjectId, SubjectGrades $grades): array
     {
+        if ($grades->rule->isLatest()) {
+            return $this->latestSubjectResult($subjectId, $grades);
+        }
+
         $equivalences = $this->equivalences();
         $totals = [];
 
-        foreach ($this->subjectAggregate($subjectId) as $row) {
+        foreach ($this->subjectAggregate($subjectId, $grades) as $row) {
             $studentId = (int) $row->student_id;
             $totals[$studentId] ??= ['sum' => 0.0, 'count' => 0];
             $totals[$studentId]['sum'] += (float) ($row->score_sum ?? 0);
@@ -432,14 +450,12 @@ class IndicatorData
         }
 
         // The latest level-only result of each student (newest first).
-        $ranked = $this->subjectQuery($subjectId)
-            ->whereNull('assessment_results.score')
-            ->whereNotNull('assessment_results.official_scale_level_id')
-            ->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, ROW_NUMBER() OVER (PARTITION BY assessment_results.student_id ORDER BY assessments.administered_at DESC, assessment_results.id DESC) as position_in_student');
-        $latestLevelIds = DB::query()->fromSub($ranked, 'ranked')->where('position_in_student', 1)->pluck('level_id', 'student_id');
-        $levels = $latestLevelIds->isEmpty()
-            ? collect()
-            : OfficialScaleLevel::query()->whereIn('id', $latestLevelIds->unique()->values())->get()->keyBy('id');
+        $latestLevelIds = $this->newestPerStudent(
+            $this->subjectQuery($subjectId, $grades)
+                ->whereNull('assessment_results.score')
+                ->whereNotNull('assessment_results.official_scale_level_id'),
+        )->pluck('level_id', 'student_id');
+        $levels = $this->levelsById($latestLevelIds);
 
         $values = [];
 
@@ -459,6 +475,68 @@ class IndicatorData
         }
 
         return $values;
+    }
+
+    /**
+     * Only each student's newest result among the grades the rule keeps
+     * (`latest`, `latest_of_category`): its score, or its level of progress
+     * (a number only through the school's equivalence).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function latestSubjectResult(int $subjectId, SubjectGrades $grades): array
+    {
+        $rows = $this->newestPerStudent($this->subjectQuery($subjectId, $grades));
+        $levels = $this->levelsById($rows->pluck('level_id'));
+        $equivalences = $this->equivalences();
+        $values = [];
+
+        foreach ($rows as $row) {
+            $levelId = $row->level_id === null ? null : (int) $row->level_id;
+            $level = $row->score === null && $levelId !== null ? $levels->get($levelId) : null;
+            $value = $row->score !== null
+                ? (float) $row->score
+                : ($levelId !== null && isset($equivalences[$levelId]) ? (float) $equivalences[$levelId] : null);
+
+            if ($value === null && $level === null) {
+                continue;
+            }
+
+            $values[(int) $row->student_id] = [
+                'value' => $value === null ? null : round($value, 2),
+                'level' => $level === null ? null : ['id' => $level->id, 'name' => $level->name, 'position' => (int) $level->position],
+                'band' => null,
+                'year' => $this->year,
+            ];
+        }
+
+        return $values;
+    }
+
+    /**
+     * Each student's newest row of a subject query (assessment date, then
+     * result id), ranked in SQL.
+     *
+     * @return Collection<int, object{student_id: int, level_id: int|null, score: mixed}>
+     */
+    protected function newestPerStudent(QueryBuilder $query): Collection
+    {
+        $ranked = $query->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, assessment_results.score as score, ROW_NUMBER() OVER (PARTITION BY assessment_results.student_id ORDER BY assessments.administered_at DESC, assessment_results.id DESC) as position_in_student');
+
+        return DB::query()->fromSub($ranked, 'ranked')->where('position_in_student', 1)->get();
+    }
+
+    /**
+     * @param  Collection<int|string, mixed>  $levelIds
+     * @return Collection<int, OfficialScaleLevel>
+     */
+    protected function levelsById(Collection $levelIds): Collection
+    {
+        $levelIds = $levelIds->filter()->unique()->values();
+
+        return $levelIds->isEmpty()
+            ? collect()
+            : OfficialScaleLevel::query()->whereIn('id', $levelIds)->get()->keyBy('id');
     }
 
     /**

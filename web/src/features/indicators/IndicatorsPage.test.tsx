@@ -138,7 +138,7 @@ describe("IndicatorsPage", () => {
     const row = (await screen.findByText("Screening · Comprensión lectora")).closest("tr") as HTMLElement
     expect(within(row).getByText("0 a 100")).toBeInTheDocument()
     expect(within(row).getByText("6 alumnos con dato")).toBeInTheDocument()
-    const subject = screen.getByText("Promedio del año · Idioma Español").closest("tr") as HTMLElement
+    const subject = screen.getByText("Calificaciones · Idioma Español").closest("tr") as HTMLElement
     expect(within(subject).getByText("Nivel de avance")).toBeInTheDocument()
     expect(screen.queryByText(/Rúbrica/)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Descargar la plantilla de Aula+" })).toBeInTheDocument()
@@ -250,12 +250,19 @@ describe("IndicatorsPage", () => {
     await userEvent.selectOptions(screen.getByLabelText("Dato de la condición 2"), "subject:3")
     expect(screen.getByLabelText("Cómo se lee la condición 2")).toHaveValue("level")
     await userEvent.selectOptions(screen.getByLabelText("Nivel de la condición 2"), "13")
+    // The creator says which grades the subject reads (PO answer of 17/11).
+    expect(screen.getByLabelText("Qué calificaciones usa el dato de la condición 2")).toHaveValue("all")
+    await userEvent.selectOptions(
+      screen.getByLabelText("Qué calificaciones usa el dato de la condición 2"),
+      "latest_of_category",
+    )
+    await userEvent.selectOptions(screen.getByLabelText("Categoría de calificación del dato de la condición 2"), "oral")
     await userEvent.click(screen.getByRole("button", { name: "Ver a quiénes alcanza hoy" }))
 
     expect(await screen.findByText("Vista previa con los datos de hoy: 3 alumnos de 5.°A · 1 de 5.°B")).toBeInTheDocument()
     expect(preview).toHaveBeenCalledWith([
       { source: { type: "indicator", id: 5 }, operator: "band", value: "Bajo" },
-      { source: { type: "subject", id: 3 }, operator: "level", value: 13 },
+      { source: { type: "subject", id: 3, grades: { rule: "latest_of_category", category: "oral" } }, operator: "level", value: 13 },
     ])
   })
 
@@ -298,6 +305,192 @@ describe("IndicatorsPage", () => {
   })
 })
 
+describe("IndicatorsPage · follow-ups of 17/11", () => {
+  const external: api.DataSource = {
+    type: "external",
+    id: 7,
+    name: "Prueba de vocabulario",
+    scale: { min: 0, max: 50 },
+    coverage: 0,
+    number_coverage: 0,
+    level_coverage: 0,
+    latest_year: null,
+    bands: [],
+    levels: [],
+    taken_every_year: true,
+  }
+  const math: api.DataSource = {
+    type: "subject",
+    id: 4,
+    name: "Matemática",
+    scale: { min: 1, max: 10 },
+    coverage: 6,
+    number_coverage: 6,
+    level_coverage: 0,
+    latest_year: 2026,
+    bands: [],
+    levels: [],
+  }
+
+  beforeEach(() => {
+    vi.spyOn(api, "fetchIndicatorData").mockResolvedValue({ ...catalog, sources: [...catalog.sources, math, external] })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("asks which student a CSV row is when the name is repeated, showing each one's code", async () => {
+    vi.spyOn(api, "fetchExternalMeasureRoster").mockResolvedValue({
+      measure: { id: 7, name: "Prueba de vocabulario", scale_min: 0, scale_max: 50, taken_every_year: true },
+      school_year: 2026,
+      rows: [],
+    })
+    const match = vi.spyOn(api, "matchTemplateStudents").mockResolvedValue([
+      { status: "matched", student_id: 21, candidates: [] },
+      {
+        status: "ambiguous",
+        student_id: null,
+        candidates: [
+          { student_id: 31, name: "Sofía Pérez", group_name: "5.°A" },
+          { student_id: 32, name: "Sofía Pérez", group_name: "5.°B" },
+        ],
+      },
+      { status: "unknown", student_id: null, candidates: [] },
+    ])
+    const save = vi
+      .spyOn(api, "saveExternalMeasureValues")
+      .mockResolvedValue({ saved: 2, cleared: 0, skipped: 0, school_year: 2026 })
+    renderPage("psychopedagogue")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Cargar desde Excel (CSV)" }))
+    const csv = "id_alumno;alumno;grupo;valor\n21;Lucía;5.°A;40\n;Sofía Pérez;;30\n;Nadie;;10"
+    await userEvent.upload(screen.getByLabelText("Archivo CSV con la plantilla completa"), new File([csv], "datos.csv"))
+
+    expect(await screen.findByText("Hay un nombre que se repite. Elegí a qué alumno corresponde la fila.")).toBeInTheDocument()
+    expect(match).toHaveBeenCalledWith(7, [
+      { student_id: 21, name: "Lucía", group: "5.°A" },
+      { student_id: null, name: "Sofía Pérez", group: null },
+      { student_id: null, name: "Nadie", group: null },
+    ])
+    expect(save).not.toHaveBeenCalled()
+    const picker = screen.getByLabelText("Alumno de la fila «Sofía Pérez» 1")
+    expect(within(picker).getByRole("option", { name: "Sofía Pérez · 5.°A · código 31" })).toBeInTheDocument()
+    expect(within(picker).getByRole("option", { name: "Sofía Pérez · 5.°B · código 32" })).toBeInTheDocument()
+
+    // Nothing is loaded until every repeated name is resolved.
+    await userEvent.click(screen.getByRole("button", { name: "Cargar" }))
+    expect(screen.getByRole("alert")).toHaveTextContent("Elegí a qué alumno corresponde cada fila")
+    expect(save).not.toHaveBeenCalled()
+
+    await userEvent.selectOptions(picker, "32")
+    await userEvent.click(screen.getByRole("button", { name: "Cargar" }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(7, [
+        { student_id: 21, value: 40 },
+        { student_id: 32, value: 30 },
+      ]),
+    )
+    expect(await screen.findByText("2 valores cargados · 1 fila con errores.")).toBeInTheDocument()
+  })
+
+  it("saves which grades a subject reads in an indicator and shows the rule in the list", async () => {
+    const fetchIndicators = vi.spyOn(api, "fetchIndicators").mockResolvedValue([])
+    const save = vi.spyOn(api, "saveIndicator").mockResolvedValue(indicator)
+    renderPage("director", "/indicadores-y-cruces?solapa=indicadores")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Nuevo indicador" }))
+    await userEvent.type(screen.getByLabelText("Nombre"), "Escritos de Matemática")
+    await userEvent.click(screen.getByRole("button", { name: "Agregar dato" }))
+    await userEvent.selectOptions(screen.getByLabelText("Dato 1"), "subject:4")
+    await userEvent.selectOptions(screen.getByLabelText("Qué calificaciones usa el dato 1"), "category_average")
+    await userEvent.selectOptions(screen.getByLabelText("Categoría de calificación del dato 1"), "written")
+    for (const [index, name] of ["Bajo", "Medio", "Alto"].entries()) {
+      await userEvent.type(screen.getByLabelText(`Nombre de la franja ${index + 1}`), name)
+    }
+    for (const field of screen.getAllByLabelText("Qué significa")) await userEvent.type(field, "Texto.")
+    fetchIndicators.mockResolvedValue([
+      {
+        ...indicator,
+        name: "Escritos de Matemática",
+        inputs: [{ type: "subject", id: 4, name: "Matemática", grades: { rule: "category_average", category: "written" } }],
+      },
+    ])
+    await userEvent.click(screen.getByRole("button", { name: "Guardar el indicador" }))
+
+    await waitFor(() => expect(save).toHaveBeenCalled())
+    expect(save.mock.calls[0][0].inputs).toEqual([
+      { type: "subject", id: 4, grades: { rule: "category_average", category: "written" } },
+    ])
+    expect(
+      await screen.findByText(/Calificaciones · Matemática \(promedio del año de las de tipo «Escrita»\)/),
+    ).toBeInTheDocument()
+  })
+
+  it("tells which crossing to change first when a band it uses cannot be renamed", async () => {
+    vi.spyOn(api, "fetchIndicators").mockResolvedValue([indicator])
+    vi.spyOn(api, "saveIndicator").mockRejectedValue(
+      Object.assign(new Error("422"), {
+        isAxiosError: true,
+        response: {
+          status: 422,
+          data: { errors: { bands: ["A band used by a crossing…"], used_by_crossings: ["Lectura baja y atención baja"] } },
+        },
+      }),
+    )
+    renderPage("psychopedagogue", "/indicadores-y-cruces?solapa=indicadores")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Editar" }))
+    const first = screen.getByLabelText("Nombre de la franja 1")
+    await userEvent.clear(first)
+    await userEvent.type(first, "Bajo rendimiento")
+    await userEvent.click(screen.getByRole("button", { name: "Guardar el indicador" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El cruce «Lectura baja y atención baja» usa una franja que cambiaste o sacaste. Cambiá primero ese cruce",
+    )
+  })
+
+  it("refuses repeated band names before asking the server", async () => {
+    vi.spyOn(api, "fetchIndicators").mockResolvedValue([indicator])
+    const save = vi.spyOn(api, "saveIndicator")
+    renderPage("psychopedagogue", "/indicadores-y-cruces?solapa=indicadores")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Editar" }))
+    const second = screen.getByLabelText("Nombre de la franja 2")
+    await userEvent.clear(second)
+    await userEvent.type(second, "Bajo")
+    await userEvent.click(screen.getByRole("button", { name: "Guardar el indicador" }))
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Dos franjas no pueden llamarse igual.")
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it("shows the grade rule in a crossing's condition", async () => {
+    vi.spyOn(api, "fetchCrossings").mockResolvedValue([
+      {
+        id: 1,
+        name: "Oral bajo",
+        reading: "El equipo mira la oralidad.",
+        conditions: [
+          {
+            source: { type: "subject", id: 4, name: "Matemática", grades: { rule: "latest", category: null } },
+            operator: "below",
+            value: 5,
+          },
+        ],
+        preview: { total: 0, groups: [] },
+        updated_at: null,
+      },
+    ])
+    renderPage("psychopedagogue", "/indicadores-y-cruces?solapa=cruces")
+
+    expect(
+      await screen.findByText("Se cumple si: Calificaciones · Matemática (solo la última calificación del año) menor que 5."),
+    ).toBeInTheDocument()
+  })
+})
+
 describe("screen 30 helpers", () => {
   it("formats the preview as counts per group", () => {
     expect(previewText({ total: 0, groups: [] })).toBe("Hoy no le aparece a ningún alumno")
@@ -313,14 +506,25 @@ describe("screen 30 helpers", () => {
   })
 
   it("reads the template CSV and counts bad rows", () => {
-    const csv = 'id_alumno;alumno;grupo;valor\n21;"Pereyra; Lucía";5.°A;42\n22;Federico;5.°A;\nabc;X;5.°A;3\n23;Sofía;5.°B;7,5'
+    const csv =
+      'id_alumno;alumno;grupo;valor\n21;"Pereyra; Lucía";5.°A;42\n22;Federico;5.°A;\nabc;X;5.°A;3\n23;Sofía;5.°B;7,5\n;Juan Gómez;5.°B;6\n;;5.°B;6'
     expect(parseTemplateCsv(csv)).toEqual({
-      values: [
-        { student_id: 21, value: 42 },
-        { student_id: 23, value: 7.5 },
+      rows: [
+        { student_id: 21, name: "Pereyra; Lucía", group: "5.°A", value: 42 },
+        { student_id: 23, name: "Sofía", group: "5.°B", value: 7.5 },
+        // No code: the name (and group) say who it is.
+        { student_id: null, name: "Juan Gómez", group: "5.°B", value: 6 },
       ],
-      bad: 1,
+      bad: 2,
     })
+  })
+
+  it("reads a sheet with names and no codes", () => {
+    expect(parseTemplateCsv("alumno,valor\nJuan Gómez,8")).toEqual({
+      rows: [{ student_id: null, name: "Juan Gómez", group: null, value: 8 }],
+      bad: 0,
+    })
+    expect(parseTemplateCsv("grupo,valor\n5.°A,8")).toEqual({ rows: [], bad: 1 })
   })
 
   it("builds the template the way Excel in Spanish opens it, and reads it back", () => {
@@ -331,6 +535,9 @@ describe("screen 30 helpers", () => {
 
     expect(csv.startsWith("\uFEFFid_alumno;alumno;grupo;valor\r\n")).toBe(true)
     expect(csv).toContain('21;"Martínez; Lucía";5.°A;7,5')
-    expect(parseTemplateCsv(csv)).toEqual({ values: [{ student_id: 21, value: 7.5 }], bad: 0 })
+    expect(parseTemplateCsv(csv)).toEqual({
+      rows: [{ student_id: 21, name: "Martínez; Lucía", group: "5.°A", value: 7.5 }],
+      bad: 0,
+    })
   })
 })

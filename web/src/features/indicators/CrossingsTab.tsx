@@ -23,7 +23,9 @@ import {
   type ScaleLevel,
   type SourceType,
 } from "./indicatorsApi"
-import { formatNumber, operatorLabels, previewText, sourceLabel } from "./indicatorText"
+import { DEFAULT_GRADES, formatNumber, gradesText, operatorLabels, previewText, sourceLabel } from "./indicatorText"
+import { GradeRuleFields } from "./GradeRuleFields"
+import { crossingSaveError } from "./saveErrors"
 
 /** One datum a condition can read, with what it offers. */
 interface ConditionSource {
@@ -79,16 +81,24 @@ function defaultValue(source: ConditionSource | undefined, operator: CrossingOpe
 function freshCondition(source: ConditionSource | undefined): CrossingCondition | null {
   if (!source) return null
   const operator = operatorsFor(source)[0] ?? "below"
-  return { source: { type: source.type, id: source.id }, operator, value: defaultValue(source, operator) }
+  return {
+    source: source.type === "subject" ? { type: source.type, id: source.id, grades: DEFAULT_GRADES } : { type: source.type, id: source.id },
+    operator,
+    value: defaultValue(source, operator),
+  }
 }
 
-/** «Herramienta de lectura en la franja «Bajo»», for the rule that holds. */
+/**
+ * «Herramienta de lectura en la franja «Bajo»», for the rule that holds. A
+ * subject also says which grades it reads (PO answer of 17/11).
+ */
 function conditionText(
   condition: CrossingCondition & { source: { name?: string | null } },
   sources: ConditionSource[],
 ): string {
   const source = sources.find((candidate) => candidate.key === `${condition.source.type}:${condition.source.id}`)
-  const label = source?.label ?? sourceLabel(condition.source.type, condition.source.name ?? null)
+  const base = source?.label ?? sourceLabel(condition.source.type, condition.source.name ?? null)
+  const label = condition.source.type === "subject" ? `${base} (${gradesText(condition.source.grades)})` : base
   if (condition.operator === "band") return `${label} ${operatorLabels.band} «${condition.value}»`
   if (condition.operator === "level") {
     const level = source?.levels.find((candidate) => candidate.id === Number(condition.value))
@@ -181,7 +191,10 @@ export function CrossingsTab({ catalog }: { catalog: IndicatorDataCatalog }) {
                           name: crossing.name,
                           reading: crossing.reading,
                           conditions: crossing.conditions.map(({ source, operator, value }) => ({
-                            source: { type: source.type, id: source.id },
+                            source:
+                              source.type === "subject"
+                                ? { type: source.type, id: source.id, grades: source.grades ?? DEFAULT_GRADES }
+                                : { type: source.type, id: source.id },
                             operator,
                             value,
                           })),
@@ -274,8 +287,8 @@ function CrossingForm({
     setBusy(true)
     try {
       setPreview(await previewCrossing(input.conditions))
-    } catch {
-      setError("No pudimos calcular la vista previa.")
+    } catch (err) {
+      setError(crossingSaveError(err, "No pudimos calcular la vista previa."))
     } finally {
       setBusy(false)
     }
@@ -289,8 +302,8 @@ function CrossingForm({
     try {
       await saveCrossing({ ...input, name: input.name.trim(), reading: input.reading.trim() }, id)
       await onSaved()
-    } catch {
-      setError("No pudimos guardar el cruce. Revisá las condiciones.")
+    } catch (err) {
+      setError(crossingSaveError(err))
       setBusy(false)
     }
   }
@@ -395,6 +408,15 @@ function CrossingForm({
                 >
                   <Trash2 aria-hidden="true" />
                 </Button>
+                {condition.source.type === "subject" && (
+                  <div className="sm:col-span-4">
+                    <GradeRuleFields
+                      label={`dato de la condición ${index + 1}`}
+                      grades={condition.source.grades}
+                      onChange={(grades) => setCondition(index, { ...condition, source: { ...condition.source, grades } })}
+                    />
+                  </div>
+                )}
               </div>
             )
           })}

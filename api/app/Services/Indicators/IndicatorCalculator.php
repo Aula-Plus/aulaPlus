@@ -32,16 +32,18 @@ class IndicatorCalculator
     public function __construct(protected IndicatorData $data) {}
 
     /**
-     * @return array{calculation: string, inputs: list<array{type: string, id: int}>, base_100: bool, z_population: string|null, bands: list<array<string, mixed>>}
+     * @return array{calculation: string, inputs: list<array{type: string, id: int, grades?: array{rule: string, category: string|null}}>, base_100: bool, z_population: string|null, bands: list<array<string, mixed>>}
      */
     public static function specOf(Indicator $indicator): array
     {
         return [
             'calculation' => $indicator->calculation->value,
-            'inputs' => array_values(array_map(static fn (array $input): array => [
+            'inputs' => array_values(array_map(static fn (array $input): array => array_filter([
                 'type' => (string) $input['type'],
                 'id' => (int) $input['id'],
-            ], $indicator->inputs ?? [])),
+                // A subject always says which grades it reads (every one by default).
+                'grades' => SubjectGrades::forSource((string) $input['type'], $input['grades'] ?? null),
+            ], static fn ($value): bool => $value !== null), $indicator->inputs ?? [])),
             'base_100' => (bool) $indicator->base_100,
             'z_population' => $indicator->z_population?->value,
             'bands' => $indicator->bands ?? [],
@@ -68,7 +70,7 @@ class IndicatorCalculator
     }
 
     /**
-     * @param  array{calculation: string, inputs: list<array{type: string, id: int}>, base_100: bool, z_population: string|null, bands: list<array<string, mixed>>}  $spec
+     * @param  array{calculation: string, inputs: list<array{type: string, id: int, grades?: array{rule: string, category: string|null}}>, base_100: bool, z_population: string|null, bands: list<array<string, mixed>>}  $spec
      * @return array<int, array{value: float, band: string|null, band_color: string|null, population: array{kind: string, label: string|null, size: int}|null}>
      */
     public function compute(array $spec): array
@@ -84,7 +86,7 @@ class IndicatorCalculator
             $scale = $this->data->scale($input['type'], $input['id']);
             $numbers = [];
 
-            foreach ($this->data->values($input['type'], $input['id']) as $studentId => $datum) {
+            foreach ($this->data->values($input['type'], $input['id'], $input['grades'] ?? null) as $studentId => $datum) {
                 if ($datum['value'] === null) {
                     continue;
                 }

@@ -14,7 +14,7 @@ class CrossingEvaluator
     public function __construct(protected IndicatorData $data) {}
 
     /**
-     * @param  list<array{source: array{type: string, id: int|string}, operator: string, value: mixed}>  $conditions
+     * @param  list<array{source: array{type: string, id: int|string, grades?: array<string, mixed>|null}, operator: string, value: mixed}>  $conditions
      * @return list<int> student ids
      */
     public function matches(array $conditions): array
@@ -26,7 +26,7 @@ class CrossingEvaluator
         $candidates = null;
 
         foreach ($conditions as $condition) {
-            $values = $this->data->values((string) $condition['source']['type'], (int) $condition['source']['id']);
+            $values = $this->data->values((string) $condition['source']['type'], (int) $condition['source']['id'], $condition['source']['grades'] ?? null);
             $hits = [];
 
             foreach ($values as $studentId => $datum) {
@@ -47,7 +47,7 @@ class CrossingEvaluator
     /**
      * Counts per group, in group-name order (never ranked).
      *
-     * @param  list<array{source: array{type: string, id: int|string}, operator: string, value: mixed}>  $conditions
+     * @param  list<array{source: array{type: string, id: int|string, grades?: array<string, mixed>|null}, operator: string, value: mixed}>  $conditions
      * @return array{total: int, groups: list<array{group_id: int, group_name: string, count: int}>}
      */
     public function preview(array $conditions): array
@@ -71,7 +71,7 @@ class CrossingEvaluator
     }
 
     /**
-     * @param  array{source: array{type: string, id: int|string}, operator: string, value: mixed}  $condition
+     * @param  array{source: array{type: string, id: int|string, grades?: array<string, mixed>|null}, operator: string, value: mixed}  $condition
      * @param  array{value: float|null, level: array{id: int, name: string, position: int}|null, band: string|null, year: int|null}  $datum
      */
     protected function holds(array $condition, array $datum): bool

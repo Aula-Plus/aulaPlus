@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
+import { crossingsUsingBandsMessage } from "@/features/indicators/saveErrors"
 import {
   canEditScreeningTestDesign,
   canManageScreeningTests,
@@ -331,8 +332,8 @@ function LastChangeCard({
     try {
       await screeningApi.revertScreeningTestDesign(current.id)
       await onReverted()
-    } catch {
-      setError("No pudimos volver atrás el cambio.")
+    } catch (err) {
+      setError(crossingsUsingBandsMessage(err) ?? "No pudimos volver atrás el cambio.")
     } finally {
       setReverting(false)
     }
@@ -595,6 +596,15 @@ const bandsSchema = z
       }
       previous = max
     })
+    // A crossing of screen 30 names the band it reads: names are unique.
+    const seen = new Set<string>()
+    values.bands.forEach((band, index) => {
+      const name = band.name.trim().toLowerCase()
+      if (name !== "" && seen.has(name)) {
+        ctx.addIssue({ code: "custom", path: ["bands", index, "name"], message: "Ya hay una franja con ese nombre" })
+      }
+      seen.add(name)
+    })
   })
 
 type BandsValues = z.infer<typeof bandsSchema>
@@ -682,8 +692,8 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
       setImpact(null)
       setSaved(true)
       await onSaved()
-    } catch {
-      setFormError("No pudimos guardar las franjas.")
+    } catch (err) {
+      setFormError(crossingsUsingBandsMessage(err) ?? "No pudimos guardar las franjas.")
     }
   }
 

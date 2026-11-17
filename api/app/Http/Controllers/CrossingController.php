@@ -7,6 +7,7 @@ use App\Models\Crossing;
 use App\Services\Indicators\CrossingEvaluator;
 use App\Services\Indicators\DataCatalog;
 use App\Services\Indicators\IndicatorData;
+use App\Services\Indicators\SubjectGrades;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
@@ -105,10 +106,13 @@ class CrossingController extends Controller
             'reading' => $crossing->reading,
             'conditions' => array_map(fn (array $condition): array => [
                 ...$condition,
-                'source' => [
+                'source' => array_filter([
                     ...$condition['source'],
+                    // A subject always says which grades it reads, so the
+                    // reading shows the rule that applied.
+                    'grades' => SubjectGrades::forSource((string) $condition['source']['type'], $condition['source']['grades'] ?? null),
                     'name' => $catalog->name((string) $condition['source']['type'], (int) $condition['source']['id']),
-                ],
+                ], static fn ($value, string $key): bool => $key !== 'grades' || $value !== null, ARRAY_FILTER_USE_BOTH),
             ], $conditions),
             'preview' => $evaluator->preview($conditions),
             'updated_at' => $crossing->updated_at?->toIso8601String(),

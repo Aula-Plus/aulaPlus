@@ -1,3 +1,4 @@
+import { assessmentTypeLabels } from "@/types"
 import type {
   CrossingOperator,
   CrossingPreview,
@@ -7,13 +8,15 @@ import type {
   Population,
   Scale,
   SourceType,
+  SubjectGradeRule,
+  SubjectGrades,
   ZScorePopulation,
 } from "./indicatorsApi"
 
 /** Spanish labels of screen 30 (code values stay English, CLAUDE.md). */
 export const sourceTypeLabels: Record<SourceType, string> = {
   screening: "Screening",
-  subject: "Promedio del año",
+  subject: "Calificaciones",
   external: "Dato cargado",
   indicator: "Indicador",
   assessment: "Evaluación",
@@ -55,9 +58,49 @@ export function formatNumber(value: number): string {
   return number(value)
 }
 
-/** «Screening · Comprensión lectora», as in P30-DAT-02. */
-export function sourceLabel(type: SourceType, name: string | null): string {
-  return `${sourceTypeLabels[type]} · ${name ?? "(ya no existe)"}`
+/** The grade rules of a subject datum, in the order the form offers them. */
+export const gradeRuleLabels: Record<SubjectGradeRule, string> = {
+  all: "Promedio de todas las calificaciones",
+  all_except_category: "Promedio de todas menos una categoría",
+  category_average: "Promedio de una categoría",
+  latest: "Solo la última calificación",
+  latest_of_category: "Solo la última de una categoría",
+}
+
+export const DEFAULT_GRADES: SubjectGrades = { rule: "all", category: null }
+
+export function gradeRuleNeedsCategory(rule: SubjectGradeRule): boolean {
+  return rule === "all_except_category" || rule === "category_average" || rule === "latest_of_category"
+}
+
+/**
+ * Which grades a subject datum reads, as the reading shows it (PO answer of
+ * 17/11): «promedio de las de tipo Oral del año».
+ */
+export function gradesText(grades: SubjectGrades | null | undefined): string {
+  const { rule, category } = grades ?? DEFAULT_GRADES
+  const type = category ? `«${assessmentTypeLabels[category]}»` : ""
+  switch (rule) {
+    case "all_except_category":
+      return `promedio del año sin las de tipo ${type}`
+    case "category_average":
+      return `promedio del año de las de tipo ${type}`
+    case "latest":
+      return "solo la última calificación del año"
+    case "latest_of_category":
+      return `solo la última de tipo ${type} del año`
+    default:
+      return "promedio de todas las calificaciones del año"
+  }
+}
+
+/**
+ * «Screening · Comprensión lectora», as in P30-DAT-02. A subject used by an
+ * indicator or a crossing also says which grades it reads.
+ */
+export function sourceLabel(type: SourceType, name: string | null, grades?: SubjectGrades | null): string {
+  const label = `${sourceTypeLabels[type]} · ${name ?? "(ya no existe)"}`
+  return type === "subject" && grades !== undefined ? `${label} (${gradesText(grades)})` : label
 }
 
 export function scaleText(scale: Scale | null, source?: Pick<DataSource, "number_coverage" | "level_coverage">): string {
