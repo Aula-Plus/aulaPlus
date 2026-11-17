@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ChecksGroupSchoolYear;
 use App\Models\Student;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreStudentRequest extends FormRequest
 {
+    use ChecksGroupSchoolYear;
+
     public function authorize(): bool
     {
         return $this->user()->can('create', Student::class);

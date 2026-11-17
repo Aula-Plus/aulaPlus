@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { EducationLevelOption, Group } from "@/types"
+import { closedYearError } from "@/features/school-year/closedYearError"
 import { GroupLevelFields, type GroupLevelValue } from "./GroupLevelFields"
 import * as groupsApi from "./groupsApi"
 
@@ -41,8 +42,8 @@ export function GroupLevelDialog({
         school_grade_id: value.gradeId ? Number(value.gradeId) : null,
       })
       onSaved()
-    } catch {
-      setError("No pudimos guardar el nivel.")
+    } catch (caught) {
+      setError(closedYearError(caught) ?? "No pudimos guardar el nivel.")
       setSaving(false)
     }
   }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CalendarBody;
 use App\Enums\PlannerFamily;
 use Database\Factories\CurricularFrameworkFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -13,9 +14,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Global catalog shared by every school (e.g. "ANEP EBI", "IB DP"). NOT
  * tenant-scoped — does not use BelongsToSchool / school_id. `planner_family`
- * says which unit-planner fields it brings (null = only the common ones).
+ * says which unit-planner fields it brings (null = only the common ones);
+ * `calendar_body`, whose calendar its periods follow (screen 26).
  */
-#[Fillable(['name', 'planner_family', 'education_levels'])]
+#[Fillable(['name', 'planner_family', 'education_levels', 'calendar_body'])]
 class CurricularFramework extends Model
 {
     /** @use HasFactory<CurricularFrameworkFactory> */
@@ -23,7 +25,11 @@ class CurricularFramework extends Model
 
     protected function casts(): array
     {
-        return ['planner_family' => PlannerFamily::class, 'education_levels' => 'array'];
+        return [
+            'planner_family' => PlannerFamily::class,
+            'education_levels' => 'array',
+            'calendar_body' => CalendarBody::class,
+        ];
     }
 
     public function isAnep(): bool

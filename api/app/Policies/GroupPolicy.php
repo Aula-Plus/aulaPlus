@@ -5,6 +5,8 @@ namespace App\Policies;
 use App\Enums\Role;
 use App\Models\Group;
 use App\Models\User;
+use App\Services\SchoolYears\SchoolYearCalendar;
+use Illuminate\Auth\Access\Response;
 
 /**
  * Reference policy showing the expected authorization pattern for this codebase.
@@ -60,10 +62,22 @@ class GroupPolicy
             && $user->hasRole(Role::Director->value);
     }
 
-    public function delete(User $user, Group $group): bool
+    /**
+     * Direction only. A group of a closed year is history (screen 26): it is
+     * never deleted, not even while direction enabled loading in it — an
+     * enablement lets its structure be corrected, not removed.
+     */
+    public function delete(User $user, Group $group): Response
     {
-        return $this->sharesSchool($user, $group)
-            && $user->hasRole(Role::Director->value);
+        if (! $this->sharesSchool($user, $group) || ! $user->hasRole(Role::Director->value)) {
+            return Response::deny();
+        }
+
+        if (app(SchoolYearCalendar::class)->isInClosedYear($group)) {
+            return Response::deny("School year {$group->school_year} is closed: its groups cannot be deleted.", 'school_year_closed');
+        }
+
+        return Response::allow();
     }
 
     /**
@@ -88,5 +102,28 @@ class GroupPolicy
     protected function sharesSchool(User $user, Group $group): bool
     {
         return $user->school_id === $group->school_id;
+    }
+
+    /**
+     * Screen 26 «Año y calendario» (ClickUp 1dfd3mc4bh7): once its year is
+     * closed, a group's data (grades, observations, assessments, plans,
+     * classes, screenings) and its structure (the group, its teachers, its
+     * curricular offer and its level — Eitán 17/11) are history and
+     * read-only for everybody — unless direction enabled loading in that
+     * group until a date, which includes correcting its structure. Checked by the
+     * `group.writable` middleware on every group-data write route, on top of
+     * the endpoint's own role rules (it never grants anything by itself).
+     */
+    public function writeInYear(User $user, Group $group): Response
+    {
+        if ($user->school_id !== $group->school_id) {
+            return Response::denyAsNotFound();
+        }
+
+        if (app(SchoolYearCalendar::class)->isReadOnly($group)) {
+            return Response::deny("School year {$group->school_year} is closed: this group is read-only.", 'school_year_closed');
+        }
+
+        return Response::allow();
     }
 }

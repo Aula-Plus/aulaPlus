@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ChecksGroupSchoolYear;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateStudentRequest extends FormRequest
 {
+    use ChecksGroupSchoolYear;
+
     public function authorize(): bool
     {
         return $this->user()->can('update', $this->route('student'));

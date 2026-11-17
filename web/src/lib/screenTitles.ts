@@ -39,6 +39,7 @@ export const screenTitles: { pattern: string; title: string }[] = [
   { pattern: "/usuarios/:id", title: "Editar usuario" },
   { pattern: "/materias", title: "Materias" },
   { pattern: "/colegio", title: "Colegio y estructura" },
+  { pattern: "/administracion/ano-y-calendario", title: "Año y calendario" },
   { pattern: "/configuracion/alertas", title: "Configurar alertas" },
   { pattern: "/ajustes/comentarios", title: "Configurar comentarios" },
   { pattern: "/adopcion", title: "Tablero de adopción" },

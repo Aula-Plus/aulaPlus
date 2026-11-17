@@ -73,6 +73,14 @@ export interface Group {
   /** Optional grade; only suggests a level, never forces it. */
   school_grade: LevelRef | null
   school_year: number
+  /**
+   * Screen 26: the group's year is closed (history). `read_only` unless
+   * direction enabled loading in it until `writable_until`. UX hint only —
+   * the server rejects the writes. Optional: not every payload carries it.
+   */
+  year_closed?: boolean
+  read_only?: boolean
+  writable_until?: string | null
   group_profile: unknown | null
   related_documents: unknown | null
   teachers: { id: number; name: string }[]
@@ -2027,3 +2035,16 @@ export type AssessmentResultScale =
         equivalences: { level_id: number; numeric_grade: number }[]
       }
     }
+
+/**
+ * Screen 26 › Períodos: the body whose calendar a program follows
+ * (`App\Enums\CalendarBody`), one row each.
+ */
+export type CalendarBody = "anep_basic" | "anep_upper_secondary" | "cambridge" | "ib"
+
+export const calendarBodyLabels: Record<CalendarBody, string> = {
+  anep_basic: "ANEP Ciclo Básico y Primaria",
+  anep_upper_secondary: "ANEP Bachillerato",
+  cambridge: "Cambridge",
+  ib: "IB",
+}

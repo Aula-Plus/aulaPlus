@@ -117,6 +117,52 @@ describe("GroupFormPage", () => {
     )
   })
 
+  const group2026 = {
+    id: 1,
+    name: "2°EMS-A",
+    level: null,
+    education_level: { id: 4, key: "upper_secondary", label: "Bachillerato" },
+    school_grade: null,
+    school_year: 2026,
+    group_profile: null,
+    related_documents: null,
+    teachers: [],
+  }
+
+  it("keeps a closed year's group structure for reading only (screen 26)", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue({ ...group2026, year_closed: true, read_only: true, writable_until: null })
+
+    renderEdit()
+
+    expect(await screen.findByText("El año 2026 está cerrado: este grupo es solo para leer.")).toBeInTheDocument()
+    expect(screen.getByLabelText(/nombre/i)).toBeDisabled()
+    expect(screen.queryByRole("button", { name: /guardar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /eliminar grupo/i })).not.toBeInTheDocument()
+  })
+
+  it("lets direction correct it while loading is enabled, but never delete it or change its year", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue({
+      ...group2026,
+      year_closed: true,
+      read_only: false,
+      writable_until: "2027-02-28",
+    })
+    const updateGroup = vi.spyOn(groupsApi, "updateGroup").mockResolvedValue(group2026)
+
+    renderEdit()
+
+    expect(await screen.findByText(/habilitó la carga en este grupo hasta el 28\/02\/2027/)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /eliminar grupo/i })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/año lectivo/i)).toHaveAttribute("readonly")
+    const name = screen.getByLabelText(/nombre/i)
+    expect(name).toBeEnabled()
+    await userEvent.clear(name)
+    await userEvent.type(name, "2°EMS-B")
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }))
+
+    expect(updateGroup).toHaveBeenCalledWith(1, expect.objectContaining({ name: "2°EMS-B", school_year: 2026 }))
+  })
+
   it("does not show a delete button when creating a new group", () => {
     renderCreate()
 

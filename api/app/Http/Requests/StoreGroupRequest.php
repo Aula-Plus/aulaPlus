@@ -3,8 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Models\Group;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreGroupRequest extends FormRequest
 {
@@ -30,6 +32,24 @@ class StoreGroupRequest extends FormRequest
             'school_year' => ['required', 'integer'],
             'group_profile' => ['nullable', 'array'],
             'related_documents' => ['nullable', 'array'],
+        ];
+    }
+
+    /**
+     * Screen 26: no group is added to a closed year (its groups are history).
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                if ($validator->errors()->has('school_year')) {
+                    return;
+                }
+                $lastClosed = app(SchoolYearCalendar::class)->lastClosedYear((int) $this->user()->school_id);
+                if ($lastClosed !== null && $this->integer('school_year') <= $lastClosed) {
+                    $validator->errors()->add('school_year', 'The school year is closed: groups cannot be added to it.');
+                }
+            },
         ];
     }
 }

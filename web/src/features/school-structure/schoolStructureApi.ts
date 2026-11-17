@@ -20,8 +20,11 @@ export interface FrameworkOption {
 }
 
 export interface CurricularOfferingRow {
-  /** `level` is the group's education level label (null = «Sin nivel»). */
-  group: { id: number; name: string; school_year: number; level: string | null }
+  /**
+   * `level` is the group's education level label (null = «Sin nivel»).
+   * `read_only`: screen 26, a closed year's group (UX only; the server decides).
+   */
+  group: { id: number; name: string; school_year: number; level: string | null; read_only?: boolean }
   subject: { id: number; name: string }
   frameworks: FrameworkOption[]
   /** What the editor offers: the school's active programs for the group's level. */

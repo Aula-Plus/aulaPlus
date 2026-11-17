@@ -7,6 +7,7 @@ import {
   CalendarRange,
   CalendarDays,
   ChartScatter,
+  CalendarCog,
   ClipboardList,
   Columns2,
   GraduationCap,
@@ -31,6 +32,7 @@ import {
   canManageAlertSettings,
   canManageCurricularStructure,
   canManageCommentSettings,
+  canManageSchoolYear,
   canManageSubjects,
   canManageUsers,
   canViewOfficialScales,
@@ -131,6 +133,11 @@ export function buildNavSections(
         // (mirror of CurricularOfferingPolicy) — ClickUp 1dfd3mc4bgf.
         ...(canManageCurricularStructure(user)
           ? [{ to: "/colegio", label: "Colegio y estructura", icon: Building2 }]
+          : []),
+        // Screen 26 «Año y calendario»: direction closes and opens the year
+        // (mirror of SchoolYearPolicy) — ClickUp 1dfd3mc4bh7.
+        ...(canManageSchoolYear(user)
+          ? [{ to: "/administracion/ano-y-calendario", label: "Año y calendario", icon: CalendarCog }]
           : []),
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
