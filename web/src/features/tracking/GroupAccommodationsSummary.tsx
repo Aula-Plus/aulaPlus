@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { HeartHandshake } from "lucide-react"
+import { useAuth } from "@/features/auth/AuthContext"
+import { isSchoolWideStaff } from "@/lib/permissions"
+import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { accommodationCategoryLabels, type GroupAccommodationSummaryEntry } from "@/types"
+import { AIInputReviewDialog } from "./AIInputReviewDialog"
 import { fetchGroupAccommodationsSummary } from "./trackingApi"
 
 interface GroupAccommodationsSummaryProps {
@@ -20,10 +24,18 @@ interface GroupAccommodationsSummaryProps {
  * the clinical "Ajustes vigentes" section of StudentTrackingPage. Adding a
  * `canAccessClinicalProfile` gate here would be more restrictive than necessary
  * (spec §6). Authorization stays the backend's job anyway (CLAUDE.md).
+ *
+ * «Ver lo que recibiría la IA» (ClickUp 1dfd3mc2wx2, P03-AJU-03) opens the
+ * review of «Lo que recibe la IA» for Psicopedagogía (who marks lines) and
+ * Dirección (read only). Teachers never see the button; the endpoint refuses
+ * them anyway (AIInputMarkPolicy).
  */
 export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSummaryProps) {
   const [entries, setEntries] = useState<GroupAccommodationSummaryEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const { user } = useAuth()
+  const canReview = isSchoolWideStaff(user)
 
   const load = useCallback(async () => {
     setError(null)
@@ -40,7 +52,17 @@ export function GroupAccommodationsSummary({ groupId }: GroupAccommodationsSumma
   }, [load])
 
   return (
-    <SectionCard title="Ajustes activos">
+    <SectionCard
+      title="Ajustes activos"
+      action={
+        canReview ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => setReviewOpen(true)}>
+            Ver lo que recibiría la IA
+          </Button>
+        ) : undefined
+      }
+    >
+      {canReview && <AIInputReviewDialog groupId={groupId} open={reviewOpen} onOpenChange={setReviewOpen} />}
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
       ) : entries === null ? (

@@ -6,6 +6,7 @@ use App\Http\Controllers\AccommodationInstanceOverrideController;
 use App\Http\Controllers\AccommodationProposalController;
 use App\Http\Controllers\AccommodationReviewController;
 use App\Http\Controllers\AdoptionDashboardController;
+use App\Http\Controllers\AIInputReviewController;
 use App\Http\Controllers\AIProposalController;
 use App\Http\Controllers\AiReportSettingsController;
 use App\Http\Controllers\AlertController;
@@ -284,6 +285,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // count-by-(type,date) marks (never a student identifier), and the
         // group's scheduled follow-ups filtered per-student by policy.
         Route::get('/groups/{group}/accommodations-summary', [GroupProfileController::class, 'accommodationsSummary']);
+        // «Ver lo que recibiría la IA» (ClickUp 1dfd3mc2wx2, P03-AJU-03):
+        // Psicopedagogía and Dirección read it, Psicopedagogía marks lines
+        // (AIInputMarkPolicy).
+        Route::get('/groups/{group}/ai-input', [AIInputReviewController::class, 'show']);
+        Route::post('/groups/{group}/ai-input/marks', [AIInputReviewController::class, 'store'])->middleware('throttle:30,1');
+        Route::post('/ai-input-marks/{mark}/adjustment-ok', [AIInputReviewController::class, 'confirmAdjustment'])->middleware('throttle:30,1');
         // Screen 05 «Comparativa por año de cursada» (Psicopedagogía y Dirección).
         Route::get('/group-comparison/options', [GroupComparisonController::class, 'options']);
         Route::get('/group-comparison', [GroupComparisonController::class, 'show']);

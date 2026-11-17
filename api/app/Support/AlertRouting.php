@@ -36,6 +36,8 @@ class AlertRouting
             // Legacy: no longer created, no role gets it.
             AlertType::EscalatedOverdue => [],
             AlertType::DifficultySignal => [AlertRecipient::Psychopedagogue->value],
+            // Reaches only whoever marked the line, never a role.
+            AlertType::AIInputMark => [],
             default => [AlertRecipient::Teacher->value, AlertRecipient::Psychopedagogue->value],
         };
     }
@@ -57,7 +59,7 @@ class AlertRouting
      */
     public static function allowsTeachers(AlertType $type): bool
     {
-        return $type !== AlertType::DifficultySignal;
+        return $type !== AlertType::DifficultySignal && $type !== AlertType::AIInputMark;
     }
 
     /**
