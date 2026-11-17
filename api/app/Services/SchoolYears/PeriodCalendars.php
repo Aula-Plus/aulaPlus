@@ -116,6 +116,12 @@ class PeriodCalendars
     public function split(SchoolYear $year, CalendarBody $body): void
     {
         DB::transaction(function () use ($year, $body): void {
+            // A double submit must not copy the periods twice: lock the year
+            // and re-check under the lock.
+            $year = SchoolYear::query()->lockForUpdate()->findOrFail($year->id);
+            if ($year->isSplit($body)) {
+                return;
+            }
             $programs = $this->activeProgramsOf($year, $body);
             $shared = $year->periods()->where('calendar_body', $body->value)->get();
 
@@ -161,6 +167,10 @@ class PeriodCalendars
     public function join(SchoolYear $year, CalendarBody $body): void
     {
         DB::transaction(function () use ($year, $body): void {
+            $year = SchoolYear::query()->lockForUpdate()->findOrFail($year->id);
+            if (! $year->isSplit($body)) {
+                return;
+            }
             foreach ($this->programSchemes($year, $body)->first() ?? [] as [$name, $startsOn]) {
                 $year->periods()->forceCreate([
                     'school_id' => $year->school_id,

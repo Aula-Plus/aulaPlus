@@ -959,3 +959,57 @@ it('puts every write route on a group or its data behind group.writable', functi
 
     expect($missing)->toBe([]);
 });
+
+// ── The roster of a closed year's group ─────────────────────────────────────
+
+it('keeps the roster of a closed year\'s group read-only unless loading is enabled', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    ['group' => $group, 'student' => $student] = teacherGroup($school);
+    ['group' => $otherGroup] = teacherGroup($school);
+    $newcomer = Student::factory()->create(['school_id' => $school->id]);
+    closeYear($year);
+    Sanctum::actingAs($director);
+
+    // Editing the student re-sends their own group: still allowed.
+    $this->patchJson("/api/students/{$student->id}", [
+        'full_name' => 'Nombre corregido', 'group_id' => $group->id, 'school_year' => 2026,
+    ])->assertOk();
+
+    // Moving them to another group of the closed year, or enrolling someone new, is not.
+    $this->patchJson("/api/students/{$student->id}", [
+        'full_name' => 'Nombre corregido', 'group_id' => $otherGroup->id, 'school_year' => 2026,
+    ])->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    $this->patchJson("/api/students/{$newcomer->id}", [
+        'full_name' => $newcomer->full_name, 'group_id' => $group->id, 'school_year' => 2026,
+    ])->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    $this->postJson('/api/students', [
+        'full_name' => 'Alumno nuevo', 'enrollment_year' => 2026, 'group_id' => $group->id, 'school_year' => 2026,
+    ])->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    expect($student->fresh()->groupForYear(2026)->id)->toBe($group->id)
+        ->and($newcomer->fresh()->groupForYear(2026))->toBeNull();
+
+    // While direction enables loading in the group, the move goes through and is recorded.
+    $this->postJson("/api/v1/school-years/{$year->id}/write-windows", [
+        'group_id' => $otherGroup->id, 'reason' => 'Corrección de lista', 'until_on' => '2027-02-28',
+    ])->assertCreated();
+    $this->patchJson("/api/students/{$student->id}", [
+        'full_name' => 'Nombre corregido', 'group_id' => $otherGroup->id, 'school_year' => 2026,
+    ])->assertOk();
+    expect($student->fresh()->groupForYear(2026)->id)->toBe($otherGroup->id)
+        ->and(AuditLog::query()->where('auditable_type', GroupWriteWindow::class)->where('action', 'updated')
+            ->sole()->changes['loaded_under_window']['group_id'])->toBe($otherGroup->id);
+});
+
+it('rejects enrolling a student under a school year other than the group\'s own', function () {
+    ['school' => $school, 'director' => $director, 'year' => $year] = schoolWithYear();
+    closeYear($year);
+    SchoolYear::query()->forceCreate(['school_id' => $school->id, 'year' => 2027, 'status' => 'open']);
+    ['group' => $group] = teacherGroup($school, 2027);
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    Sanctum::actingAs($director);
+
+    // A 2027 group (open) filed under the closed 2026 row would rewrite 2026's roster.
+    $this->patchJson("/api/students/{$student->id}", [
+        'full_name' => $student->full_name, 'group_id' => $group->id, 'school_year' => 2026,
+    ])->assertUnprocessable()->assertJsonValidationErrors('school_year');
+});

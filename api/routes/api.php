@@ -104,7 +104,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // 17/11), unless direction enabled loading in that group.
     Route::apiResource('groups', GroupController::class)
         ->middlewareFor(['update', 'destroy'], 'group.writable');
-    Route::apiResource('students', StudentController::class);
+    // Enrolling a student in a group of a closed year (or moving them there)
+    // rewrites that year's roster: same gate as the group's structure.
+    Route::apiResource('students', StudentController::class)
+        ->middlewareFor(['store', 'update'], 'group.writable');
 
     // Versioned routes start here (session 3): approval/validation flows and
     // audit-log-backed traceability. Existing unversioned routes above are

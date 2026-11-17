@@ -12,6 +12,7 @@ use App\Models\Group;
 use App\Models\GroupWriteWindow;
 use App\Models\ScreeningTestApplication;
 use App\Models\ScreeningTestResult;
+use App\Models\Student;
 use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Services\SchoolYears\SchoolYearCalendar;
@@ -31,7 +32,8 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * It covers the group's data and, since Eitán's answer of 17/11, its
  * structure too (the group itself, its teachers, its curricular offer and its
- * level).
+ * level), and its roster: enrolling a student in a group, or moving them to
+ * another group of that year.
  *
  * It only ever denies: when no group can be resolved (e.g. a record from
  * another school, hidden by the tenant scope) it lets the request through so
@@ -114,6 +116,14 @@ class EnsureGroupIsWritable
         }
 
         if ($request->filled('group_id') && is_numeric($request->input('group_id'))) {
+            $student = $this->bound($route?->parameter('student'), Student::class);
+            // Editing a student re-sends their current group: only a change of
+            // group for that year writes to the group's roster.
+            if ($student instanceof Student && is_numeric($request->input('school_year'))
+                && $student->groupForYear((int) $request->input('school_year'))?->id === (int) $request->input('group_id')) {
+                return null;
+            }
+
             return Group::query()->find((int) $request->input('group_id'));
         }
 

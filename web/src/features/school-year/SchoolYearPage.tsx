@@ -48,6 +48,14 @@ function errorText(error: unknown, fallback: string): string {
       "Los programas tienen períodos distintos: para volver a una sola fila, tienen que tener los mismos.",
     "The school has only one program of this body.": "El colegio tiene un solo programa de este organismo.",
     "The periods of a closed school year cannot change.": "Los períodos de un año cerrado no cambian.",
+    "Only Cambridge and IB can be split by program.": "Solo Cambridge e IB se pueden separar por programa.",
+    "This body is already split by program.": "Este organismo ya está separado por programa.",
+    "This body is not split by program.": "Este organismo no está separado por programa.",
+    "The school has no program of this body in its curricular offer.":
+      "El colegio no tiene ningún programa de este organismo en su oferta curricular.",
+    "This body is split by program: add the period to one of its programs.":
+      "Este organismo está separado por programa: agregá el período en uno de sus programas.",
+    "This program follows its body's periods.": "Este programa sigue los períodos de su organismo.",
   }
   return (message && known[message]) || fallback
 }
