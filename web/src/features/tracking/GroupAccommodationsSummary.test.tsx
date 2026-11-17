@@ -56,6 +56,21 @@ describe("GroupAccommodationsSummary", () => {
     expect(screen.getByText("Criterio")).toBeInTheDocument()
   })
 
+  it("shows «Ver lo que recibiría la IA» to Psicopedagogía and Dirección, never to a teacher", async () => {
+    vi.spyOn(trackingApi, "fetchGroupAccommodationsSummary").mockResolvedValue(summary())
+
+    const teacherView = renderAs("teacher")
+    await screen.findByText("tiempo extra")
+    expect(screen.queryByRole("button", { name: "Ver lo que recibiría la IA" })).not.toBeInTheDocument()
+    teacherView.unmount()
+
+    for (const role of ["psychopedagogue", "director"] as const) {
+      const view = renderAs(role)
+      expect(await screen.findByRole("button", { name: "Ver lo que recibiría la IA" })).toBeInTheDocument()
+      view.unmount()
+    }
+  })
+
   it("shows an empty-state message when the group has no active accommodations", async () => {
     vi.spyOn(trackingApi, "fetchGroupAccommodationsSummary").mockResolvedValue([])
 

@@ -34,11 +34,17 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * carry the comment category the signals were counted in
  * (`comment_category_id`) and only the count in `description` — never any
  * observation text, author or id. They never reach a teacher.
+ *
+ * «Lo que recibe la IA» alerts (ClickUp 1dfd3mc2wx2, `alerts:ai-input-marks`)
+ * have no student: they carry the pending mark (`ai_input_mark_id`), reach
+ * only whoever marked it (`alert_user`, empty `recipients`) and close when the
+ * mark closes.
  */
 #[Fillable([
     'student_id',
     'subject_id',
     'comment_category_id',
+    'ai_input_mark_id',
     'alert_rule_id',
     'source_alert_id',
     'type',
@@ -101,6 +107,15 @@ class Alert extends Model
     public function commentCategory(): BelongsTo
     {
         return $this->belongsTo(CommentCategory::class);
+    }
+
+    /**
+     * «Lo que recibe la IA» alerts (ClickUp 1dfd3mc2wx2): the mark still
+     * pending. These alerts have no student.
+     */
+    public function aiInputMark(): BelongsTo
+    {
+        return $this->belongsTo(AIInputMark::class);
     }
 
     public function rule(): BelongsTo
@@ -212,7 +227,9 @@ class Alert extends Model
      */
     public function canLinkFollowUpBy(User $user): bool
     {
-        return $this->canBeActedOnBy($user);
+        // A follow-up is about a student: an alert with none (a «Lo que
+        // recibe la IA» mark) has nobody to follow.
+        return $this->student_id !== null && $this->canBeActedOnBy($user);
     }
 
     /**
