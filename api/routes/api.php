@@ -295,7 +295,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Psicopedagogía and Dirección read it, Psicopedagogía marks lines
         // (AIInputMarkPolicy).
         Route::get('/groups/{group}/ai-input', [AIInputReviewController::class, 'show']);
-        Route::post('/groups/{group}/ai-input/marks', [AIInputReviewController::class, 'store'])->middleware('throttle:30,1');
+        Route::post('/groups/{group}/ai-input/marks', [AIInputReviewController::class, 'store'])->middleware(['throttle:30,1', 'group.writable']);
         Route::post('/ai-input-marks/{mark}/adjustment-ok', [AIInputReviewController::class, 'confirmAdjustment'])->middleware('throttle:30,1');
         // Screen 05 «Comparativa por año de cursada» (Psicopedagogía y Dirección).
         Route::get('/group-comparison/options', [GroupComparisonController::class, 'options']);
