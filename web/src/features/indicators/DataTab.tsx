@@ -357,7 +357,12 @@ function ExternalLoadDialog({
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={measureKey}
-                onChange={(event) => setMeasureKey(event.target.value)}
+                onChange={(event) => {
+                  // A pending name picker belongs to the datum and group it was
+                  // uploaded for: changing either discards it.
+                  setPending(null)
+                  setMeasureKey(event.target.value)
+                }}
               >
                 {externals.map((source) => (
                   <option key={source.id} value={String(source.id)}>
@@ -372,7 +377,10 @@ function ExternalLoadDialog({
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={groupId}
-                onChange={(event) => setGroupId(event.target.value)}
+                onChange={(event) => {
+                  setPending(null)
+                  setGroupId(event.target.value)
+                }}
               >
                 <option value="">Todos los grupos</option>
                 {catalog.groups.map((group) => (

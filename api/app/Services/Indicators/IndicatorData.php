@@ -515,13 +515,13 @@ class IndicatorData
 
     /**
      * Each student's newest row of a subject query (assessment date, then
-     * result id), ranked in SQL.
+     * assessment id, then result id), ranked in SQL.
      *
      * @return Collection<int, object{student_id: int, level_id: int|null, score: mixed}>
      */
     protected function newestPerStudent(QueryBuilder $query): Collection
     {
-        $ranked = $query->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, assessment_results.score as score, ROW_NUMBER() OVER (PARTITION BY assessment_results.student_id ORDER BY assessments.administered_at DESC, assessment_results.id DESC) as position_in_student');
+        $ranked = $query->selectRaw('assessment_results.student_id as student_id, assessment_results.official_scale_level_id as level_id, assessment_results.score as score, ROW_NUMBER() OVER (PARTITION BY assessment_results.student_id ORDER BY assessments.administered_at DESC, assessments.id DESC, assessment_results.id DESC) as position_in_student');
 
         return DB::query()->fromSub($ranked, 'ranked')->where('position_in_student', 1)->get();
     }
