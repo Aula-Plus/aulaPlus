@@ -27,6 +27,7 @@ class ScreeningTestTypeResource extends JsonResource
             'levels' => $this->levels ?? [],
             'frequency' => $this->frequency?->value,
             'frequency_years' => $this->frequency_years,
+            'taken_every_year' => (bool) $this->taken_every_year,
             'teacher_visible' => $this->teacher_visible,
             'active' => $this->active,
             'created_by_id' => $this->created_by_id,

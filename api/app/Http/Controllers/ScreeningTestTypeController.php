@@ -45,6 +45,7 @@ class ScreeningTestTypeController extends Controller
             'levels' => $request->validated('levels'),
             'frequency' => $request->validated('frequency'),
             'frequency_years' => $this->frequencyYears($request->validated()),
+            'taken_every_year' => $request->validated('taken_every_year') ?? self::takenEveryYearByDefault($request->validated('frequency')),
             'teacher_visible' => $request->validated('teacher_visible') ?? false,
             'active' => $request->validated('active') ?? true,
             'created_by_id' => $request->user()->id,
@@ -74,6 +75,15 @@ class ScreeningTestTypeController extends Controller
         return new ScreeningTestTypeResource($type->fresh()->load([
             'designs' => fn ($query) => $query->where('approved', true)->whereNull('reverted_at')->with('createdBy:id,name'),
         ]));
+    }
+
+    /**
+     * «Se toma todos los años» when it was not sent: a screening taken once or
+     * twice a year is annual; every few years or on demand is not.
+     */
+    public static function takenEveryYearByDefault(?string $frequency): bool
+    {
+        return in_array($frequency, [ScreeningFrequency::Yearly->value, ScreeningFrequency::TwiceYearly->value], true);
     }
 
     /**

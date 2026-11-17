@@ -1552,6 +1552,8 @@ export interface ScreeningTestType {
   levels: SchoolLevel[]
   frequency: ScreeningFrequency | null
   frequency_years: number | null
+  /** «Se toma todos los años»: which take Indicadores y cruces reads (screen 30). */
+  taken_every_year: boolean
   teacher_visible: boolean
   active: boolean
   created_by_id: number | null
@@ -1650,6 +1652,7 @@ export interface ScreeningTestTypeInput {
   levels?: SchoolLevel[]
   frequency?: ScreeningFrequency | null
   frequency_years?: number | null
+  taken_every_year?: boolean
   teacher_visible?: boolean
 }
 

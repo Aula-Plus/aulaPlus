@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Screening\ComputeScreeningImpact;
+use App\Enums\IndicatorSourceType;
 use App\Enums\Role;
 use App\Http\Requests\PreviewScreeningTestImpactRequest;
 use App\Http\Requests\StoreScreeningTestDesignRequest;
@@ -12,6 +13,7 @@ use App\Models\ScreeningTestType;
 use App\Models\User;
 use App\Notifications\ScreeningDesignChangedNotification;
 use App\Notifications\ScreeningDesignRevertedNotification;
+use App\Services\Indicators\CrossingBandUsage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +102,18 @@ class ScreeningTestDesignController extends Controller
 
             if ($ruled->count() < 2) {
                 throw ValidationException::withMessages(['design' => 'There is no previous design to go back to.']);
+            }
+
+            // The previous design rules again: it cannot leave a crossing of
+            // screen 30 on a band it does not have (CrossingBandUsage).
+            $losing = CrossingBandUsage::messages(
+                IndicatorSourceType::Screening->value,
+                $type->id,
+                array_map(static fn (array $band): string => (string) $band['name'], $ruled[1]->bandList()),
+            );
+
+            if ($losing !== []) {
+                throw ValidationException::withMessages($losing);
             }
 
             $design->update([

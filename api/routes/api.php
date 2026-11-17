@@ -26,8 +26,10 @@ use App\Http\Controllers\ClassSessionScheduleController;
 use App\Http\Controllers\CommentCategoryController;
 use App\Http\Controllers\CommentShareController;
 use App\Http\Controllers\CommentTrendSettingsController;
+use App\Http\Controllers\CrossingController;
 use App\Http\Controllers\CurricularOfferingController;
 use App\Http\Controllers\EducationLevelController;
+use App\Http\Controllers\ExternalMeasureController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
@@ -38,6 +40,9 @@ use App\Http\Controllers\GroupLevelController;
 use App\Http\Controllers\GroupProfileController;
 use App\Http\Controllers\GroupTeacherAssignmentController;
 use App\Http\Controllers\GroupTrackingController;
+use App\Http\Controllers\IndicatorChartController;
+use App\Http\Controllers\IndicatorController;
+use App\Http\Controllers\IndicatorDataController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NumericGradeSettingsController;
@@ -390,6 +395,29 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         Route::patch('/screening-test-results/{result}', [ScreeningTestResultController::class, 'update'])
             ->middleware('group.writable');
+
+        // Screen 30 «Indicadores y cruces» (ClickUp 1dfd3mc4bgp, first
+        // delivery: its four tabs). Psicopedagogía and Dirección only; the AI
+        // takes no part. Previews and the chart never rank students: previews
+        // are aggregate, and the chart's names only go with each point.
+        Route::get('/indicator-data', [IndicatorDataController::class, 'index']);
+        Route::post('/external-measures', [ExternalMeasureController::class, 'store']);
+        Route::patch('/external-measures/{externalMeasure}', [ExternalMeasureController::class, 'update']);
+        Route::delete('/external-measures/{externalMeasure}', [ExternalMeasureController::class, 'destroy']);
+        Route::get('/external-measures/{externalMeasure}/values', [ExternalMeasureController::class, 'values']);
+        Route::put('/external-measures/{externalMeasure}/values', [ExternalMeasureController::class, 'storeValues']);
+        Route::post('/external-measures/{externalMeasure}/match-students', [ExternalMeasureController::class, 'matchStudents']);
+        Route::get('/indicators', [IndicatorController::class, 'index']);
+        Route::post('/indicators', [IndicatorController::class, 'store']);
+        Route::post('/indicators/preview', [IndicatorController::class, 'preview']);
+        Route::patch('/indicators/{indicator}', [IndicatorController::class, 'update'])->whereNumber('indicator');
+        Route::delete('/indicators/{indicator}', [IndicatorController::class, 'destroy'])->whereNumber('indicator');
+        Route::get('/crossings', [CrossingController::class, 'index']);
+        Route::post('/crossings', [CrossingController::class, 'store']);
+        Route::post('/crossings/preview', [CrossingController::class, 'preview']);
+        Route::patch('/crossings/{crossing}', [CrossingController::class, 'update'])->whereNumber('crossing');
+        Route::delete('/crossings/{crossing}', [CrossingController::class, 'destroy'])->whereNumber('crossing');
+        Route::get('/indicator-chart', [IndicatorChartController::class, 'show']);
 
         // Session 10: performance timeline (docs/prompts/20-linea-tiempo-
         // alumno.md). Read-only aggregator over the results line + six mark

@@ -34,6 +34,7 @@ import { CalendarPage } from "@/features/calendar/CalendarPage"
 import { GroupComparisonPage } from "@/features/group-comparison/GroupComparisonPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
+import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
 
 function App() {
   return (
@@ -216,6 +217,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <AlertsAndFollowUpsPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Indicadores y cruces (screen 30): Psicopedagogía y Dirección. */}
+          <Route
+            path="/indicadores-y-cruces"
+            element={
+              <ProtectedLayout>
+                <IndicatorsPage />
               </ProtectedLayout>
             }
           />

@@ -51,6 +51,7 @@ function type(
     levels,
     frequency: null,
     frequency_years: null,
+    taken_every_year: false,
     teacher_visible: false,
     active: true,
     created_by_id: 2,

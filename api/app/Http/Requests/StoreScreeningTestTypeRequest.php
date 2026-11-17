@@ -52,6 +52,9 @@ class StoreScreeningTestTypeRequest extends FormRequest
                 'max:10',
                 'required_if:frequency,'.ScreeningFrequency::EveryFewYears->value,
             ],
+            // «Se toma todos los años» (ClickUp 1dfd3mc4bgp): which take an
+            // indicator reads. Defaults from the frequency when not sent.
+            'taken_every_year' => ['sometimes', 'boolean'],
             'teacher_visible' => ['sometimes', 'boolean'],
         ];
     }

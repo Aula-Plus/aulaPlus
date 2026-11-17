@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
+import { crossingsUsingBandsMessage } from "@/features/indicators/saveErrors"
 import {
   canEditScreeningTestDesign,
   canManageScreeningTests,
@@ -193,6 +194,7 @@ function lastUpdateText(type: ScreeningTestType): string {
 const newSchema = z.object({
   name: z.string().trim().min(1, "Ingresá un nombre").max(255, "Máximo 255 caracteres"),
   area: z.string().max(100, "Máximo 100 caracteres"),
+  taken_every_year: z.boolean(),
 })
 
 type NewValues = z.infer<typeof newSchema>
@@ -204,7 +206,10 @@ function NewScreeningForm({ onCreated }: { onCreated: (type: ScreeningTestType) 
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<NewValues>({ resolver: zodResolver(newSchema), defaultValues: { name: "", area: "" } })
+  } = useForm<NewValues>({
+    resolver: zodResolver(newSchema),
+    defaultValues: { name: "", area: "", taken_every_year: false },
+  })
 
   async function onSubmit(values: NewValues) {
     setFormError(null)
@@ -212,8 +217,9 @@ function NewScreeningForm({ onCreated }: { onCreated: (type: ScreeningTestType) 
       const type = await screeningApi.createScreeningTestType({
         name: values.name.trim(),
         area: values.area.trim() || null,
+        taken_every_year: values.taken_every_year,
       })
-      reset({ name: "", area: "" })
+      reset({ name: "", area: "", taken_every_year: false })
       onCreated(type)
     } catch {
       setFormError("No pudimos crear el screening.")
@@ -233,6 +239,10 @@ function NewScreeningForm({ onCreated }: { onCreated: (type: ScreeningTestType) 
           <Input id="area" placeholder="Ej: lectoescritura" {...register("area")} />
           {errors.area && <p className="text-sm text-destructive">{errors.area.message}</p>}
         </div>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <input type="checkbox" {...register("taken_every_year")} />
+          Se toma todos los años
+        </label>
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Creando…" : "Crear screening"}
         </Button>
@@ -322,8 +332,8 @@ function LastChangeCard({
     try {
       await screeningApi.revertScreeningTestDesign(current.id)
       await onReverted()
-    } catch {
-      setError("No pudimos volver atrás el cambio.")
+    } catch (err) {
+      setError(crossingsUsingBandsMessage(err) ?? "No pudimos volver atrás el cambio.")
     } finally {
       setReverting(false)
     }
@@ -406,6 +416,7 @@ const generalSchema = z
     levels: z.array(z.enum(["primary", "lower_secondary", "upper_secondary"])),
     frequency: z.enum(["", "yearly", "twice_yearly", "every_few_years", "on_demand"]),
     frequency_years: z.string(),
+    taken_every_year: z.boolean(),
     teacher_visible: z.boolean(),
   })
   // UX-only mirror of the backend rule; the server remains the boundary.
@@ -436,6 +447,7 @@ function GeneralDataForm({ type, onSaved }: { type: ScreeningTestType; onSaved: 
       levels: type.levels,
       frequency: type.frequency ?? "",
       frequency_years: type.frequency_years ? String(type.frequency_years) : "",
+      taken_every_year: type.taken_every_year,
       teacher_visible: type.teacher_visible,
     },
   })
@@ -451,6 +463,7 @@ function GeneralDataForm({ type, onSaved }: { type: ScreeningTestType; onSaved: 
         levels: values.levels,
         frequency: values.frequency || null,
         frequency_years: values.frequency === "every_few_years" ? Number(values.frequency_years) : null,
+        taken_every_year: values.taken_every_year,
         teacher_visible: values.teacher_visible,
       })
       setSaved(true)
@@ -513,9 +526,14 @@ function GeneralDataForm({ type, onSaved }: { type: ScreeningTestType; onSaved: 
               )}
             </div>
           )}
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" {...register("taken_every_year")} />
+            Se toma todos los años
+          </label>
           <p className="text-xs text-muted-foreground">
-            Se guardan todas las tomas con su fecha. Si no se tomó este año, se usa la última y se
-            muestra de cuándo es.
+            Se guardan todas las tomas con su fecha. En Indicadores y cruces, un screening que se toma todos
+            los años usa la toma de este año (sin toma, el alumno queda sin dato); si no, se usa la última y
+            se muestra de qué año es.
           </p>
         </div>
         <div className="grid gap-1 sm:col-span-2">
@@ -577,6 +595,15 @@ const bandsSchema = z
         ctx.addIssue({ code: "custom", path: ["bands", index, "max"], message: "Tiene que ser mayor que la franja anterior" })
       }
       previous = max
+    })
+    // A crossing of screen 30 names the band it reads: names are unique.
+    const seen = new Set<string>()
+    values.bands.forEach((band, index) => {
+      const name = band.name.trim().toLowerCase()
+      if (name !== "" && seen.has(name)) {
+        ctx.addIssue({ code: "custom", path: ["bands", index, "name"], message: "Ya hay una franja con ese nombre" })
+      }
+      seen.add(name)
     })
   })
 
@@ -665,8 +692,8 @@ function BandsForm({ type, onSaved }: { type: ScreeningTestType; onSaved: () => 
       setImpact(null)
       setSaved(true)
       await onSaved()
-    } catch {
-      setFormError("No pudimos guardar las franjas.")
+    } catch (err) {
+      setFormError(crossingsUsingBandsMessage(err) ?? "No pudimos guardar las franjas.")
     }
   }
 

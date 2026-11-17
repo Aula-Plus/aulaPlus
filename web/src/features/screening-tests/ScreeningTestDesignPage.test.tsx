@@ -43,6 +43,7 @@ function type(overrides: Partial<ScreeningTestType> = {}): ScreeningTestType {
     levels: ["lower_secondary", "upper_secondary"],
     frequency: "twice_yearly",
     frequency_years: null,
+    taken_every_year: false,
     teacher_visible: false,
     active: true,
     created_by_id: 2,
@@ -117,9 +118,12 @@ describe("ScreeningTestDesignPage", () => {
     renderPage()
 
     await userEvent.type(await screen.findByLabelText("Nombre del screening"), "Cálculo mental")
+    await userEvent.click(screen.getByLabelText("Se toma todos los años"))
     await userEvent.click(screen.getByRole("button", { name: "Crear screening" }))
 
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ name: "Cálculo mental", area: null }))
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({ name: "Cálculo mental", area: null, taken_every_year: true }),
+    )
   })
 
   it("does not offer creating a screening to Dirección, but lets it open and edit one", async () => {
@@ -151,6 +155,7 @@ describe("ScreeningTestDesignPage", () => {
         levels: ["primary", "lower_secondary", "upper_secondary"],
         frequency: "every_few_years",
         frequency_years: 3,
+        taken_every_year: false,
         teacher_visible: true,
       }),
     )
