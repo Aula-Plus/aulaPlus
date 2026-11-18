@@ -40,7 +40,7 @@ class UnitController extends Controller
 
         $items = UnitObjective::query()
             ->where('unit_id', $unit->id)
-            ->with('curricularItems.curricularCatalog.curricularFramework:id,name')
+            ->with(['curricularItems.curricularCatalog.curricularFramework:id,name', 'curricularItems.parent:id,name'])
             ->get()
             ->mapWithKeys(fn (UnitObjective $objective) => [
                 $objective->id => $objective->curricularItems
@@ -140,9 +140,10 @@ class UnitController extends Controller
         $this->authorize('view', $unit);
 
         $items = $curriculum->itemsFor($unit);
+        $byId = $items->keyBy('id');
 
         return response()->json(['data' => $items
-            ->map(fn (CurricularItem $item) => $curriculum->row($item, $items))
+            ->map(fn (CurricularItem $item) => $curriculum->row($item, $byId))
             ->values()->all()]);
     }
 

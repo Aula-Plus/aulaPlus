@@ -102,12 +102,19 @@ export function UnitPage() {
   }, [reload])
 
   useEffect(() => {
+    let active = true
     fetchUnitAccommodations(unitId)
-      .then(setAccommodations)
-      .catch(() => {
-        setAccommodationsError(true)
-        setAccommodations([])
+      .then((rows) => {
+        if (!active) return
+        setAccommodations(rows)
+        setAccommodationsError(false)
       })
+      .catch(() => {
+        if (active) setAccommodationsError(true)
+      })
+    return () => {
+      active = false
+    }
   }, [unitId])
 
   if (error) return <p className="text-sm text-destructive">{error}</p>
@@ -169,7 +176,13 @@ export function UnitPage() {
       </div>
 
       {tab === "planning" && (
-        <PlanningTab unit={unit} accommodations={accommodations} onChanged={reload} onSaved={setUnit} />
+        <PlanningTab
+          unit={unit}
+          accommodations={accommodations}
+          accommodationsFailed={accommodationsError}
+          onChanged={reload}
+          onSaved={setUnit}
+        />
       )}
       {tab === "objectives" && <ObjectivesTab unit={unit} onChanged={reload} />}
 
@@ -188,18 +201,25 @@ export function UnitPage() {
 function PlanningTab({
   unit,
   accommodations,
+  accommodationsFailed,
   onChanged,
   onSaved,
 }: {
   unit: UnitDetail
   accommodations: UnitAccommodationType[] | null
+  accommodationsFailed: boolean
   onChanged: () => Promise<void>
   onSaved: (unit: UnitDetail) => void
 }) {
   return (
     <div className="grid gap-6">
       <UnitDataCard unit={unit} onChanged={onChanged} />
-      <PlannerCard unit={unit} accommodations={accommodations} onSaved={onSaved} />
+      <PlannerCard
+        unit={unit}
+        accommodations={accommodations}
+        accommodationsFailed={accommodationsFailed}
+        onSaved={onSaved}
+      />
     </div>
   )
 }
@@ -296,10 +316,12 @@ function differentiationLine(accommodations: UnitAccommodationType[]): string {
 function PlannerCard({
   unit,
   accommodations,
+  accommodationsFailed,
   onSaved,
 }: {
   unit: UnitDetail
   accommodations: UnitAccommodationType[] | null
+  accommodationsFailed: boolean
   onSaved: (unit: UnitDetail) => void
 }) {
   const initial = useMemo(
@@ -354,6 +376,7 @@ function PlannerCard({
             value={values[field.key] ?? null}
             readOnly={!unit.can_edit}
             accommodations={accommodations}
+            accommodationsFailed={accommodationsFailed}
             onChange={(value) => set(field.key, value)}
           />
         ))}
@@ -382,12 +405,14 @@ function PlannerFieldControl({
   value,
   readOnly,
   accommodations,
+  accommodationsFailed,
   onChange,
 }: {
   field: PlannerField
   value: PlannerValue
   readOnly: boolean
   accommodations: UnitAccommodationType[] | null
+  accommodationsFailed: boolean
   onChange: (value: PlannerValue) => void
 }) {
   const inputId = `planner-${field.key}`
@@ -405,7 +430,9 @@ function PlannerFieldControl({
   if (field.type === "automatic") {
     const body =
       field.key === "differentiation" ? (
-        accommodations === null ? (
+        accommodationsFailed ? (
+          <p className="text-sm text-destructive">No pudimos cargar los ajustes del grupo.</p>
+        ) : accommodations === null ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : accommodations.length === 0 ? (
           <p className="text-sm text-muted-foreground">El grupo no tiene ajustes activos.</p>
@@ -634,16 +661,33 @@ function CurricularItemsDialog({
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    let active = true
     fetchUnitCurricularItems(unitId)
-      .then(setItems)
+      .then((rows) => {
+        if (active) setItems(rows)
+      })
       .catch(() => {
+        if (!active) return
         setError("No pudimos cargar el catálogo del programa.")
         setItems([])
       })
+    return () => {
+      active = false
+    }
   }, [unitId])
 
+  // Items already linked that the picker no longer offers (the program left
+  // the group-subject's offering, the catalog changed…): listed first so the
+  // teacher can still untick them.
+  const offeredIds = new Set((items ?? []).map((item) => item.id))
+  const staleIds = new Set(
+    objective.curricular_items.filter((item) => !offeredIds.has(item.id)).map((item) => item.id),
+  )
+  const options =
+    items === null ? null : [...objective.curricular_items.filter((item) => staleIds.has(item.id)), ...items]
+
   const term = search.trim().toLowerCase()
-  const visible = (items ?? []).filter(
+  const visible = (options ?? []).filter(
     (item) =>
       term === "" ||
       [item.name, item.code, item.parent_name, item.description].some((v) => v?.toLowerCase().includes(term)),
@@ -671,9 +715,9 @@ function CurricularItemsDialog({
             cita.
           </DialogDescription>
         </DialogHeader>
-        {items === null ? (
+        {options === null ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : items.length === 0 && !error ? (
+        ) : options.length === 0 && !error ? (
           <p className="text-sm text-muted-foreground">
             Todavía no hay elementos del programa cargados para esta materia.
           </p>
@@ -704,6 +748,11 @@ function CurricularItemsDialog({
                       </span>
                       {item.parent_name && <span className="text-muted-foreground"> · {item.parent_name}</span>}
                       <span className="block text-xs text-muted-foreground">{citation(item)}</span>
+                      {staleIds.has(item.id) && (
+                        <span className="block text-xs text-muted-foreground">
+                          Ya no está en el catálogo del programa.
+                        </span>
+                      )}
                     </span>
                   </label>
                 </li>
@@ -717,7 +766,7 @@ function CurricularItemsDialog({
           <DialogClose asChild>
             <Button variant="outline">Cancelar</Button>
           </DialogClose>
-          <Button onClick={save} disabled={saving || items === null || (items.length === 0 && selected.length === 0)}>
+          <Button onClick={save} disabled={saving || options === null || (options.length === 0 && selected.length === 0)}>
             {saving ? "Guardando…" : "Guardar elementos"}
           </Button>
         </DialogFooter>

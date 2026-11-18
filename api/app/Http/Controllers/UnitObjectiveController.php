@@ -54,7 +54,7 @@ class UnitObjectiveController extends Controller
     {
         $objective->curricularItems()->sync(collect($request->validated('curricular_item_ids'))->map(fn ($id) => (int) $id)->all());
 
-        $items = $objective->curricularItems()->with('curricularCatalog.curricularFramework:id,name')->get();
+        $items = $objective->curricularItems()->with(['curricularCatalog.curricularFramework:id,name', 'parent:id,name'])->get();
 
         return response()->json(['data' => [
             ...$this->row($objective),

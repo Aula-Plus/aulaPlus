@@ -8,11 +8,14 @@ use App\Models\CurricularFramework;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\School;
+use App\Models\SchoolYear;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Models\User;
+use App\Services\SchoolYears\SchoolYearCalendar;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
 /**
@@ -210,4 +213,120 @@ it('gives «A mano» the accommodations by type with the students the viewer alr
 
     Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
     $this->getJson("/api/v1/units/{$unit->id}/accommodations")->assertOk()->assertJsonCount(2, 'data');
+});
+
+it('lets only the plan owner write the planner and the objective items', function () {
+    [$school, $framework, , , , $unit, $objective] = unitScreenSetup();
+    $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id]);
+    $item = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
+
+    $readers = [
+        User::factory()->forSchool($school)->teacher()->create(),
+        User::factory()->forSchool($school)->psychopedagogue()->create(),
+        User::factory()->forSchool($school)->director()->create(),
+    ];
+    foreach ($readers as $user) {
+        Sanctum::actingAs($user);
+        $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['contents' => 'x']])->assertForbidden();
+        $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$item->id]])
+            ->assertForbidden();
+    }
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->teacher()->create());
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['contents' => 'x']])->assertNotFound();
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => []])
+        ->assertNotFound();
+
+    expect($unit->refresh()->planner_values)->toBeNull()
+        ->and($objective->curricularItems()->count())->toBe(0);
+});
+
+it('hides «A mano» from another teacher and another school', function () {
+    [$school, , , , , $unit] = unitScreenSetup();
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+    $this->getJson("/api/v1/units/{$unit->id}/accommodations")->assertForbidden();
+    $this->getJson("/api/v1/units/{$unit->id}/curricular-items")->assertForbidden();
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    $this->getJson("/api/v1/units/{$unit->id}/accommodations")->assertNotFound();
+    $this->getJson("/api/v1/units/{$unit->id}/curricular-items")->assertNotFound();
+});
+
+it('blocks the unit writes in a group of a closed year', function () {
+    [$school, , $teacher, $group, , $unit, $objective] = unitScreenSetup();
+    SchoolYear::query()->forceCreate([
+        'school_id' => $school->id, 'year' => $group->school_year, 'status' => 'closed', 'closed_at' => now(),
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+    Sanctum::actingAs($teacher);
+
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['contents' => 'x']])
+        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => []])
+        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    // Reading still works.
+    $this->getJson("/api/v1/units/{$unit->id}")->assertOk();
+});
+
+it('does not open a unit of an individualized plan as screen 13', function () {
+    [$school, $framework, $teacher, $group, $subject] = unitScreenSetup();
+    $student = Student::factory()->create(['school_id' => $school->id]);
+    $plan = AnnualPlan::factory()->create([
+        'group_id' => $group->id,
+        'subject_id' => $subject->id,
+        'teacher_id' => $teacher->id,
+        'curricular_framework_id' => $framework->id,
+        'student_id' => $student->id,
+        'year' => 2027,
+    ]);
+    $unit = Unit::factory()->create(['annual_plan_id' => $plan->id]);
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/units/{$unit->id}")->assertNotFound();
+    $this->getJson("/api/v1/units/{$unit->id}/accommodations")->assertNotFound();
+});
+
+it('keeps an item that left the offered catalog saveable and removable', function () {
+    [, $framework, $teacher, , , $unit, $objective] = unitScreenSetup();
+    $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id]);
+    $old = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
+    $new = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
+    Sanctum::actingAs($teacher);
+
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$old->id]])
+        ->assertOk();
+
+    // The catalog moves to another program: the old item is no longer offered.
+    $catalog->forceFill(['curricular_framework_id' => CurricularFramework::factory()->create()->id])->save();
+    $current = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id]);
+    $new->forceFill(['curricular_catalog_id' => $current->id])->save();
+
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$old->id, $new->id]])
+        ->assertOk();
+    expect($objective->curricularItems()->pluck('curricular_items.id')->all())->toEqualCanonicalizing([$old->id, $new->id]);
+
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$new->id]])
+        ->assertOk();
+    // Once removed, it cannot be added back: it is not offered anymore.
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$new->id, $old->id]])
+        ->assertUnprocessable();
+});
+
+it('names each linked item\'s parent without a query per item', function () {
+    [, $framework, $teacher, , , $unit, $objective] = unitScreenSetup();
+    $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id]);
+    $parent = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id, 'name' => 'Álgebra']);
+    $children = CurricularItem::factory()->count(5)->create(['curricular_catalog_id' => $catalog->id, 'parent_id' => $parent->id]);
+    $objective->curricularItems()->sync($children->pluck('id')->all());
+    Sanctum::actingAs($teacher);
+
+    DB::enableQueryLog();
+    $this->getJson("/api/v1/units/{$unit->id}")
+        ->assertOk()
+        ->assertJsonPath('data.objectives.0.curricular_items.0.parent_name', 'Álgebra');
+    $parentLookups = collect(DB::getQueryLog())
+        ->filter(fn (array $q) => str_contains($q['query'], 'from "curricular_items"') && ! str_contains($q['query'], 'inner join'))
+        ->count();
+    expect($parentLookups)->toBeLessThanOrEqual(1);
 });

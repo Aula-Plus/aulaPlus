@@ -80,14 +80,20 @@ class UnitCurriculum
      * How an item is shown and cited: its program and catalog, its parent (to
      * locate it) and its source and page when the catalog carries them.
      *
-     * @param  Collection<int, CurricularItem>|null  $siblings  items of the same catalog, to name the parent without a query
+     * Pass the items keyed by id as `$siblings`, or eager load `parent`, to
+     * name the parent without a query per item.
+     *
+     * @param  Collection<int, CurricularItem>|null  $siblings  items keyed by id
      * @return array<string, mixed>
      */
     public function row(CurricularItem $item, ?Collection $siblings = null): array
     {
         $catalog = $item->relationLoaded('curricularCatalog') ? $item->curricularCatalog : $item->curricularCatalog()->with('curricularFramework:id,name')->first();
-        $parent = $item->parent_id === null ? null
-            : ($siblings?->firstWhere('id', $item->parent_id) ?? CurricularItem::query()->find($item->parent_id, ['id', 'name']));
+        $parent = match (true) {
+            $item->parent_id === null => null,
+            $item->relationLoaded('parent') => $item->parent,
+            default => $siblings?->get($item->parent_id) ?? CurricularItem::query()->find($item->parent_id, ['id', 'name']),
+        };
 
         return [
             'id' => $item->id,
