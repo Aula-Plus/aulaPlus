@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AnnualPlans\SyncObjectiveCurricularItemsRequest;
 use App\Http\Requests\AnnualPlans\UnitObjectiveRequest;
+use App\Models\CurricularItem;
 use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Services\AnnualPlans\ClosableClasses;
+use App\Services\Units\UnitCurriculum;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -41,6 +44,22 @@ class UnitObjectiveController extends Controller
         $objective->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * PUT /unit-objectives/{objective}/curricular-items — the curricular items
+     * this objective works, chosen from the program catalog (P13-DEC-05).
+     */
+    public function syncCurricularItems(SyncObjectiveCurricularItemsRequest $request, UnitObjective $objective, UnitCurriculum $curriculum): JsonResponse
+    {
+        $objective->curricularItems()->sync(collect($request->validated('curricular_item_ids'))->map(fn ($id) => (int) $id)->all());
+
+        $items = $objective->curricularItems()->with(['curricularCatalog.curricularFramework:id,name', 'parent:id,name'])->get();
+
+        return response()->json(['data' => [
+            ...$this->row($objective),
+            'curricular_items' => $items->map(fn (CurricularItem $item) => $curriculum->row($item))->values()->all(),
+        ]]);
     }
 
     /**

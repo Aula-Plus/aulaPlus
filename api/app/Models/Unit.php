@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * domain doc. Do NOT add BelongsToSchool here; reach Unit only through its
  * (already tenant-scoped) AnnualPlan relation to keep isolation intact.
  */
-#[Fillable(['annual_plan_id', 'name', 'position', 'start_date', 'end_date', 'materials'])]
+#[Fillable(['annual_plan_id', 'name', 'position', 'start_date', 'end_date', 'materials', 'planner_values'])]
 class Unit extends Model
 {
     /** @use HasFactory<UnitFactory> */
@@ -28,6 +28,9 @@ class Unit extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'materials' => 'array',
+            // Screen 13: the unit planner, keyed by resolved field key
+            // (App\Services\CurricularStructure\PlannerFields).
+            'planner_values' => 'array',
         ];
     }
 

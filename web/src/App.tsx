@@ -30,6 +30,7 @@ import { AlertSettingsPage } from "@/features/alerts/AlertSettingsPage"
 import { AlertsAndFollowUpsPage } from "@/features/alerts/AlertsAndFollowUpsPage"
 import { AnnualPlansListPage } from "@/features/annual-plans/AnnualPlansListPage"
 import { AnnualPlanPage } from "@/features/annual-plans/AnnualPlanPage"
+import { UnitPage } from "@/features/annual-plans/UnitPage"
 import { CalendarPage } from "@/features/calendar/CalendarPage"
 import { GroupComparisonPage } from "@/features/group-comparison/GroupComparisonPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
@@ -152,6 +153,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <AnnualPlanPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/unidades/:id"
+            element={
+              <ProtectedLayout>
+                <UnitPage />
               </ProtectedLayout>
             }
           />

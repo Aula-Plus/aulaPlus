@@ -31,6 +31,16 @@ class UnitObjective extends Model
             ->withTimestamps();
     }
 
+    /**
+     * The curricular items this objective works, chosen by the teacher from
+     * the catalog of the plan's program (screen 13, P13-DEC-05).
+     */
+    public function curricularItems(): BelongsToMany
+    {
+        return $this->belongsToMany(CurricularItem::class, 'unit_objective_curricular_item')
+            ->withTimestamps();
+    }
+
     public function assessments(): BelongsToMany
     {
         return $this->belongsToMany(Assessment::class, 'assessment_unit_objective')
