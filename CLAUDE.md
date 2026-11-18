@@ -158,6 +158,12 @@ skeleton is done, until explicitly asked:
     if needed and keeps other classes' records) and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
     optional time and room (`PATCH /v1/class-sessions/{id}`) plus the teacher's
     private «Mis horarios» (`TimetableSlot`, pre-fill only).
+  - Screen 13 «Unidad» (ClickUp 1dfd3mc4bga): the unit screen with its
+    planner values (`units.planner_values`, keyed by the resolved planner
+    field), each objective's curricular items (`unit_objective_curricular_item`,
+    picked from the program catalog) and the «A mano» side panel. «Nueva clase
+    desde esta unidad», the PTP block and the group's resources are not there
+    yet (their own tasks).
   The AI-proposal engine itself (`AIProposal`,
   `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
   full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
