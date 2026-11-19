@@ -85,6 +85,16 @@ class InstitutionalEventRequest extends FormRequest
                     ->whereKey(array_filter(array_column($targets, 'grade_id')))
                     ->get()
                     ->keyBy('id');
+                // On edit, a program already stored on this event for that
+                // grade stays valid even if the school stopped offering it,
+                // so editing the title does not lock the event.
+                /** @var CalendarEvent|null $event */
+                $event = $this->route('calendarEvent');
+                $stored = $event === null ? collect() : $event->audiences()
+                    ->whereNotNull('curricular_framework_id')
+                    ->get(['school_grade_id', 'curricular_framework_id'])
+                    ->map(fn ($row): string => ((int) $row->school_grade_id).'-'.((int) $row->curricular_framework_id))
+                    ->flip();
                 $seen = [];
 
                 foreach (array_values($targets) as $index => $target) {
@@ -98,7 +108,7 @@ class InstitutionalEventRequest extends FormRequest
                         continue;
                     }
 
-                    if ($framework !== null) {
+                    if ($framework !== null && ! ($grade !== null && $stored->has(((int) $grade).'-'.((int) $framework)))) {
                         if ($grade === null) {
                             $validator->errors()->add("audience.{$index}.framework_id", 'A program is chosen within a grade.');
 

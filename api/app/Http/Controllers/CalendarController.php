@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The Calendar (screen 21, ClickUp 1dfd3mc4bgh): the feed of each person's
@@ -49,13 +50,19 @@ class CalendarController extends Controller
 
     public function store(InstitutionalEventRequest $request): JsonResponse
     {
-        $event = CalendarEvent::create([
-            ...$this->eventAttributes($request->validated()),
-            'type' => CalendarEventType::Institutional->value,
-            'created_by_id' => $request->user()->id,
-        ]);
+        // One transaction: an event saved without its targets would mean
+        // «Todo el colegio», widening who sees it.
+        $event = DB::transaction(function () use ($request): CalendarEvent {
+            $event = CalendarEvent::create([
+                ...$this->eventAttributes($request->validated()),
+                'type' => CalendarEventType::Institutional->value,
+                'created_by_id' => $request->user()->id,
+            ]);
 
-        $this->audience->replace($event, $request->audience() ?? []);
+            $this->audience->replace($event, $request->audience() ?? []);
+
+            return $event;
+        });
 
         return response()->json(['data' => $this->present($event)], 201);
     }
@@ -64,19 +71,21 @@ class CalendarController extends Controller
     {
         $current = $this->present($calendarEvent);
 
-        $calendarEvent->update($this->eventAttributes([
-            'title' => $current['title'],
-            'date' => $current['date'],
-            'time' => $current['time'],
-            'location' => $current['location'],
-            'description' => $current['description'],
-            ...$request->validated(),
-        ]));
+        DB::transaction(function () use ($request, $calendarEvent, $current): void {
+            $calendarEvent->update($this->eventAttributes([
+                'title' => $current['title'],
+                'date' => $current['date'],
+                'time' => $current['time'],
+                'location' => $current['location'],
+                'description' => $current['description'],
+                ...$request->validated(),
+            ]));
 
-        $audience = $request->audience();
-        if ($audience !== null) {
-            $this->audience->replace($calendarEvent, $audience);
-        }
+            $audience = $request->audience();
+            if ($audience !== null) {
+                $this->audience->replace($calendarEvent, $audience);
+            }
+        });
 
         return response()->json(['data' => $this->present($calendarEvent)]);
     }

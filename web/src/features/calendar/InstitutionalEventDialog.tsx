@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { CalendarItem, EventAudienceOptions } from "@/types"
+import type { CalendarItem, EventAudienceOptions, EventAudienceTarget } from "@/types"
 import {
   createInstitutionalEvent,
   fetchAudienceOptions,
@@ -135,6 +135,7 @@ export function InstitutionalEventDialog({
           <AudiencePicker
             wholeSchool={wholeSchool}
             targets={audience}
+            stored={item?.audience}
             onWholeSchool={(value) => {
               setWholeSchool(value)
               setAudienceError(null)
@@ -173,11 +174,14 @@ function sameTarget(a: AudienceTargetInput, b: AudienceTargetInput): boolean {
 export function AudiencePicker({
   wholeSchool,
   targets,
+  stored,
   onWholeSchool,
   onChange,
 }: {
   wholeSchool: boolean
   targets: AudienceTargetInput[]
+  /** The event's saved targets: their names label a program no longer offered. */
+  stored?: readonly EventAudienceTarget[]
   onWholeSchool: (value: boolean) => void
   onChange: (targets: AudienceTargetInput[]) => void
 }) {
@@ -230,9 +234,11 @@ export function AudiencePicker({
   }
 
   function generationLabel(target: AudienceTargetInput): string {
-    const grade = grades.find((item) => item.id === target.grade_id)?.label ?? "Generación"
-    const framework = options?.frameworks.find((item) => item.id === target.framework_id)
-    return framework ? `${framework.name} en ${grade}` : grade
+    const saved = stored?.find((item) => item.grade?.id === target.grade_id && item.framework?.id === target.framework_id)
+    const grade = grades.find((item) => item.id === target.grade_id)?.label ?? saved?.grade?.label ?? "Generación"
+    if (target.framework_id === undefined) return grade
+    const framework = options?.frameworks.find((item) => item.id === target.framework_id)?.name ?? saved?.framework?.name
+    return `${framework ?? "Un programa"} en ${grade}`
   }
 
   return (

@@ -295,3 +295,45 @@ it('matches a program target only in groups whose offering follows it', function
         ->and($audience->concerns($event, $audience->groupsOf(audienceTeacher($school, 'primary', 'primary_4', $cambridge))))->toBeFalse()
         ->and($audience->concerns($event, $audience->groupsOf(audienceTeacher($school, 'primary', 'primary_3'))))->toBeFalse();
 });
+
+it('keeps an event editable when the school stops offering a program it already targets, but never re-adds it', function () {
+    ['school' => $school, 'director' => $director, 'cambridge' => $cambridge] = audienceSchool();
+    Sanctum::actingAs($director);
+    $target = ['grade_id' => audienceGradeId('primary_3'), 'framework_id' => $cambridge->id];
+
+    $id = $this->postJson('/api/v1/calendar-events', ['title' => 'Feria', 'date' => '2026-12-10', 'audience' => [$target]])
+        ->assertCreated()
+        ->json('data.id');
+    $school->curricularFrameworks()->updateExistingPivot($cambridge->id, ['active' => false]);
+
+    // The dialog always sends the audience back on edit.
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['title' => 'Feria de ciencias', 'audience' => [$target]])
+        ->assertOk()
+        ->assertJsonPath('data.audience.0.framework.id', $cambridge->id);
+
+    // A grade it did not target before is a new target: the program must be offered.
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['audience' => [['grade_id' => audienceGradeId('primary_4'), 'framework_id' => $cambridge->id]]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['audience.0.framework_id']);
+
+    // Nor on a new event.
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Otra', 'date' => '2026-12-11', 'audience' => [$target]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['audience.0.framework_id']);
+});
+
+it('saves nothing when a target cannot be stored, instead of leaving an event for the whole school', function () {
+    ['director' => $director] = audienceSchool();
+    Sanctum::actingAs($director);
+    $this->mock(EventAudience::class, function ($mock): void {
+        $mock->shouldReceive('pickableFrameworks')->andReturn(collect());
+        $mock->shouldReceive('replace')->andThrow(new RuntimeException('insert failed'));
+    });
+
+    $this->withoutExceptionHandling();
+    expect(fn () => $this->postJson('/api/v1/calendar-events', [
+        'title' => 'Acto', 'date' => '2026-12-15', 'audience' => [['level_id' => audienceLevelId('primary')]],
+    ]))->toThrow(RuntimeException::class);
+
+    expect(CalendarEvent::query()->count())->toBe(0);
+});
