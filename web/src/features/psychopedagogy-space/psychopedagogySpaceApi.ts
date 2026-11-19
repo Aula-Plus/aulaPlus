@@ -93,9 +93,18 @@ export async function deleteCompanion(id: number): Promise<void> {
   await api.delete(`/api/v1/psychopedagogy/companions/${id}`)
 }
 
-export async function fetchSheets(): Promise<MeetingSheetRow[]> {
-  const { data } = await api.get<{ data: MeetingSheetRow[] }>("/api/v1/psychopedagogy/sheets")
-  return data.data
+export interface SheetsPage {
+  rows: MeetingSheetRow[]
+  meta: { current_page: number; last_page: number; total: number }
+}
+
+/** Newest first, a page at a time («Ver más»). */
+export async function fetchSheets(page = 1): Promise<SheetsPage> {
+  const { data } = await api.get<{ data: MeetingSheetRow[]; meta: SheetsPage["meta"] }>(
+    "/api/v1/psychopedagogy/sheets",
+    { params: { page } },
+  )
+  return { rows: data.data, meta: data.meta }
 }
 
 export async function fetchSheet(id: number): Promise<MeetingSheet> {

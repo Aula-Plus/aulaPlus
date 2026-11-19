@@ -105,6 +105,11 @@ export interface Student {
   birth_date: string | null
   enrollment_year: number
   has_therapeutic_companion: boolean
+  /**
+   * Only on a single student: the flag comes from the companion records of
+   * the Espacio de psicopedagogía, so the form can't change it.
+   */
+  therapeutic_companion_records?: boolean
   groups: { id: number; name: string; school_year: number }[]
   // Absent from the JSON (not null) when the viewer lacks
   // view-clinical-profile on this student.

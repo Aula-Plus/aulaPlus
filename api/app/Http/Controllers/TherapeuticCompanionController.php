@@ -27,6 +27,8 @@ class TherapeuticCompanionController extends Controller
             ->with(['student' => fn ($student) => $student->select('id', 'school_id', 'full_name')->with([
                 'groups' => fn ($groups) => $groups->wherePivot('school_year', $year)->select('groups.id', 'groups.name'),
             ])])
+            // A removed (soft-deleted) student's companions are not active.
+            ->whereHas('student')
             ->orderBy('name')
             ->get();
 

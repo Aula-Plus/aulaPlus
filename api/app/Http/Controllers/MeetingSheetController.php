@@ -26,6 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class MeetingSheetController extends Controller
 {
+    public const PER_PAGE = 50;
+
     public function __construct(protected MeetingSheetSplit $split) {}
 
     public function index(Request $request): JsonResponse
@@ -38,11 +40,17 @@ class MeetingSheetController extends Controller
             ->when($full, fn ($query) => $query->with(['students:id,full_name', 'attendees:id,name'])->withCount('actions'))
             ->orderByDesc('held_on')
             ->orderByDesc('id')
-            ->limit(200)
-            ->get();
+            // Sheets pile up all year and are meant to be crossed years later
+            // (P10-DEC-01): paged, «Ver más» in the SPA.
+            ->paginate(self::PER_PAGE);
 
         return response()->json([
-            'data' => $sheets->map(function (MeetingSheet $sheet) use ($full): array {
+            'meta' => [
+                'current_page' => $sheets->currentPage(),
+                'last_page' => $sheets->lastPage(),
+                'total' => $sheets->total(),
+            ],
+            'data' => $sheets->getCollection()->map(function (MeetingSheet $sheet) use ($full): array {
                 $row = [
                     'id' => $sheet->id,
                     'held_on' => $sheet->held_on->toDateString(),
@@ -89,11 +97,12 @@ class MeetingSheetController extends Controller
 
     public function update(MeetingSheetRequest $request, MeetingSheet $sheet): JsonResponse
     {
-        if ($sheet->isConfirmed()) {
-            return response()->json(['message' => 'A confirmed sheet can no longer be edited.'], 422);
-        }
-
         DB::transaction(function () use ($request, $sheet): void {
+            // Under a lock, so a confirmation running at the same time either
+            // lands before (and this answers 422) or sees this edit whole.
+            $locked = MeetingSheet::query()->whereKey($sheet->id)->lockForUpdate()->firstOrFail();
+            abort_if($locked->isConfirmed(), 422, 'A confirmed sheet can no longer be edited.');
+
             $sheet->update($this->attributes($request));
             $this->syncParts($sheet, $request);
         });
@@ -109,13 +118,8 @@ class MeetingSheetController extends Controller
     {
         $this->authorize('confirm', $sheet);
 
-        if ($sheet->isConfirmed()) {
-            return response()->json(['message' => 'This sheet was already confirmed.'], 422);
-        }
-        if (! $sheet->fragments()->exists()) {
-            return response()->json(['message' => 'Write at least one fragment before confirming.'], 422);
-        }
-
+        // Already confirmed, no fragments, a removed student: answered with a
+        // 422 by the split, which checks them under a lock.
         $this->split->confirm($sheet, $request->user());
 
         return response()->json(['data' => $this->present($sheet->fresh())]);

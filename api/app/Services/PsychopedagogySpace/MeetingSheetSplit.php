@@ -38,9 +38,25 @@ class MeetingSheetSplit
 {
     public function confirm(MeetingSheet $sheet, User $confirmer): MeetingSheet
     {
-        $sheet->loadMissing(['sheetType', 'fragments.student', 'attendees', 'actions.owner']);
-
         DB::transaction(function () use ($sheet, $confirmer): void {
+            // Lock the sheet and read it again under the lock: a second
+            // confirmation (another tab, another psychopedagogue) or an
+            // «Editar antes» racing this one must not land the fragments twice
+            // or swap them while they are being copied into the files.
+            $locked = MeetingSheet::query()->whereKey($sheet->id)->lockForUpdate()->firstOrFail();
+            abort_if($locked->isConfirmed(), 422, 'This sheet was already confirmed.');
+
+            $sheet->setRawAttributes($locked->getAttributes(), true);
+            $sheet->load(['sheetType', 'fragments.student', 'attendees', 'actions.owner']);
+
+            abort_if($sheet->fragments->isEmpty(), 422, 'Write at least one fragment before confirming.');
+            // A discussed student removed while the sheet was a draft.
+            abort_if(
+                $sheet->fragments->contains(fn (MeetingSheetFragment $fragment) => $fragment->student === null),
+                422,
+                'A discussed student is no longer enrolled; edit the sheet before confirming.',
+            );
+
             foreach ($sheet->fragments as $fragment) {
                 $comment = new Comment([
                     'author_id' => $confirmer->id,

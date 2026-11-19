@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,15 +20,60 @@ import { observationScopeLabels } from "./spaceText"
  */
 export function SheetsTab({ works }: { works: boolean }) {
   const [sheets, setSheets] = useState<MeetingSheetRow[] | null>(null)
+  const [page, setPage] = useState({ current: 1, last: 1 })
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Ignores a page that arrives after a newer reload started.
+  const generation = useRef(0)
 
   const load = useCallback(() => {
-    fetchSheets().then(setSheets, () => setError("No pudimos cargar las planillas."))
+    const mine = ++generation.current
+    fetchSheets().then(
+      (result) => {
+        if (mine !== generation.current) return
+        setError(null)
+        setSheets(result.rows)
+        setPage({ current: result.meta.current_page, last: result.meta.last_page })
+      },
+      () => {
+        if (mine === generation.current) setError("No pudimos cargar las planillas.")
+      },
+    )
   }, [])
 
   useEffect(() => {
     load()
+    return () => {
+      generation.current++
+    }
   }, [load])
+
+  async function loadMore() {
+    const mine = generation.current
+    setLoadingMore(true)
+    try {
+      const result = await fetchSheets(page.current + 1)
+      if (mine !== generation.current) return
+      setSheets((previous) => {
+        const seen = new Set((previous ?? []).map((sheet) => sheet.id))
+        return [...(previous ?? []), ...result.rows.filter((sheet) => !seen.has(sheet.id))]
+      })
+      setPage({ current: result.meta.current_page, last: result.meta.last_page })
+    } catch {
+      if (mine === generation.current) setError("No pudimos cargar más planillas.")
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const more =
+    page.current < page.last ? (
+      <div className="mt-3 flex justify-center">
+        <Button size="sm" variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
+          {loadingMore ? "Cargando…" : "Ver más"}
+        </Button>
+      </div>
+    ) : null
 
   if (!works) {
     return (
@@ -39,11 +84,12 @@ export function SheetsTab({ works }: { works: boolean }) {
         </p>
         {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
         <SheetsTable sheets={sheets} />
+        {more}
       </SectionCard>
     )
   }
 
-  return <TeamSheets sheets={sheets} error={error} reload={load} />
+  return <TeamSheets sheets={sheets} error={error} reload={load} more={more} />
 }
 
 function scopeOf(sheet: { group: { name: string } | null }): string {
@@ -106,10 +152,12 @@ function TeamSheets({
   sheets,
   error,
   reload,
+  more,
 }: {
   sheets: MeetingSheetRow[] | null
   error: string | null
   reload: () => void
+  more: ReactNode
 }) {
   const options = useSheetFormOptions()
   const [creating, setCreating] = useState(false)
@@ -148,6 +196,7 @@ function TeamSheets({
       >
         {(error || openError) && <p className="mb-3 text-sm text-destructive">{error ?? openError}</p>}
         <SheetsTable sheets={sheets} onOpen={(row) => void openSheet(row)} />
+        {more}
       </SectionCard>
       {open && (
         <SheetDetail

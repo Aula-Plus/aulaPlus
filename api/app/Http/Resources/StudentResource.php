@@ -38,6 +38,12 @@ class StudentResource extends JsonResource
             'birth_date' => $this->birth_date?->toDateString(),
             'enrollment_year' => $this->enrollment_year,
             'has_therapeutic_companion' => $this->has_therapeutic_companion,
+            // Whether the flag comes from screen 10's companion records (and
+            // the form can no longer change it). Only on show/update.
+            'therapeutic_companion_records' => $this->when(
+                $this->resource->therapeutic_companions_count !== null,
+                fn () => $this->resource->therapeutic_companions_count > 0,
+            ),
             'groups' => $this->whenLoaded('groups', fn () => $this->groups->map(fn ($group) => [
                 'id' => $group->id,
                 'name' => $group->name,

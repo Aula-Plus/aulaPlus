@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\MeetingSheetController;
 use App\Models\Comment;
 use App\Models\Group;
 use App\Models\MeetingSheet;
@@ -320,4 +321,97 @@ it('lets direction rename and add sheet types, and nobody else', function () {
     $this->postJson('/api/v1/meeting-sheet-types', ['name' => 'Entrevista con familia'])->assertUnprocessable();
     $this->getJson('/api/v1/meeting-sheet-types')->assertOk()->assertJsonCount(4, 'data')
         ->assertJsonPath('data.0.name', 'Reunión docente');
+});
+
+it('confirms a sheet only once and never edits a confirmed one', function () {
+    ['psycho' => $psycho, 'lucia' => $lucia, 'types' => $types] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    $payload = [
+        'meeting_sheet_type_id' => $types[1]->id, 'held_on' => '2026-11-17', 'student_ids' => [$lucia->id], 'content' => 'Entrevista.',
+        'fragments' => [['student_id' => $lucia->id, 'content' => 'Primero.', 'scope' => 'psychopedagogue']],
+    ];
+    $id = $this->postJson('/api/v1/psychopedagogy/sheets', $payload)->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$id}/confirm")->assertOk()->assertJsonPath('data.status', 'confirmed');
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$id}/confirm")->assertUnprocessable();
+    $this->putJson("/api/v1/psychopedagogy/sheets/{$id}", [...$payload, 'fragments' => [
+        ['student_id' => $lucia->id, 'content' => 'Otro.', 'scope' => 'everyone'],
+    ]])->assertUnprocessable();
+
+    expect(Comment::withoutGlobalScopes()->count())->toBe(1)
+        ->and(Comment::withoutGlobalScopes()->sole()->content)->toEndWith('Primero.')
+        ->and(MeetingSheet::withoutGlobalScopes()->findOrFail($id)->fragments()->sole()->content)->toBe('Primero.');
+});
+
+it('does not confirm a sheet about a student removed while it was a draft', function () {
+    Notification::fake();
+    ['psycho' => $psycho, 'lucia' => $lucia, 'nicolas' => $nicolas, 'types' => $types] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    $id = $this->postJson('/api/v1/psychopedagogy/sheets', [
+        'meeting_sheet_type_id' => $types[0]->id, 'held_on' => '2026-11-18', 'student_ids' => [$lucia->id, $nicolas->id], 'content' => 'x',
+        'fragments' => [
+            ['student_id' => $lucia->id, 'content' => 'a', 'scope' => 'everyone'],
+            ['student_id' => $nicolas->id, 'content' => 'b', 'scope' => 'everyone'],
+        ],
+    ])->assertCreated()->json('data.id');
+    $nicolas->delete();
+
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$id}/confirm")->assertUnprocessable();
+
+    expect(Comment::withoutGlobalScopes()->count())->toBe(0)
+        ->and(MeetingSheet::withoutGlobalScopes()->findOrFail($id)->isConfirmed())->toBeFalse();
+    Notification::assertNothingSent();
+});
+
+it('pages the sheets list', function () {
+    ['school' => $school, 'psycho' => $psycho, 'director' => $director, 'types' => $types] = spaceScenario();
+    Tenancy::useSchool($school);
+    foreach (range(1, MeetingSheetController::PER_PAGE + 1) as $day) {
+        MeetingSheet::query()->forceCreate([
+            'school_id' => $school->id, 'meeting_sheet_type_id' => $types[0]->id, 'held_on' => now()->subDays($day)->toDateString(),
+            'content' => 'x', 'created_by_id' => $psycho->id,
+        ]);
+    }
+
+    foreach ([$psycho, $director] as $user) {
+        Sanctum::actingAs($user);
+        $this->getJson('/api/v1/psychopedagogy/sheets')->assertOk()
+            ->assertJsonCount(MeetingSheetController::PER_PAGE, 'data')
+            ->assertJsonPath('meta.last_page', 2);
+        $this->getJson('/api/v1/psychopedagogy/sheets?page=2')->assertOk()->assertJsonCount(1, 'data');
+    }
+});
+
+it('counts only companions of enrolled students', function () {
+    ['psycho' => $psycho, 'lucia' => $lucia, 'nicolas' => $nicolas] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    foreach ([$lucia, $nicolas] as $student) {
+        $this->postJson('/api/v1/psychopedagogy/companions', [
+            'student_id' => $student->id, 'name' => 'AT', 'weekly_hours' => 4, 'days' => ['monday'],
+        ])->assertCreated();
+    }
+    $nicolas->delete();
+
+    $this->getJson('/api/v1/psychopedagogy/overview')->assertOk()->assertJsonPath('data.active_companions', 1);
+    $this->getJson('/api/v1/psychopedagogy/companions')->assertOk()->assertJsonCount(1, 'data');
+});
+
+it('lets the companion records decide the student flag, not the student form', function () {
+    ['psycho' => $psycho, 'director' => $director, 'lucia' => $lucia, 'nicolas' => $nicolas] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    $this->postJson('/api/v1/psychopedagogy/companions', [
+        'student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['tuesday'],
+    ])->assertCreated();
+
+    Sanctum::actingAs($director);
+    $this->getJson("/api/students/{$lucia->id}")->assertOk()->assertJsonPath('data.therapeutic_companion_records', true);
+    $this->putJson("/api/students/{$lucia->id}", ['full_name' => 'Lucía Pereyra', 'enrollment_year' => 2024, 'has_therapeutic_companion' => false])
+        ->assertOk()
+        ->assertJsonPath('data.has_therapeutic_companion', true);
+
+    // Without records the form still sets it.
+    $this->putJson("/api/students/{$nicolas->id}", ['full_name' => 'Nicolás Sosa', 'enrollment_year' => 2024, 'has_therapeutic_companion' => true])
+        ->assertOk()
+        ->assertJsonPath('data.has_therapeutic_companion', true)
+        ->assertJsonPath('data.therapeutic_companion_records', false);
 });

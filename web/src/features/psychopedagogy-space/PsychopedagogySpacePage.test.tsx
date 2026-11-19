@@ -97,10 +97,13 @@ describe("PsychopedagogySpacePage", () => {
 
   it("lists only date, type and scope of each sheet for Dirección", async () => {
     currentRole = "director"
-    vi.spyOn(spaceApi, "fetchSheets").mockResolvedValue([
-      { id: 1, held_on: "2026-11-18", sheet_type: { id: 1, name: "Reunión de profesores" }, group: { id: 9, name: "2°EMS-A" } },
-      { id: 2, held_on: "2026-11-17", sheet_type: { id: 2, name: "Entrevista con familia" }, group: null },
-    ])
+    vi.spyOn(spaceApi, "fetchSheets").mockResolvedValue({
+      rows: [
+        { id: 1, held_on: "2026-11-18", sheet_type: { id: 1, name: "Reunión de profesores" }, group: { id: 9, name: "2°EMS-A" } },
+        { id: 2, held_on: "2026-11-17", sheet_type: { id: 2, name: "Entrevista con familia" }, group: null },
+      ],
+      meta: { current_page: 1, last_page: 1, total: 2 },
+    })
     renderPage("/espacio-psicopedagogia?solapa=planillas")
 
     expect(await screen.findByText("Planillas registradas")).toBeInTheDocument()
@@ -108,6 +111,30 @@ describe("PsychopedagogySpacePage", () => {
     expect(screen.getByText("2°EMS-A")).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Abrir" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /Nueva planilla/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Ver más" })).not.toBeInTheDocument()
+  })
+
+  it("loads older sheets with «Ver más»", async () => {
+    currentRole = "director"
+    const fetchSheets = vi.spyOn(spaceApi, "fetchSheets").mockImplementation(async (page = 1) =>
+      page === 1
+        ? {
+            rows: [{ id: 1, held_on: "2026-11-18", sheet_type: { id: 1, name: "Reunión de profesores" }, group: null }],
+            meta: { current_page: 1, last_page: 2, total: 2 },
+          }
+        : {
+            rows: [{ id: 2, held_on: "2025-03-10", sheet_type: { id: 2, name: "Entrevista con familia" }, group: null }],
+            meta: { current_page: 2, last_page: 2, total: 2 },
+          },
+    )
+    renderPage("/espacio-psicopedagogia?solapa=planillas")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Ver más" }))
+
+    expect(await screen.findByText("Entrevista con familia")).toBeInTheDocument()
+    expect(screen.getByText("Reunión de profesores")).toBeInTheDocument()
+    expect(fetchSheets).toHaveBeenLastCalledWith(2)
+    expect(screen.queryByRole("button", { name: "Ver más" })).not.toBeInTheDocument()
   })
 })
 

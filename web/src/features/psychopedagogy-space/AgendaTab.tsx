@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -94,18 +94,29 @@ function TeamAgenda({ onChanged }: { onChanged: () => void }) {
   const [sheetFor, setSheetFor] = useState<PsychopedagogyMeeting | null>(null)
   const options = useSheetFormOptions()
 
+  // Only the latest request counts: a slower answer for a week left behind
+  // must not show under the current one.
+  const latest = useRef(0)
+
   const load = useCallback(() => {
+    const mine = ++latest.current
     fetchMeetings(week).then(
       (list) => {
+        if (mine !== latest.current) return
         setError(null)
         setMeetings(list)
       },
-      () => setError("No pudimos cargar la agenda."),
+      () => {
+        if (mine === latest.current) setError("No pudimos cargar la agenda.")
+      },
     )
   }, [week])
 
   useEffect(() => {
     load()
+    return () => {
+      latest.current++
+    }
   }, [load])
 
   function changed() {
