@@ -6,6 +6,7 @@ import { FollowUpsSectionView } from "@/features/tracking/FollowUpsSection"
 import { useFollowUpsInbox } from "@/features/tracking/useFollowUpsInbox"
 import { TodayInCalendar } from "@/features/calendar/TodayInCalendar"
 import { AnnualReviewTask } from "@/features/accommodations-ptp/AnnualReviewTask"
+import { MeetingActionsTask } from "@/features/psychopedagogy-space/MeetingActionsTask"
 import { formatLongDate } from "@/lib/utils"
 
 /**
@@ -28,7 +29,8 @@ import { formatLongDate } from "@/lib/utils"
  * card below.
  *
  * Psychopedagogy also gets the single «Revisión anual: N alumnos» task row
- * (P01-DEC-06, ClickUp 1dfd3mc4bgc), apart from the follow-ups.
+ * (P01-DEC-06, ClickUp 1dfd3mc4bgc), apart from the follow-ups. Every role
+ * gets the actions of a meeting left to them (screen 10, P10-DEC-08).
  */
 export function DashboardPage() {
   const { user } = useAuth()
@@ -48,6 +50,7 @@ export function DashboardPage() {
       </AlertsSection>
       <FollowUpsSectionView inbox={inbox} compact />
       <AnnualReviewTask user={user} />
+      <MeetingActionsTask />
     </div>
   )
 }

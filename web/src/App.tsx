@@ -35,6 +35,7 @@ import { GroupComparisonPage } from "@/features/group-comparison/GroupComparison
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
 import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
+import { PsychopedagogySpacePage } from "@/features/psychopedagogy-space/PsychopedagogySpacePage"
 
 function App() {
   return (
@@ -239,6 +240,14 @@ function App() {
             }
           />
           {/* Ajustes y PTP (screen 06): psychopedagogy's inbox; other roles get its note. */}
+          <Route
+            path="/espacio-psicopedagogia"
+            element={
+              <ProtectedLayout>
+                <PsychopedagogySpacePage />
+              </ProtectedLayout>
+            }
+          />
           <Route
             path="/ajustes-y-ptp"
             element={

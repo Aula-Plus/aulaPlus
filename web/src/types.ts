@@ -900,6 +900,12 @@ export interface AccommodationChip extends SupportChip, AccommodationScope {}
 
 export interface StudentTracking {
   student: Student
+  /**
+   * Who accompanies the student (screen 10). Name, weekly hours and days for
+   * everyone who sees the file; `reason` only for Psicopedagogía. Optional:
+   * older payloads (and test fixtures) may not carry it.
+   */
+  therapeutic_companions?: TherapeuticCompanion[]
   /** `null` until psychopedagogy writes and confirms it. */
   team_summary: TeamSummary | null
   support_chips: { accommodations: AccommodationChip[]; barriers: SupportChip[] }
@@ -1263,6 +1269,8 @@ export interface AppNotification {
     | AccommodationConfirmedNotice
     | CommentSharedNotice
     | ScreeningDesignNotice
+    | MeetingSheetFragmentNotice
+    | MeetingActionAssignedNotice
   /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
   read_at?: string | null
   created_at: string | null
@@ -2047,4 +2055,144 @@ export const calendarBodyLabels: Record<CalendarBody, string> = {
   anep_upper_secondary: "ANEP Bachillerato",
   cambridge: "Cambridge",
   ib: "IB",
+}
+
+// ── Espacio de psicopedagogía (screen 10, ClickUp 1dfd3mc4bge) ──────────────
+
+/**
+ * A meeting sheet's fragment about a student landed in the file, where I can
+ * read it (P10-DEC-07). Ids only; the server adds `student_name` at read time.
+ */
+export interface MeetingSheetFragmentNotice {
+  type: "meeting_sheet_fragment"
+  student_id: number
+  comment_id: number | null
+  student_name?: string | null
+}
+
+/** An action agreed in a meeting was left to me, with its deadline. */
+export interface MeetingActionAssignedNotice {
+  type: "meeting_action_assigned"
+  meeting_sheet_action_id: number
+  due_date: string
+}
+
+export type Weekday = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"
+
+export const weekdayNameLabels: Record<Weekday, string> = {
+  monday: "Lunes",
+  tuesday: "Martes",
+  wednesday: "Miércoles",
+  thursday: "Jueves",
+  friday: "Viernes",
+  saturday: "Sábado",
+}
+
+export const WEEKDAYS: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+
+/** The four presets of an observation's «Visible para» (`App\Enums\ObservationScope`). */
+export type ObservationScope = "everyone" | "direction_and_psychopedagogy" | "psychopedagogue" | "author_only"
+
+export interface NamedRef {
+  id: number
+  name: string
+}
+
+/** A therapeutic companion: a record, not an account. `reason` only reaches Psicopedagogía. */
+export interface TherapeuticCompanion {
+  id: number
+  name: string
+  weekly_hours: number
+  days: Weekday[]
+  reason?: string | null
+  student?: NamedRef | null
+  group?: NamedRef | null
+}
+
+export interface MeetingSheetType {
+  id: number
+  name: string
+  position: number
+}
+
+/** Header counts and «Carga de la semana»: never with whom. */
+export interface PsychopedagogyOverview {
+  week_start: string
+  week_end: string
+  meetings_this_week: number
+  active_companions: number
+  workload: { key: string; meeting_sheet_type_id: number | null; name: string | null; count: number }[]
+}
+
+export type PsychopedagogyMeetingKind = "individual_session" | "meeting"
+
+export interface PsychopedagogyMeeting {
+  id: number
+  kind: PsychopedagogyMeetingKind
+  sheet_type: NamedRef | null
+  scheduled_on: string
+  start_time: string
+  student: NamedRef | null
+  group: NamedRef | null
+  attendees: NamedRef[]
+  external_attendees: string | null
+  status: "scheduled" | "done"
+  has_note: boolean
+  sheet: { id: number; status: MeetingSheetStatus } | null
+}
+
+export type MeetingSheetStatus = "draft" | "confirmed"
+
+/** A row of «Planillas». Dirección gets only id, date, type and group. */
+export interface MeetingSheetRow {
+  id: number
+  held_on: string
+  sheet_type: NamedRef
+  group: NamedRef | null
+  status?: MeetingSheetStatus
+  students?: NamedRef[]
+  attendees?: NamedRef[]
+  actions_count?: number
+}
+
+export interface MeetingSheetFragment {
+  id?: number
+  student_id: number
+  content: string
+  scope: ObservationScope
+  landed?: boolean
+}
+
+export interface MeetingSheetActionItem {
+  id?: number
+  description: string
+  owner: NamedRef | null
+  due_on: string
+  done?: boolean
+}
+
+export interface MeetingSheet {
+  id: number
+  held_on: string
+  sheet_type: NamedRef
+  psychopedagogy_meeting_id: number | null
+  group: NamedRef | null
+  attendees: NamedRef[]
+  external_attendees: string | null
+  students: NamedRef[]
+  content: string
+  fragments: MeetingSheetFragment[]
+  actions: MeetingSheetActionItem[]
+  status: MeetingSheetStatus
+  confirmed_at: string | null
+  confirmed_by_name: string | null
+}
+
+/** An action of a meeting that is a task of mine (Inicio). */
+export interface MyMeetingAction {
+  id: number
+  description: string
+  due_on: string
+  done: boolean
+  meeting: { sheet_type_name: string; held_on: string }
 }
