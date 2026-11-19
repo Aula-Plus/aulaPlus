@@ -146,6 +146,34 @@ describe("ClassProposalPage", () => {
     )
   })
 
+  it("lets the teacher decide on the regenerated draft (no leftover busy state)", async () => {
+    vi.spyOn(classesApi, "fetchProposal").mockImplementation(async (id: number) =>
+      id === 40 ? makeProposal() : makeProposal({ id: 41 }),
+    )
+    vi.spyOn(classesApi, "requestClassProposal").mockResolvedValue(makeProposal({ id: 41, status: "pending" }))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "Regenerar Cierre" }))
+    await user.click(screen.getByRole("button", { name: "Regenerar la sección" }))
+
+    await waitFor(() => expect(classesApi.fetchProposal).toHaveBeenCalledWith(41))
+    await waitFor(() => expect(screen.getByRole("button", { name: "Aprobar Cierre" })).toBeEnabled())
+  })
+
+  it("keeps polling after a failed poll instead of showing an error", async () => {
+    vi.spyOn(classesApi, "fetchProposal")
+      .mockResolvedValueOnce(makeProposal({ status: "pending", raw_response: null }))
+      .mockRejectedValueOnce(new Error("502"))
+      .mockResolvedValue(makeProposal())
+    renderPage()
+
+    expect(
+      await screen.findByRole("heading", { name: "Comparar fracciones con tiras" }, { timeout: 7000 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("No pudimos cargar la propuesta.")).not.toBeInTheDocument()
+  }, 10000)
+
   it("is read-only for Psicopedagogía and Dirección", async () => {
     vi.spyOn(classesApi, "fetchProposal").mockResolvedValue(makeProposal({ can_decide: false }))
     renderPage()

@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\AI\ApplyProposal;
 use App\Actions\AI\BuildProposalContext;
 use App\Enums\AIProposalStatus;
 use App\Enums\AIProposalType;
@@ -22,6 +23,7 @@ use App\Support\Tenancy;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /*
  * Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0):
@@ -590,4 +592,36 @@ it('lists «Tus clases»: the teacher\'s open drafts and classes, nothing for sc
 
     Sanctum::actingAs(User::factory()->forSchool($s['school'])->director()->create());
     $this->getJson('/api/v1/my-classes')->assertOk()->assertJsonCount(0, 'data.drafts')->assertJsonCount(0, 'data.classes');
+});
+
+it('corrects a «Todo» close to «Nada»: the class is no longer delivered', function () {
+    $this->travelTo('2026-11-19 12:00:00');
+    $s = mathClassSetup();
+    $class = confirmedClass($s);
+    Sanctum::actingAs($s['teacher']);
+
+    $this->postJson("/api/v1/class-sessions/{$class->id}/close", ['result' => 'full'])->assertOk();
+    $this->postJson("/api/v1/class-sessions/{$class->id}/close", ['result' => 'none'])->assertOk();
+
+    expect($class->refresh()->status)->toBe(ClassSessionStatus::Planned)
+        ->and($class->closing_result?->value)->toBe('none');
+    $this->getJson("/api/v1/annual-plans/{$s['plan']->id}")->assertJsonPath('data.coverage.objectives_given', 0);
+});
+
+it('never applies the same class draft twice', function () {
+    $s = mathClassSetup();
+    $proposal = completedClassProposal($s);
+    Sanctum::actingAs($s['teacher']);
+
+    $this->postJson("/api/v1/ai-proposals/{$proposal->id}/apply", sectionDecisions())->assertOk();
+    $this->postJson("/api/v1/ai-proposals/{$proposal->id}/apply", sectionDecisions())->assertUnprocessable();
+
+    // Even when the stale, already-loaded draft reaches the action (a request
+    // that passed the controller's check before the other one committed).
+    $stale = $proposal->replicate()->forceFill(['id' => $proposal->id, 'status' => AIProposalStatus::Completed]);
+    $stale->exists = true;
+    expect(fn () => app(ApplyProposal::class)($stale, $s['teacher'], sectionDecisions()))
+        ->toThrow(HttpException::class);
+
+    expect(ClassSession::query()->count())->toBe(1);
 });

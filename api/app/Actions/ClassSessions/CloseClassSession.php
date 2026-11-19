@@ -45,7 +45,9 @@ class CloseClassSession
             $class->update([
                 'closing_result' => $result,
                 'closed_at' => now(),
-                'status' => $result === ObjectiveCoverage::None ? $class->status : ClassSessionStatus::Delivered,
+                // Closing again corrects the record: «Nada» after «Todo» is a
+                // class that was not given (a cancelled one can't be closed).
+                'status' => $result === ObjectiveCoverage::None ? ClassSessionStatus::Planned : ClassSessionStatus::Delivered,
             ]);
 
             return $class;

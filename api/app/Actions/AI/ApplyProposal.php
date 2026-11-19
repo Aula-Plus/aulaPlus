@@ -21,6 +21,7 @@ use App\Services\Calendar\TimetableSlotSuggester;
 use App\Support\UsageJourney;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Turns a completed AIProposal draft into the real domain entity
@@ -46,6 +47,15 @@ class ApplyProposal
     public function __invoke(AIProposal $proposal, User $applier, array $decisions = []): Model
     {
         return DB::transaction(function () use ($proposal, $applier, $decisions): Model {
+            // Re-check under a lock: two «Confirmar clase» at once (two tabs,
+            // a browser retry) must not create the entity twice.
+            $locked = AIProposal::query()->whereKey($proposal->id)->lockForUpdate()->firstOrFail();
+            abort_unless(
+                $locked->status === AIProposalStatus::Completed,
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+                'Only a completed proposal can be applied.',
+            );
+
             // The created entity's `*.created` usage event is the journey's
             // confirmed-creation step (ClickUp 86e3qkxtc).
             $entity = UsageJourney::within($proposal->journey_id, fn (): Model => match ($proposal->type) {

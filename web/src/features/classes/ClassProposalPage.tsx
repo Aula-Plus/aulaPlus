@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
 import { Check, Pencil, RefreshCw, X } from "lucide-react"
 
@@ -83,6 +83,14 @@ function initialDecisions(carried: Partial<Decisions> | undefined, draft: ClassD
  */
 export function ClassProposalPage() {
   const { id } = useParams()
+  // «Regenerar» navigates to the new draft's id on this same route: a fresh
+  // page per id, so nothing of the previous draft (busy, decisions being
+  // edited, errors) leaks into the new one.
+  return <ClassProposalView key={id} />
+}
+
+function ClassProposalView() {
+  const { id } = useParams()
   const proposalId = Number(id)
   const navigate = useNavigate()
   const location = useLocation()
@@ -93,17 +101,23 @@ export function ClassProposalPage() {
   const [decisions, setDecisions] = useState<Decisions>(() => initialDecisions(undefined, null))
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  // A failed poll (school wifi, a stray 502) retries instead of replacing the
+  // page with an error; only the first load shows one.
+  const loaded = useRef(false)
+  const [pollFailures, setPollFailures] = useState(0)
 
   const load = useCallback(
     () =>
       fetchProposal(proposalId)
         .then((next) => {
+          loaded.current = true
           setProposal(next)
           if (next.status === "completed") setDecisions(initialDecisions(carried, next.raw_response))
           return next
         })
         .catch(() => {
-          setLoadError("No pudimos cargar la propuesta.")
+          if (loaded.current) setPollFailures((count) => count + 1)
+          else setLoadError("No pudimos cargar la propuesta.")
           return null
         }),
     [proposalId, carried],
@@ -118,7 +132,7 @@ export function ClassProposalPage() {
     if (proposal?.status !== "pending") return
     const timer = setTimeout(() => void load(), POLL_INTERVAL_MS)
     return () => clearTimeout(timer)
-  }, [proposal, load])
+  }, [proposal, load, pollFailures])
 
   if (loadError) return <p className="text-sm text-destructive">{loadError}</p>
   if (!proposal) return <p className="text-sm text-muted-foreground">Cargando…</p>
