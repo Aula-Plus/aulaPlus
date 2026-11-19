@@ -1940,6 +1940,27 @@ export interface CalendarItem {
   place: string | null
   assessment_type: AssessmentType | null
   can_edit: boolean
+  /** Institutional events only: who it concerns (empty = the whole school). */
+  audience?: EventAudienceTarget[]
+  /** Institutional events only: whether it concerns the caller's groups. */
+  for_me?: boolean
+}
+
+/**
+ * One target of an institutional event's audience (ClickUp 1dfd3mc55zp): a
+ * level, a generation (grade), or a program within a generation. Labels are
+ * the catalog's own data.
+ */
+export interface EventAudienceTarget {
+  level: { id: number; key: string; label: string } | null
+  grade: { id: number; key: string; label: string } | null
+  framework: { id: number; name: string } | null
+}
+
+/** What Direction can pick as an event's audience (`/calendar-events/audience-options`). */
+export interface EventAudienceOptions {
+  levels: { id: number; key: string; label: string; grades: { id: number; key: string; label: string }[] }[]
+  frameworks: { id: number; name: string; education_levels: string[] | null }[]
 }
 
 /** An institutional event as returned by `/api/v1/calendar-events`. */
@@ -1951,6 +1972,7 @@ export interface InstitutionalEvent {
   time: string | null
   location: string | null
   description: string | null
+  audience: EventAudienceTarget[]
 }
 
 /** ISO weekday (1 = lunes … 7 = domingo) → Spanish label. */
