@@ -4,6 +4,8 @@ namespace App\Actions\AI;
 
 use App\Enums\AIProposalStatus;
 use App\Enums\AIProposalType;
+use App\Enums\ClassSection;
+use App\Enums\ClassSectionDecision;
 use App\Enums\ClassSessionStatus;
 use App\Models\AIProposal;
 use App\Models\AnnualPlan;
@@ -12,6 +14,7 @@ use App\Models\ClassSession;
 use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\Unit;
+use App\Models\UnitObjective;
 use App\Models\UsageEvent;
 use App\Models\User;
 use App\Services\Calendar\TimetableSlotSuggester;
@@ -35,15 +38,20 @@ class ApplyProposal
 {
     public function __construct(protected TimetableSlotSuggester $suggester) {}
 
-    public function __invoke(AIProposal $proposal, User $applier): Model
+    /**
+     * @param  array<string, mixed>  $decisions  for a class draft in sections: the
+     *                                           teacher's decision per section
+     *                                           (ApplyAIProposalRequest)
+     */
+    public function __invoke(AIProposal $proposal, User $applier, array $decisions = []): Model
     {
-        return DB::transaction(function () use ($proposal, $applier): Model {
+        return DB::transaction(function () use ($proposal, $applier, $decisions): Model {
             // The created entity's `*.created` usage event is the journey's
             // confirmed-creation step (ClickUp 86e3qkxtc).
             $entity = UsageJourney::within($proposal->journey_id, fn (): Model => match ($proposal->type) {
                 AIProposalType::AnnualPlan => $this->applyAnnualPlan($proposal, $applier),
                 AIProposalType::Unit => $this->applyUnit($proposal, $applier),
-                AIProposalType::ClassSession => $this->applyClassSession($proposal, $applier),
+                AIProposalType::ClassSession => $this->applyClassSession($proposal, $applier, $decisions),
                 AIProposalType::Assessment => $this->applyAssessment($proposal, $applier),
             });
 
@@ -132,10 +140,17 @@ class ApplyProposal
         return $unit;
     }
 
-    protected function applyClassSession(AIProposal $proposal, User $applier): ClassSession
+    /**
+     * @param  array<string, mixed>  $decisions
+     */
+    protected function applyClassSession(AIProposal $proposal, User $applier, array $decisions = []): ClassSession
     {
         $params = $proposal->input_parameters;
         $raw = $proposal->raw_response;
+
+        if (is_array($raw['sections'] ?? null)) {
+            return $this->applyClassInSections($proposal, $applier, $decisions);
+        }
 
         // date/duration_minutes/title are NOT NULL on class_sessions; the
         // model's suggested_date may be null, so default to today.
@@ -153,6 +168,75 @@ class ApplyProposal
 
         // Time and room come pre-filled from the teacher's «Mis horarios»
         // (ClickUp 1dfd3mc4bgh); the teacher edits them from the Calendar.
+        $this->suggester->prefill($classSession, $applier);
+
+        return $classSession;
+    }
+
+    /**
+     * Confirm a class drafted section by section (screens 14–15, ClickUp
+     * 86e3jujh0). The class is a real ClassSession of the group and subject
+     * — it shows in the Calendar and the Programa anual and can be closed —
+     * holding only the sections the teacher approved (as the AI wrote them)
+     * or edited (as the teacher wrote them); a rejected section is not saved.
+     *
+     * Its objective is the teacher's own text («Qué querés que logren»), never
+     * the AI's. Hanging from a unit, it is linked to the unit objectives the
+     * teacher chose, so they count as planned in the Programa anual; a free
+     * class links none and adds nothing to coverage (Q2). The date and
+     * duration are the ones the teacher asked for.
+     *
+     * @param  array<string, mixed>  $decisions
+     */
+    protected function applyClassInSections(AIProposal $proposal, User $applier, array $decisions): ClassSession
+    {
+        $params = $proposal->input_parameters;
+        $raw = $proposal->raw_response;
+
+        $sections = [];
+        foreach (ClassSection::cases() as $section) {
+            $decision = ClassSectionDecision::from($decisions['sections'][$section->value]['decision']);
+            if ($decision === ClassSectionDecision::Rejected) {
+                continue;
+            }
+
+            $proposed = $raw['sections'][$section->value] ?? [];
+            $edited = $decision === ClassSectionDecision::Edited;
+            $minutes = $edited && array_key_exists('duration_minutes', $decisions['sections'][$section->value])
+                ? $decisions['sections'][$section->value]['duration_minutes']
+                : ($proposed['duration_minutes'] ?? null);
+
+            $sections[] = array_filter([
+                'key' => $section->value,
+                'content' => $edited ? trim((string) $decisions['sections'][$section->value]['content']) : (string) ($proposed['content'] ?? ''),
+                'duration_minutes' => $section->isTimed() && $minutes !== null ? (int) $minutes : null,
+                'edited' => $edited,
+            ], fn ($value) => $value !== null);
+        }
+
+        $title = trim((string) ($decisions['title'] ?? ''));
+
+        $classSession = ClassSession::create([
+            'group_id' => $proposal->group_id,
+            'subject_id' => $this->classSessionSubjectId($proposal, $applier),
+            'unit_id' => $params['unit_id'] ?? null,
+            'title' => $title !== '' ? $title : ($raw['title'] ?? $params['focus'] ?? self::DEFAULT_SESSION_TITLE),
+            'objective' => $params['objectives'] ?? null,
+            'sections' => $sections,
+            'duration_minutes' => $params['duration_minutes'] ?? $raw['duration_minutes'] ?? self::DEFAULT_SESSION_MINUTES,
+            'date' => $params['date'] ?? now()->toDateString(),
+            'status' => ClassSessionStatus::Planned,
+        ]);
+
+        $objectiveIds = array_map('intval', (array) ($params['unit_objective_ids'] ?? []));
+        if ($classSession->unit_id !== null && $objectiveIds !== []) {
+            $ids = UnitObjective::query()
+                ->where('unit_id', $classSession->unit_id)
+                ->whereKey($objectiveIds)
+                ->pluck('id');
+            $classSession->unitObjectives()->sync($ids);
+        }
+
         $this->suggester->prefill($classSession, $applier);
 
         return $classSession;

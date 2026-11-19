@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Home,
   Scale,
+  Sparkles,
   TriangleAlert,
   LifeBuoy,
   TrendingUp,
@@ -28,6 +29,7 @@ import {
   canOpenAccommodationsInbox,
   canOpenIndicators,
   canEditScreeningTestDesign,
+  canGenerateClasses,
   canManageGradesVisibility,
   canManageAlertSettings,
   canManageCurricularStructure,
@@ -97,6 +99,9 @@ export function buildNavSections(
         // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8): the teacher builds
         // their plans; Psicopedagogía and Dirección read every plan.
         ...(user ? [{ to: "/programa-anual", label: "Programa anual", icon: CalendarRange }] : []),
+        // Screen 14 «Nueva clase» (ClickUp 86e3jujh0): the direct entry, for
+        // teachers only — the unit entry is in the Programa anual.
+        ...(canGenerateClasses(user) ? [{ to: "/nueva-clase", label: "Nueva clase", icon: Sparkles }] : []),
         // Every role has a Calendar (screen 21); what each sees is decided
         // server-side.
         { to: "/calendario", label: "Calendario", icon: CalendarDays },

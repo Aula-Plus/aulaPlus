@@ -71,8 +71,10 @@ describe("TodayInCalendar", () => {
       "Matemática",
       "5°A",
       "Aula 12",
-      "",
+      "Abrir",
     ])
+    // A class opens its own screen (15, ClickUp 86e3jujh0).
+    expect(within(rows[2]).getByRole("link", { name: "Abrir" })).toHaveAttribute("href", "/clase/1")
     // A class without a time is listed without one.
     expect(within(rows[1]).getAllByRole("cell")[0]).toHaveTextContent("—")
     expect(rows).toHaveLength(4)

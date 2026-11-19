@@ -35,6 +35,9 @@ import { GroupComparisonPage } from "@/features/group-comparison/GroupComparison
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
 import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
+import { NewClassPage } from "@/features/classes/NewClassPage"
+import { ClassProposalPage } from "@/features/classes/ClassProposalPage"
+import { ClassPage } from "@/features/classes/ClassPage"
 
 function App() {
   return (
@@ -152,6 +155,32 @@ function App() {
             element={
               <ProtectedLayout>
                 <AnnualPlanPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0).
+              «/clases» is the groups list, so a class lives under «/clase». */}
+          <Route
+            path="/nueva-clase"
+            element={
+              <ProtectedLayout>
+                <NewClassPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/propuesta-de-clase/:id"
+            element={
+              <ProtectedLayout>
+                <ClassProposalPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clase/:id"
+            element={
+              <ProtectedLayout>
+                <ClassPage />
               </ProtectedLayout>
             }
           />
