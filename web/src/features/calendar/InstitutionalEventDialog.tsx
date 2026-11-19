@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
@@ -14,9 +14,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { CalendarItem } from "@/types"
-import { createInstitutionalEvent, updateInstitutionalEvent } from "./calendarApi"
+import type { CalendarItem, EventAudienceOptions } from "@/types"
+import {
+  createInstitutionalEvent,
+  fetchAudienceOptions,
+  updateInstitutionalEvent,
+  type AudienceTargetInput,
+} from "./calendarApi"
 import { calendarErrorMessage } from "./calendarErrors"
+import { audienceToInput, SECONDARY_LEVEL_KEYS } from "./eventAudience"
 
 // UX only: the server validates again (InstitutionalEventRequest).
 const eventSchema = z.object({
@@ -32,8 +38,9 @@ type EventValues = z.infer<typeof eventSchema>
 /**
  * Direction's institutional event (P21-DEC-05): what it is, a date and an
  * optional time — plus, optionally, where (the «Dónde» of the Inicio) and a
- * detail. Everyone in the school sees it. Create when `item` is absent, edit
- * otherwise.
+ * detail — and who it concerns (ClickUp 1dfd3mc55zp): the whole school, or
+ * levels, generations and programs within a generation. Create when `item`
+ * is absent, edit otherwise.
  */
 export function InstitutionalEventDialog({
   item,
@@ -47,6 +54,9 @@ export function InstitutionalEventDialog({
   onSaved: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const [audience, setAudience] = useState<AudienceTargetInput[]>(() => audienceToInput(item?.audience))
+  const [wholeSchool, setWholeSchool] = useState(audience.length === 0)
+  const [audienceError, setAudienceError] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
@@ -64,12 +74,17 @@ export function InstitutionalEventDialog({
 
   async function onSubmit(values: EventValues) {
     setError(null)
+    if (!wholeSchool && audience.length === 0) {
+      setAudienceError("Elegí a quién le corresponde, o marcá «Todo el colegio».")
+      return
+    }
     const input = {
       title: values.title.trim(),
       date: values.date,
       time: values.time || null,
       location: values.location.trim() || null,
       description: values.description.trim() || null,
+      audience: wholeSchool ? [] : audience,
     }
     try {
       if (item) await updateInstitutionalEvent(item.id, input)
@@ -85,7 +100,10 @@ export function InstitutionalEventDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{item ? "Editar evento institucional" : "Evento institucional"}</DialogTitle>
-          <DialogDescription>Lo ven todos en el colegio, en su calendario y en su Inicio ese día.</DialogDescription>
+          <DialogDescription>
+            Aparece en el calendario y en el Inicio de quienes tienen grupos a los que les corresponde. Todos pueden
+            encontrarlo en el calendario completo del colegio.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
           <div className="grid gap-2">
@@ -114,6 +132,19 @@ export function InstitutionalEventDialog({
             <Textarea id="event-description" rows={3} {...register("description")} />
             {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
           </div>
+          <AudiencePicker
+            wholeSchool={wholeSchool}
+            targets={audience}
+            onWholeSchool={(value) => {
+              setWholeSchool(value)
+              setAudienceError(null)
+            }}
+            onChange={(targets) => {
+              setAudience(targets)
+              setAudienceError(null)
+            }}
+          />
+          {audienceError && <p className="text-sm text-destructive">{audienceError}</p>}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
@@ -126,5 +157,197 @@ export function InstitutionalEventDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function sameTarget(a: AudienceTargetInput, b: AudienceTargetInput): boolean {
+  return a.level_id === b.level_id && a.grade_id === b.grade_id && a.framework_id === b.framework_id
+}
+
+/**
+ * «A quién le corresponde»: «Todo el colegio», or any combination of levels
+ * («Secundaria» = Ciclo Básico + Bachillerato), generations and the groups
+ * of a program within a generation. UX only: the server validates every
+ * target (InstitutionalEventRequest).
+ */
+export function AudiencePicker({
+  wholeSchool,
+  targets,
+  onWholeSchool,
+  onChange,
+}: {
+  wholeSchool: boolean
+  targets: AudienceTargetInput[]
+  onWholeSchool: (value: boolean) => void
+  onChange: (targets: AudienceTargetInput[]) => void
+}) {
+  const [options, setOptions] = useState<EventAudienceOptions | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [gradeId, setGradeId] = useState("")
+  const [frameworkId, setFrameworkId] = useState("")
+
+  useEffect(() => {
+    let active = true
+    fetchAudienceOptions()
+      .then((result) => {
+        if (active) setOptions(result)
+      })
+      .catch(() => {
+        if (active) setLoadError(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const levels = options?.levels ?? []
+  const grades = levels.flatMap((level) => level.grades.map((grade) => ({ ...grade, levelKey: level.key })))
+  const levelIds = targets.flatMap((target) => (target.level_id !== undefined ? [target.level_id] : []))
+  const secondaryIds = levels
+    .filter((level) => (SECONDARY_LEVEL_KEYS as readonly string[]).includes(level.key))
+    .map((level) => level.id)
+  const secondaryOn = secondaryIds.length > 0 && secondaryIds.every((id) => levelIds.includes(id))
+  const chosenGrade = grades.find((grade) => String(grade.id) === gradeId)
+  const frameworksForGrade = (options?.frameworks ?? []).filter(
+    (framework) =>
+      chosenGrade && (framework.education_levels === null || framework.education_levels.includes(chosenGrade.levelKey)),
+  )
+  const generations = targets.filter((target) => target.grade_id !== undefined)
+
+  function setLevels(ids: number[], on: boolean) {
+    const rest = targets.filter((target) => target.level_id === undefined || !ids.includes(target.level_id))
+    onChange(on ? [...rest, ...ids.map((id) => ({ level_id: id }))] : rest)
+  }
+
+  function addGeneration() {
+    if (!chosenGrade) return
+    const target: AudienceTargetInput = frameworkId
+      ? { grade_id: chosenGrade.id, framework_id: Number(frameworkId) }
+      : { grade_id: chosenGrade.id }
+    if (!targets.some((existing) => sameTarget(existing, target))) onChange([...targets, target])
+    setGradeId("")
+    setFrameworkId("")
+  }
+
+  function generationLabel(target: AudienceTargetInput): string {
+    const grade = grades.find((item) => item.id === target.grade_id)?.label ?? "Generación"
+    const framework = options?.frameworks.find((item) => item.id === target.framework_id)
+    return framework ? `${framework.name} en ${grade}` : grade
+  }
+
+  return (
+    <fieldset className="grid gap-3 rounded-md border p-3">
+      <legend className="px-1 text-sm font-medium">A quién le corresponde</legend>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="size-4"
+          checked={wholeSchool}
+          onChange={(event) => onWholeSchool(event.target.checked)}
+        />
+        Todo el colegio
+      </label>
+      {!wholeSchool &&
+        (loadError ? (
+          <p className="text-sm text-destructive">No pudimos cargar los niveles y las generaciones.</p>
+        ) : options === null ? (
+          <p className="text-sm text-muted-foreground">Cargando opciones…</p>
+        ) : (
+          <>
+            <div role="group" aria-label="Niveles" className="grid gap-1">
+              <p className="text-xs font-medium text-muted-foreground">Niveles</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {levels.map((level) => (
+                  <label key={level.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={levelIds.includes(level.id)}
+                      onChange={(event) => setLevels([level.id], event.target.checked)}
+                    />
+                    {level.label}
+                  </label>
+                ))}
+                {secondaryIds.length > 0 && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      checked={secondaryOn}
+                      onChange={(event) => setLevels(secondaryIds, event.target.checked)}
+                    />
+                    Secundaria (Ciclo Básico y Bachillerato)
+                  </label>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Generaciones</p>
+              <div className="flex flex-wrap items-end gap-2">
+                <select
+                  aria-label="Generación"
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={gradeId}
+                  onChange={(event) => {
+                    setGradeId(event.target.value)
+                    setFrameworkId("")
+                  }}
+                >
+                  <option value="">Elegí una generación</option>
+                  {levels.map((level) => (
+                    <optgroup key={level.id} label={level.label}>
+                      {level.grades.map((grade) => (
+                        <option key={grade.id} value={grade.id}>
+                          {grade.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <select
+                  aria-label="Grupos de la generación"
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={frameworkId}
+                  disabled={!chosenGrade || frameworksForGrade.length === 0}
+                  onChange={(event) => setFrameworkId(event.target.value)}
+                >
+                  <option value="">Todos sus grupos</option>
+                  {frameworksForGrade.map((framework) => (
+                    <option key={framework.id} value={framework.id}>
+                      Solo los grupos de {framework.name}
+                    </option>
+                  ))}
+                </select>
+                <Button type="button" variant="outline" size="sm" disabled={!chosenGrade} onClick={addGeneration}>
+                  Agregar generación
+                </Button>
+              </div>
+              {generations.length > 0 && (
+                <ul className="flex flex-wrap gap-2" aria-label="Generaciones elegidas">
+                  {generations.map((target) => {
+                    const label = generationLabel(target)
+                    return (
+                      <li
+                        key={`${target.grade_id}-${target.framework_id ?? 0}`}
+                        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+                      >
+                        {label}
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Quitar ${label}`}
+                          onClick={() => onChange(targets.filter((existing) => !sameTarget(existing, target)))}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          </>
+        ))}
+    </fieldset>
   )
 }

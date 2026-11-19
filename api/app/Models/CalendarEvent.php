@@ -11,10 +11,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A date stored in the Calendar (screen 21). Today only institutional events
- * are created (by Direction, seen by the whole school); `meeting` is reserved
+ * are created (by Direction; every staff member may see them in the school's
+ * full calendar, and each person's own calendar shows the ones whose
+ * `audiences` touch their groups — ClickUp 1dfd3mc55zp); `meeting` is reserved
  * for screen 10 and, when it exists, is visible only to the people whose
  * calendar it is linked to (the screen's red line). See CalendarEventPolicy.
  *
@@ -39,6 +42,15 @@ class CalendarEvent extends Model
     {
         return $this->belongsToMany(Calendar::class, 'calendar_calendar_event')
             ->withTimestamps();
+    }
+
+    /**
+     * Who an institutional event concerns (ClickUp 1dfd3mc55zp). No rows =
+     * the whole school.
+     */
+    public function audiences(): HasMany
+    {
+        return $this->hasMany(CalendarEventAudience::class);
     }
 
     public function createdBy(): BelongsTo

@@ -7,6 +7,7 @@ use App\Http\Requests\CalendarFeedRequest;
 use App\Http\Requests\InstitutionalEventRequest;
 use App\Models\CalendarEvent;
 use App\Services\Calendar\CalendarFeed;
+use App\Services\Calendar\EventAudience;
 use App\Support\SchoolTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -17,14 +18,33 @@ use Illuminate\Http\Response;
  * The Calendar (screen 21, ClickUp 1dfd3mc4bgh): the feed of each person's
  * dates, and Direction's institutional events — the only date born here.
  * The Inicio's «Hoy en tu calendario» block (P01-HOY-01) reads the same feed.
+ * Each institutional event says who it concerns (ClickUp 1dfd3mc55zp).
  */
 class CalendarController extends Controller
 {
+    public function __construct(protected EventAudience $audience) {}
+
     public function index(CalendarFeedRequest $request, CalendarFeed $feed): JsonResponse
     {
         return response()->json([
-            'data' => $feed->for($request->user(), $request->from(), $request->to(), $request->types()),
+            'data' => $feed->for(
+                $request->user(),
+                $request->from(),
+                $request->to(),
+                $request->types(),
+                $request->wholeSchool(),
+            ),
         ]);
+    }
+
+    /**
+     * What Direction can choose as an event's audience (ClickUp 1dfd3mc55zp).
+     */
+    public function audienceOptions(Request $request): JsonResponse
+    {
+        $this->authorize('create', CalendarEvent::class);
+
+        return response()->json(['data' => $this->audience->options($request->user()->school)]);
     }
 
     public function store(InstitutionalEventRequest $request): JsonResponse
@@ -34,6 +54,8 @@ class CalendarController extends Controller
             'type' => CalendarEventType::Institutional->value,
             'created_by_id' => $request->user()->id,
         ]);
+
+        $this->audience->replace($event, $request->audience() ?? []);
 
         return response()->json(['data' => $this->present($event)], 201);
     }
@@ -50,6 +72,11 @@ class CalendarController extends Controller
             'description' => $current['description'],
             ...$request->validated(),
         ]));
+
+        $audience = $request->audience();
+        if ($audience !== null) {
+            $this->audience->replace($calendarEvent, $audience);
+        }
 
         return response()->json(['data' => $this->present($calendarEvent)]);
     }
@@ -106,6 +133,7 @@ class CalendarController extends Controller
             'time' => $event->all_day ? null : $local->format('H:i'),
             'location' => $event->location,
             'description' => $event->description,
+            'audience' => $this->audience->present($event),
         ];
     }
 }
