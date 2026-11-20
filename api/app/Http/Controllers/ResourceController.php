@@ -7,6 +7,7 @@ use App\Models\Group;
 use App\Models\GroupResource;
 use App\Models\GroupResourceExclusion;
 use App\Models\SchoolResource;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -100,8 +101,13 @@ class ResourceController extends Controller
     {
         $excluded = GroupResourceExclusion::query()->where('group_id', $group->id)->pluck('school_resource_id');
 
+        // A group of a closed year without a loading window is read-only
+        // (screen 26). UX hint only: `group.writable` rejects the writes.
+        $calendar = app(SchoolYearCalendar::class);
+        $readOnly = $calendar->isInClosedYear($group) && $calendar->activeWindow($group) === null;
+
         return [
-            'can_manage' => $request->user()->can('manageResources', $group),
+            'can_manage' => ! $readOnly && $request->user()->can('manageResources', $group),
             'school' => SchoolResource::query()->orderBy('position')->orderBy('id')->get()
                 ->map(fn (SchoolResource $resource) => [
                     'id' => $resource->id,

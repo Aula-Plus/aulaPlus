@@ -3,7 +3,9 @@
 use App\Models\Group;
 use App\Models\School;
 use App\Models\SchoolGrade;
+use App\Models\SchoolYear;
 use App\Models\User;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use Laravel\Sanctum\Sanctum;
 
 // Screen 23 «Recursos disponibles» (ClickUp 1dfd3mc4bh4): Dirección loads the
@@ -91,4 +93,45 @@ it('names the grades as in Uruguay', function () {
         '1.° de Primaria', '2.° de Primaria', '3.° de Primaria', '4.° de Primaria', '5.° de Primaria', '6.° de Primaria',
         '7°CB', '8°CB', '9°CB', '1°EMS', '2°EMS', '3°EMS',
     ]);
+});
+
+it('rejects nested, cross-group and cross-school access to the group resources', function () {
+    $otherGroup = Group::factory()->create(['school_id' => $this->school->id]);
+    leadGroup($otherGroup, $this->otherTeacher);
+    Sanctum::actingAs($this->otherTeacher);
+    $foreignOwn = $this->postJson("/api/v1/groups/{$otherGroup->id}/resources", ['name' => 'Proyector'])->assertCreated()->json('data.group.0.id');
+
+    // A teacher of the group cannot reach another group's resource through their own group (IDOR).
+    Sanctum::actingAs($this->teacher);
+    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$foreignOwn}")->assertNotFound();
+    $this->deleteJson("/api/v1/groups/{$otherGroup->id}/resources/{$foreignOwn}")->assertForbidden();
+    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/999999", ['available' => false])->assertNotFound();
+
+    Sanctum::actingAs($this->director);
+    $huerta = $this->postJson('/api/v1/school-resources', ['name' => 'Huerta escolar'])->json('data.id');
+    Sanctum::actingAs($this->otherTeacher);
+    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/{$huerta}", ['available' => false])->assertForbidden();
+    Sanctum::actingAs($this->teacher);
+    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/{$huerta}", ['available' => 'quizás'])->assertUnprocessable();
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => ''])->assertUnprocessable();
+
+    // Another school's director gets 404 on every group route.
+    $stranger = User::factory()->forSchool(School::factory()->create())->director()->create();
+    Sanctum::actingAs($stranger);
+    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertNotFound();
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'x'])->assertNotFound();
+    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/{$huerta}", ['available' => false])->assertNotFound();
+    $this->deleteJson("/api/v1/groups/{$otherGroup->id}/resources/{$foreignOwn}")->assertNotFound();
+});
+
+it('marks the card read-only and rejects writes in a closed year', function () {
+    SchoolYear::query()->forceCreate([
+        'school_id' => $this->school->id, 'year' => $this->group->school_year, 'status' => 'closed', 'closed_at' => now(),
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+
+    Sanctum::actingAs($this->teacher);
+    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertOk()->assertJsonPath('data.can_manage', false);
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele'])
+        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
 });
