@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { Comment, CommentCategory, GroupTracking } from "@/types"
 import { CommentsPanel } from "./CommentsPanel"
 import { GroupAccommodationsSummary } from "./GroupAccommodationsSummary"
+import { GroupResourcesCard } from "@/features/resources/GroupResourcesCard"
 import { GroupOpenAlerts } from "./GroupOpenAlerts"
 import { GroupOverdueFollowUps } from "./GroupOverdueFollowUps"
 import { GroupPerformanceChart } from "./GroupPerformanceChart"
@@ -136,6 +137,8 @@ export function GroupTrackingPage() {
       <GroupAccommodationsSummary groupId={group.id} />
 
       <GroupPerformanceChart groupId={group.id} studentCount={tracking.students.length} />
+
+      <GroupResourcesCard groupId={group.id} />
 
       <GroupOverdueFollowUps groupId={group.id} />
 

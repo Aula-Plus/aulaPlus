@@ -42,7 +42,7 @@ it('lists the four levels with stable keys, in order, each with the grades it su
         'upper_secondary' => 'Bachillerato',
     ]);
     $lowerSecondary = collect($response->json('data'))->firstWhere('key', 'lower_secondary');
-    expect(collect($lowerSecondary['grades'])->pluck('label')->all())->toBe(['7°', '8°', '9°']);
+    expect(collect($lowerSecondary['grades'])->pluck('label')->all())->toBe(['7°CB', '8°CB', '9°CB']);
     $response->assertJsonPath('groups_without_level', 2);
 });
 
@@ -71,7 +71,7 @@ it('requires a level when creating a group and keeps the grade optional and sepa
         'school_grade_id' => gradeId('grade_9'),
     ])->assertCreated()
         ->assertJsonPath('data.education_level.label', 'Bachillerato')
-        ->assertJsonPath('data.school_grade.label', '9°');
+        ->assertJsonPath('data.school_grade.label', '9°CB');
 
     $this->postJson('/api/groups', [
         'name' => 'X',
