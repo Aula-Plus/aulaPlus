@@ -16,6 +16,7 @@ import { LimitsPage } from "@/features/users/LimitsPage"
 import { GradesVisibilityPage } from "@/features/tracking/GradesVisibilityPage"
 import { OfficialScalesPage } from "@/features/official-scales/OfficialScalesPage"
 import { SchoolYearPage } from "@/features/school-year/SchoolYearPage"
+import { OnboardingPage } from "@/features/onboarding/OnboardingPage"
 import { CommentSettingsPage } from "@/features/tracking/CommentSettingsPage"
 import { SupportPage } from "@/features/support/SupportPage"
 import { AdoptionDashboardPage } from "@/features/tracking/AdoptionDashboardPage"
@@ -204,6 +205,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <SchoolYearPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Puesta en marcha (screen 29): direction reads the onboarding record. */}
+          <Route
+            path="/administracion/puesta-en-marcha"
+            element={
+              <ProtectedLayout>
+                <OnboardingPage />
               </ProtectedLayout>
             }
           />
