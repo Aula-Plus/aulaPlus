@@ -5,20 +5,21 @@ import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 import { CurricularOfferingTab } from "./CurricularOfferingTab"
 import { PlannersTab } from "./PlannersTab"
+import { SchoolResourcesTab } from "./SchoolResourcesTab"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 
-type Tab = "offering" | "planners"
+type Tab = "offering" | "planners" | "resources"
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "offering", label: "Oferta curricular" },
   { id: "planners", label: "Planificadores" },
+  { id: "resources", label: "Recursos disponibles" },
 ]
 
 /**
  * «Colegio y estructura» (screen 23 of the living document), route `/colegio`.
- * For now only the two tabs the cycle needs (ClickUp 1dfd3mc4bgf): «Oferta
- * curricular» and «Planificadores». Institución, Grupos and Recursos
- * disponibles come later. Director only — UX gate; the server enforces it
+ * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf) and «Recursos
+ * disponibles» (ClickUp 1dfd3mc4bh4). Institución and Grupos come later. Director only — UX gate; the server enforces it
  * (CurricularOfferingPolicy).
  */
 export function SchoolStructurePage() {
@@ -58,7 +59,7 @@ export function SchoolStructurePage() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "offering" ? <CurricularOfferingTab /> : <PlannersTab />}
+        {tab === "offering" ? <CurricularOfferingTab /> : tab === "planners" ? <PlannersTab /> : <SchoolResourcesTab />}
       </div>
     </div>
   )
