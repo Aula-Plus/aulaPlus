@@ -18,9 +18,11 @@ use App\Services\Materials\MaterialCatalog;
 use App\Services\Materials\MaterialCurriculum;
 use App\Services\Materials\MaterialScope;
 use App\Support\MaterialStorage;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -38,6 +40,8 @@ use Illuminate\Support\Str;
 class MaterialController extends Controller
 {
     protected const URL_TTL_MINUTES = 5;
+
+    protected const PER_PAGE = 50;
 
     public function __construct(
         private readonly MaterialScope $scope,
@@ -62,39 +66,77 @@ class MaterialController extends Controller
             ->when($gradeId === null, fn (Builder $q) => $q->whereNull('school_grade_id'), fn (Builder $q) => $q->where('school_grade_id', $gradeId));
 
         if ($request->validated('tab') === 'catalog') {
-            $rows = $materials
+            $page = $materials
                 ->where('catalog_status', MaterialCatalogStatus::Published->value)
                 ->orderByDesc('published_at')
-                ->get()
-                ->map(fn (Material $material) => $this->materialRow($material, $user, inCatalog: true));
+                ->orderByDesc('id')
+                ->paginate(self::PER_PAGE);
 
-            return response()->json(['data' => $rows->values()]);
+            return $this->pageResponse($page, $page->getCollection()
+                ->map(fn (Material $material) => $this->materialRow($material, $user, inCatalog: true)));
         }
 
-        $uploads = $materials
+        // «Lo generado» mixes two tables. Both grow every year, so the merge
+        // and the page are done in SQL over (kind, id, created_at), and only
+        // the rows of the requested page are loaded with their relations.
+        $uploads = $materials->clone()
+            ->setEagerLoads([])
             ->where('source', MaterialSource::Upload->value)
             ->when(! $schoolWide, fn (Builder $q) => $q->where('owner_id', $user->id))
-            ->latest()
-            ->get()
-            ->map(fn (Material $material) => $this->materialRow($material, $user, inCatalog: false));
+            ->select(['materials.id', DB::raw("'upload' as kind"), 'materials.created_at']);
 
         $assessments = Assessment::query()
-            ->with(['group:id,name,school_grade_id', 'teacher:id,name', 'curricularItems:id,code,name'])
             ->where('subject_id', $subjectId)
             ->whereHas('group', fn (Builder $q) => $gradeId === null ? $q->whereNull('school_grade_id') : $q->where('school_grade_id', $gradeId))
             ->when(! $schoolWide, fn (Builder $q) => $q->where('teacher_id', $user->id))
-            ->latest('administered_at')
-            ->get();
+            ->select(['assessments.id', DB::raw("'assessment' as kind"), 'assessments.created_at']);
+
+        $page = DB::query()
+            ->fromSub($uploads->toBase()->unionAll($assessments->toBase()), 'generated_rows')
+            ->orderByDesc('created_at')
+            ->orderBy('kind')
+            ->orderByDesc('id')
+            ->paginate(self::PER_PAGE);
+
+        $ids = collect($page->items())->groupBy('kind')->map(fn ($rows) => $rows->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+        $uploadModels = Material::query()
+            ->with(['owner:id,name', 'publishedBy:id,name', 'group:id,name', 'curricularItems:id,code,name'])
+            ->whereKey($ids->get('upload', []))
+            ->get()
+            ->keyBy('id');
+        $assessmentModels = Assessment::query()
+            ->with(['group:id,name,school_grade_id', 'teacher:id,name', 'curricularItems:id,code,name'])
+            ->whereKey($ids->get('assessment', []))
+            ->get()
+            ->keyBy('id');
         $copies = Material::query()
-            ->whereIn('assessment_id', $assessments->pluck('id'))
-            ->get(['id', 'assessment_id', 'catalog_status'])
+            ->whereIn('assessment_id', $assessmentModels->keys())
+            ->get(['id', 'school_id', 'assessment_id', 'owner_id', 'catalog_status'])
             ->keyBy('assessment_id');
 
-        $rows = $uploads->concat($assessments->map(fn (Assessment $assessment) => $this->assessmentRow($assessment, $copies->get($assessment->id), $user)))
-            ->sortByDesc('created_at')
-            ->values();
+        $rows = collect($page->items())
+            ->map(fn (object $row) => $row->kind === 'upload'
+                ? $this->materialRow($uploadModels->get((int) $row->id), $user, inCatalog: false)
+                : $this->assessmentRow($assessmentModels->get((int) $row->id), $copies->get((int) $row->id), $user));
 
-        return response()->json(['data' => $rows]);
+        return $this->pageResponse($page, $rows);
+    }
+
+    /**
+     * @param  LengthAwarePaginator<int, mixed>  $page
+     * @param  Collection<int, array<string, mixed>>  $rows
+     */
+    protected function pageResponse(LengthAwarePaginator $page, Collection $rows): JsonResponse
+    {
+        return response()->json([
+            'data' => $rows->values(),
+            'meta' => [
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+                'total' => $page->total(),
+            ],
+        ]);
     }
 
     public function curricularItems(Request $request, MaterialCurriculum $curriculum): JsonResponse

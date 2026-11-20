@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { FileText, Upload } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -45,6 +45,15 @@ const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
 /** «none» is the «Sin grado» folder in the URL and the selects. */
+/** The first validation error or the message of a 4xx the server explained (already in Spanish). */
+function serverMessage(err: unknown): string | undefined {
+  const response = (err as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } })
+    .response
+  if (!response?.status || response.status >= 500) return undefined
+  const firstError = response.data?.errors ? Object.values(response.data.errors)[0]?.[0] : undefined
+  return firstError ?? response.data?.message
+}
+
 function gradeKey(id: number | null): string {
   return id === null ? "none" : String(id)
 }
@@ -68,7 +77,10 @@ export function MaterialsPage() {
   const [options, setOptions] = useState<MaterialOptions | null>(null)
   const [optionsError, setOptionsError] = useState(false)
   const [rows, setRows] = useState<MaterialRow[] | null>(null)
+  const [meta, setMeta] = useState<materialsApi.MaterialsPage["meta"] | null>(null)
   const [listError, setListError] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [moreError, setMoreError] = useState(false)
   const [reload, setReload] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [detail, setDetail] = useState<MaterialDetail | null>(null)
@@ -92,20 +104,52 @@ export function MaterialsPage() {
   }, [])
 
   const ready = subjectParam !== "" && gradeParam !== ""
+  // Bumped on every fresh listing, so a «Ver más» page that arrives after the
+  // filters changed is dropped.
+  const listToken = useRef(0)
 
   useEffect(() => {
     if (!ready) return
     let cancelled = false
+    listToken.current += 1
     setRows(null)
+    setMeta(null)
     setListError(false)
+    setMoreError(false)
     materialsApi
       .fetchMaterials(tab, Number(subjectParam), gradeParam === "none" ? null : Number(gradeParam))
-      .then((loaded) => !cancelled && setRows(loaded))
+      .then((loaded) => {
+        if (cancelled) return
+        setRows(loaded.data)
+        setMeta(loaded.meta)
+      })
       .catch(() => !cancelled && setListError(true))
     return () => {
       cancelled = true
     }
   }, [ready, tab, subjectParam, gradeParam, reload])
+
+  async function loadMore() {
+    if (!meta || loadingMore) return
+    const token = listToken.current
+    setLoadingMore(true)
+    setMoreError(false)
+    try {
+      const next = await materialsApi.fetchMaterials(
+        tab,
+        Number(subjectParam),
+        gradeParam === "none" ? null : Number(gradeParam),
+        meta.current_page + 1,
+      )
+      if (token !== listToken.current) return
+      setRows((current) => [...(current ?? []), ...next.data])
+      setMeta(next.meta)
+    } catch {
+      if (token === listToken.current) setMoreError(true)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(params)
@@ -123,8 +167,8 @@ export function MaterialsPage() {
     try {
       await action()
       setReload((n) => n + 1)
-    } catch {
-      setActionError(failure)
+    } catch (err) {
+      setActionError(serverMessage(err) ?? failure)
     }
   }
 
@@ -302,6 +346,18 @@ export function MaterialsPage() {
               />
             ) : (
               <MaterialsTable tab={tab} rows={rows} onOpen={open} run={run} />
+            )}
+            {meta && meta.current_page < meta.last_page && (
+              <div className="grid justify-items-start gap-2 px-6 pt-4">
+                <Button type="button" variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
+                  {loadingMore ? "Cargando…" : `Ver más (${rows.length} de ${meta.total})`}
+                </Button>
+                {moreError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    No pudimos cargar más materiales.
+                  </p>
+                )}
+              </div>
             )}
             {tab === "generated" && (
               <p className="px-6 pb-4 text-sm text-muted-foreground">
@@ -649,10 +705,7 @@ function UploadForm({
       })
       onSaved({ ...saved, subject_id: Number(subjectId) })
     } catch (err) {
-      const response = (err as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } })
-        .response
-      const firstError = response?.data?.errors ? Object.values(response.data.errors)[0]?.[0] : undefined
-      setError(firstError ?? response?.data?.message ?? "No pudimos guardar el material.")
+      setError(serverMessage(err) ?? "No pudimos guardar el material.")
     } finally {
       setSaving(false)
     }

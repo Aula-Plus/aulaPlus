@@ -42,6 +42,10 @@ function row(overrides: Partial<MaterialRow> = {}): MaterialRow {
   }
 }
 
+function page(data: MaterialRow[], current = 1, last = 1, total = data.length): materialsApi.MaterialsPage {
+  return { data, meta: { current_page: current, last_page: last, total } }
+}
+
 function renderAt(path = "/materiales") {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -55,7 +59,7 @@ describe("MaterialsPage", () => {
     vi.clearAllMocks()
     roles = ["teacher"]
     vi.mocked(materialsApi.fetchMaterialOptions).mockResolvedValue(options)
-    vi.mocked(materialsApi.fetchMaterials).mockResolvedValue([row()])
+    vi.mocked(materialsApi.fetchMaterials).mockResolvedValue(page([row()]))
     vi.mocked(materialsApi.fetchProgramItems).mockResolvedValue([])
   })
 
@@ -90,15 +94,17 @@ describe("MaterialsPage", () => {
 
   it("opens the catalog for everyone and lets Psicopedagogía take a material out", async () => {
     roles = ["psychopedagogue"]
-    vi.mocked(materialsApi.fetchMaterials).mockResolvedValue([
-      row({
-        group: null,
-        is_mine: false,
-        catalog_status: "published",
-        published_by_name: "Ana",
-        can: { publish: false, remove_from_catalog: true, delete: false },
-      }),
-    ])
+    vi.mocked(materialsApi.fetchMaterials).mockResolvedValue(
+      page([
+        row({
+          group: null,
+          is_mine: false,
+          catalog_status: "published",
+          published_by_name: "Ana",
+          can: { publish: false, remove_from_catalog: true, delete: false },
+        }),
+      ]),
+    )
     vi.mocked(materialsApi.removeFromCatalog).mockResolvedValue(row({ catalog_status: "removed" }))
     renderAt("/materiales?materia=3&nivel=8&solapa=institucional")
 
@@ -109,6 +115,35 @@ describe("MaterialsPage", () => {
     const dialog = await screen.findByRole("dialog")
     await userEvent.click(within(dialog).getByRole("button", { name: "Sacar del catálogo" }))
     await waitFor(() => expect(materialsApi.removeFromCatalog).toHaveBeenCalledWith(11))
+  })
+
+  it("loads the next page with «Ver más»", async () => {
+    vi.mocked(materialsApi.fetchMaterials)
+      .mockResolvedValueOnce(page([row()], 1, 2, 51))
+      .mockResolvedValueOnce(page([row({ id: 12, material_id: 12, title: "Guía de decimales" })], 2, 2, 51))
+    renderAt("/materiales?materia=3&nivel=8")
+    await screen.findByText("Fracciones equivalentes")
+
+    await userEvent.click(screen.getByRole("button", { name: "Ver más (1 de 51)" }))
+
+    expect(await screen.findByText("Guía de decimales")).toBeInTheDocument()
+    expect(screen.getByText("Fracciones equivalentes")).toBeInTheDocument()
+    expect(materialsApi.fetchMaterials).toHaveBeenLastCalledWith("generated", 3, 8, 2)
+    expect(screen.queryByRole("button", { name: /Ver más/ })).not.toBeInTheDocument()
+  })
+
+  it("shows the server's reason when an action is refused", async () => {
+    vi.mocked(materialsApi.deleteMaterial).mockRejectedValue({
+      response: { status: 403, data: { message: "Este material no es tuyo." } },
+    })
+    renderAt("/materiales?materia=3&nivel=8")
+    await screen.findByText("Fracciones equivalentes")
+
+    await userEvent.click(screen.getByRole("button", { name: "Eliminar" }))
+    const dialog = await screen.findByRole("dialog")
+    await userEvent.click(within(dialog).getByRole("button", { name: "Eliminar" }))
+
+    expect(await screen.findByText("Este material no es tuyo.")).toBeInTheDocument()
   })
 
   it("does not offer Dirección an upload", async () => {

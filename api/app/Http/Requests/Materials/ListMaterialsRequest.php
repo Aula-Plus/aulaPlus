@@ -24,6 +24,7 @@ class ListMaterialsRequest extends FormRequest
             'tab' => ['required', 'in:generated,catalog'],
             'subject_id' => ['required', 'integer'],
             'grade_id' => ['required', 'regex:/^(none|\d+)$/'],
+            'page' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 

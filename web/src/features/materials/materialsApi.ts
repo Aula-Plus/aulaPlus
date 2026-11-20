@@ -14,11 +14,22 @@ export async function fetchMaterialOptions(): Promise<MaterialOptions> {
   return data.data
 }
 
-export async function fetchMaterials(tab: MaterialsTab, subjectId: number, gradeId: number | null): Promise<MaterialRow[]> {
-  const { data } = await api.get<{ data: MaterialRow[] }>("/api/v1/materials", {
-    params: { tab, subject_id: subjectId, grade_id: gradeId ?? "none" },
+export interface MaterialsPage {
+  data: MaterialRow[]
+  meta: { current_page: number; last_page: number; total: number }
+}
+
+/** One page (50 rows) of a tab; «Ver más» asks for the next one. */
+export async function fetchMaterials(
+  tab: MaterialsTab,
+  subjectId: number,
+  gradeId: number | null,
+  page = 1,
+): Promise<MaterialsPage> {
+  const { data } = await api.get<MaterialsPage>("/api/v1/materials", {
+    params: { tab, subject_id: subjectId, grade_id: gradeId ?? "none", page },
   })
-  return data.data
+  return data
 }
 
 export async function fetchProgramItems(groupId: number, subjectId: number): Promise<MaterialProgramItem[]> {

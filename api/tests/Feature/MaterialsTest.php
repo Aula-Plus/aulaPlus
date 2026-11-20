@@ -259,3 +259,95 @@ it('never shows another school\'s materials', function () {
         ->assertOk()->assertJsonCount(0, 'data');
     expect(Tenancy::forSchool($otherSchool, fn () => Material::query()->count()))->toBe(0);
 });
+
+it('takes an assessment\'s catalog copy out with it when the assessment is deleted', function () {
+    Notification::fake();
+    $assessment = Assessment::factory()->create(['group_id' => $this->group->id, 'subject_id' => $this->subject->id, 'teacher_id' => $this->teacher->id]);
+    Sanctum::actingAs($this->teacher);
+    $id = $this->postJson("/api/v1/assessments/{$assessment->id}/material")->assertOk()->json('data.id');
+
+    $this->deleteJson("/api/v1/assessments/{$assessment->id}")->assertNoContent();
+
+    expect(Material::query()->find($id))->toBeNull();
+    Sanctum::actingAs($this->otherTeacher);
+    ($this->list)('catalog')->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('pages «Lo generado» across uploads and assessments, and the catalog', function () {
+    Notification::fake();
+    Sanctum::actingAs($this->teacher);
+    foreach (range(1, 30) as $i) {
+        Assessment::factory()->create([
+            'group_id' => $this->group->id, 'subject_id' => $this->subject->id, 'teacher_id' => $this->teacher->id,
+            'created_at' => now()->subDays(60 + $i),
+        ]);
+    }
+    foreach (range(1, 25) as $i) {
+        $this->travelTo(now()->subDays($i));
+        ($this->upload)(['publish' => true, 'confirm_no_student_data' => true])->assertCreated();
+        $this->travelBack();
+    }
+
+    $first = ($this->list)('generated')->assertOk()
+        ->assertJsonCount(50, 'data')
+        ->assertJsonPath('meta.total', 55)
+        ->assertJsonPath('meta.last_page', 2)
+        ->assertJsonPath('data.0.kind', 'upload')
+        ->assertJsonPath('data.49.kind', 'assessment');
+    $second = $this->getJson("/api/v1/materials?tab=generated&subject_id={$this->subject->id}&grade_id={$this->grade->id}&page=2")
+        ->assertOk()->assertJsonCount(5, 'data')->assertJsonPath('meta.current_page', 2);
+    $keys = fn ($response) => collect($response->json('data'))->map(fn ($row) => $row['kind'].$row['id']);
+    expect($keys($first)->intersect($keys($second)))->toBeEmpty();
+
+    Sanctum::actingAs($this->otherTeacher);
+    ($this->list)('catalog')->assertOk()->assertJsonCount(25, 'data')->assertJsonPath('meta.last_page', 1);
+});
+
+it('keeps an unpublished or removed material away from other teachers', function () {
+    Sanctum::actingAs($this->teacher);
+    $id = ($this->upload)()->json('data.id');
+
+    Sanctum::actingAs($this->otherTeacher);
+    $this->getJson("/api/v1/materials/{$id}")->assertForbidden();
+    $this->getJson("/api/v1/materials/{$id}/download")->assertForbidden();
+
+    Sanctum::actingAs($this->teacher);
+    $this->postJson("/api/v1/materials/{$id}/publish", ['confirm_no_student_data' => true])->assertOk();
+    Sanctum::actingAs($this->otherTeacher);
+    $this->getJson("/api/v1/materials/{$id}")->assertOk();
+
+    Sanctum::actingAs($this->psycho);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog")->assertOk();
+    Sanctum::actingAs($this->otherTeacher);
+    $this->getJson("/api/v1/materials/{$id}")->assertForbidden();
+    $this->getJson("/api/v1/materials/{$id}/download")->assertForbidden();
+});
+
+it('validates where an upload goes: another school\'s group, Dirección and Psicopedagogía', function () {
+    $otherSchool = School::factory()->create();
+    $foreignGroup = Tenancy::forSchool($otherSchool, fn () => Group::factory()->create(['school_id' => $otherSchool->id]));
+
+    Sanctum::actingAs($this->teacher);
+    ($this->upload)(['group_id' => $foreignGroup->id])->assertUnprocessable();
+
+    Sanctum::actingAs($this->director);
+    $this->getJson("/api/v1/materials/curricular-items?group_id={$this->group->id}&subject_id={$this->subject->id}")->assertForbidden();
+
+    // Psicopedagogía uploads to any group × subject of the school.
+    Sanctum::actingAs($this->psycho);
+    ($this->upload)(['group_id' => $this->otherGroup->id])->assertCreated();
+});
+
+it('publishes an assessment copy only from its assessment, and lets Dirección take it out from «Lo generado»', function () {
+    Notification::fake();
+    $assessment = Assessment::factory()->create(['group_id' => $this->group->id, 'subject_id' => $this->subject->id, 'teacher_id' => $this->teacher->id]);
+    Sanctum::actingAs($this->teacher);
+    $id = $this->postJson("/api/v1/assessments/{$assessment->id}/material")->assertOk()->json('data.id');
+    $this->postJson("/api/v1/materials/{$id}/publish", ['confirm_no_student_data' => true])->assertUnprocessable();
+
+    Sanctum::actingAs($this->director);
+    ($this->list)('generated')->assertOk()
+        ->assertJsonPath('data.0.kind', 'assessment')
+        ->assertJsonPath('data.0.can.remove_from_catalog', true);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog")->assertOk()->assertJsonPath('data.catalog_status', 'removed');
+});

@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Schema;
  * A row is either a file someone uploaded (`source = upload`, private disk,
  * temporary URLs only — CLAUDE.md rule 7) or the catalog copy of a confirmed
  * assessment (`source = assessment`), whose `content` is a snapshot cleaned of
- * student marks (screen 19 red line). `subject_id` + `school_grade_id` are the
+ * student marks (screen 19 red line); deleting the assessment deletes its
+ * copy, so nothing stays in the catalog that its owner can no longer manage. `subject_id` + `school_grade_id` are the
  * catalog's folders (P19-DEC-02: subject and grade before anything else).
  */
 return new class extends Migration
@@ -26,7 +27,7 @@ return new class extends Migration
             $table->foreignId('subject_id')->constrained();
             $table->foreignId('school_grade_id')->nullable()->constrained('school_grades');
             $table->string('source', 20);
-            $table->foreignId('assessment_id')->nullable()->unique()->constrained()->nullOnDelete();
+            $table->foreignId('assessment_id')->nullable()->unique()->constrained()->cascadeOnDelete();
             $table->string('title', 200);
             $table->string('type', 30);
             $table->json('tags')->nullable();
