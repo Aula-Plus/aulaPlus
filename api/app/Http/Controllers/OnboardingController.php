@@ -23,9 +23,6 @@ use Illuminate\Support\Facades\Notification;
  */
 class OnboardingController extends Controller
 {
-    /** Levels every private school holds as «habilitado» (P23-INS-02). */
-    protected const ALWAYS_ENABLED_LEVELS = ['lower_secondary', 'upper_secondary'];
-
     public function show(Request $request): JsonResponse
     {
         $school = $request->user()->school;
@@ -44,17 +41,18 @@ class OnboardingController extends Controller
                 : null,
             // Every level, loaded or not, so a missing regime is visible.
             // Ciclo Básico and Bachillerato are «habilitado» for every private
-            // school (P23-INS-02), so they read that way until Aula+ loads
-            // something else.
+            // school (P23-INS-02): always that way, flagged `fixed` (the SPA
+            // writes the Spanish line).
             'regimes' => EducationLevel::query()->orderBy('position')->get()->map(function (EducationLevel $level) use ($regimes): array {
                 $loaded = $regimes->get($level->id);
-                $fixed = $loaded === null && in_array($level->key, self::ALWAYS_ENABLED_LEVELS, true);
+                $fixed = LevelRegime::isFixedLevel($level->key);
 
                 return [
                     'level_key' => $level->key,
                     'level_label' => $level->label,
-                    'regime' => $loaded?->regime->value ?? ($fixed ? LevelRegime::Enabled->value : null),
-                    'note' => $loaded?->note ?? ($fixed ? 'Fijo: todos los colegios privados lo están' : null),
+                    'regime' => $fixed ? LevelRegime::Enabled->value : $loaded?->regime->value,
+                    'fixed' => $fixed,
+                    'note' => $loaded?->note,
                 ];
             })->values(),
             'sources' => OnboardingSource::query()->orderBy('position')->orderBy('id')->get()->map(fn (OnboardingSource $source) => [

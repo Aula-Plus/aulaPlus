@@ -48,6 +48,12 @@ class OnboardingRegime extends Command
             return self::FAILURE;
         }
 
+        if ($regime === LevelRegime::Authorized && LevelRegime::isFixedLevel($level->key)) {
+            $this->error("{$level->label} is always «habilitado» for private schools (P23-INS-02).");
+
+            return self::FAILURE;
+        }
+
         $note = $this->option('note');
         Tenancy::forSchool($school, fn () => SchoolLevelRegime::query()->updateOrCreate(
             ['education_level_id' => $level->id],

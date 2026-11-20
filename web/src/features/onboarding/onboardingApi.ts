@@ -16,7 +16,8 @@ export interface OnboardingRecord {
   opened_on: string | null
   offering_confirmed_on: string | null
   contact: { name: string | null; channel: string | null } | null
-  regimes: { level_key: string; level_label: string; regime: LevelRegime | null; note: string | null }[]
+  /** `fixed`: Ciclo Básico and Bachillerato, «habilitado» for every private school (P23-INS-02). */
+  regimes: { level_key: string; level_label: string; regime: LevelRegime | null; fixed: boolean; note: string | null }[]
   sources: { id: number; source: string; content: string; format: string | null; status: OnboardingStepStatus }[]
   log: { id: number; happened_on: string; step: string; status: OnboardingStepStatus }[]
   support_channels: SupportChannels

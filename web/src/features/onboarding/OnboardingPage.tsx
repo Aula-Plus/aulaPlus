@@ -163,16 +163,24 @@ export function OnboardingPage() {
               </li>
             ))}
           </ol>
-          <ContactLines record={record} />
+          <ContactLines record={record} failed={error} />
         </DialogContent>
       </Dialog>
     </div>
   )
 }
 
-function ContactLines({ record }: { record: OnboardingRecord | null }) {
-  const contact = record?.contact
-  const channels = record?.support_channels
+function ContactLines({ record, failed }: { record: OnboardingRecord | null; failed: boolean }) {
+  // Until the record arrives (or if it failed) we cannot say there is no contact.
+  if (record === null) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {failed ? "No pudimos cargar el contacto de Aula+." : "Cargando el contacto de Aula+…"}
+      </p>
+    )
+  }
+  const contact = record.contact
+  const channels = record.support_channels
   return (
     <div className="grid gap-1 text-sm">
       {contact ? (
@@ -260,6 +268,7 @@ function RegimeTab({ record }: { record: OnboardingRecord }) {
                 <dt className="font-medium">{level.level_label}</dt>
                 <dd className="text-muted-foreground">
                   {level.regime ? regimeLabels[level.regime] : "Sin cargar por Aula+"}
+                  {level.fixed ? " · Fijo: todos los colegios privados lo están" : ""}
                   {level.note ? ` · ${level.note}` : ""}
                 </dd>
               </div>

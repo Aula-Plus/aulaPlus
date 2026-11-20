@@ -12,6 +12,14 @@ enum LevelRegime: string
     case Enabled = 'enabled';
     case Authorized = 'authorized';
 
+    /** Levels every private school holds as «habilitado» (P23-INS-02, P29-REG-01). */
+    public const FIXED_LEVELS = ['lower_secondary', 'upper_secondary'];
+
+    public static function isFixedLevel(string $levelKey): bool
+    {
+        return in_array($levelKey, self::FIXED_LEVELS, true);
+    }
+
     /** @return list<string> */
     public static function values(): array
     {

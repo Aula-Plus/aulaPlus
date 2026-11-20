@@ -43,7 +43,9 @@ it('lets the Aula+ team load the record by command and Dirección read it', func
         ->assertJsonPath('data.regimes.1.regime', 'enabled')
         // Ciclo Básico and Bachillerato read as «habilitado» even before loading.
         ->assertJsonPath('data.regimes.2.regime', 'enabled')
-        ->assertJsonPath('data.regimes.2.note', 'Fijo: todos los colegios privados lo están')
+        ->assertJsonPath('data.regimes.2.fixed', true)
+        ->assertJsonPath('data.regimes.2.note', null)
+        ->assertJsonPath('data.regimes.0.fixed', false)
         ->assertJsonPath('data.sources.0.format', 'CSV')
         ->assertJsonPath('data.sources.0.status', 'done')
         ->assertJsonPath('data.log.0.happened_on', '2026-02-27');
@@ -54,6 +56,9 @@ it('rejects bad dates, levels and regimes in the commands', function () {
     $this->artisan('app:onboarding-status', ['school' => $id, '--opened' => '02/03/2026'])->assertFailed();
     $this->artisan('app:onboarding-regime', ['school' => $id, 'level' => 'kinder', 'regime' => 'enabled'])->assertFailed();
     $this->artisan('app:onboarding-regime', ['school' => $id, 'level' => 'primary', 'regime' => 'maybe'])->assertFailed();
+    // Ciclo Básico and Bachillerato are always «habilitado» (P23-INS-02).
+    $this->artisan('app:onboarding-regime', ['school' => $id, 'level' => 'upper_secondary', 'regime' => 'authorized'])->assertFailed();
+    $this->artisan('app:onboarding-regime', ['school' => $id, 'level' => 'lower_secondary', 'regime' => 'enabled', '--note' => 'Resolución 123'])->assertSuccessful();
     $this->artisan('app:onboarding-log', ['school' => 999999, 'date' => '2026-02-27', 'step' => 'x'])->assertFailed();
 });
 
@@ -119,4 +124,15 @@ it('keeps the regime correction out of the generic support form', function () {
 
     $this->postJson('/api/v1/support-messages', ['kind' => 'regime_correction', 'message' => 'Algo no coincide'])
         ->assertUnprocessable();
+});
+
+it('keeps a fixed level «habilitado» with its note once Aula+ loads it', function () {
+    $this->artisan('app:onboarding-regime', ['school' => $this->school->id, 'level' => 'lower_secondary', 'regime' => 'enabled', '--note' => 'Resolución 123'])->assertSuccessful();
+
+    Sanctum::actingAs($this->director);
+    $this->getJson('/api/v1/onboarding')->assertOk()
+        ->assertJsonPath('data.regimes.2.level_key', 'lower_secondary')
+        ->assertJsonPath('data.regimes.2.regime', 'enabled')
+        ->assertJsonPath('data.regimes.2.fixed', true)
+        ->assertJsonPath('data.regimes.2.note', 'Resolución 123');
 });

@@ -20,8 +20,9 @@ const record: OnboardingRecord = {
   offering_confirmed_on: null,
   contact: { name: "Tiago", channel: "Por mail" },
   regimes: [
-    { level_key: "initial", level_label: "Inicial", regime: "authorized", note: "Programa propio" },
-    { level_key: "primary", level_label: "Primaria", regime: null, note: null },
+    { level_key: "initial", level_label: "Inicial", regime: "authorized", fixed: false, note: "Programa propio" },
+    { level_key: "primary", level_label: "Primaria", regime: null, fixed: false, note: null },
+    { level_key: "lower_secondary", level_label: "Ciclo Básico", regime: "enabled", fixed: true, note: null },
   ],
   sources: [{ id: 1, source: "Sistema de gestión", content: "Alumnos y grupos", format: "CSV", status: "done" }],
   log: [{ id: 1, happened_on: "2026-02-27", step: "Validación conjunta", status: "done" }],
@@ -54,6 +55,7 @@ describe("OnboardingPage", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "Régimen, oferta y plantillas" }))
     expect(screen.getByText("Autorizado · Programa propio")).toBeInTheDocument()
     expect(screen.getByText("Sin cargar por Aula+")).toBeInTheDocument()
+    expect(screen.getByText("Habilitado · Fijo: todos los colegios privados lo están")).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText("Qué no coincide con tu colegio"), "Primaria es autorizada")
     await userEvent.click(screen.getByRole("button", { name: "Solicitar corrección" }))
@@ -71,6 +73,15 @@ describe("OnboardingPage", () => {
     expect(await screen.findByText(/15 días hábiles/)).toBeInTheDocument()
     expect(screen.getByText(/muestra de 20 alumnos/)).toBeInTheDocument()
     expect(screen.getByText("Tu contacto en Aula+: Tiago · Por mail")).toBeInTheDocument()
+  })
+
+  it("does not say there is no contact when the record failed to load", async () => {
+    vi.mocked(onboardingApi.fetchOnboarding).mockRejectedValue(new Error("network"))
+    render(<OnboardingPage />)
+    await screen.findByText("No pudimos cargar la puesta en marcha.")
+    await userEvent.click(screen.getAllByRole("button", { name: "Ver instructivo" })[0])
+    expect(await screen.findByText("No pudimos cargar el contacto de Aula+.")).toBeInTheDocument()
+    expect(screen.queryByText(/Todavía no hay una persona de Aula\+ asignada/)).not.toBeInTheDocument()
   })
 
   it("is not for other roles", async () => {
