@@ -10,6 +10,7 @@ import {
   CalendarCog,
   ClipboardList,
   FolderOpen,
+  PackageCheck,
   Columns2,
   GraduationCap,
   ListChecks,
@@ -34,6 +35,7 @@ import {
   canManageCurricularStructure,
   canManageCommentSettings,
   canManageSchoolYear,
+  canViewOnboarding,
   canManageSubjects,
   canManageUsers,
   canViewOfficialScales,
@@ -142,6 +144,11 @@ export function buildNavSections(
         // (mirror of SchoolYearPolicy) — ClickUp 1dfd3mc4bh7.
         ...(canManageSchoolYear(user)
           ? [{ to: "/administracion/ano-y-calendario", label: "Año y calendario", icon: CalendarCog }]
+          : []),
+        // Screen 29 «Puesta en marcha»: direction reads how the school's
+        // information came in (mirror of SchoolPolicy::viewOnboarding).
+        ...(canViewOnboarding(user)
+          ? [{ to: "/administracion/puesta-en-marcha", label: "Puesta en marcha", icon: PackageCheck }]
           : []),
         // The subjects catalog is director-only (mirror of SubjectPolicy).
         ...(canManageSubjects(user)
