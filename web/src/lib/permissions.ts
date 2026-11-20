@@ -406,3 +406,11 @@ export function canOpenIndicators(user: User | null): boolean {
 export function canOpenAccommodationsInbox(user: User | null): boolean {
   return isPsychopedagogue(user)
 }
+
+/**
+ * «Subir un recurso propio» in Materiales (screen 19). Mirror of
+ * `MaterialPolicy::create`: Docente and Psicopedagogía; Dirección reads.
+ */
+export function canUploadMaterials(user: User | null): boolean {
+  return hasAnyRole(user, ["teacher", "psychopedagogue"])
+}

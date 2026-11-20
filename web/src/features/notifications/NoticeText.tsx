@@ -54,6 +54,18 @@ export function NoticeText({ notice, studentName }: { notice: AppNotification; s
           </Link>
         </span>
       )
+    case "material_published":
+      return (
+        <span>
+          Se agregó un material al catálogo del colegio.{" "}
+          <Link
+            className="underline"
+            to={`/materiales?solapa=institucional&materia=${data.subject_id}&nivel=${data.school_grade_id ?? "none"}`}
+          >
+            Ver en Materiales
+          </Link>
+        </span>
+      )
     case "follow_up_assigned":
       return (
         <span>
