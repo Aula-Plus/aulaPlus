@@ -408,6 +408,14 @@ export function canOpenAccommodationsInbox(user: User | null): boolean {
 }
 
 /**
+ * «Subir un recurso propio» in Materiales (screen 19). Mirror of
+ * `MaterialPolicy::create`: Docente and Psicopedagogía; Dirección reads.
+ */
+export function canUploadMaterials(user: User | null): boolean {
+  return hasAnyRole(user, ["teacher", "psychopedagogue"])
+}
+
+/**
  * Screen 29 «Puesta en marcha»: direction only reads the onboarding record.
  * Mirror of `SchoolPolicy::viewOnboarding`.
  */

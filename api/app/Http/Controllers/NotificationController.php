@@ -8,6 +8,7 @@ use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\AlertOverdueNotification;
 use App\Notifications\CommentSharedNotification;
 use App\Notifications\FollowUpAssignedNotification;
+use App\Notifications\MaterialPublishedNotification;
 use App\Notifications\ScreeningDesignChangedNotification;
 use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -159,6 +160,8 @@ class NotificationController extends Controller
         CommentSharedNotification::class,
         ScreeningDesignChangedNotification::class,
         ScreeningDesignRevertedNotification::class,
+        // Screen 19: a material was added to the school's catalog.
+        MaterialPublishedNotification::class,
     ];
 
     /**
