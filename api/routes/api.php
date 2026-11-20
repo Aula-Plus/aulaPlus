@@ -47,6 +47,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NumericGradeSettingsController;
 use App\Http\Controllers\OfficialScaleController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlannerSettingsController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
@@ -491,6 +492,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/school-years/{schoolYear}/open-next', [SchoolYearController::class, 'openNext']);
         Route::post('/school-years/{schoolYear}/write-windows', [SchoolYearController::class, 'storeWriteWindow']);
         Route::post('/group-write-windows/{window}/end', [SchoolYearController::class, 'endWriteWindow']);
+
+        // Screen 29 «Puesta en marcha» (ClickUp 1dfd3mc4bh8): direction reads
+        // the onboarding record (loaded by Aula+ with app:onboarding-*) and
+        // asks for a regime correction.
+        Route::get('/onboarding', [OnboardingController::class, 'show']);
+        Route::post('/onboarding/regime-correction', [OnboardingController::class, 'requestRegimeCorrection'])
+            ->middleware('throttle:10,1');
 
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/{user}', [UserController::class, 'show']);
