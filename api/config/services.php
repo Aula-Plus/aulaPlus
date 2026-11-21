@@ -31,6 +31,10 @@ return [
     // Recipients (comma-separated) of "Ayuda y sugerencias" emails. Per-env.
     'support' => [
         'notify_to' => array_filter(array_map('trim', explode(',', (string) env('SUPPORT_NOTIFY_EMAILS', '')))),
+        // Direct channels Puesta en marcha offers after «Solicitar corrección»
+        // and in the instructivo (screen 29). Shown only when set; per-env.
+        'whatsapp' => env('SUPPORT_WHATSAPP_NUMBER') ?: null,
+        'contact_email' => env('SUPPORT_CONTACT_EMAIL') ?: null,
     ],
 
     'slack' => [

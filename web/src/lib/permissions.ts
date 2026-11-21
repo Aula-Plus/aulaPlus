@@ -418,3 +418,11 @@ export function canOpenAccommodationsInbox(user: User | null): boolean {
 export function canGenerateClasses(user: User | null): boolean {
   return isTeacher(user)
 }
+
+/**
+ * Screen 29 «Puesta en marcha»: direction only reads the onboarding record.
+ * Mirror of `SchoolPolicy::viewOnboarding`.
+ */
+export function canViewOnboarding(user: User | null): boolean {
+  return isDirector(user)
+}

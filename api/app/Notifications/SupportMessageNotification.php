@@ -53,14 +53,21 @@ class SupportMessageNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $message = $this->message->loadMissing('user', 'school');
-        $kind = $message->kind === SupportMessage::KIND_ISSUE ? 'Algo no funciona' : 'Propuesta de mejora';
+        $kind = match ($message->kind) {
+            SupportMessage::KIND_ISSUE => 'Algo no funciona',
+            SupportMessage::KIND_REGIME_CORRECTION => 'URGENTE · Corrección de régimen',
+            default => 'Propuesta de mejora',
+        };
         $role = self::ROLE_LABELS[$message->role] ?? $message->role;
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject("[Aula+] {$kind}")
             ->line(self::literal($message->message))
             ->line(self::literal("Desde: {$this->origin($message->screen)} — {$role} — {$message->school->name}"))
             ->line(self::literal("Enviado por: {$message->user->name}"));
+
+        // Regime corrections are top urgency (screen 29): flagged in the mail too.
+        return $message->isUrgent() ? $mail->priority(1) : $mail;
     }
 
     /**
