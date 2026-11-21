@@ -407,6 +407,18 @@ export function canOpenAccommodationsInbox(user: User | null): boolean {
   return isPsychopedagogue(user)
 }
 
+// ── Classes (screens 14–15) ─────────────────────────────────────────────────
+
+/**
+ * Ask the AI for a class (screen 14, ClickUp 86e3jujh0). Mirror of the role
+ * portion of `AIProposalPolicy::generateClass`: only teachers — Psicopedagogía
+ * and Dirección read and comment proposals, they don't generate classes
+ * (P14-DEC-04). The subject check is the server's.
+ */
+export function canGenerateClasses(user: User | null): boolean {
+  return isTeacher(user)
+}
+
 /**
  * Screen 29 «Puesta en marcha»: direction only reads the onboarding record.
  * Mirror of `SchoolPolicy::viewOnboarding`.

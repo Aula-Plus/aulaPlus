@@ -27,5 +27,7 @@ export function calendarItemHour(item: CalendarItem): string {
 export function calendarItemLink(item: CalendarItem): string | null {
   if (item.type === "assessment" && item.group) return `/clases/${item.group.id}/evaluaciones`
   if (item.type === "task") return "/alertas"
+  // A class opens its own screen (15): its sections and its one-tap closing.
+  if (item.type === "class") return `/clase/${item.id}`
   return null
 }
