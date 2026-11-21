@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\Role;
 use App\Models\Accommodation;
 use App\Models\Student;
+use App\Models\TherapeuticCompanion;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
@@ -137,6 +138,12 @@ class StudentTrackingResource extends JsonResource
                 fn () => AlertResource::collection($alerts)
             ),
             'open_alerts_count' => $openAlertsCount,
+            // Who accompanies the student (screen 10, ClickUp 1dfd3mc4bge):
+            // everyone who sees the file gets name, weekly hours and days —
+            // the teacher's only window on the companion — and only
+            // psychopedagogy also the reason (P10-DEC-09). Read per request,
+            // never from the shared cache.
+            'therapeutic_companions' => $this->companions($student, $user),
             // Role-filtered upstream (StudentGradeAccess): a teacher only gets the
             // subjects they teach unless direction opened more, and no general
             // average at all while limited to their own subjects.
@@ -151,6 +158,23 @@ class StudentTrackingResource extends JsonResource
             'grades_truncated' => $this->resource['grades_truncated'],
             'grades_view' => $this->resource['grades_view'],
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function companions(Student $student, User $user): array
+    {
+        $withReason = $user->can('viewReason', TherapeuticCompanion::class);
+
+        return $student->therapeuticCompanions()->orderBy('name')->get()
+            ->map(fn (TherapeuticCompanion $companion): array => [
+                'id' => $companion->id,
+                'name' => $companion->name,
+                'weekly_hours' => $companion->weekly_hours,
+                'days' => $companion->days,
+                ...($withReason ? ['reason' => $companion->reason] : []),
+            ])->values()->all();
     }
 
     /**

@@ -32,7 +32,7 @@ const studentSchema = z.object({
   photo_url: z.string().optional(),
   birth_date: z.string().optional(),
   enrollment_year: z.string().min(1, "Ingresá el año de ingreso"),
-  has_therapeutic_companion: z.boolean(),
+  has_therapeutic_companion: z.boolean().optional(),
   group_id: z.string().optional(),
   learning_profile: z.string().optional().refine(isValidJsonObjectOrEmpty, "Ingresá un JSON válido"),
   tracking_notes: z.string().optional(),
@@ -60,6 +60,8 @@ export function StudentFormPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [groups, setGroups] = useState<Group[]>([])
+  // The companion records of screen 10 decide the flag (server-side too).
+  const [companionFromRecords, setCompanionFromRecords] = useState(false)
   const currentYear = getCurrentSchoolYear()
   const { user } = useAuth()
   const canEditClinicalProfile = canViewClinicalProfileUX(user)
@@ -96,6 +98,7 @@ export function StudentFormPage() {
   useEffect(() => {
     if (!id) return
     studentsApi.fetchStudent(Number(id)).then((student) => {
+      setCompanionFromRecords(student.therapeutic_companion_records === true)
       const currentGroup = student.groups.find((group) => group.school_year === currentYear)
       reset({
         full_name: student.full_name,
@@ -234,10 +237,17 @@ export function StudentFormPage() {
               id="has_therapeutic_companion"
               type="checkbox"
               className="size-4"
+              disabled={companionFromRecords}
+              aria-describedby={companionFromRecords ? "has_therapeutic_companion_hint" : undefined}
               {...register("has_therapeutic_companion")}
             />
             <Label htmlFor="has_therapeutic_companion">Tiene acompañante terapéutico</Label>
           </div>
+          {companionFromRecords && (
+            <p id="has_therapeutic_companion_hint" className="text-sm text-muted-foreground">
+              Se carga desde el Espacio de psicopedagogía › Acompañantes.
+            </p>
+          )}
           {canEditClinicalProfile && (
             <>
               <div className="grid gap-2">

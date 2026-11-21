@@ -29,6 +29,7 @@ export const screenTitles: { pattern: string; title: string }[] = [
   { pattern: "/alumnos/:id/seguimiento", title: "Perfil del alumno" },
   { pattern: "/alumnos/:id/historial", title: "Historial del alumno" },
   { pattern: "/alertas", title: "Alertas" },
+  { pattern: "/espacio-psicopedagogia", title: "Espacio de psicopedagogía" },
   { pattern: "/mis-seguimientos", title: "Mis seguimientos" },
   { pattern: "/calendario", title: "Calendario" },
   { pattern: "/calendario/mis-horarios", title: "Mis horarios" },

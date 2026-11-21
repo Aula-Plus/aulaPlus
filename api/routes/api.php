@@ -44,11 +44,15 @@ use App\Http\Controllers\IndicatorChartController;
 use App\Http\Controllers\IndicatorController;
 use App\Http\Controllers\IndicatorDataController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\MeetingSheetActionController;
+use App\Http\Controllers\MeetingSheetController;
+use App\Http\Controllers\MeetingSheetTypeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NumericGradeSettingsController;
 use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlannerSettingsController;
+use App\Http\Controllers\PsychopedagogyMeetingController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\SchoolYearController;
@@ -69,6 +73,7 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\TherapeuticCompanionController;
 use App\Http\Controllers\TimetableSlotController;
 use App\Http\Controllers\UnitController;
 use App\Http\Controllers\UnitObjectiveController;
@@ -471,6 +476,37 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
         Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
         Route::delete('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'destroy']);
+
+        // Screen 10 «Espacio de psicopedagogía» (ClickUp 1dfd3mc4bge): the
+        // team's agenda, the therapeutic companions and the meeting sheets.
+        // No teacher enters (every endpoint 403s for them); direction gets
+        // the workload counts, the companions without the reason and that
+        // each sheet existed. The actions agreed in a sheet are tasks of
+        // their owner, whatever their role (`meeting-actions`).
+        Route::prefix('psychopedagogy')->group(function (): void {
+            Route::get('/overview', [PsychopedagogyMeetingController::class, 'overview']);
+            Route::get('/staff', [PsychopedagogyMeetingController::class, 'staff']);
+            Route::get('/meetings', [PsychopedagogyMeetingController::class, 'index']);
+            Route::post('/meetings', [PsychopedagogyMeetingController::class, 'store']);
+            Route::put('/meetings/{meeting}', [PsychopedagogyMeetingController::class, 'update'])->whereNumber('meeting');
+            Route::post('/meetings/{meeting}/complete', [PsychopedagogyMeetingController::class, 'complete'])->whereNumber('meeting');
+            Route::get('/companions', [TherapeuticCompanionController::class, 'index']);
+            Route::post('/companions', [TherapeuticCompanionController::class, 'store']);
+            Route::patch('/companions/{companion}', [TherapeuticCompanionController::class, 'update'])->whereNumber('companion');
+            Route::delete('/companions/{companion}', [TherapeuticCompanionController::class, 'destroy'])->whereNumber('companion');
+            Route::get('/sheets', [MeetingSheetController::class, 'index']);
+            Route::post('/sheets', [MeetingSheetController::class, 'store']);
+            Route::get('/sheets/{sheet}', [MeetingSheetController::class, 'show'])->whereNumber('sheet');
+            Route::put('/sheets/{sheet}', [MeetingSheetController::class, 'update'])->whereNumber('sheet');
+            Route::post('/sheets/{sheet}/confirm', [MeetingSheetController::class, 'confirm'])->whereNumber('sheet');
+        });
+        // Its types are school-wide (P10-DEC-01): direction renames and adds
+        // them from «Colegio y estructura › Institución».
+        Route::get('/meeting-sheet-types', [MeetingSheetTypeController::class, 'index']);
+        Route::post('/meeting-sheet-types', [MeetingSheetTypeController::class, 'store']);
+        Route::patch('/meeting-sheet-types/{meetingSheetType}', [MeetingSheetTypeController::class, 'update'])->whereNumber('meetingSheetType');
+        Route::get('/meeting-actions/mine', [MeetingSheetActionController::class, 'mine']);
+        Route::post('/meeting-actions/{action}/complete', [MeetingSheetActionController::class, 'complete'])->whereNumber('action');
 
         // Session: user management (docs/superpowers/specs/2026-09-15-user-
         // management-design.md). Director-only staff onboarding + lifecycle.

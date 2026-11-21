@@ -13,6 +13,7 @@ import {
   Columns2,
   GraduationCap,
   ListChecks,
+  NotebookPen,
   Eye,
   MessageSquare,
   Home,
@@ -28,6 +29,7 @@ import {
   canCompareGroups,
   canOpenAccommodationsInbox,
   canOpenIndicators,
+  canOpenPsychopedagogySpace,
   canEditScreeningTestDesign,
   canManageGradesVisibility,
   canManageAlertSettings,
@@ -92,6 +94,11 @@ export function buildNavSections(
         // own inbox of every accommodation; nobody else enters (P06-DEC-07).
         ...(canOpenAccommodationsInbox(user)
           ? [{ to: "/ajustes-y-ptp", label: "Ajustes y PTP", icon: ListChecks }]
+          : []),
+        // Screen 10 — Espacio de psicopedagogía (ClickUp 1dfd3mc4bge): the
+        // team's own space; Dirección gets its limited view, no teacher enters.
+        ...(canOpenPsychopedagogySpace(user)
+          ? [{ to: "/espacio-psicopedagogia", label: "Espacio de psicopedagogía", icon: NotebookPen }]
           : []),
         // One screen for the alerts that reach the user and their own scheduled
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr).
