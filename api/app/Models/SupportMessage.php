@@ -24,11 +24,23 @@ class SupportMessage extends Model
     public const KIND_IMPROVEMENT = 'improvement';
 
     /**
+     * «Solicitar corrección» of the ANEP regime from Puesta en marcha (screen
+     * 29, P29-DEC-115): same path as «Ayuda y sugerencias», with top urgency.
+     * Not offered by the generic form (see kinds()).
+     */
+    public const KIND_REGIME_CORRECTION = 'regime_correction';
+
+    /**
      * @return list<string>
      */
     public static function kinds(): array
     {
         return [self::KIND_ISSUE, self::KIND_IMPROVEMENT];
+    }
+
+    public function isUrgent(): bool
+    {
+        return $this->kind === self::KIND_REGIME_CORRECTION;
     }
 
     public function user(): BelongsTo
