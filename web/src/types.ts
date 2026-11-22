@@ -1263,6 +1263,8 @@ export interface AppNotification {
     | AccommodationConfirmedNotice
     | CommentSharedNotice
     | ScreeningDesignNotice
+    | MaterialPublishedNotice
+    | MaterialRemovedNotice
   /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
   read_at?: string | null
   created_at: string | null
@@ -2086,4 +2088,94 @@ export const calendarBodyLabels: Record<CalendarBody, string> = {
   anep_upper_secondary: "ANEP Bachillerato",
   cambridge: "Cambridge",
   ib: "IB",
+}
+
+// ── Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx) ────────────────────────────
+
+export type MaterialType = "guide" | "worksheet" | "activity" | "reading" | "presentation" | "assessment" | "other"
+
+/** Spanish labels for `App\Enums\MaterialType`. */
+export const materialTypeLabels: Record<MaterialType, string> = {
+  guide: "Guía",
+  worksheet: "Ficha de trabajo",
+  activity: "Actividad",
+  reading: "Lectura",
+  presentation: "Presentación",
+  assessment: "Evaluación",
+  other: "Otro",
+}
+
+/** The prefilter and the upload form's choices (`GET /api/v1/materials/options`). */
+export interface MaterialOptions {
+  subjects: { id: number; name: string }[]
+  /** `id` null is the «Sin grado» folder (groups without a grade). */
+  grades: { id: number | null; label: string }[]
+  /** Where the caller may upload; empty for Dirección. */
+  groups: { id: number; name: string; grade_id: number | null; subject_ids: number[] }[]
+}
+
+/** A program element a material can be tagged with (the subject's catalog). */
+export interface MaterialProgramItem {
+  id: number
+  code: string | null
+  name: string
+  type: string
+  catalog: string | null
+  framework: string | null
+}
+
+/**
+ * One row of «Lo generado» or «Institucional». `kind` "upload" is a file;
+ * "assessment" is a confirmed assessment (in «Lo generado», `id` is the
+ * assessment) or its catalog copy (in «Institucional», `id` is the material).
+ * In the catalog `group` is always null: what is published is the resource,
+ * not the case (screen 19 red line).
+ */
+export interface MaterialRow {
+  kind: "upload" | "assessment"
+  id: number
+  material_id: number | null
+  assessment_id: number | null
+  title: string
+  type: MaterialType
+  assessment_type?: string
+  tags: string[]
+  format: string | null
+  group: { id: number; name: string } | null
+  owner_name: string | null
+  is_mine: boolean
+  catalog_status: "published" | "removed" | null
+  published_at: string | null
+  published_by_name: string | null
+  curricular_items: { id: number; code: string | null; name: string }[]
+  created_at: string | null
+  administered_at?: string | null
+  can: { publish: boolean; remove_from_catalog: boolean; delete: boolean }
+}
+
+export interface MaterialDetail extends MaterialRow {
+  /** The cleaned content of an assessment's catalog copy; null for a file. */
+  content: unknown
+}
+
+/**
+ * «Sacaron del catálogo tu material X» (screen 19): to the owner, with the
+ * optional reason Psicopedagogía or Dirección wrote. `material_title` is
+ * resolved by the server while the owner can still see the material.
+ */
+export interface MaterialRemovedNotice {
+  type: "material_removed"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
+  reason: string | null
+  material_title?: string | null
+}
+
+/** «Se agregó un material al catálogo» (screen 19): to Psicopedagogía and Dirección. */
+export interface MaterialPublishedNotice {
+  type: "material_published"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
 }

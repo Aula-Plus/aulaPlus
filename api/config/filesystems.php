@@ -127,6 +127,38 @@ return [
             ],
         },
 
+        /*
+        | Uploaded teaching materials (screen 19, App\Support\MaterialStorage).
+        | Private like the reports: a file may carry student data until whoever
+        | publishes it confirms it does not, so it is only ever reached through
+        | short-lived temporary URLs (CLAUDE.md rule 7). MATERIAL_DISK: "s3"
+        | (private bucket, AWS_* vars; required in production) or "local".
+        */
+        'materials' => match (env('MATERIAL_DISK', 'local')) {
+            's3' => [
+                'driver' => 's3',
+                'key' => env('AWS_ACCESS_KEY_ID'),
+                'secret' => env('AWS_SECRET_ACCESS_KEY'),
+                'region' => env('AWS_DEFAULT_REGION'),
+                'bucket' => env('AWS_BUCKET'),
+                'endpoint' => env('AWS_ENDPOINT'),
+                'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+                'visibility' => 'private',
+                'throw' => true,
+                'report' => false,
+            ],
+            default => [
+                'driver' => 'local',
+                'root' => storage_path('app/private'),
+                // Own URL prefix: each served disk needs a unique one.
+                'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/material-files',
+                'serve' => true,
+                'visibility' => 'private',
+                'throw' => true,
+                'report' => false,
+            ],
+        },
+
     ],
 
     /*
