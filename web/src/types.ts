@@ -1276,6 +1276,8 @@ export interface AppNotification {
     | ScreeningDesignNotice
     | MeetingSheetFragmentNotice
     | MeetingActionAssignedNotice
+    | MaterialPublishedNotice
+    | MaterialRemovedNotice
   /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
   read_at?: string | null
   created_at: string | null
@@ -1953,6 +1955,44 @@ export interface CalendarItem {
   place: string | null
   assessment_type: AssessmentType | null
   can_edit: boolean
+  /** Institutional events only: who it concerns (empty = the whole school). */
+  audience?: EventAudienceTarget[]
+  /** Institutional events only: whether it concerns the caller's groups. */
+  for_me?: boolean
+}
+
+/**
+ * One target of an institutional event's audience (ClickUp 1dfd3mc55zp): a
+ * level, a generation (grade), a program within a generation, or one group.
+ * Labels are the catalog's own data; group names are the school's own
+ * («3° B»). `groups`: the groups it reaches in the event's school year,
+ * resolved by the server (the group itself, a generation's or program's
+ * groups; empty for a level). All of level/grade/group null = a group that
+ * was deleted (it reaches nobody).
+ */
+export interface EventAudienceTarget {
+  level: { id: number; key: string; label: string } | null
+  grade: { id: number; key: string; label: string } | null
+  framework: { id: number; name: string } | null
+  group: { id: number; name: string } | null
+  groups: { id: number; name: string }[]
+}
+
+/** A group Direction can pick, by its own name, with what decides which targets reach it. */
+export interface EventAudienceGroupOption {
+  id: number
+  name: string
+  school_year: number
+  level_id: number | null
+  grade_id: number | null
+  framework_ids: number[]
+}
+
+/** What Direction can pick as an event's audience (`/calendar-events/audience-options`). */
+export interface EventAudienceOptions {
+  levels: { id: number; key: string; label: string; grades: { id: number; key: string; label: string }[] }[]
+  frameworks: { id: number; name: string; education_levels: string[] | null }[]
+  groups: EventAudienceGroupOption[]
 }
 
 /** An institutional event as returned by `/api/v1/calendar-events`. */
@@ -1964,6 +2004,7 @@ export interface InstitutionalEvent {
   time: string | null
   location: string | null
   description: string | null
+  audience: EventAudienceTarget[]
 }
 
 /** ISO weekday (1 = lunes … 7 = domingo) → Spanish label. */
@@ -2205,4 +2246,94 @@ export interface MyMeetingAction {
   due_on: string
   done: boolean
   meeting: { sheet_type_name: string; held_on: string }
+}
+
+// ── Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx) ────────────────────────────
+
+export type MaterialType = "guide" | "worksheet" | "activity" | "reading" | "presentation" | "assessment" | "other"
+
+/** Spanish labels for `App\Enums\MaterialType`. */
+export const materialTypeLabels: Record<MaterialType, string> = {
+  guide: "Guía",
+  worksheet: "Ficha de trabajo",
+  activity: "Actividad",
+  reading: "Lectura",
+  presentation: "Presentación",
+  assessment: "Evaluación",
+  other: "Otro",
+}
+
+/** The prefilter and the upload form's choices (`GET /api/v1/materials/options`). */
+export interface MaterialOptions {
+  subjects: { id: number; name: string }[]
+  /** `id` null is the «Sin grado» folder (groups without a grade). */
+  grades: { id: number | null; label: string }[]
+  /** Where the caller may upload; empty for Dirección. */
+  groups: { id: number; name: string; grade_id: number | null; subject_ids: number[] }[]
+}
+
+/** A program element a material can be tagged with (the subject's catalog). */
+export interface MaterialProgramItem {
+  id: number
+  code: string | null
+  name: string
+  type: string
+  catalog: string | null
+  framework: string | null
+}
+
+/**
+ * One row of «Lo generado» or «Institucional». `kind` "upload" is a file;
+ * "assessment" is a confirmed assessment (in «Lo generado», `id` is the
+ * assessment) or its catalog copy (in «Institucional», `id` is the material).
+ * In the catalog `group` is always null: what is published is the resource,
+ * not the case (screen 19 red line).
+ */
+export interface MaterialRow {
+  kind: "upload" | "assessment"
+  id: number
+  material_id: number | null
+  assessment_id: number | null
+  title: string
+  type: MaterialType
+  assessment_type?: string
+  tags: string[]
+  format: string | null
+  group: { id: number; name: string } | null
+  owner_name: string | null
+  is_mine: boolean
+  catalog_status: "published" | "removed" | null
+  published_at: string | null
+  published_by_name: string | null
+  curricular_items: { id: number; code: string | null; name: string }[]
+  created_at: string | null
+  administered_at?: string | null
+  can: { publish: boolean; remove_from_catalog: boolean; delete: boolean }
+}
+
+export interface MaterialDetail extends MaterialRow {
+  /** The cleaned content of an assessment's catalog copy; null for a file. */
+  content: unknown
+}
+
+/**
+ * «Sacaron del catálogo tu material X» (screen 19): to the owner, with the
+ * optional reason Psicopedagogía or Dirección wrote. `material_title` is
+ * resolved by the server while the owner can still see the material.
+ */
+export interface MaterialRemovedNotice {
+  type: "material_removed"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
+  reason: string | null
+  material_title?: string | null
+}
+
+/** «Se agregó un material al catálogo» (screen 19): to Psicopedagogía and Dirección. */
+export interface MaterialPublishedNotice {
+  type: "material_published"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
 }

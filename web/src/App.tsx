@@ -24,6 +24,7 @@ import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
+import { MaterialsPage } from "@/features/materials/MaterialsPage"
 import { SchoolStructurePage } from "@/features/school-structure/SchoolStructurePage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
@@ -154,6 +155,14 @@ function App() {
             element={
               <ProtectedLayout>
                 <AnnualPlanPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/materiales"
+            element={
+              <ProtectedLayout>
+                <MaterialsPage />
               </ProtectedLayout>
             }
           />

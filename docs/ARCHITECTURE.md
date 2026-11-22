@@ -291,13 +291,39 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
   («Hoy en tu calendario», P01-HOY-01) lee el mismo feed para hoy.
 - **Quién ve qué** (línea roja): clases solo el docente que da esa materia en
   ese grupo; evaluaciones el docente dueño, Psicopedagogía y Dirección todas
-  (sin notas ni alumnos); tareas solo las propias; institucionales todos. Una
+  (sin notas ni alumnos); tareas solo las propias; institucionales, los que
+  le corresponden (ver abajo) y, en «Ver todo el calendario del colegio»
+  (`scope=school`), todos los del colegio. Una
   reunión (`CalendarEvent` tipo `meeting`) la ve solo quien la tiene en su
   calendario (pivot `calendar_calendar_event`) — ni Dirección la ve si no está
   citada. Ningún ítem lleva nombre de alumno.
 - **Evento institucional**: la única fecha que nace acá. Solo Dirección crea,
   edita y quita (`CalendarEventPolicy`). Fecha, hora opcional (`all_day`),
   lugar opcional; fechas/horas en hora local del colegio, guardadas en UTC.
+- **A quién le corresponde** (ClickUp 1dfd3mc55zp, P21-DEC-05/108):
+  `calendar_event_audiences`, una fila por destinatario y el evento toca los
+  grupos que cumplan **cualquiera** (combinación). Destinatario = un nivel
+  (`education_level_id`; «Secundaria» = Ciclo Básico + Bachillerato, dos
+  filas), una generación (`school_grade_id`) o los grupos de un programa
+  dentro de una generación (`school_grade_id` + `curricular_framework_id`,
+  según la oferta curricular del grupo en cualquier materia) o un grupo
+  (`group_id`, del colegio y del año lectivo de la fecha del evento; Eitán,
+  ClickUp 1dfd3mc55zp). Los grupos se muestran siempre con el nombre que les
+  puso el colegio («3° B»): cada destinatario trae `groups`, los grupos a los
+  que llega en el año del evento (el propio grupo, o los de la generación o
+  programa; vacío para un nivel), resuelto en el servidor con una consulta
+  para todo el feed. Si se borra el grupo, la fila queda con todo en null y no
+  le corresponde a nadie (nunca «todo el colegio»). Sin filas = todo
+  el colegio (los eventos previos quedan así). Validación en
+  `InstitutionalEventRequest`: el programa tiene que estar activo y no ser el
+  régimen obligatorio del colegio y aplicar al nivel del grado
+  (`GET /calendar-events/audience-options`, solo Dirección).
+  `EventAudience`: al docente le corresponden los de los grupos donde da una
+  materia, del año lectivo de la fecha del evento; a Psicopedagogía y
+  Dirección (roles de todo el colegio) todos. Es un filtro de la vista, no de
+  permisos: cualquier persona del colegio puede leer todos los eventos
+  institucionales (`CalendarEventPolicy::view`). Cada ítem trae `audience` y
+  `for_me`.
 - **Hora y salón de una clase**: datos de la clase (`class_sessions.start_time`,
   `room`, ambos opcionales), editables por su docente en cualquier momento.
   `class_sessions.subject_id` dice de qué materia es la clase.
@@ -313,6 +339,9 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
 |---------------------|------------------------------------------|
 | Calendario          | calendar feed (`CalendarFeed`)           |
 | Evento institucional| `CalendarEvent` tipo `institutional`     |
+| A quién le corresponde (destinatarios) | `CalendarEventAudience` (`calendar_event_audiences`) |
+| Generación          | grado (`SchoolGrade`) de los grupos del año |
+| Calendario completo del colegio | `scope=school` del feed          |
 | Reunión             | `CalendarEvent` tipo `meeting` / item `meeting` |
 | Cierre de período   | item `period_closing`                    |
 | Etapa de proyecto   | item `project_stage`                     |
@@ -373,6 +402,8 @@ Se agregan acá a medida que aparecen.
 | Planilla | `MeetingSheet` (`meeting_sheets`) | Una por reunión (P10-DEC-02). `draft` hasta «Confirmar el reparto» (`confirmed`); nada baja a las fichas antes. |
 | Fragmento (del reparto) | `MeetingSheetFragment` | La parte de la planilla que va a la ficha de un alumno tratado, con su alcance (`ObservationScope`). Al confirmar se vuelve una observación (`comment_id`). Lo escribe Psicopedagogía a mano (`source = manual`): la propuesta de reparto con IA espera a que existan los datos de la familia (respuesta C de Eitán en ClickUp). Arranca en «Solo Psicopedagogía» y se abre a mano por alumno. Al confirmar se antepone «Tipo · 20 nov 2026 — ». |
 | Acción (de una planilla) | `MeetingSheetAction` | Con responsable y plazo; al confirmar es una tarea en el Inicio de su responsable (`/v1/meeting-actions/mine`) y le llega un aviso. |
+| Materiales (pantalla 19) | `Material` (`materials`) | Material pedagógico: archivo que sube Docente o Psicopedagogía (`source = upload`, disco privado `materials`, solo enlaces temporales) o copia de catálogo de una evaluación confirmada (`source = assessment`, `content` sin marcas de alumno: `StudentMarkCleaner`). Las carpetas del catálogo son materia × grado (`subject_id`, `school_grade_id`). Antes se llamaba «Recursos»; «Recursos disponibles» es otra cosa (la huerta, el laboratorio). |
+| Catálogo institucional / Sacar del catálogo | `materials.catalog_status` (`published` / `removed`) | Se publica al guardar (sin aprobación hasta que exista Usuarios y permisos › Aprobaciones) y se avisa a Psicopedagogía y Dirección (`MaterialPublishedNotification`), que lo pueden sacar con un motivo opcional (`removed_reason`, hasta 500 caracteres); a quien lo publicó le llega «Sacaron del catálogo tu material» con ese motivo (`MaterialRemovedNotification`), salvo que lo haya sacado él mismo. Si la dueña lo vuelve a publicar, Psicopedagogía y Dirección reciben otra vez el aviso de publicación y `removed_at/_by_id/_reason` vuelven a null (el historial queda en `audit_logs`). Un archivo solo se publica con «Revisé que no tenga datos de alumnos» (`no_student_data_confirmed_at/_by_id`). |
 | Puesta en marcha (pantalla 29) | `SchoolOnboarding`, `OnboardingSource`, `OnboardingLogEntry` | Registro de cómo entró la información del colegio: fechas del encabezado y contacto de Aula+, «Qué se recibió» y «Bitácora». Lo carga el equipo de Aula+ con `php artisan app:onboarding-status|-source|-log` (no hay rol ni pantalla para Aula+); Dirección solo lo lee (`SchoolPolicy::viewOnboarding`). Migración, no sincronización. |
 | Régimen ANEP por nivel (habilitado / autorizado) | `SchoolLevelRegime` (`LevelRegime`: `enabled` / `authorized`) | Lo carga Aula+ (`app:onboarding-regime`), nunca lo declara el colegio (P29-DEC-01). Ciclo Básico y Bachillerato se leen «Habilitado» hasta que se cargue otra cosa. Distinto de `school_curricular_framework.mandatory` (qué programa es obligatorio). |
 | Corrección de régimen | `SupportMessage::KIND_REGIME_CORRECTION` | «Solicitar corrección» de la pantalla 29: mismo camino que «Ayuda y sugerencias» (se guarda y sale mail a soporte), con máxima urgencia. Después se ofrecen `SUPPORT_WHATSAPP_NUMBER` / `SUPPORT_CONTACT_EMAIL` si están configurados. |

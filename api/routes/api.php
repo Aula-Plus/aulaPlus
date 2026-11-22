@@ -44,6 +44,7 @@ use App\Http\Controllers\IndicatorChartController;
 use App\Http\Controllers\IndicatorController;
 use App\Http\Controllers\IndicatorDataController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\MeetingSheetActionController;
 use App\Http\Controllers\MeetingSheetController;
 use App\Http\Controllers\MeetingSheetTypeController;
@@ -377,6 +378,20 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('group.writable');
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
 
+        // Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx): own materials, the
+        // school's catalog behind the subject × grade prefilter, private
+        // uploads opened through temporary URLs only.
+        Route::get('/materials/options', [MaterialController::class, 'options']);
+        Route::get('/materials/curricular-items', [MaterialController::class, 'curricularItems']);
+        Route::get('/materials', [MaterialController::class, 'index']);
+        Route::post('/materials', [MaterialController::class, 'store']);
+        Route::get('/materials/{material}', [MaterialController::class, 'show'])->whereNumber('material');
+        Route::get('/materials/{material}/download', [MaterialController::class, 'download'])->whereNumber('material');
+        Route::post('/materials/{material}/publish', [MaterialController::class, 'publish'])->whereNumber('material');
+        Route::delete('/materials/{material}/catalog', [MaterialController::class, 'removeFromCatalog'])->whereNumber('material');
+        Route::delete('/materials/{material}', [MaterialController::class, 'destroy'])->whereNumber('material');
+        Route::post('/assessments/{assessment}/material', [MaterialController::class, 'publishAssessment']);
+
         // Session 13: screening tests ("pruebas de sondeo", docs/prompts/
         // 11-pruebas-de-sondeo.md). School-wide, psychopedagogy-led module;
         // teachers see nothing here. Catalog + versioned design (a saved design
@@ -466,6 +481,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Direction's institutional events, the time/room of a class, and the
         // teacher's private «Mis horarios», which only pre-fills them.
         Route::get('/calendar', [CalendarController::class, 'index']);
+        Route::get('/calendar-events/audience-options', [CalendarController::class, 'audienceOptions']);
         Route::post('/calendar-events', [CalendarController::class, 'store']);
         Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
         Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);

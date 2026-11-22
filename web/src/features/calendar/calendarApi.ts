@@ -2,6 +2,7 @@ import { api } from "@/lib/api"
 import type {
   CalendarItem,
   CalendarItemType,
+  EventAudienceOptions,
   InstitutionalEvent,
   TeachingAssignment,
   TimetableSlot,
@@ -12,15 +13,33 @@ import type {
  * person sees is decided server-side (`CalendarFeed`); the SPA only renders.
  */
 
+/**
+ * `scope: "school"` = «Ver todo el calendario del colegio»: every
+ * institutional event, not only the ones that concern the caller's groups.
+ */
 export async function fetchCalendar(
   from: string,
   to: string,
   types?: readonly CalendarItemType[],
+  scope?: "school",
 ): Promise<CalendarItem[]> {
   const { data } = await api.get<{ data: CalendarItem[] }>("/api/v1/calendar", {
     // axios serializes arrays as `types[]=…`, which Laravel reads as a list.
-    params: { from, to, ...(types ? { types } : {}) },
+    params: { from, to, ...(types ? { types } : {}), ...(scope ? { scope } : {}) },
   })
+  return data.data
+}
+
+/** A target as sent: a level, a grade, a program within a grade, or one group. */
+export interface AudienceTargetInput {
+  level_id?: number
+  grade_id?: number
+  framework_id?: number
+  group_id?: number
+}
+
+export async function fetchAudienceOptions(): Promise<EventAudienceOptions> {
+  const { data } = await api.get<{ data: EventAudienceOptions }>("/api/v1/calendar-events/audience-options")
   return data.data
 }
 
@@ -32,6 +51,8 @@ export interface InstitutionalEventInput {
   time: string | null
   location: string | null
   description: string | null
+  /** Empty = the whole school. */
+  audience: AudienceTargetInput[]
 }
 
 export async function createInstitutionalEvent(input: InstitutionalEventInput): Promise<InstitutionalEvent> {

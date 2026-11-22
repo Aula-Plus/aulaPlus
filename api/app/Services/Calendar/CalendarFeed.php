@@ -30,7 +30,11 @@ use Illuminate\Support\Collection;
  *   P21-DEC-04: no scores, no student).
  * - Tasks: the caller's own pending follow-ups with a deadline (same rows as
  *   «Mis seguimientos»).
- * - Institutional events: everyone in the school.
+ * - Institutional events: the ones that concern the caller's groups
+ *   (EventAudience; ClickUp 1dfd3mc55zp) — or, with `$wholeSchool` («Ver todo
+ *   el calendario del colegio»), every one of the school, which any staff
+ *   member may read. Each carries its audience and whether it is the
+ *   caller's (`for_me`).
  * - Meetings, period closings, project stages: no source yet (screens 10, 26,
  *   18), always empty. A meeting, when it exists, reaches only the calendars
  *   it is linked to.
@@ -39,11 +43,13 @@ use Illuminate\Support\Collection;
  */
 class CalendarFeed
 {
+    public function __construct(protected EventAudience $audience) {}
+
     /**
      * @param  list<CalendarItemType>  $types
      * @return Collection<int, array<string, mixed>>
      */
-    public function for(User $user, CarbonImmutable $from, CarbonImmutable $to, array $types): Collection
+    public function for(User $user, CarbonImmutable $from, CarbonImmutable $to, array $types, bool $wholeSchool = false): Collection
     {
         $wants = fn (CalendarItemType $type): bool => in_array($type, $types, true);
 
@@ -62,7 +68,7 @@ class CalendarFeed
         }
 
         if ($wants(CalendarItemType::Institutional)) {
-            $items = $items->concat($this->institutionalEvents($user, $from, $to));
+            $items = $items->concat($this->institutionalEvents($user, $from, $to, $wholeSchool));
         }
 
         // Within a day: dates without a time first (like all-day events), then
@@ -189,14 +195,28 @@ class CalendarFeed
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    protected function institutionalEvents(User $user, CarbonImmutable $from, CarbonImmutable $to): Collection
+    protected function institutionalEvents(User $user, CarbonImmutable $from, CarbonImmutable $to, bool $wholeSchool): Collection
     {
-        return CalendarEvent::query()
+        $groups = $this->audience->groupsOf($user);
+
+        $events = CalendarEvent::query()
             ->institutional()
+            ->with(EventAudience::RELATIONS)
             ->where('start_at', '>=', SchoolTime::startOfDay($from))
             ->where('start_at', '<', SchoolTime::startOfDay($to->addDay()))
-            ->get()
-            ->map(function (CalendarEvent $event) use ($user): array {
+            ->get();
+        // The groups every «Para: …» lists, in one go for the whole window.
+        $schoolGroups = $events->isEmpty() ? collect() : $this->audience->schoolGroups(
+            (int) $user->school_id,
+            $events->map(fn (CalendarEvent $event): int => EventAudience::yearOf($event))->unique()->values()->all(),
+        );
+
+        return $events
+            ->map(fn (CalendarEvent $event): array => ['event' => $event, 'for_me' => $this->audience->concerns($event, $groups)])
+            ->filter(fn (array $row): bool => $wholeSchool || $row['for_me'])
+            ->map(function (array $row) use ($user, $schoolGroups): array {
+                /** @var CalendarEvent $event */
+                $event = $row['event'];
                 $local = CarbonImmutable::instance($event->start_at)->setTimezone(SchoolTime::timezone());
                 $end = $event->end_at ? CarbonImmutable::instance($event->end_at)->setTimezone(SchoolTime::timezone()) : null;
 
@@ -214,7 +234,10 @@ class CalendarFeed
                     'place' => $event->location,
                     'assessment_type' => null,
                     'can_edit' => $user->can('update', $event),
+                    'audience' => $this->audience->present($event, $schoolGroups),
+                    'for_me' => $row['for_me'],
                 ];
-            });
+            })
+            ->values();
     }
 }

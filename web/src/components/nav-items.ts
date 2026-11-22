@@ -9,6 +9,7 @@ import {
   ChartScatter,
   CalendarCog,
   ClipboardList,
+  FolderOpen,
   PackageCheck,
   Columns2,
   GraduationCap,
@@ -106,6 +107,9 @@ export function buildNavSections(
         // Screen 12 — Programa anual (ClickUp 1dfd3mc4bg8): the teacher builds
         // their plans; Psicopedagogía and Dirección read every plan.
         ...(user ? [{ to: "/programa-anual", label: "Programa anual", icon: CalendarRange }] : []),
+        // Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx): every role; what
+        // each sees and may do is decided server-side (MaterialPolicy).
+        ...(user ? [{ to: "/materiales", label: "Materiales", icon: FolderOpen }] : []),
         // Every role has a Calendar (screen 21); what each sees is decided
         // server-side.
         { to: "/calendario", label: "Calendario", icon: CalendarDays },
