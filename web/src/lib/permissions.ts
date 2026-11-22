@@ -406,3 +406,11 @@ export function canOpenIndicators(user: User | null): boolean {
 export function canOpenAccommodationsInbox(user: User | null): boolean {
   return isPsychopedagogue(user)
 }
+
+/**
+ * Screen 29 «Puesta en marcha»: direction only reads the onboarding record.
+ * Mirror of `SchoolPolicy::viewOnboarding`.
+ */
+export function canViewOnboarding(user: User | null): boolean {
+  return isDirector(user)
+}
