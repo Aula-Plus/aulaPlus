@@ -109,8 +109,42 @@ describe("CalendarPage", () => {
       "Etapa de proyecto",
       "Institucional",
     ])
-    expect(within(screen.getByTestId("day-2026-12-17")).getByText("Matemática")).toBeInTheDocument()
+    expect(within(screen.getByTestId("day-2026-12-17")).getByText("Matemática · 2°EMS-A")).toBeInTheDocument()
     expect(within(screen.getByTestId("day-2026-12-10")).getByText("Escrito de integración")).toBeInTheDocument()
+  })
+
+  it("shows a class as «Matemática · 2°EMS-A» with its topic next to it, discreet, in the month and the list", async () => {
+    const longTopic = "Comparar fracciones con tiras de papel y ubicarlas en la recta numérica entre cero y uno"
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([item({ time: "08:30", place: "Aula 4", detail: longTopic })])
+    const user = userEvent.setup()
+    renderPage()
+
+    const day = await screen.findByTestId("day-2026-12-17")
+    expect(within(day).getByText("Matemática · 2°EMS-A")).toBeInTheDocument()
+    const chipTopic = within(day).getByTestId("class-topic")
+    expect(chipTopic).toHaveTextContent(longTopic)
+    expect(chipTopic).toHaveClass("font-normal")
+    // The whole chip is cut with an ellipsis; its tooltip keeps the topic.
+    expect(within(day).getByRole("button", { name: /Comparar fracciones/ })).toHaveClass("truncate")
+
+    await user.click(screen.getByRole("button", { name: "Lista" }))
+    const table = await screen.findByRole("table")
+    expect(within(table).getByText("Matemática · 2°EMS-A · Aula 4")).toBeInTheDocument()
+    const listTopic = within(table).getByTestId("class-topic")
+    expect(listTopic).toHaveTextContent(longTopic)
+    expect(listTopic).toHaveAttribute("title", longTopic)
+    expect(listTopic).toHaveClass("truncate", "text-xs", "text-muted-foreground")
+  })
+
+  it("does not repeat the title as a topic for a class without subject, nor show a topic for other dates", async () => {
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([
+      item({ title: "Repaso de ecuaciones", subject: null }),
+      assessment,
+    ])
+    renderPage()
+
+    await screen.findByText("Escrito de integración")
+    expect(screen.queryByTestId("class-topic")).not.toBeInTheDocument()
   })
 
   it("hides a type from the filter", async () => {
@@ -123,7 +157,7 @@ describe("CalendarPage", () => {
 
     expect(screen.getByRole("button", { name: "Evaluación" })).toHaveAttribute("aria-pressed", "false")
     expect(screen.queryByText("Escrito de integración")).not.toBeInTheDocument()
-    expect(within(screen.getByTestId("day-2026-12-17")).getByText("Matemática")).toBeInTheDocument()
+    expect(within(screen.getByTestId("day-2026-12-17")).getByText("Matemática · 2°EMS-A")).toBeInTheDocument()
   })
 
   it("switches to the week and the list views, moving with Anterior/Siguiente", async () => {
@@ -309,11 +343,11 @@ describe("CalendarPage", () => {
     renderPage()
 
     await user.click(screen.getByRole("button", { name: "Siguiente" }))
-    expect(await screen.findByText("Geografía")).toBeInTheDocument()
+    expect(await screen.findByText("Geografía · 2°EMS-A")).toBeInTheDocument()
 
     resolveOld([item({ key: "class-8", id: 8, date: "2026-12-17", title: "Historia" })])
-    await waitFor(() => expect(screen.queryByText("Historia")).not.toBeInTheDocument())
-    expect(screen.getByText("Geografía")).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText("Historia · 2°EMS-A")).not.toBeInTheDocument())
+    expect(screen.getByText("Geografía · 2°EMS-A")).toBeInTheDocument()
   })
 
   it("lets Psychopedagogy switch the Inicio's assessments total from the filters (ClickUp 1dfd3mc4zpk)", async () => {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\AI\ApplyProposal;
 use App\Enums\AIProposalStatus;
 use App\Enums\JourneyStep;
+use App\Http\Requests\ApplyAIProposalRequest;
 use App\Http\Requests\GenerateAIProposalRequest;
 use App\Http\Resources\AIProposalResource;
 use App\Jobs\GenerateAIProposalJob;
@@ -13,7 +14,6 @@ use App\Models\Group;
 use App\Support\AiProvider;
 use App\Support\UsageJourney;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -66,10 +66,8 @@ class AIProposalController extends Controller
         return new AIProposalResource($aiProposal);
     }
 
-    public function apply(Request $request, AIProposal $aiProposal, ApplyProposal $applyProposal): AIProposalResource
+    public function apply(ApplyAIProposalRequest $request, AIProposal $aiProposal, ApplyProposal $applyProposal): AIProposalResource
     {
-        $this->authorize('apply', $aiProposal);
-
         abort_unless(
             $aiProposal->status === AIProposalStatus::Completed,
             Response::HTTP_UNPROCESSABLE_ENTITY,
@@ -78,7 +76,9 @@ class AIProposalController extends Controller
 
         // The policy guarantees the applier is the requester; authorship of the
         // created entity points at whoever applies it (spec §5).
-        $applyProposal($aiProposal, $request->user());
+        // A class draft carries the teacher's decision on each section
+        // (screen 15); other drafts are applied as they are.
+        $applyProposal($aiProposal, $request->user(), $request->hasSections() ? $request->validated() : []);
 
         return new AIProposalResource($aiProposal->refresh());
     }

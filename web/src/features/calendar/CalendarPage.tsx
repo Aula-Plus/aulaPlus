@@ -41,7 +41,8 @@ import {
   weekdayDayMonth,
   type CalendarView,
 } from "./calendarDates"
-import { calendarItemHour, calendarItemLink, calendarItemWhat } from "./calendarItemText"
+import { CalendarItemTopic } from "./CalendarItemTopic"
+import { calendarItemHour, calendarItemLink, calendarItemTopic, calendarItemWhat } from "./calendarItemText"
 import { audienceLabel } from "./eventAudience"
 import { ClassScheduleDialog } from "./ClassScheduleDialog"
 import { InstitutionalEventDialog } from "./InstitutionalEventDialog"
@@ -405,8 +406,9 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   const hour = calendarItemHour(item)
   const what = calendarItemWhat(item)
   const group = item.group ? ` · ${item.group.name}` : ""
+  const topic = calendarItemTopic(item)
   const audience = audienceSuffix(item)
-  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${hour ? ` · ${hour}` : ""}${audience ? ` · ${audience}` : ""}`
+  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${topic ? ` · ${topic}` : ""}${hour ? ` · ${hour}` : ""}${audience ? ` · ${audience}` : ""}`
   const className = cn(
     "block w-full truncate rounded border px-1.5 py-0.5 text-left text-xs",
     typeTone[item.type],
@@ -417,9 +419,17 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   const content = (
     <>
       {item.time && <span className="mr-1 font-semibold tabular-nums">{item.time}</span>}
-      {what}
-      {full && group}
-      {full && item.place && ` · ${item.place}`}
+      {/* A class reads «Matemática · 5.°A» with its topic next to it, discreet. */}
+      <span>
+        {what}
+        {(full || item.type === "class") && group}
+        {full && item.place && ` · ${item.place}`}
+      </span>
+      {topic && (
+        <span data-testid="class-topic" className="ml-1 font-normal opacity-70">
+          {topic}
+        </span>
+      )}
       {full && audience && <span className="block text-[11px] opacity-80">{audience}</span>}
     </>
   )
@@ -619,8 +629,11 @@ function ListTable({
                   {calendarItemTypeLabels[item.type]}
                 </span>
               </TableCell>
-              <TableCell>
-                {detail}
+              <TableCell className="max-w-md">
+                <span className="flex min-w-0 items-baseline">
+                  <span className="shrink-0">{detail}</span>
+                  <CalendarItemTopic item={item} className="min-w-0 max-w-none" />
+                </span>
                 {item.type === "institutional" && (
                   <span className="block text-xs text-muted-foreground">{audienceSuffix(item)}</span>
                 )}

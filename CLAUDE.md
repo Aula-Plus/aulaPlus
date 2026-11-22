@@ -163,10 +163,22 @@ skeleton is done, until explicitly asked:
     if needed and keeps other classes' records) and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
     optional time and room (`PATCH /v1/class-sessions/{id}`) plus the teacher's
     private «Mis horarios» (`TimetableSlot`, pre-fill only).
+  - Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0,
+    first delivery): a teacher asks the AI for a class of a group-subject they
+    teach (from a unit of their Programa anual or directly; subject
+    mandatory), decides on each section and confirms it as a `ClassSession`
+    (`POST /ai-proposals/{id}/apply` with per-section decisions); «Tus
+    clases» (`GET /my-classes`), one class (`GET /class-sessions/{id}`) and
+    its one-tap closing «Todo / Una parte / Nada»
+    (`POST /class-sessions/{id}/close`).
   The AI-proposal engine itself (`AIProposal`,
   `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
   full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
-  scope is creating/listing classes and the class-closing flow (screens 14–17).
+  scope: screens 16–17 (Nueva evaluación / Propuesta de evaluación with AI, the
+  next delivery of the same task), reading the unit planner in the class
+  proposal (`BuildUnitPlannerInput`, after screen 13), comments of
+  Psicopedagogía/Dirección on a proposal, the extended class closing (Repaso,
+  «no previsto», free text) and creating classes by hand (without the AI).
 - ~~"PTP y enriquecimiento"~~ — no longer deferred (ClickUp 1dfd3mc4bgc): it is
   defined by screen 06 «Ajustes y PTP» of the living document (screen 09 is only
   a pointer to it). The inbox and «Revisión anual» are built; the PTP itself is

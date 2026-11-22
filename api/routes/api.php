@@ -21,6 +21,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\ClassSessionController;
 use App\Http\Controllers\ClassSessionObjectiveController;
 use App\Http\Controllers\ClassSessionScheduleController;
 use App\Http\Controllers\CommentCategoryController;
@@ -486,6 +487,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
         Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);
         Route::get('/class-sessions/suggested-slot', [ClassSessionScheduleController::class, 'suggestedSlot']);
+        // Screens 14–15 (ClickUp 86e3jujh0): «Tus clases», one confirmed
+        // class and its one-tap closing («Todo / Una parte / Nada»).
+        Route::get('/my-classes', [ClassSessionController::class, 'index']);
+        Route::get('/class-sessions/{classSession}', [ClassSessionController::class, 'show'])->whereNumber('classSession');
+        Route::post('/class-sessions/{classSession}/close', [ClassSessionController::class, 'close'])
+            ->middleware('group.writable')
+            ->whereNumber('classSession');
         Route::patch('/class-sessions/{classSession}', [ClassSessionScheduleController::class, 'update'])
             ->middleware('group.writable');
         Route::get('/timetable-slots', [TimetableSlotController::class, 'index']);
