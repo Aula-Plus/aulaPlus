@@ -86,4 +86,14 @@ class SchoolPolicy
         return $user->school_id === $school->id
             && $user->hasRole(Role::Director->value);
     }
+
+    /**
+     * Screen 29 «Puesta en marcha»: only direction reads its school's
+     * onboarding record and asks for a regime correction (P29-DEC-115).
+     */
+    public function viewOnboarding(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
 }
