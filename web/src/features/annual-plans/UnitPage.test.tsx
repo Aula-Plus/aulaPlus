@@ -275,6 +275,45 @@ describe("UnitPage", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
   })
 
+  it("marks the catalog elements that already are objectives of the unit and does not offer them again", async () => {
+    const user = userEvent.setup()
+    const linked = {
+      id: 40,
+      code: "1.1",
+      name: "Knowledge and understanding",
+      type: "content",
+      description: null,
+      parent_name: "Group 5: Mathematics",
+      catalog: "IB DP (muestra)",
+      framework: "IB DP",
+      source: "Mathematics guide",
+      page: "20",
+    }
+    const unit = makeUnit()
+    unit.objectives[0].curricular_items = [linked]
+    vi.mocked(unitApi.fetchUnit).mockResolvedValue(unit)
+    vi.mocked(unitApi.fetchUnitCurricularItems).mockResolvedValue([
+      linked,
+      { ...linked, id: 41, code: "1.2", name: "Problem solving" },
+    ])
+    vi.mocked(unitApi.createObjectiveFromCatalog).mockResolvedValue()
+    renderPage()
+
+    await user.click(await screen.findByRole("tab", { name: "Objetivos" }))
+    await user.click(screen.getByRole("button", { name: "Elegir del catálogo" }))
+    await user.click(screen.getByRole("button", { name: "Buscar en el catálogo" }))
+    const dialog = await screen.findByRole("dialog", { name: "Elegir un objetivo del catálogo" })
+
+    const taken = await within(dialog).findByRole("button", { name: "Elegir «Knowledge and understanding»" })
+    expect(taken).toBeDisabled()
+    expect(within(dialog).getAllByText("Ya es objetivo de esta unidad.")).toHaveLength(1)
+    await user.click(taken)
+    expect(unitApi.createObjectiveFromCatalog).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole("button", { name: "Elegir «Problem solving»" }))
+    await waitFor(() => expect(unitApi.createObjectiveFromCatalog).toHaveBeenCalledWith(5, 41))
+  })
+
   it("says the catalog failed to load instead of flagging linked items as gone", async () => {
     const user = userEvent.setup()
     const unit = makeUnit()

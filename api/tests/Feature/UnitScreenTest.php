@@ -385,6 +385,39 @@ it('only adds catalog objectives offered by the unit\'s program, and only for th
     expect(UnitObjective::query()->withoutGlobalScopes()->where('unit_id', $unit->id)->count())->toBe(1);
 });
 
+it('does not pick again an element that is already an objective of the unit', function () {
+    [, $framework, $teacher, , , $unit, $objective] = unitScreenSetup();
+    $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id]);
+    $picked = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
+    $linked = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
+    $free = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
+    Sanctum::actingAs($teacher);
+
+    $id = $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $picked->id])
+        ->assertCreated()->json('data.id');
+    // Picked twice: 422, no second objective.
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $picked->id])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_item_id');
+
+    // Linked to a written objective: it already is an objective of the unit too.
+    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$linked->id]])
+        ->assertOk();
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $linked->id])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_item_id');
+
+    expect(UnitObjective::query()->where('unit_id', $unit->id)->count())->toBe(2);
+
+    // Another element still can be picked; and once the objective is
+    // deleted, its element can be picked again.
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $free->id])->assertCreated();
+    $this->deleteJson("/api/v1/unit-objectives/{$id}")->assertNoContent();
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $picked->id])->assertCreated();
+
+    // Only within the unit: another unit of the plan may pick it.
+    $other = Unit::factory()->create(['annual_plan_id' => $unit->annual_plan_id]);
+    $this->postJson("/api/v1/units/{$other->id}/objectives", ['curricular_item_id' => $picked->id])->assertCreated();
+});
+
 it('does not open a unit of an individualized plan as screen 13', function () {
     [$school, $framework, $teacher, $group, $subject] = unitScreenSetup();
     $student = Student::factory()->create(['school_id' => $school->id]);

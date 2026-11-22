@@ -712,6 +712,7 @@ function ObjectivesTab({
       {choosing && (
         <CatalogObjectiveDialog
           unitId={unit.id}
+          linkedIds={new Set(unit.objectives.flatMap((o) => o.curricular_items.map((item) => item.id)))}
           onClose={() => setChoosing(false)}
           onSaved={async () => {
             setChoosing(false)
@@ -771,14 +772,18 @@ const catalogEmpty = "Todavía no hay elementos del programa cargados para esta 
 /**
  * «Elegir del catálogo» (ClickUp 1dfd3mc4bga): the teacher picks one element
  * of the program catalog and it becomes an objective of the unit, with the
- * element's text and its citation, without writing it.
+ * element's text and its citation, without writing it. An element some
+ * objective of the unit already works is marked and cannot be picked again
+ * (the server rejects it too).
  */
 function CatalogObjectiveDialog({
   unitId,
+  linkedIds,
   onClose,
   onSaved,
 }: {
   unitId: number
+  linkedIds: ReadonlySet<number>
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
@@ -824,22 +829,28 @@ function CatalogObjectiveDialog({
               <Input id="catalog-objective-search" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
-              {visible.map((item) => (
-                <li key={item.id} className="flex items-start justify-between gap-3 text-sm">
-                  <span>
-                    <ItemLabel item={item} />
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={savingId !== null}
-                    aria-label={`Elegir «${item.name}»`}
-                    onClick={() => void choose(item)}
-                  >
-                    {savingId === item.id ? "Agregando…" : "Elegir"}
-                  </Button>
-                </li>
-              ))}
+              {visible.map((item) => {
+                const linked = linkedIds.has(item.id)
+                return (
+                  <li key={item.id} className="flex items-start justify-between gap-3 text-sm">
+                    <span>
+                      <ItemLabel item={item} />
+                      {linked && (
+                        <span className="block text-xs text-muted-foreground">Ya es objetivo de esta unidad.</span>
+                      )}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={savingId !== null || linked}
+                      aria-label={`Elegir «${item.name}»`}
+                      onClick={() => void choose(item)}
+                    >
+                      {savingId === item.id ? "Agregando…" : "Elegir"}
+                    </Button>
+                  </li>
+                )
+              })}
               {visible.length === 0 && <li className="text-sm text-muted-foreground">Ningún elemento coincide.</li>}
             </ul>
           </div>

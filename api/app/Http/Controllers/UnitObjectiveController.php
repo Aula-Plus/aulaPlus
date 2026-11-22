@@ -31,10 +31,7 @@ class UnitObjectiveController extends Controller
      */
     public function store(StoreUnitObjectiveRequest $request, Unit $unit, UnitCurriculum $curriculum): JsonResponse
     {
-        $item = $request->filled('curricular_item_id')
-            ? CurricularItem::query()->with(['curricularCatalog.curricularFramework:id,name', 'parent:id,name'])
-                ->findOrFail((int) $request->validated('curricular_item_id'))
-            : null;
+        $item = $request->offeredItem()?->loadMissing(['curricularCatalog.curricularFramework:id,name', 'parent:id,name']);
         $description = trim((string) $request->validated('description'));
 
         $objective = DB::transaction(function () use ($unit, $item, $description): UnitObjective {
