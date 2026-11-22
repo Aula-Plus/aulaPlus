@@ -7,6 +7,7 @@ use App\Models\CurricularCatalog;
 use App\Models\CurricularFramework;
 use App\Models\CurricularItem;
 use App\Models\Group;
+use App\Models\GroupWriteWindow;
 use App\Models\School;
 use App\Models\SchoolYear;
 use App\Models\Student;
@@ -253,20 +254,135 @@ it('hides «A mano» from another teacher and another school', function () {
     $this->getJson("/api/v1/units/{$unit->id}/curricular-items")->assertNotFound();
 });
 
-it('blocks the unit writes in a group of a closed year', function () {
-    [$school, , $teacher, $group, , $unit, $objective] = unitScreenSetup();
+/**
+ * Every write of the unit screen: «Guardar datos» (title and dates), the
+ * planner, the objectives (written or picked from the catalog) and their
+ * curricular items.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function unitWrites(Unit $unit, UnitObjective $objective, CurricularItem $item): array
+{
+    return [
+        'unit data' => ['patch', "/api/v1/units/{$unit->id}", ['name' => 'Ecuaciones II', 'start_date' => '2026-05-25', 'end_date' => '2026-06-26']],
+        'planner' => ['patch', "/api/v1/units/{$unit->id}/planner", ['values' => ['contents' => 'x']]],
+        'write objective' => ['post', "/api/v1/units/{$unit->id}/objectives", ['description' => 'Nuevo']],
+        'objective from catalog' => ['post', "/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $item->id]],
+        'edit objective' => ['patch', "/api/v1/unit-objectives/{$objective->id}", ['description' => 'Editado']],
+        'objective items' => ['put', "/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => [$item->id]]],
+        'delete objective' => ['delete', "/api/v1/unit-objectives/{$objective->id}", []],
+    ];
+}
+
+it('makes the unit read-only in a group of a closed year, unless direction enabled loading', function () {
+    [$school, $framework, $teacher, $group, , $unit, $objective] = unitScreenSetup();
+    $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id]);
+    $item = CurricularItem::factory()->create(['curricular_catalog_id' => $catalog->id]);
     SchoolYear::query()->forceCreate([
         'school_id' => $school->id, 'year' => $group->school_year, 'status' => 'closed', 'closed_at' => now(),
     ]);
     app(SchoolYearCalendar::class)->forget();
     Sanctum::actingAs($teacher);
 
-    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['contents' => 'x']])
-        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
-    $this->putJson("/api/v1/unit-objectives/{$objective->id}/curricular-items", ['curricular_item_ids' => []])
-        ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
-    // Reading still works.
-    $this->getJson("/api/v1/units/{$unit->id}")->assertOk();
+    // Reading still works, and says the group is read-only.
+    $this->getJson("/api/v1/units/{$unit->id}")->assertOk()
+        ->assertJsonPath('data.plan.group.year_closed', true)
+        ->assertJsonPath('data.plan.group.read_only', true)
+        ->assertJsonPath('data.plan.group.writable_until', null);
+
+    foreach (unitWrites($unit, $objective, $item) as [$method, $url, $body]) {
+        $this->json(strtoupper($method), $url, $body)
+            ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+    }
+    expect($unit->refresh()->name)->toBe('Ecuaciones')
+        ->and($unit->planner_values)->toBeNull()
+        ->and(UnitObjective::query()->where('unit_id', $unit->id)->count())->toBe(1);
+
+    GroupWriteWindow::query()->forceCreate([
+        'school_id' => $school->id, 'group_id' => $group->id, 'reason' => 'Exámenes de febrero',
+        'until_on' => now()->addMonth()->toDateString(),
+        'enabled_by_id' => User::factory()->forSchool($school)->director()->create()->id,
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+
+    $this->getJson("/api/v1/units/{$unit->id}")->assertOk()
+        ->assertJsonPath('data.plan.group.year_closed', true)
+        ->assertJsonPath('data.plan.group.read_only', false)
+        ->assertJsonPath('data.plan.group.writable_until', now()->addMonth()->toDateString());
+
+    foreach (unitWrites($unit, $objective, $item) as [$method, $url, $body]) {
+        $this->json(strtoupper($method), $url, $body)->assertSuccessful();
+    }
+    expect($unit->refresh()->name)->toBe('Ecuaciones II');
+    $this->assertModelMissing($objective);
+});
+
+it('reports an open year\'s group as writable', function () {
+    [, , $teacher, , , $unit] = unitScreenSetup();
+    Sanctum::actingAs($teacher);
+
+    $this->getJson("/api/v1/units/{$unit->id}")->assertOk()
+        ->assertJsonPath('data.plan.group.year_closed', false)
+        ->assertJsonPath('data.plan.group.read_only', false);
+});
+
+it('adds an objective picked from the program catalog, with its text and citation', function () {
+    [, $framework, $teacher, , , $unit] = unitScreenSetup();
+    $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id, 'name' => 'Progresiones 2022']);
+    $item = CurricularItem::factory()->create([
+        'curricular_catalog_id' => $catalog->id,
+        'name' => 'Resuelve ecuaciones de primer grado con una incógnita',
+        'source' => 'Progresiones de Aprendizaje 2022',
+        'page' => '31',
+    ]);
+    Sanctum::actingAs($teacher);
+
+    $response = $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $item->id])
+        ->assertCreated()
+        ->assertJsonPath('data.description', 'Resuelve ecuaciones de primer grado con una incógnita')
+        ->assertJsonPath('data.position', 2)
+        ->assertJsonPath('data.curricular_items.0.id', $item->id)
+        ->assertJsonPath('data.curricular_items.0.catalog', 'Progresiones 2022')
+        ->assertJsonPath('data.curricular_items.0.source', 'Progresiones de Aprendizaje 2022')
+        ->assertJsonPath('data.curricular_items.0.page', '31');
+
+    $this->getJson("/api/v1/units/{$unit->id}")
+        ->assertJsonPath('data.objectives.1.id', $response->json('data.id'))
+        ->assertJsonPath('data.objectives.1.curricular_items.0.id', $item->id);
+
+    // Writing one's own objective still works, without any item.
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['description' => 'Uno propio'])
+        ->assertCreated()->assertJsonPath('data.curricular_items', []);
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", [])->assertUnprocessable()->assertJsonValidationErrors('description');
+});
+
+it('only adds catalog objectives offered by the unit\'s program, and only for the plan owner', function () {
+    [$school, $framework, $teacher, , , $unit] = unitScreenSetup();
+    $item = CurricularItem::factory()->create([
+        'curricular_catalog_id' => CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id])->id,
+    ]);
+    $foreign = CurricularItem::factory()->create();
+
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $foreign->id])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_item_id');
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => 'x'])
+        ->assertUnprocessable()->assertJsonValidationErrors('curricular_item_id');
+
+    foreach ([
+        User::factory()->forSchool($school)->teacher()->create(),
+        User::factory()->forSchool($school)->director()->create(),
+        User::factory()->forSchool($school)->psychopedagogue()->create(),
+    ] as $other) {
+        Sanctum::actingAs($other);
+        $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $item->id])
+            ->assertForbidden();
+    }
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->teacher()->create());
+    $this->postJson("/api/v1/units/{$unit->id}/objectives", ['curricular_item_id' => $item->id])->assertNotFound();
+
+    expect(UnitObjective::query()->withoutGlobalScopes()->where('unit_id', $unit->id)->count())->toBe(1);
 });
 
 it('does not open a unit of an individualized plan as screen 13', function () {

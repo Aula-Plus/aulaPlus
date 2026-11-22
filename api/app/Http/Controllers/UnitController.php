@@ -11,6 +11,7 @@ use App\Models\CurricularItem;
 use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Services\AnnualPlans\AnnualPlanProgress;
+use App\Services\SchoolYears\SchoolYearCalendar;
 use App\Services\Units\UnitCurriculum;
 use App\Services\Units\UnitPlanner;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +32,7 @@ class UnitController extends Controller
      * objectives (each with the curricular items it works) and its planner
      * with what the teacher filled in.
      */
-    public function show(Request $request, Unit $unit, AnnualPlanProgress $progress, UnitPlanner $planner, UnitCurriculum $curriculum): JsonResponse
+    public function show(Request $request, Unit $unit, AnnualPlanProgress $progress, UnitPlanner $planner, UnitCurriculum $curriculum, SchoolYearCalendar $calendar): JsonResponse
     {
         $this->authorize('view', $unit);
 
@@ -53,12 +54,26 @@ class UnitController extends Controller
             'curricular_items' => $items->get($objective['id'], []),
         ], $row['objectives']);
 
+        // Screen 26 (PA-110, PA-123): a group of a closed year is read-only
+        // unless direction enabled loading in it — same flags as
+        // GroupResource. UX hint only: `group.writable` rejects the writes.
+        $group = $plan->group;
+        $yearClosed = $group !== null && $calendar->isInClosedYear($group);
+        $window = $yearClosed ? $calendar->activeWindow($group) : null;
+
         return response()->json(['data' => [
             ...$row,
             'plan' => [
                 'id' => $plan->id,
                 'year' => $plan->year,
-                'group' => ['id' => $plan->group?->id, 'name' => $plan->group?->name],
+                'group' => [
+                    'id' => $group?->id,
+                    'name' => $group?->name,
+                    'school_year' => $group?->school_year,
+                    'year_closed' => $yearClosed,
+                    'read_only' => $yearClosed && $window === null,
+                    'writable_until' => $window?->until_on->toDateString(),
+                ],
                 'subject' => ['id' => $plan->subject?->id, 'name' => $plan->subject?->name],
                 'teacher' => ['id' => $plan->teacher?->id, 'name' => $plan->teacher?->name],
                 'framework' => ['id' => $plan->curricularFramework?->id, 'name' => $plan->curricularFramework?->name],

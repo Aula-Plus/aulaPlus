@@ -16,6 +16,7 @@ vi.mock("./unitApi", async (importOriginal) => {
     fetchUnitCurricularItems: vi.fn(),
     saveUnitPlanner: vi.fn(),
     saveObjectiveCurricularItems: vi.fn(),
+    createObjectiveFromCatalog: vi.fn(),
   }
 })
 
@@ -46,7 +47,7 @@ function makeUnit(overrides: Partial<UnitDetail> = {}): UnitDetail {
     plan: {
       id: 7,
       year: 2026,
-      group: { id: 1, name: "2°EMS-A" },
+      group: { id: 1, name: "2°EMS-A", school_year: 2026, year_closed: false, read_only: false, writable_until: null },
       subject: { id: 2, name: "Matemática" },
       teacher: { id: 3, name: "Mariana López" },
       framework: { id: 4, name: "ANEP Bachillerato" },
@@ -205,6 +206,101 @@ describe("UnitPage", () => {
     expect(screen.queryByRole("button", { name: "Guardar planificación" })).not.toBeInTheDocument()
     await user.click(screen.getByRole("tab", { name: "Objetivos" }))
     expect(screen.queryByRole("button", { name: "Elementos curriculares" })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText("Escribir un objetivo")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Escribir un objetivo" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Elegir del catálogo" })).not.toBeInTheDocument()
+  })
+
+  function closedYear(writableUntil: string | null): UnitDetail {
+    const unit = makeUnit()
+    return {
+      ...unit,
+      plan: {
+        ...unit.plan,
+        group: { ...unit.plan.group, year_closed: true, read_only: writableUntil === null, writable_until: writableUntil },
+      },
+    }
+  }
+
+  it("is read-only, with the group's notice, in a group of a closed year", async () => {
+    vi.mocked(unitApi.fetchUnit).mockResolvedValue(closedYear(null))
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText("El año 2026 está cerrado: este grupo es solo para leer.")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Guardar datos" })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Título")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Guardar planificación" })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Pregunta problematizadora")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Objetivos" }))
+    expect(screen.queryByRole("button", { name: "Elementos curriculares" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Elegir del catálogo" })).not.toBeInTheDocument()
+  })
+
+  it("is edited as usual while direction enabled loading in the group", async () => {
+    vi.mocked(unitApi.fetchUnit).mockResolvedValue(closedYear("2027-02-28"))
+    renderPage()
+
+    expect(await screen.findByText(/Dirección habilitó la carga en este grupo hasta el/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Guardar datos" })).toBeInTheDocument()
+    expect(screen.getByLabelText("Pregunta problematizadora")).toBeInTheDocument()
+  })
+
+  it("adds an objective picked from the catalog, without writing it", async () => {
+    const user = userEvent.setup()
+    vi.mocked(unitApi.fetchUnitCurricularItems).mockResolvedValue([
+      {
+        id: 40,
+        code: "1.1",
+        name: "Knowledge and understanding",
+        type: "content",
+        description: null,
+        parent_name: "Group 5: Mathematics",
+        catalog: "IB DP (muestra)",
+        framework: "IB DP",
+        source: "Mathematics guide",
+        page: "20",
+      },
+    ])
+    vi.mocked(unitApi.createObjectiveFromCatalog).mockResolvedValue()
+    renderPage()
+
+    await user.click(await screen.findByRole("tab", { name: "Objetivos" }))
+    await user.click(screen.getByRole("button", { name: "Elegir del catálogo" }))
+    await user.click(screen.getByRole("button", { name: "Buscar en el catálogo" }))
+    const dialog = await screen.findByRole("dialog", { name: "Elegir un objetivo del catálogo" })
+    expect(await within(dialog).findByText("IB DP · IB DP (muestra) — Mathematics guide, p. 20")).toBeInTheDocument()
+    await user.click(within(dialog).getByRole("button", { name: "Elegir «Knowledge and understanding»" }))
+
+    await waitFor(() => expect(unitApi.createObjectiveFromCatalog).toHaveBeenCalledWith(5, 40))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+  })
+
+  it("says the catalog failed to load instead of flagging linked items as gone", async () => {
+    const user = userEvent.setup()
+    const unit = makeUnit()
+    unit.objectives[0].curricular_items = [
+      {
+        id: 31,
+        code: "CG-1",
+        name: "Comunicación",
+        type: "general_competency",
+        description: null,
+        parent_name: null,
+        catalog: "MCN 2022",
+        framework: "ANEP Bachillerato",
+        source: null,
+        page: null,
+      },
+    ]
+    vi.mocked(unitApi.fetchUnit).mockResolvedValue(unit)
+    vi.mocked(unitApi.fetchUnitCurricularItems).mockRejectedValue(new Error("network"))
+    renderPage()
+
+    await user.click(await screen.findByRole("tab", { name: "Objetivos" }))
+    await user.click(screen.getByRole("button", { name: "Elementos curriculares" }))
+
+    expect(await screen.findByText(/No pudimos cargar el catálogo del programa/)).toBeInTheDocument()
+    expect(screen.queryByText("Ya no está en el catálogo del programa.")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Guardar elementos" })).toBeDisabled()
   })
 })

@@ -62,12 +62,24 @@ interface NamedRef {
   name: string | null
 }
 
+/**
+ * The plan's group with the screen 26 flags (PA-110, PA-123): a group of a
+ * closed year is read-only unless direction enabled loading in it until
+ * `writable_until`. UX hint only — the server rejects the writes.
+ */
+export interface UnitGroupRef extends NamedRef {
+  school_year: number
+  year_closed: boolean
+  read_only: boolean
+  writable_until: string | null
+}
+
 export interface UnitDetail extends Omit<PlanUnit, "objectives"> {
   objectives: UnitObjective[]
   plan: {
     id: number
     year: number
-    group: NamedRef
+    group: UnitGroupRef
     subject: NamedRef
     teacher: NamedRef
     framework: NamedRef
@@ -105,6 +117,14 @@ export async function fetchUnitAccommodations(id: number): Promise<UnitAccommoda
 export async function fetchUnitCurricularItems(id: number): Promise<CurricularItemRow[]> {
   const { data } = await api.get<{ data: CurricularItemRow[] }>(`/api/v1/units/${id}/curricular-items`)
   return data.data
+}
+
+/**
+ * «Elegir del catálogo» (ClickUp 1dfd3mc4bga): the objective takes the
+ * element's text and stays linked to it, with its citation.
+ */
+export async function createObjectiveFromCatalog(unitId: number, curricularItemId: number): Promise<void> {
+  await api.post(`/api/v1/units/${unitId}/objectives`, { curricular_item_id: curricularItemId })
 }
 
 export async function saveObjectiveCurricularItems(objectiveId: number, ids: number[]): Promise<void> {

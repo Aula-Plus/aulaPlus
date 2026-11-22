@@ -161,7 +161,10 @@ skeleton is done, until explicitly asked:
   - Screen 13 «Unidad» (ClickUp 1dfd3mc4bga): the unit screen with its
     planner values (`units.planner_values`, keyed by the resolved planner
     field), each objective's curricular items (`unit_objective_curricular_item`,
-    picked from the program catalog) and the «A mano» side panel. «Nueva clase
+    picked from the program catalog; an objective can also be picked straight
+    from the catalog, taking the element's text and link) and the «A mano»
+    side panel. In a group of a closed year it is read-only unless direction
+    enabled loading (screen 26, `group.writable`). «Nueva clase
     desde esta unidad», the PTP block and the group's resources are not there
     yet (their own tasks).
   The AI-proposal engine itself (`AIProposal`,

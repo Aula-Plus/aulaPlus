@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AnnualPlans\StoreUnitObjectiveRequest;
 use App\Http\Requests\AnnualPlans\SyncObjectiveCurricularItemsRequest;
 use App\Http\Requests\AnnualPlans\UnitObjectiveRequest;
 use App\Models\CurricularItem;
@@ -12,22 +13,46 @@ use App\Services\Units\UnitCurriculum;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Objectives of a unit. The teacher writes them (P13-OBJ-05); whether each is
- * planned or given is derived from the classes and assessments that point at
- * it, never set here.
+ * Objectives of a unit. The teacher writes them (P13-OBJ-05) or picks one
+ * from the program catalog (ClickUp 1dfd3mc4bga, «Elegir del catálogo»);
+ * whether each is planned or given is derived from the classes and
+ * assessments that point at it, never set here.
  */
 class UnitObjectiveController extends Controller
 {
-    public function store(UnitObjectiveRequest $request, Unit $unit): JsonResponse
+    /**
+     * POST /units/{unit}/objectives — a written objective, or one picked from
+     * the catalog: it takes the element's name as its text and is linked to
+     * the element, so it shows with its citation (program, catalog, source
+     * and page) like any other linked element.
+     */
+    public function store(StoreUnitObjectiveRequest $request, Unit $unit, UnitCurriculum $curriculum): JsonResponse
     {
-        $objective = $unit->objectives()->create([
-            'description' => $request->validated('description'),
-            'position' => ((int) $unit->objectives()->max('position')) + 1,
-        ]);
+        $item = $request->filled('curricular_item_id')
+            ? CurricularItem::query()->with(['curricularCatalog.curricularFramework:id,name', 'parent:id,name'])
+                ->findOrFail((int) $request->validated('curricular_item_id'))
+            : null;
+        $description = trim((string) $request->validated('description'));
 
-        return response()->json(['data' => $this->row($objective)], 201);
+        $objective = DB::transaction(function () use ($unit, $item, $description): UnitObjective {
+            $objective = $unit->objectives()->create([
+                'description' => $description !== '' ? $description : $item?->name,
+                'position' => ((int) $unit->objectives()->max('position')) + 1,
+            ]);
+            if ($item !== null) {
+                $objective->curricularItems()->attach($item->id);
+            }
+
+            return $objective;
+        });
+
+        return response()->json(['data' => [
+            ...$this->row($objective),
+            'curricular_items' => $item ? [$curriculum->row($item)] : [],
+        ]], 201);
     }
 
     public function update(UnitObjectiveRequest $request, UnitObjective $objective): JsonResponse

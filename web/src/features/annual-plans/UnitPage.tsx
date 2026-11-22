@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dialog"
 import { formatShortDate } from "@/lib/utils"
 import { accommodationCategoryLabels } from "@/types"
+import { ClosedYearNotice } from "@/features/school-year/ClosedYearNotice"
+import { closedYearError } from "@/features/school-year/closedYearError"
 import {
   createObjective,
   objectiveStatusLabels,
@@ -31,6 +33,7 @@ import {
 } from "./annualPlansApi"
 import {
   citation,
+  createObjectiveFromCatalog,
   fetchUnit,
   fetchUnitAccommodations,
   fetchUnitCurricularItems,
@@ -74,6 +77,10 @@ const objectiveTone: Record<ObjectiveStatus, BadgeTone> = {
  * opens the group context in a side panel, closed by default: accommodations
  * by type and, on demand, the detail per student. Psicopedagogía and Dirección
  * read everything. The unit status is derived by the server (P13-DEC-06).
+ *
+ * In a group of a closed year (screen 26, PA-110 and PA-123) the unit is
+ * read-only for everybody, with the group's notice, unless direction enabled
+ * loading in it; the server rejects the writes either way (`group.writable`).
  *
  * Not here yet, by decision in ClickUp: «Nueva clase desde esta unidad»
  * (screen 14, task 86e3jujh0), the PTP block (second PR of Ajustes y PTP,
@@ -120,12 +127,14 @@ export function UnitPage() {
   if (error) return <p className="text-sm text-destructive">{error}</p>
   if (!unit) return <p className="text-sm text-muted-foreground">Cargando…</p>
 
+  // Role (server: UnitPolicy) and year (screen 26). UX only.
+  const editable = unit.can_edit && !unit.plan.group.read_only
   const meta = [
     unit.plan.subject.name,
     unit.plan.group.name,
     `${formatShortDate(unit.start_date)} – ${formatShortDate(unit.end_date)}`,
     `Docente: ${unit.plan.teacher.name}`,
-    ...(unit.can_edit ? [] : ["solo lectura"]),
+    ...(editable ? [] : ["solo lectura"]),
   ].join(" · ")
 
   return (
@@ -140,6 +149,8 @@ export function UnitPage() {
           <PanelRightOpen aria-hidden="true" />A mano
         </Button>
       </PageHeader>
+
+      <ClosedYearNotice group={unit.plan.group} />
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {unit.status ? (
@@ -178,19 +189,20 @@ export function UnitPage() {
       {tab === "planning" && (
         <PlanningTab
           unit={unit}
+          editable={editable}
           accommodations={accommodations}
           accommodationsFailed={accommodationsError}
           onChanged={reload}
           onSaved={setUnit}
         />
       )}
-      {tab === "objectives" && <ObjectivesTab unit={unit} onChanged={reload} />}
+      {tab === "objectives" && <ObjectivesTab unit={unit} editable={editable} onChanged={reload} />}
 
       {panelOpen && (
         <AtHandPanel
           accommodations={accommodations}
           failed={accommodationsError}
-          readOnly={!unit.can_edit}
+          readOnly={!editable}
           onClose={() => setPanelOpen(false)}
         />
       )}
@@ -200,12 +212,14 @@ export function UnitPage() {
 
 function PlanningTab({
   unit,
+  editable,
   accommodations,
   accommodationsFailed,
   onChanged,
   onSaved,
 }: {
   unit: UnitDetail
+  editable: boolean
   accommodations: UnitAccommodationType[] | null
   accommodationsFailed: boolean
   onChanged: () => Promise<void>
@@ -213,9 +227,10 @@ function PlanningTab({
 }) {
   return (
     <div className="grid gap-6">
-      <UnitDataCard unit={unit} onChanged={onChanged} />
+      <UnitDataCard unit={unit} editable={editable} onChanged={onChanged} />
       <PlannerCard
         unit={unit}
+        editable={editable}
         accommodations={accommodations}
         accommodationsFailed={accommodationsFailed}
         onSaved={onSaved}
@@ -224,7 +239,15 @@ function PlanningTab({
   )
 }
 
-function UnitDataCard({ unit, onChanged }: { unit: UnitDetail; onChanged: () => Promise<void> }) {
+function UnitDataCard({
+  unit,
+  editable,
+  onChanged,
+}: {
+  unit: UnitDetail
+  editable: boolean
+  onChanged: () => Promise<void>
+}) {
   const [name, setName] = useState(unit.name)
   const [start, setStart] = useState(unit.start_date)
   const [end, setEnd] = useState(unit.end_date)
@@ -244,8 +267,8 @@ function UnitDataCard({ unit, onChanged }: { unit: UnitDetail; onChanged: () => 
     try {
       await updateUnit(unit.id, { name: name.trim(), start_date: start, end_date: end })
       await onChanged()
-    } catch {
-      setError("No pudimos guardar los datos de la unidad.")
+    } catch (e) {
+      setError(closedYearError(e) ?? "No pudimos guardar los datos de la unidad.")
     } finally {
       setSaving(false)
     }
@@ -256,7 +279,7 @@ function UnitDataCard({ unit, onChanged }: { unit: UnitDetail; onChanged: () => 
       ? "La unidad todavía no tiene objetivos: escribilos en la solapa Objetivos y el estado sale solo."
       : `El estado se actualiza con las clases y evaluaciones de la unidad. Está ${unitStatusLabels[unit.status].toLowerCase()}, con ${unit.given_count} de ${unit.objectives_count} objetivos dados.`
 
-  if (!unit.can_edit) {
+  if (!editable) {
     return (
       <SectionCard title="Datos de la unidad">
         <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -315,11 +338,13 @@ function differentiationLine(accommodations: UnitAccommodationType[]): string {
 
 function PlannerCard({
   unit,
+  editable,
   accommodations,
   accommodationsFailed,
   onSaved,
 }: {
   unit: UnitDetail
+  editable: boolean
   accommodations: UnitAccommodationType[] | null
   accommodationsFailed: boolean
   onSaved: (unit: UnitDetail) => void
@@ -333,7 +358,6 @@ function PlannerCard({
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
-
   const changed = Object.keys(values).filter((key) => JSON.stringify(values[key] ?? null) !== JSON.stringify(initial[key] ?? null))
 
   async function save() {
@@ -345,8 +369,8 @@ function PlannerCard({
       const planner = await saveUnitPlanner(unit.id, payload)
       onSaved({ ...unit, planner })
       setSaved(true)
-    } catch {
-      setError("No pudimos guardar la planificación. Revisá los campos e intentá de nuevo.")
+    } catch (e) {
+      setError(closedYearError(e) ?? "No pudimos guardar la planificación. Revisá los campos e intentá de nuevo.")
     } finally {
       setSaving(false)
     }
@@ -374,7 +398,7 @@ function PlannerCard({
             key={field.key}
             field={field}
             value={values[field.key] ?? null}
-            readOnly={!unit.can_edit}
+            readOnly={!editable}
             accommodations={accommodations}
             accommodationsFailed={accommodationsFailed}
             onChange={(value) => set(field.key, value)}
@@ -386,7 +410,7 @@ function PlannerCard({
             nombre; no hace falta completarlo para generar una clase.
           </p>
         )}
-        {unit.can_edit && (
+        {editable && (
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={save} disabled={saving || changed.length === 0}>
               {saving ? "Guardando…" : "Guardar planificación"}
@@ -548,11 +572,23 @@ function PlannerFieldControl({
   )
 }
 
-function ObjectivesTab({ unit, onChanged }: { unit: UnitDetail; onChanged: () => Promise<void> }) {
+type AddMode = "write" | "catalog"
+
+function ObjectivesTab({
+  unit,
+  editable,
+  onChanged,
+}: {
+  unit: UnitDetail
+  editable: boolean
+  onChanged: () => Promise<void>
+}) {
+  const [mode, setMode] = useState<AddMode>("write")
   const [text, setText] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [picking, setPicking] = useState<UnitObjective | null>(null)
+  const [choosing, setChoosing] = useState(false)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -563,8 +599,8 @@ function ObjectivesTab({ unit, onChanged }: { unit: UnitDetail; onChanged: () =>
       await createObjective(unit.id, text.trim())
       setText("")
       await onChanged()
-    } catch {
-      setError("No pudimos guardar el objetivo.")
+    } catch (e) {
+      setError(closedYearError(e) ?? "No pudimos guardar el objetivo.")
     } finally {
       setSaving(false)
     }
@@ -600,7 +636,7 @@ function ObjectivesTab({ unit, onChanged }: { unit: UnitDetail; onChanged: () =>
                     ))}
                   </ul>
                 )}
-                {unit.can_edit && (
+                {editable && (
                   <div>
                     <Button size="sm" variant="outline" onClick={() => setPicking(objective)}>
                       Elementos curriculares
@@ -615,17 +651,51 @@ function ObjectivesTab({ unit, onChanged }: { unit: UnitDetail; onChanged: () =>
           Un objetivo está dado cuando lo marcaste al cerrar una clase o cuando una evaluación con resultados lo
           trabajó.
         </p>
-        {unit.can_edit && (
-          <form className="grid gap-2" onSubmit={submit}>
-            <Label htmlFor="new-objective">Escribir un objetivo</Label>
-            <Textarea id="new-objective" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div>
-              <Button type="submit" size="sm" disabled={saving || !text.trim()}>
-                {saving ? "Guardando…" : "Agregar objetivo"}
+        {editable && (
+          <div className="grid gap-3">
+            <div role="group" aria-label="Cómo agregar un objetivo" className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={mode === "write" ? "default" : "outline"}
+                aria-pressed={mode === "write"}
+                onClick={() => setMode("write")}
+              >
+                Escribir un objetivo
+              </Button>
+              <Button
+                size="sm"
+                variant={mode === "catalog" ? "default" : "outline"}
+                aria-pressed={mode === "catalog"}
+                onClick={() => setMode("catalog")}
+              >
+                Elegir del catálogo
               </Button>
             </div>
-          </form>
+            {mode === "write" ? (
+              <form className="grid gap-2" onSubmit={submit}>
+                <Label htmlFor="new-objective">Tu objetivo</Label>
+                <Textarea id="new-objective" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} />
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                <div>
+                  <Button type="submit" size="sm" disabled={saving || !text.trim()}>
+                    {saving ? "Guardando…" : "Agregar objetivo"}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Elegí un elemento del catálogo del programa (por ejemplo, una progresión): queda como objetivo de la
+                  unidad con su texto y su cita.
+                </p>
+                <div>
+                  <Button size="sm" onClick={() => setChoosing(true)}>
+                    Buscar en el catálogo
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
       {picking && (
@@ -639,7 +709,149 @@ function ObjectivesTab({ unit, onChanged }: { unit: UnitDetail; onChanged: () =>
           }}
         />
       )}
+      {choosing && (
+        <CatalogObjectiveDialog
+          unitId={unit.id}
+          onClose={() => setChoosing(false)}
+          onSaved={async () => {
+            setChoosing(false)
+            await onChanged()
+          }}
+        />
+      )}
     </SectionCard>
+  )
+}
+
+/** The program catalog the picker reads (UnitCurriculum), loaded on open. */
+function useUnitCatalog(unitId: number) {
+  const [items, setItems] = useState<CurricularItemRow[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetchUnitCurricularItems(unitId)
+      .then((rows) => {
+        if (active) setItems(rows)
+      })
+      .catch(() => {
+        if (active) setFailed(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [unitId])
+
+  return { items, failed }
+}
+
+function matches(item: CurricularItemRow, term: string): boolean {
+  return (
+    term === "" ||
+    [item.name, item.code, item.parent_name, item.description].some((v) => v?.toLowerCase().includes(term))
+  )
+}
+
+function ItemLabel({ item }: { item: CurricularItemRow }) {
+  return (
+    <>
+      <span className="font-medium">
+        {item.code ? `${item.code} · ` : ""}
+        {item.name}
+      </span>
+      {item.parent_name && <span className="text-muted-foreground"> · {item.parent_name}</span>}
+      <span className="block text-xs text-muted-foreground">{citation(item)}</span>
+    </>
+  )
+}
+
+const catalogLoadError = "No pudimos cargar el catálogo del programa. Cerrá y volvé a intentar."
+const catalogEmpty = "Todavía no hay elementos del programa cargados para esta materia."
+
+/**
+ * «Elegir del catálogo» (ClickUp 1dfd3mc4bga): the teacher picks one element
+ * of the program catalog and it becomes an objective of the unit, with the
+ * element's text and its citation, without writing it.
+ */
+function CatalogObjectiveDialog({
+  unitId,
+  onClose,
+  onSaved,
+}: {
+  unitId: number
+  onClose: () => void
+  onSaved: () => Promise<void>
+}) {
+  const { items, failed } = useUnitCatalog(unitId)
+  const [search, setSearch] = useState("")
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const term = search.trim().toLowerCase()
+  const visible = (items ?? []).filter((item) => matches(item, term))
+
+  async function choose(item: CurricularItemRow) {
+    setSavingId(item.id)
+    setError(null)
+    try {
+      await createObjectiveFromCatalog(unitId, item.id)
+      await onSaved()
+    } catch (e) {
+      setError(closedYearError(e) ?? "No pudimos agregar el objetivo.")
+      setSavingId(null)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Elegir un objetivo del catálogo</DialogTitle>
+          <DialogDescription>
+            El elemento que elijas queda como objetivo de la unidad, con su texto y su cita.
+          </DialogDescription>
+        </DialogHeader>
+        {failed ? (
+          <p className="text-sm text-destructive">{catalogLoadError}</p>
+        ) : items === null ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{catalogEmpty}</p>
+        ) : (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="catalog-objective-search">Buscar en el catálogo</Label>
+              <Input id="catalog-objective-search" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <ul className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+              {visible.map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-3 text-sm">
+                  <span>
+                    <ItemLabel item={item} />
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={savingId !== null}
+                    aria-label={`Elegir «${item.name}»`}
+                    onClick={() => void choose(item)}
+                  >
+                    {savingId === item.id ? "Agregando…" : "Elegir"}
+                  </Button>
+                </li>
+              ))}
+              {visible.length === 0 && <li className="text-sm text-muted-foreground">Ningún elemento coincide.</li>}
+            </ul>
+          </div>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancelar</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -654,44 +866,25 @@ function CurricularItemsDialog({
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
-  const [items, setItems] = useState<CurricularItemRow[] | null>(null)
+  const { items, failed } = useUnitCatalog(unitId)
   const [selected, setSelected] = useState<number[]>(objective.curricular_items.map((i) => i.id))
   const [search, setSearch] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    let active = true
-    fetchUnitCurricularItems(unitId)
-      .then((rows) => {
-        if (active) setItems(rows)
-      })
-      .catch(() => {
-        if (!active) return
-        setError("No pudimos cargar el catálogo del programa.")
-        setItems([])
-      })
-    return () => {
-      active = false
-    }
-  }, [unitId])
-
   // Items already linked that the picker no longer offers (the program left
   // the group-subject's offering, the catalog changed…): listed first so the
-  // teacher can still untick them.
+  // teacher can still untick them. Only once the catalog loaded: a failed
+  // load says so instead of claiming they left the catalog.
   const offeredIds = new Set((items ?? []).map((item) => item.id))
   const staleIds = new Set(
-    objective.curricular_items.filter((item) => !offeredIds.has(item.id)).map((item) => item.id),
+    items === null ? [] : objective.curricular_items.filter((item) => !offeredIds.has(item.id)).map((item) => item.id),
   )
   const options =
     items === null ? null : [...objective.curricular_items.filter((item) => staleIds.has(item.id)), ...items]
 
   const term = search.trim().toLowerCase()
-  const visible = (options ?? []).filter(
-    (item) =>
-      term === "" ||
-      [item.name, item.code, item.parent_name, item.description].some((v) => v?.toLowerCase().includes(term)),
-  )
+  const visible = (options ?? []).filter((item) => matches(item, term))
 
   async function save() {
     setSaving(true)
@@ -699,8 +892,8 @@ function CurricularItemsDialog({
     try {
       await saveObjectiveCurricularItems(objective.id, selected)
       await onSaved()
-    } catch {
-      setError("No pudimos guardar los elementos curriculares.")
+    } catch (e) {
+      setError(closedYearError(e) ?? "No pudimos guardar los elementos curriculares.")
       setSaving(false)
     }
   }
@@ -715,12 +908,12 @@ function CurricularItemsDialog({
             cita.
           </DialogDescription>
         </DialogHeader>
-        {options === null ? (
+        {failed ? (
+          <p className="text-sm text-destructive">{catalogLoadError}</p>
+        ) : options === null ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : options.length === 0 && !error ? (
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay elementos del programa cargados para esta materia.
-          </p>
+        ) : options.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{catalogEmpty}</p>
         ) : (
           <div className="grid gap-3">
             <div className="grid gap-1.5">
@@ -742,12 +935,7 @@ function CurricularItemsDialog({
                       }
                     />
                     <span>
-                      <span className="font-medium">
-                        {item.code ? `${item.code} · ` : ""}
-                        {item.name}
-                      </span>
-                      {item.parent_name && <span className="text-muted-foreground"> · {item.parent_name}</span>}
-                      <span className="block text-xs text-muted-foreground">{citation(item)}</span>
+                      <ItemLabel item={item} />
                       {staleIds.has(item.id) && (
                         <span className="block text-xs text-muted-foreground">
                           Ya no está en el catálogo del programa.
@@ -766,7 +954,10 @@ function CurricularItemsDialog({
           <DialogClose asChild>
             <Button variant="outline">Cancelar</Button>
           </DialogClose>
-          <Button onClick={save} disabled={saving || options === null || (options.length === 0 && selected.length === 0)}>
+          <Button
+            onClick={save}
+            disabled={saving || failed || options === null || (options.length === 0 && selected.length === 0)}
+          >
             {saving ? "Guardando…" : "Guardar elementos"}
           </Button>
         </DialogFooter>
