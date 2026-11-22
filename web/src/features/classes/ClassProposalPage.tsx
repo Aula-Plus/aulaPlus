@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
+import { isAxiosError } from "axios"
 import { Check, Pencil, RefreshCw, X } from "lucide-react"
 
 import { PageHeader } from "@/components/ui/page-header"
@@ -209,7 +210,16 @@ function ClassProposalView() {
     try {
       const applied = await confirmClassProposal(proposal.id, body)
       navigate(applied.applied_to_id ? classPath(applied.applied_to_id) : newClassPath())
-    } catch {
+    } catch (err) {
+      // 422: maybe it was already confirmed (another tab, a retry). Then go
+      // to that class instead of asking to try again forever.
+      if (isAxiosError(err) && err.response?.status === 422) {
+        const fresh = await fetchProposal(proposal.id).catch(() => null)
+        if (fresh?.status === "applied" && fresh.applied_to_id) {
+          navigate(classPath(fresh.applied_to_id))
+          return
+        }
+      }
       setActionError("No pudimos confirmar la clase. Probá de nuevo.")
       setBusy(false)
     }

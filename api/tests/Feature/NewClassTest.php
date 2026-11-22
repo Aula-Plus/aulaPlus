@@ -501,19 +501,83 @@ it('closes a class in one tap with «Todo»', function () {
     $this->getJson("/api/v1/annual-plans/{$s['plan']->id}")->assertJsonPath('data.coverage.objectives_given', 2);
 });
 
-it('closes with «Una parte» marking the objectives given; the rest are recorded in part', function () {
+it('closes with «Una parte» per objective: «Se dio» is given, «Se empezó» started, unmarked stays planned with no record', function () {
     $this->travelTo('2026-11-19 12:00:00');
     $s = mathClassSetup();
+    [$compare, $order] = $s['objectives'];
+    $money = classObjective($s['unit'], 'Problemas con dinero', 3);
     $class = confirmedClass($s);
+    $class->unitObjectives()->attach($money->id);
     Sanctum::actingAs($s['teacher']);
 
     $this->postJson("/api/v1/class-sessions/{$class->id}/close", [
-        'result' => 'partial', 'given_objective_ids' => [$s['objectives'][0]->id],
-    ])->assertOk();
+        'result' => 'partial',
+        'given_objective_ids' => [$compare->id],
+        'started_objective_ids' => [$order->id],
+    ])->assertOk()
+        ->assertJsonPath('data.closing_result', 'partial')
+        ->assertJsonPath('data.objectives.2.coverage', null);
+
+    $coverage = $class->unitObjectives()->pluck('class_session_unit_objective.coverage', 'unit_objectives.id');
+    expect($coverage[$compare->id])->toBe('full')
+        ->and($coverage[$order->id])->toBe('partial')
+        // Still linked (planned), but nothing recorded.
+        ->and($coverage->has($money->id))->toBeTrue()
+        ->and($coverage[$money->id])->toBeNull()
+        ->and($class->refresh()->status)->toBe(ClassSessionStatus::Delivered);
 
     $objectives = collect($this->getJson("/api/v1/annual-plans/{$s['plan']->id}")->json('data.units.0.objectives'));
-    expect($objectives->firstWhere('id', $s['objectives'][0]->id)['status'])->toBe('given')
-        ->and($objectives->firstWhere('id', $s['objectives'][1]->id)['status'])->toBe('started');
+    expect($objectives->firstWhere('id', $compare->id)['status'])->toBe('given')
+        ->and($objectives->firstWhere('id', $order->id)['status'])->toBe('started')
+        ->and($objectives->firstWhere('id', $money->id)['status'])->toBe('planned');
+});
+
+it('corrects a close consistently: «Todo» → «Una parte» → «Nada» rewrites every objective of the class', function () {
+    $this->travelTo('2026-11-19 12:00:00');
+    $s = mathClassSetup();
+    [$compare, $order] = $s['objectives'];
+    $class = confirmedClass($s);
+    $url = "/api/v1/class-sessions/{$class->id}/close";
+    $coverage = fn () => $class->unitObjectives()->pluck('class_session_unit_objective.coverage', 'unit_objectives.id')->all();
+    Sanctum::actingAs($s['teacher']);
+
+    $this->postJson($url, ['result' => 'full'])->assertOk();
+    expect($coverage())->toBe([$compare->id => 'full', $order->id => 'full']);
+
+    // «Ordenar» was not touched after all: its «Todo» record is gone.
+    $this->postJson($url, ['result' => 'partial', 'started_objective_ids' => [$compare->id]])->assertOk();
+    expect($coverage())->toBe([$compare->id => 'partial', $order->id => null]);
+
+    $this->postJson($url, ['result' => 'none'])->assertOk();
+    expect($coverage())->toBe([$compare->id => 'none', $order->id => 'none']);
+    $this->getJson("/api/v1/annual-plans/{$s['plan']->id}")
+        ->assertJsonPath('data.coverage.objectives_given', 0)
+        ->assertJsonPath('data.coverage.objectives_planned', 2);
+});
+
+it('validates the per-objective «Una parte» payload', function () {
+    $this->travelTo('2026-11-19 12:00:00');
+    $s = mathClassSetup();
+    [$compare] = $s['objectives'];
+    $class = confirmedClass($s);
+    $url = "/api/v1/class-sessions/{$class->id}/close";
+    $foreign = classObjective(Unit::factory()->create(['annual_plan_id' => $s['plan']->id]));
+    Sanctum::actingAs($s['teacher']);
+
+    $this->postJson($url, ['result' => 'partial', 'started_objective_ids' => [$foreign->id]])
+        ->assertStatus(422)->assertJsonValidationErrors('started_objective_ids');
+    $this->postJson($url, ['result' => 'partial', 'started_objective_ids' => [999999]])
+        ->assertStatus(422)->assertJsonValidationErrors('started_objective_ids');
+    $this->postJson($url, ['result' => 'partial', 'started_objective_ids' => ['abc']])
+        ->assertStatus(422)->assertJsonValidationErrors('started_objective_ids.0');
+    // The same objective can't be both.
+    $this->postJson($url, ['result' => 'partial', 'given_objective_ids' => [$compare->id], 'started_objective_ids' => [$compare->id]])
+        ->assertStatus(422)->assertJsonValidationErrors('started_objective_ids');
+    // Per-objective marks only go with «Una parte».
+    $this->postJson($url, ['result' => 'none', 'started_objective_ids' => [$compare->id]])
+        ->assertStatus(422)->assertJsonValidationErrors('started_objective_ids');
+
+    expect($class->refresh()->closing_result)->toBeNull();
 });
 
 it('closes with «Nada», keeping the objectives as planned', function () {
@@ -563,12 +627,14 @@ it('forbids closing someone else\'s class', function () {
     leadGroup($s['group'], $colleague);
     Sanctum::actingAs($colleague);
     $this->postJson($url, ['result' => 'full'])->assertForbidden();
+    $this->postJson($url, ['result' => 'partial', 'started_objective_ids' => [$s['objectives'][0]->id]])->assertForbidden();
 
     Sanctum::actingAs(User::factory()->forSchool($s['school'])->psychopedagogue()->create());
     $this->postJson($url, ['result' => 'full'])->assertForbidden();
 
     Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->teacher()->create());
     $this->postJson($url, ['result' => 'full'])->assertNotFound();
+    $this->postJson($url, ['result' => 'partial', 'started_objective_ids' => [$s['objectives'][0]->id]])->assertNotFound();
 
     expect($class->refresh()->closing_result)->toBeNull();
 });
@@ -587,8 +653,15 @@ it('lists «Tus clases»: the teacher\'s open drafts and classes, nothing for sc
         ->assertJsonCount(1, 'data.drafts')
         ->assertJsonPath('data.drafts.0.id', $draft->id)
         ->assertJsonPath('data.drafts.0.title', 'Comparar fracciones')
+        ->assertJsonPath('data.drafts.0.subject.name', 'Matemática')
         ->assertJsonCount(1, 'data.classes')
         ->assertJsonPath('data.classes.0.id', $class->id);
+
+    // A free class's draft names the subject chosen directly.
+    $free = completedClassProposal($s, ['unit_id' => null, 'unit_objective_ids' => null, 'subject_id' => $s['subject']->id]);
+    $this->getJson('/api/v1/my-classes')->assertOk()
+        ->assertJsonPath('data.drafts.0.id', $free->id)
+        ->assertJsonPath('data.drafts.0.subject.name', 'Matemática');
 
     Sanctum::actingAs(User::factory()->forSchool($s['school'])->director()->create());
     $this->getJson('/api/v1/my-classes')->assertOk()->assertJsonCount(0, 'data.drafts')->assertJsonCount(0, 'data.classes');
@@ -624,4 +697,25 @@ it('never applies the same class draft twice', function () {
         ->toThrow(HttpException::class);
 
     expect(ClassSession::query()->count())->toBe(1);
+});
+
+it('only lets the teacher ask the AI for an assessment, never Psicopedagogía or Dirección (PA-104)', function () {
+    Queue::fake();
+    $s = mathClassSetup();
+    $url = "/api/v1/groups/{$s['group']->id}/assistant/generate";
+    $payload = [
+        'type' => 'assessment',
+        'parameters' => ['focus' => 'Fracciones', 'assessment_type' => 'written', 'subject_id' => $s['subject']->id],
+    ];
+
+    foreach (['psychopedagogue', 'director'] as $role) {
+        Sanctum::actingAs(User::factory()->forSchool($s['school'])->{$role}()->create());
+        $this->postJson($url, $payload)->assertForbidden();
+    }
+    Queue::assertNothingPushed();
+    expect(AIProposal::query()->count())->toBe(0);
+
+    Sanctum::actingAs($s['teacher']);
+    $this->postJson($url, $payload)->assertStatus(202);
+    Queue::assertPushed(GenerateAIProposalJob::class);
 });

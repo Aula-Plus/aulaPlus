@@ -143,7 +143,16 @@ describe("NewClassPage", () => {
   it("lists «Tus clases» with drafts and confirmed classes", async () => {
     vi.spyOn(annualPlansApi, "fetchAnnualPlanOptions").mockResolvedValue({ assignments: [], frameworks: [] })
     vi.mocked(classesApi.fetchMyClasses).mockResolvedValue({
-      drafts: [{ id: 5, title: "Comparar fracciones", group: { id: 1, name: "2°EMS-A" }, date: "2026-11-20", status: "completed" }],
+      drafts: [
+        {
+          id: 5,
+          title: "Comparar fracciones",
+          group: { id: 1, name: "2°EMS-A" },
+          subject: { id: 3, name: "Física" },
+          date: "2026-11-20",
+          status: "completed",
+        },
+      ],
       classes: [
         {
           id: 6,
@@ -161,6 +170,8 @@ describe("NewClassPage", () => {
 
     expect(await screen.findByRole("link", { name: "Comparar fracciones" })).toHaveAttribute("href", "/propuesta-de-clase/5")
     expect(screen.getByText("Borrador")).toBeInTheDocument()
+    // A draft shows its subject too: two subjects in one group are told apart.
+    expect(screen.getByText("Física · 2°EMS-A")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Distancias en el plano" })).toHaveAttribute("href", "/clase/6")
     expect(screen.getByText("Cerrada · Todo")).toBeInTheDocument()
   })

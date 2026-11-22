@@ -11,6 +11,8 @@ use App\Enums\Role;
 use App\Http\Requests\ClassSessions\CloseClassSessionRequest;
 use App\Models\AIProposal;
 use App\Models\ClassSession;
+use App\Models\Subject;
+use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Support\SchoolTime;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -50,14 +52,35 @@ class ClassSessionController extends Controller
             ->whereIn('status', [AIProposalStatus::Pending->value, AIProposalStatus::Completed->value, AIProposalStatus::Error->value])
             ->latest('id')
             ->limit(self::LIST_LIMIT)
-            ->get()
-            ->map(fn (AIProposal $proposal): array => [
+            ->get();
+
+        // A draft's subject is chosen directly or comes from its unit's plan
+        // (as in AIProposalResource::classRequest), resolved for all drafts
+        // in two queries instead of one per row.
+        $unitSubjects = Unit::query()
+            ->join('annual_plans', 'annual_plans.id', '=', 'units.annual_plan_id')
+            ->whereIn('units.id', $drafts->map(fn (AIProposal $p) => $p->input_parameters['unit_id'] ?? null)->filter()->unique()->values())
+            ->pluck('annual_plans.subject_id', 'units.id');
+        $subjectIdOf = fn (AIProposal $p): ?int => isset($p->input_parameters['subject_id'])
+            ? (int) $p->input_parameters['subject_id']
+            : (isset($p->input_parameters['unit_id']) ? ($unitSubjects[(int) $p->input_parameters['unit_id']] ?? null) : null);
+        $subjects = Subject::query()
+            ->whereIn('id', $drafts->map($subjectIdOf)->filter()->unique()->values())
+            ->get(['id', 'name'])
+            ->keyBy('id');
+
+        $drafts = $drafts->map(function (AIProposal $proposal) use ($subjectIdOf, $subjects): array {
+            $subject = $subjects->get($subjectIdOf($proposal));
+
+            return [
                 'id' => $proposal->id,
                 'title' => $proposal->raw_response['title'] ?? $proposal->input_parameters['focus'] ?? null,
                 'group' => $proposal->group ? ['id' => $proposal->group->id, 'name' => $proposal->group->name] : null,
+                'subject' => $subject ? ['id' => $subject->id, 'name' => $subject->name] : null,
                 'date' => $proposal->input_parameters['date'] ?? null,
                 'status' => $proposal->status->value,
-            ]);
+            ];
+        });
 
         $classes = ClassSession::query()
             ->with(['group:id,name', 'subject:id,name'])
@@ -101,7 +124,8 @@ class ClassSessionController extends Controller
     }
 
     /**
-     * POST /class-sessions/{classSession}/close — «Todo / Una parte / Nada».
+     * POST /class-sessions/{classSession}/close — «Todo / Una parte / Nada»;
+     * with «Una parte», each objective «Se dio» or «Se empezó» (or unmarked).
      */
     public function close(CloseClassSessionRequest $request, ClassSession $classSession, CloseClassSession $close): JsonResponse
     {
@@ -109,6 +133,7 @@ class ClassSessionController extends Controller
             $classSession,
             ObjectiveCoverage::from($request->validated('result')),
             array_map('intval', (array) $request->validated('given_objective_ids', [])),
+            array_map('intval', (array) $request->validated('started_objective_ids', [])),
         );
 
         return response()->json(['data' => $this->detail($request, $classSession->refresh())]);

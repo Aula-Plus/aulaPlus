@@ -36,9 +36,10 @@ class GenerateAIProposalRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Only the teacher generates classes (P14-DEC-04, P14-DEC-61):
-        // Psicopedagogía and Dirección read and comment the proposal.
-        if ($this->input('type') === AIProposalType::ClassSession->value) {
+        // Only the teacher generates classes and assessments (P14-DEC-04,
+        // P14-DEC-61, PA-104): Psicopedagogía and Dirección read and comment
+        // the proposal.
+        if (in_array($this->input('type'), [AIProposalType::ClassSession->value, AIProposalType::Assessment->value], true)) {
             return $this->user()->can('generateClass', [AIProposal::class, $this->group()]);
         }
 

@@ -158,7 +158,14 @@ export async function discardProposal(id: number): Promise<void> {
 }
 
 export interface MyClasses {
-  drafts: { id: number; title: string | null; group: NamedRef | null; date: string | null; status: ProposalStatus }[]
+  drafts: {
+    id: number
+    title: string | null
+    group: NamedRef | null
+    subject: NamedRef | null
+    date: string | null
+    status: ProposalStatus
+  }[]
   classes: {
     id: number
     title: string
@@ -209,14 +216,25 @@ export async function fetchClass(id: number): Promise<ClassDetail> {
   return data.data
 }
 
+/**
+ * With «Una parte»: the objectives that «Se dio» and the ones that «Se
+ * empezó». Any other objective of the class stays planned, with no record.
+ */
+export interface PartialClosing {
+  given: number[]
+  started: number[]
+}
+
 export async function closeClass(
   id: number,
   result: ObjectiveCoverage,
-  givenObjectiveIds: number[] = [],
+  partial: PartialClosing = { given: [], started: [] },
 ): Promise<ClassDetail> {
   const { data } = await api.post<{ data: ClassDetail }>(`/api/v1/class-sessions/${id}/close`, {
     result,
-    ...(result === "partial" ? { given_objective_ids: givenObjectiveIds } : {}),
+    ...(result === "partial"
+      ? { given_objective_ids: partial.given, started_objective_ids: partial.started }
+      : {}),
   })
   return data.data
 }

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react"
+import { AxiosError, AxiosHeaders } from "axios"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -119,6 +120,32 @@ describe("ClassProposalPage", () => {
       materials: { decision: "rejected" },
       assessment: { decision: "approved" },
     })
+  })
+
+  it("when the class was already confirmed elsewhere, a second «Confirmar clase» goes to it instead of «Probá de nuevo»", async () => {
+    vi.spyOn(classesApi, "fetchProposal")
+      .mockResolvedValueOnce(makeProposal())
+      .mockResolvedValue(makeProposal({ status: "applied", applied_to_id: 77 }))
+    vi.spyOn(classesApi, "confirmClassProposal").mockRejectedValue(
+      new AxiosError("Unprocessable", "ERR_BAD_REQUEST", undefined, undefined, {
+        status: 422,
+        statusText: "Unprocessable",
+        data: { message: "Only a completed proposal can be applied." },
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await screen.findByRole("button", { name: /Confirmar clase/ })
+    for (const label of ["Apertura", "Actividad central", "Cierre", "Materiales", "Evaluación de la clase"]) {
+      await user.click(screen.getByRole("button", { name: `Aprobar ${label}` }))
+    }
+    await user.click(screen.getByRole("button", { name: /Confirmar clase/ }))
+
+    expect(await screen.findByText("Pantalla de la clase")).toBeInTheDocument()
+    expect(screen.queryByText(/Probá de nuevo/)).not.toBeInTheDocument()
   })
 
   it("regenerates the marked sections in one single call, pointing at this draft", async () => {

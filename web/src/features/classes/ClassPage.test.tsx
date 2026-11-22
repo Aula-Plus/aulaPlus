@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -67,21 +67,73 @@ describe("ClassPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Todo" }))
 
-    expect(close).toHaveBeenCalledWith(77, "full", [])
+    expect(close).toHaveBeenCalledWith(77, "full", { given: [], started: [] })
     expect(await screen.findByText(/Cerrada con «Todo»/)).toBeInTheDocument()
   })
 
-  it("with «Una parte» asks which objectives were given", async () => {
+  it("is still one tap: per-objective options only appear with «Una parte»", async () => {
     vi.spyOn(classesApi, "fetchClass").mockResolvedValue(makeClass())
+    renderPage()
+
+    expect(await screen.findByRole("button", { name: "Todo" })).toBeInTheDocument()
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument()
+    expect(screen.queryByText("¿Qué pasó con cada objetivo?")).not.toBeInTheDocument()
+  })
+
+  it("with «Una parte» records each objective «Se dio» or «Se empezó»; the untouched one is sent nowhere", async () => {
+    vi.spyOn(classesApi, "fetchClass").mockResolvedValue(
+      makeClass({
+        objectives: [
+          { id: 21, description: "Comparar fracciones", coverage: null },
+          { id: 22, description: "Ordenar decimales", coverage: null },
+          { id: 23, description: "Problemas con dinero", coverage: null },
+        ],
+      }),
+    )
     const close = vi.spyOn(classesApi, "closeClass").mockResolvedValue(makeClass({ closing_result: "partial" }))
     const user = userEvent.setup()
     renderPage()
 
     await user.click(await screen.findByRole("button", { name: "Una parte" }))
-    await user.click(screen.getByRole("checkbox", { name: "Que comparen fracciones" }))
+    expect(screen.getByText("¿Qué pasó con cada objetivo?")).toBeInTheDocument()
+
+    const compare = screen.getByRole("radiogroup", { name: "Comparar fracciones" })
+    const order = screen.getByRole("radiogroup", { name: "Ordenar decimales" })
+    const money = screen.getByRole("radiogroup", { name: "Problemas con dinero" })
+    // Nothing marked yet: every objective starts as «No se tocó».
+    expect(within(money).getByRole("radio", { name: "No se tocó" })).toBeChecked()
+
+    await user.click(within(compare).getByRole("radio", { name: "Se dio" }))
+    await user.click(within(order).getByRole("radio", { name: "Se empezó" }))
     await user.click(screen.getByRole("button", { name: "Guardar «Una parte»" }))
 
-    await waitFor(() => expect(close).toHaveBeenCalledWith(77, "partial", [21]))
+    await waitFor(() => expect(close).toHaveBeenCalledWith(77, "partial", { given: [21], started: [22] }))
+  })
+
+  it("correcting an earlier «Una parte» starts from what it recorded", async () => {
+    vi.spyOn(classesApi, "fetchClass").mockResolvedValue(
+      makeClass({
+        closing_result: "partial",
+        closed_at: "2026-11-18T15:00:00Z",
+        status: "delivered",
+        objectives: [
+          { id: 21, description: "Que comparen fracciones", coverage: "full" },
+          { id: 22, description: "Que ordenen fracciones", coverage: null },
+        ],
+      }),
+    )
+    const close = vi.spyOn(classesApi, "closeClass").mockResolvedValue(makeClass({ closing_result: "none" }))
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText("Se dio")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Cambiar el cierre" }))
+    await user.click(screen.getByRole("button", { name: "Una parte" }))
+    expect(within(screen.getByRole("radiogroup", { name: "Que comparen fracciones" })).getByRole("radio", { name: "Se dio" })).toBeChecked()
+    await user.click(screen.getByRole("button", { name: "Cancelar" }))
+
+    await user.click(screen.getByRole("button", { name: "Nada" }))
+    await waitFor(() => expect(close).toHaveBeenCalledWith(77, "none", { given: [], started: [] }))
   })
 
   it("is not closable before the class day, nor by someone who only reads it", async () => {

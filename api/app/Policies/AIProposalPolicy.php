@@ -34,11 +34,12 @@ class AIProposalPolicy
     }
 
     /**
-     * Whether $user may ask the AI for a class of $group (screen 14, ClickUp
-     * 86e3jujh0): only a teacher who teaches in the group. Psicopedagogía and
-     * Dirección don't generate classes — they read and comment the proposal
-     * (P14-DEC-04, P14-DEC-61). The subject itself (one the teacher teaches
-     * in that group) is checked by GenerateAIProposalRequest.
+     * Whether $user may ask the AI for a class or an assessment of $group
+     * (screen 14, ClickUp 86e3jujh0): only a teacher who teaches in the
+     * group. Psicopedagogía and Dirección don't generate classes nor
+     * assessments — they read and comment the proposal (P14-DEC-04,
+     * P14-DEC-61, PA-104). The subject itself (one the teacher teaches in
+     * that group) is checked by GenerateAIProposalRequest.
      */
     public function generateClass(User $user, Group $group): bool
     {

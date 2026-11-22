@@ -35,7 +35,8 @@ import {
   weekdayDayMonth,
   type CalendarView,
 } from "./calendarDates"
-import { calendarItemHour, calendarItemLink, calendarItemWhat } from "./calendarItemText"
+import { CalendarItemTopic } from "./CalendarItemTopic"
+import { calendarItemHour, calendarItemLink, calendarItemTopic, calendarItemWhat } from "./calendarItemText"
 import { ClassScheduleDialog } from "./ClassScheduleDialog"
 import { InstitutionalEventDialog } from "./InstitutionalEventDialog"
 import { TimetablePanel } from "./TimetablePanel"
@@ -372,7 +373,8 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   const hour = calendarItemHour(item)
   const what = calendarItemWhat(item)
   const group = item.group ? ` · ${item.group.name}` : ""
-  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${hour ? ` · ${hour}` : ""}`
+  const topic = calendarItemTopic(item)
+  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${topic ? ` · ${topic}` : ""}${hour ? ` · ${hour}` : ""}`
   const className = cn(
     "block w-full truncate rounded border px-1.5 py-0.5 text-left text-xs",
     typeTone[item.type],
@@ -381,9 +383,17 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   const content = (
     <>
       {item.time && <span className="mr-1 font-semibold tabular-nums">{item.time}</span>}
-      {what}
-      {full && group}
-      {full && item.place && ` · ${item.place}`}
+      {/* A class reads «Matemática · 5.°A» with its topic next to it, discreet. */}
+      <span>
+        {what}
+        {(full || item.type === "class") && group}
+        {full && item.place && ` · ${item.place}`}
+      </span>
+      {topic && (
+        <span data-testid="class-topic" className="ml-1 font-normal opacity-70">
+          {topic}
+        </span>
+      )}
     </>
   )
   const link = calendarItemLink(item)
@@ -582,7 +592,12 @@ function ListTable({
                   {calendarItemTypeLabels[item.type]}
                 </span>
               </TableCell>
-              <TableCell>{detail}</TableCell>
+              <TableCell className="max-w-md">
+                <span className="flex min-w-0 items-baseline">
+                  <span className="shrink-0">{detail}</span>
+                  <CalendarItemTopic item={item} className="min-w-0 max-w-none" />
+                </span>
+              </TableCell>
               <TableCell>{calendarItemSourceLabels[item.type]}</TableCell>
               <TableCell className="text-right whitespace-nowrap">
                 {item.type === "class" && item.can_edit && (

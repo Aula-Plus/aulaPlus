@@ -439,7 +439,9 @@ function MyClassesCard() {
                     {draft.title ?? "Propuesta de clase"}
                   </Link>
                 </TableCell>
-                <TableCell>{draft.group?.name ?? "—"}</TableCell>
+                <TableCell>
+                  {[draft.subject?.name, draft.group?.name].filter(Boolean).join(" · ") || "—"}
+                </TableCell>
                 <TableCell>{formatShortDate(draft.date)}</TableCell>
                 <TableCell>
                   <Badge tone="warning">
