@@ -15,7 +15,8 @@ import type { MeetingSheetType } from "@/types"
  * sheet types of the «Espacio de psicopedagogía» (P23-DEC-61, P10-DEC-01):
  * Dirección renames and adds them once for the whole school, so nobody
  * invents their own per sheet. There is no delete: past sheets keep their
- * type. Datos del colegio, régimen ANEP and membrete come later.
+ * type. The read-only «Régimen ANEP por nivel» (SchoolRegimeCard) sits above
+ * it in the same tab. Datos del colegio and membrete come later.
  */
 export function InstitutionTab() {
   const [types, setTypes] = useState<MeetingSheetType[] | null>(null)

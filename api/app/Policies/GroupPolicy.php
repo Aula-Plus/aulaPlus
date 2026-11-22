@@ -56,6 +56,22 @@ class GroupPolicy
         return $user->hasRole(Role::Director->value);
     }
 
+    /**
+     * «Recursos disponibles» of the group (screen 23 P23-REC-02 / PA-085,
+     * ClickUp 1dfd3mc4bh4): the group's teachers, Psicopedagogía and
+     * Dirección uncheck what the group does not have at hand and add or remove
+     * the group's own (answer of 2026-11-22). The school's list stays
+     * Dirección's (SchoolResourcePolicy).
+     */
+    public function manageResources(User $user, Group $group): bool
+    {
+        if (! $this->sharesSchool($user, $group)) {
+            return false;
+        }
+
+        return $user->hasAnyRole(Role::schoolWideValues()) || $user->teachesGroup($group);
+    }
+
     public function update(User $user, Group $group): bool
     {
         return $this->sharesSchool($user, $group)

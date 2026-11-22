@@ -86,7 +86,7 @@ it('lists only the years with two or more groups', function () {
     $this->getJson('/api/v1/group-comparison/options')->assertOk()
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.school_grade_id', $grade)
-        ->assertJsonPath('data.0.school_grade', '5° de Primaria')
+        ->assertJsonPath('data.0.school_grade', '5.° de Primaria')
         ->assertJsonPath('data.0.school_year', $year)
         ->assertJsonPath('data.0.groups.0.id', $a->id)
         ->assertJsonPath('data.0.groups.1.id', $b->id);
@@ -97,7 +97,7 @@ it('puts the groups side by side with aggregate values only', function () {
     Sanctum::actingAs($director);
 
     $response = $this->getJson("/api/v1/group-comparison?school_grade_id={$grade}&school_year={$year}")->assertOk()
-        ->assertJsonPath('data.school_grade', '5° de Primaria')
+        ->assertJsonPath('data.school_grade', '5.° de Primaria')
         ->assertJsonCount(2, 'data.groups')
         // Name order, never ranked: 5.°A first although its average is higher.
         ->assertJsonPath('data.groups.0.name', '5.°A')

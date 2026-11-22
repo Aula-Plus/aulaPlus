@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { OnboardingPage } from "./OnboardingPage"
 import * as onboardingApi from "./onboardingApi"
@@ -29,6 +30,14 @@ const record: OnboardingRecord = {
   support_channels: { whatsapp: "+598 99 000 000", email: null },
 }
 
+function renderPage(path = "/administracion/puesta-en-marcha") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <OnboardingPage />
+    </MemoryRouter>,
+  )
+}
+
 describe("OnboardingPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -37,7 +46,7 @@ describe("OnboardingPage", () => {
   })
 
   it("shows what was received and the log, read-only", async () => {
-    render(<OnboardingPage />)
+    renderPage()
     expect(await screen.findByText("Sistema de gestión")).toBeInTheDocument()
     expect(screen.getByText("Importado")).toBeInTheDocument()
     expect(screen.getByText("Qué se recibió de Colegio Modelo")).toBeInTheDocument()
@@ -51,7 +60,7 @@ describe("OnboardingPage", () => {
       id: 9,
       support_channels: { whatsapp: "+598 99 000 000", email: null },
     })
-    render(<OnboardingPage />)
+    renderPage()
     await userEvent.click(await screen.findByRole("tab", { name: "Régimen, oferta y plantillas" }))
     expect(screen.getByText("Autorizado · Programa propio")).toBeInTheDocument()
     expect(screen.getByText("Sin cargar por Aula+")).toBeInTheDocument()
@@ -67,7 +76,7 @@ describe("OnboardingPage", () => {
   })
 
   it("opens the fixed instructivo with the 15 working days and the contact", async () => {
-    render(<OnboardingPage />)
+    renderPage()
     await screen.findByText("Sistema de gestión")
     await userEvent.click(screen.getAllByRole("button", { name: "Ver instructivo" })[0])
     expect(await screen.findByText(/15 días hábiles/)).toBeInTheDocument()
@@ -77,7 +86,7 @@ describe("OnboardingPage", () => {
 
   it("does not say there is no contact when the record failed to load", async () => {
     vi.mocked(onboardingApi.fetchOnboarding).mockRejectedValue(new Error("network"))
-    render(<OnboardingPage />)
+    renderPage()
     await screen.findByText("No pudimos cargar la puesta en marcha.")
     await userEvent.click(screen.getAllByRole("button", { name: "Ver instructivo" })[0])
     expect(await screen.findByText("No pudimos cargar el contacto de Aula+.")).toBeInTheDocument()
@@ -86,8 +95,15 @@ describe("OnboardingPage", () => {
 
   it("is not for other roles", async () => {
     roles = ["psychopedagogue"]
-    render(<OnboardingPage />)
+    renderPage()
     expect(screen.getByText("Esta pantalla no está disponible para tu cuenta")).toBeInTheDocument()
     expect(onboardingApi.fetchOnboarding).not.toHaveBeenCalled()
+  })
+
+  it("opens the regime tab with its correction request when linked from Colegio y estructura", async () => {
+    renderPage("/administracion/puesta-en-marcha?solapa=regimen")
+
+    expect(await screen.findByRole("tab", { name: "Régimen, oferta y plantillas" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("button", { name: "Solicitar corrección" })).toBeInTheDocument()
   })
 })

@@ -186,7 +186,7 @@ it('computes a Z score within the same grade and year by default and says which 
     $this->postJson('/api/v1/indicators', $payload)->assertCreated()
         ->assertJsonPath('data.z_population', 'grade_year')
         ->assertJsonPath('data.summary.students_with_data', 6)
-        ->assertJsonPath('data.summary.populations', [['kind' => 'grade_year', 'label' => '5° de Primaria', 'size' => 6]]);
+        ->assertJsonPath('data.summary.populations', [['kind' => 'grade_year', 'label' => '5.° de Primaria', 'size' => 6]]);
 
     $this->postJson('/api/v1/indicators/preview', [...$payload, 'z_population' => 'group'])->assertOk()
         ->assertJsonPath('data.populations.0', ['kind' => 'group', 'label' => '5.°A', 'size' => 4])

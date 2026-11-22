@@ -6,23 +6,29 @@ import { cn } from "@/lib/utils"
 import { CurricularOfferingTab } from "./CurricularOfferingTab"
 import { InstitutionTab } from "./InstitutionTab"
 import { PlannersTab } from "./PlannersTab"
+import { SchoolRegimeCard } from "./SchoolRegimeCard"
+import { SchoolResourcesTab } from "./SchoolResourcesTab"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 
-type Tab = "institution" | "offering" | "planners"
+type Tab = "institution" | "offering" | "planners" | "resources"
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "institution", label: "Institución" },
   { id: "offering", label: "Oferta curricular" },
   { id: "planners", label: "Planificadores" },
+  { id: "resources", label: "Recursos disponibles" },
 ]
 
 /**
  * «Colegio y estructura» (screen 23 of the living document), route `/colegio`.
- * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf), and
- * «Institución» with only the meeting sheet types for now (ClickUp
- * 1dfd3mc4bge). It still opens on «Oferta curricular». Grupos and Recursos
- * disponibles come later. Director only — UX gate; the server enforces it
- * (CurricularOfferingPolicy).
+ * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf), «Recursos
+ * disponibles» (ClickUp 1dfd3mc4bh4) and «Institución»: the meeting sheet
+ * types (ClickUp 1dfd3mc4bge) and, read-only, the «Régimen ANEP por nivel»
+ * with its link to the correction request of Puesta en marcha (ClickUp
+ * 1dfd3mc4bh4, moved here once «Institución» existed, as Eitán asked). It
+ * still opens on «Oferta curricular». Grupos comes later. Director only — UX
+ * gate; the server enforces it (CurricularOfferingPolicy,
+ * SchoolPolicy::viewOnboarding).
  */
 export function SchoolStructurePage() {
   const { user } = useAuth()
@@ -61,9 +67,15 @@ export function SchoolStructurePage() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "institution" && <InstitutionTab />}
+        {tab === "institution" && (
+          <div className="space-y-6">
+            <SchoolRegimeCard />
+            <InstitutionTab />
+          </div>
+        )}
         {tab === "offering" && <CurricularOfferingTab />}
         {tab === "planners" && <PlannersTab />}
+        {tab === "resources" && <SchoolResourcesTab />}
       </div>
     </div>
   )

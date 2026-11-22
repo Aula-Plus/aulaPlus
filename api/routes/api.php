@@ -56,6 +56,7 @@ use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlannerSettingsController;
 use App\Http\Controllers\PsychopedagogyMeetingController;
 use App\Http\Controllers\ReportDocumentController;
+use App\Http\Controllers\ResourceController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\SchoolYearController;
 use App\Http\Controllers\ScreeningTestApplicationController;
@@ -552,6 +553,20 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/school-years/{schoolYear}/open-next', [SchoolYearController::class, 'openNext']);
         Route::post('/school-years/{schoolYear}/write-windows', [SchoolYearController::class, 'storeWriteWindow']);
         Route::post('/group-write-windows/{window}/end', [SchoolYearController::class, 'endWriteWindow']);
+
+        // Screen 23 «Recursos disponibles» (ClickUp 1dfd3mc4bh4): the
+        // school's list (Dirección) and each group's card «Del colegio y del
+        // grupo» (its teachers, Psicopedagogía and Dirección uncheck and add).
+        Route::get('/school-resources', [ResourceController::class, 'schoolIndex']);
+        Route::post('/school-resources', [ResourceController::class, 'schoolStore']);
+        Route::delete('/school-resources/{resource}', [ResourceController::class, 'schoolDestroy'])->whereNumber('resource');
+        Route::get('/groups/{group}/resources', [ResourceController::class, 'groupIndex']);
+        Route::put('/groups/{group}/resources/school/{resource}', [ResourceController::class, 'setAvailability'])
+            ->middleware('group.writable')->whereNumber('resource');
+        Route::post('/groups/{group}/resources', [ResourceController::class, 'groupStore'])
+            ->middleware('group.writable');
+        Route::delete('/groups/{group}/resources/{addedResource}', [ResourceController::class, 'groupDestroy'])
+            ->middleware('group.writable')->whereNumber('addedResource');
 
         // Screen 29 «Puesta en marcha» (ClickUp 1dfd3mc4bh8): direction reads
         // the onboarding record (loaded by Aula+ with app:onboarding-*) and
