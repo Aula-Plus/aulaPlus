@@ -16,7 +16,7 @@ const FIELD_MESSAGES: Record<string, string> = {
   time: "La hora no es válida.",
   location: "El lugar puede tener hasta 120 caracteres.",
   description: "El detalle puede tener hasta 2000 caracteres.",
-  audience: "Revisá a quién le corresponde: hay una opción repetida, un programa que el colegio ya no ofrece o demasiadas opciones.",
+  audience: "Revisá a quién le corresponde: hay una opción repetida, un grupo de otro año, un programa que el colegio ya no ofrece o demasiadas opciones.",
 }
 
 /** `audience.0.framework_id` and `audience.0` count as `audience`. */

@@ -30,11 +30,12 @@ export async function fetchCalendar(
   return data.data
 }
 
-/** A target as sent: a level, a grade, or a program within a grade. */
+/** A target as sent: a level, a grade, a program within a grade, or one group. */
 export interface AudienceTargetInput {
   level_id?: number
   grade_id?: number
   framework_id?: number
+  group_id?: number
 }
 
 export async function fetchAudienceOptions(): Promise<EventAudienceOptions> {

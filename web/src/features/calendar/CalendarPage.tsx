@@ -411,6 +411,8 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
     "block w-full truncate rounded border px-1.5 py-0.5 text-left text-xs",
     typeTone[item.type],
     full && "whitespace-normal",
+    // In «Ver todo el calendario del colegio»: not one of the caller's groups.
+    item.for_me === false && "opacity-60",
   )
   const content = (
     <>
@@ -607,7 +609,7 @@ function ListTable({
           const link = calendarItemLink(item)
           const detail = [calendarItemWhat(item), item.group?.name, item.place].filter(Boolean).join(" · ")
           return (
-            <TableRow key={item.key}>
+            <TableRow key={item.key} className={cn(item.for_me === false && "opacity-60")}>
               <TableCell className="whitespace-nowrap">
                 {weekdayDayMonth(item.date)}
                 {hour && ` · ${hour}`}

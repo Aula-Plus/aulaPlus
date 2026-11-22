@@ -306,7 +306,14 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
   (`education_level_id`; «Secundaria» = Ciclo Básico + Bachillerato, dos
   filas), una generación (`school_grade_id`) o los grupos de un programa
   dentro de una generación (`school_grade_id` + `curricular_framework_id`,
-  según la oferta curricular del grupo en cualquier materia). Sin filas = todo
+  según la oferta curricular del grupo en cualquier materia) o un grupo
+  (`group_id`, del colegio y del año lectivo de la fecha del evento; Eitán,
+  ClickUp 1dfd3mc55zp). Los grupos se muestran siempre con el nombre que les
+  puso el colegio («3° B»): cada destinatario trae `groups`, los grupos a los
+  que llega en el año del evento (el propio grupo, o los de la generación o
+  programa; vacío para un nivel), resuelto en el servidor con una consulta
+  para todo el feed. Si se borra el grupo, la fila queda con todo en null y no
+  le corresponde a nadie (nunca «todo el colegio»). Sin filas = todo
   el colegio (los eventos previos quedan así). Validación en
   `InstitutionalEventRequest`: el programa tiene que estar activo y no ser el
   régimen obligatorio del colegio y aplicar al nivel del grado

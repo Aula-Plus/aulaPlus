@@ -199,15 +199,22 @@ class CalendarFeed
     {
         $groups = $this->audience->groupsOf($user);
 
-        return CalendarEvent::query()
+        $events = CalendarEvent::query()
             ->institutional()
-            ->with('audiences.educationLevel', 'audiences.schoolGrade', 'audiences.curricularFramework')
+            ->with(EventAudience::RELATIONS)
             ->where('start_at', '>=', SchoolTime::startOfDay($from))
             ->where('start_at', '<', SchoolTime::startOfDay($to->addDay()))
-            ->get()
+            ->get();
+        // The groups every «Para: …» lists, in one go for the whole window.
+        $schoolGroups = $events->isEmpty() ? collect() : $this->audience->schoolGroups(
+            (int) $user->school_id,
+            $events->map(fn (CalendarEvent $event): int => EventAudience::yearOf($event))->unique()->values()->all(),
+        );
+
+        return $events
             ->map(fn (CalendarEvent $event): array => ['event' => $event, 'for_me' => $this->audience->concerns($event, $groups)])
             ->filter(fn (array $row): bool => $wholeSchool || $row['for_me'])
-            ->map(function (array $row) use ($user): array {
+            ->map(function (array $row) use ($user, $schoolGroups): array {
                 /** @var CalendarEvent $event */
                 $event = $row['event'];
                 $local = CarbonImmutable::instance($event->start_at)->setTimezone(SchoolTime::timezone());
@@ -227,7 +234,7 @@ class CalendarFeed
                     'place' => $event->location,
                     'assessment_type' => null,
                     'can_edit' => $user->can('update', $event),
-                    'audience' => $this->audience->present($event),
+                    'audience' => $this->audience->present($event, $schoolGroups),
                     'for_me' => $row['for_me'],
                 ];
             })
