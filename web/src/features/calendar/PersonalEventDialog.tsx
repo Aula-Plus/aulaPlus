@@ -99,14 +99,22 @@ export function PersonalEventDialog({
     }
   }, [])
 
-  const userOptions = useMemo(
-    () =>
-      (options?.users ?? []).map((user) => ({
-        id: user.id,
-        label: user.role ? `${user.name} · ${roleLabels[user.role]}` : user.name,
-      })),
-    [options],
-  )
+  const userOptions = useMemo(() => {
+    const list = (options?.users ?? []).map((user) => ({
+      id: user.id,
+      label: user.role ? `${user.name} · ${roleLabels[user.role]}` : user.name,
+    }))
+    if (!options) return list
+    // Someone already in the event who is no longer active (deactivated by
+    // Direction) is not invitable, but stays visible so the creator sees
+    // them and may take them out; the server keeps them otherwise.
+    const owner = item?.shared?.owner?.id
+    for (const participant of item?.shared?.participants ?? []) {
+      if (participant.id === owner || list.some((option) => option.id === participant.id)) continue
+      list.push({ id: participant.id, label: `${participant.name} · ya no está activa en el colegio` })
+    }
+    return list
+  }, [options, item])
 
   const studentOptions = useMemo(() => {
     const list = (options?.students ?? []).map((student) => ({ value: String(student.id), label: student.name }))

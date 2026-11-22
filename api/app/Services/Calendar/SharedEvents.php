@@ -109,8 +109,9 @@ class SharedEvents
     }
 
     /**
-     * School-local date + optional time → stored instant (app timezone), the
-     * same convention as institutional events.
+     * School-local date + optional time → stored instant (app timezone). The
+     * one conversion for every calendar event: institutional ones
+     * (CalendarController) use it too.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>

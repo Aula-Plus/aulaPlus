@@ -8,6 +8,9 @@ use App\Models\Student;
 use App\Models\User;
 use App\Notifications\CalendarEventInvitedNotification;
 use App\Services\Calendar\EventParticipants;
+use Illuminate\Database\Events\TransactionRolledBack;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
@@ -245,6 +248,86 @@ it('notifies only the people newly invited when the creator edits the list', fun
 
     Sanctum::actingAs($dropped);
     expect($this->getJson(personalFeed())->json('data'))->toBe([]);
+});
+
+it('keeps letting the creator edit an event whose invitee was deactivated since', function () {
+    Notification::fake();
+    $school = School::factory()->create();
+    $owner = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $gone = User::factory()->forSchool($school)->teacher()->create();
+    $other = User::factory()->forSchool($school)->teacher()->create();
+    Sanctum::actingAs($owner);
+    $id = $this->postJson('/api/v1/personal-events', personalPayload(['invitee_ids' => [$gone->id]]))->json('data.id');
+    $gone->forceFill(['disabled_at' => now()])->save();
+    Notification::fake();
+
+    // The same list (what the edit dialog sends back) still saves: someone
+    // already in the event stays, and is not notified again.
+    $participants = $this->patchJson("/api/v1/personal-events/{$id}", ['time' => '11:00', 'invitee_ids' => [$gone->id]])
+        ->assertOk()
+        ->assertJsonPath('data.time', '11:00')
+        ->json('data.shared.participants');
+    expect(array_column($participants, 'id'))->toEqualCanonicalizing([$owner->id, $gone->id]);
+    Notification::assertNothingSent();
+
+    // A deactivated person who is not in the event still cannot be added.
+    $this->patchJson("/api/v1/personal-events/{$id}", ['invitee_ids' => [$gone->id, $other->id]])->assertOk();
+    $outsider = User::factory()->forSchool($school)->teacher()->create(['disabled_at' => now()]);
+    $this->patchJson("/api/v1/personal-events/{$id}", ['invitee_ids' => [$gone->id, $outsider->id]])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('invitee_ids.1');
+
+    // And the creator may take the deactivated invitee out.
+    $participants = $this->patchJson("/api/v1/personal-events/{$id}", ['invitee_ids' => [$other->id]])
+        ->assertOk()->json('data.shared.participants');
+    expect(array_column($participants, 'id'))->toEqualCanonicalizing([$owner->id, $other->id]);
+
+    // Once out, they cannot be put back while deactivated.
+    $this->patchJson("/api/v1/personal-events/{$id}", ['invitee_ids' => [$other->id, $gone->id]])
+        ->assertUnprocessable()->assertJsonValidationErrorFor('invitee_ids.1');
+});
+
+it('reads the calendar another request created at the same time instead of failing', function () {
+    $school = School::factory()->create();
+    $user = User::factory()->forSchool($school)->teacher()->create();
+
+    // Simulate the race: between the lookup and the insert, a concurrent
+    // request creates (and commits) the same user's calendar. On one test
+    // connection that is: the insert hits the unique index, and the other
+    // request's row is there once our savepoint has rolled back.
+    $raced = false;
+    Calendar::creating(function (Calendar $calendar) use (&$raced): void {
+        if ($raced) {
+            return;
+        }
+        $raced = true;
+        DB::table('calendars')->insert([
+            'school_id' => $calendar->school_id,
+            'user_id' => $calendar->user_id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    });
+    $committed = false;
+    Event::listen(TransactionRolledBack::class, function () use (&$committed, $user): void {
+        if ($committed) {
+            return;
+        }
+        $committed = true;
+        DB::table('calendars')->insert([
+            'school_id' => $user->school_id,
+            'user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    });
+
+    $calendar = DB::transaction(fn () => app(EventParticipants::class)->calendarOf($user));
+
+    expect($raced)->toBeTrue()
+        ->and($committed)->toBeTrue()
+        ->and($calendar->exists)->toBeTrue()
+        ->and($calendar->user_id)->toBe($user->id)
+        ->and(Calendar::query()->withoutGlobalScopes()->where('user_id', $user->id)->count())->toBe(1);
 });
 
 it('isolates schools: another school cannot see, edit or leave an event', function () {

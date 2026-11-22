@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\CalendarEvent;
 use App\Models\Student;
+use App\Services\Calendar\EventParticipants;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -16,6 +17,8 @@ use Illuminate\Validation\Validator;
  *
  * - `invitee_ids`, when sent, is the full list of invitees (the creator is
  *   always in). Users are not tenant-scoped, so the school is pinned here.
+ *   New invitees must be active; people already in the event are kept even
+ *   if deactivated since (they are not notified again).
  * - `student_id`: a student of the school the creator can see — an event
  *   cannot be used to reveal a student the creator does not already see.
  *
@@ -59,10 +62,14 @@ class PersonalEventRequest extends FormRequest
                 Rule::notIn([$this->user()->id]),
                 // An active colleague: same school, not deactivated, already
                 // set a password (a pending invitation cannot log in yet).
+                // Someone who is already in the event stays valid even if
+                // deactivated since: keeping them must not block editing the
+                // event; only new invitees have to be active.
                 Rule::exists('users', 'id')
                     ->where('school_id', $schoolId)
-                    ->whereNull('disabled_at')
-                    ->whereNotNull('password'),
+                    ->where(fn ($query) => $query
+                        ->where(fn ($active) => $active->whereNull('disabled_at')->whereNotNull('password'))
+                        ->orWhereIn('id', $this->currentParticipantIds())),
             ],
             'student_id' => [
                 'sometimes',
@@ -93,6 +100,16 @@ class PersonalEventRequest extends FormRequest
                 $validator->errors()->add('student_id', 'The selected student is invalid.');
             }
         }];
+    }
+
+    /**
+     * @return list<int> who is in the event being edited (none on create)
+     */
+    protected function currentParticipantIds(): array
+    {
+        $event = $this->event();
+
+        return $event === null ? [] : app(EventParticipants::class)->participantIds($event);
     }
 
     public function event(): ?CalendarEvent

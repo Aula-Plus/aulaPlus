@@ -31,14 +31,21 @@ use Illuminate\Support\Collection;
  * - Tasks: the caller's own pending follow-ups with a deadline (same rows as
  *   «Mis seguimientos»).
  * - Institutional events: everyone in the school.
- * - Meetings, period closings, project stages: no source yet (screens 10, 26,
- *   18), always empty. A meeting, when it exists, reaches only the calendars
- *   it is linked to.
+ * - Meetings: the events of people's own calendars (personal and shared
+ *   events today, screen 10 meetings later — see SharedEvents). Each reaches
+ *   only the calendars it is linked to, once each.
+ * - Period closings, project stages: no source yet (screens 26, 18), always
+ *   empty.
  *
- * Items never carry a student's name.
+ * Items never carry a student's name, except the student a shared event
+ * names, for its participants only (decision 3B of ClickUp 1dfd3mc56kp; the
+ * viewer's StudentPolicy still decides whether the file opens — see
+ * SharedEvents).
  */
 class CalendarFeed
 {
+    public function __construct(protected SharedEvents $sharedEvents) {}
+
     /**
      * @param  list<CalendarItemType>  $types
      * @return Collection<int, array<string, mixed>>
@@ -60,7 +67,7 @@ class CalendarFeed
         // Events of people's own calendars (personal, shared, and screen 10
         // meetings): only the caller's, once each (ClickUp 1dfd3mc56kp).
         if ($wants(CalendarItemType::Meeting)) {
-            $items = $items->concat(app(SharedEvents::class)->for($user, $from, $to));
+            $items = $items->concat($this->sharedEvents->for($user, $from, $to));
         }
 
         if ($wants(CalendarItemType::Task)) {

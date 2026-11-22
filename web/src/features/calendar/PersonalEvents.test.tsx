@@ -188,6 +188,56 @@ describe("Personal and shared events (ClickUp 1dfd3mc56kp)", () => {
     expect(screen.queryByText(/Coordinar salida/)).not.toBeInTheDocument()
   })
 
+  it("offers Direction only the type chips the current view can show", async () => {
+    currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+    const user = userEvent.setup()
+    renderPage()
+
+    const chips = await screen.findByRole("group", { name: "Filtrar por tipo" })
+    const names = () => within(chips).getAllByRole("button").map((chip) => chip.textContent)
+    expect(names()).toEqual(["Clase", "Reunión", "Tarea", "Cierre de período", "Etapa de proyecto", "Institucional"])
+
+    await user.click(screen.getByRole("button", { name: "Calendario institucional" }))
+    expect(names()).toEqual(["Evaluación", "Cierre de período", "Etapa de proyecto", "Institucional"])
+  })
+
+  it("keeps an invitee deactivated since visible, and in the list sent, when the creator edits", async () => {
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([
+      shared(
+        { can_edit: true },
+        {
+          owner: { id: 4, name: "Mariana López" },
+          is_owner: true,
+          can_leave: false,
+          student: null,
+          participants: [
+            { id: 4, name: "Mariana López" },
+            { id: 7, name: "Laura Ferrando" },
+            { id: 8, name: "Pablo Suárez" },
+          ],
+        },
+      ),
+    ])
+    // Pablo was deactivated: he is no longer among the invitable colleagues.
+    vi.spyOn(personalEventsApi, "fetchPersonalEventOptions").mockResolvedValue({
+      users: [{ id: 7, name: "Laura Ferrando", role: "psychopedagogue" }],
+      students: [],
+    })
+    const update = vi.spyOn(personalEventsApi, "updatePersonalEvent").mockResolvedValue(shared())
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(within(await screen.findByRole("table")).getByRole("button", { name: "Ver" }))
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Editar" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(await within(dialog).findByText("Pablo Suárez · ya no está activa en el colegio")).toBeInTheDocument()
+
+    // Saving as is keeps him (the server accepts people already in it).
+    await user.click(within(dialog).getByRole("button", { name: "Guardar" }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith(9, expect.objectContaining({ invitee_ids: [7, 8] })))
+  })
+
   it("does not show the switch to other roles", async () => {
     vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
     renderPage()

@@ -6,7 +6,9 @@ use App\Models\Calendar;
 use App\Models\CalendarEvent;
 use App\Models\User;
 use App\Notifications\CalendarEventInvitedNotification;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Who an event of people's own calendars belongs to (ClickUp 1dfd3mc56kp,
@@ -27,23 +29,40 @@ class EventParticipants
 {
     /**
      * The person's own calendar (1:1), created on first use.
+     *
+     * Two requests may create it at once (two people inviting the same
+     * colleague): `calendars.user_id` is unique, so the loser of the race
+     * reads the winner's row instead of failing. The insert runs in its own
+     * (nested) transaction — a savepoint — because a failed statement
+     * aborts the surrounding Postgres transaction otherwise.
+     *
+     * The queries skip SchoolScope on purpose: `user_id` is globally unique
+     * and the school is pinned from the user itself (and re-checked by
+     * assertSameSchool), so this also works where no tenant is set.
      */
     public function calendarOf(User $user): Calendar
     {
-        $calendar = Calendar::query()
+        $existing = fn (): ?Calendar => Calendar::query()
             ->withoutGlobalScopes()
             ->where('user_id', $user->id)
             ->first();
 
+        $calendar = $existing();
         if ($calendar !== null) {
             return $calendar;
         }
 
-        $calendar = new Calendar(['user_id' => $user->id]);
-        $calendar->school_id = $user->school_id;
-        $calendar->save();
+        try {
+            return DB::transaction(function () use ($user): Calendar {
+                $calendar = new Calendar(['user_id' => $user->id]);
+                $calendar->school_id = $user->school_id;
+                $calendar->save();
 
-        return $calendar;
+                return $calendar;
+            });
+        } catch (UniqueConstraintViolationException $exception) {
+            return $existing() ?? throw $exception;
+        }
     }
 
     /**

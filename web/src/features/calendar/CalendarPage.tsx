@@ -59,13 +59,20 @@ const typeTone: Record<CalendarItemType, string> = {
   institutional: "border-slate-300 bg-slate-100 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
 }
 
-function roleDescription(user: User | null): string {
-  if (isDirector(user)) return "Los eventos institucionales y la carga de evaluaciones de todo el colegio."
+function roleDescription(user: User | null, directorView: DirectorView): string {
+  if (isDirector(user)) {
+    return directorView === "institutional"
+      ? "Los eventos institucionales y la carga de evaluaciones de todo el colegio."
+      : "Tu agenda, los eventos que compartís y los eventos del colegio."
+  }
   if (isPsychopedagogue(user)) return "Tu agenda, cruzada con las evaluaciones del resto del colegio."
   return "Lo que cae en tu semana: tus clases, tus evaluaciones y tus tareas."
 }
 
-function roleNote(user: User | null): string {
+function roleNote(user: User | null, directorView: DirectorView): string {
+  if (isDirector(user) && directorView === "personal") {
+    return "Ves tus eventos, los que te compartieron y los eventos del colegio. La carga de evaluaciones de todo el colegio está en «Calendario institucional»."
+  }
   if (isDirector(user)) {
     return "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional y qué es; lo ven todos y se quita desde la vista Lista."
   }
@@ -150,8 +157,12 @@ const INSTITUTIONAL_VIEW_TYPES: readonly CalendarItemType[] = [
   "project_stage",
 ]
 
+function typeInDirectorView(type: CalendarItemType, view: DirectorView): boolean {
+  return view === "institutional" ? INSTITUTIONAL_VIEW_TYPES.includes(type) : type !== "assessment"
+}
+
 function inDirectorView(item: CalendarItem, view: DirectorView): boolean {
-  return view === "institutional" ? INSTITUTIONAL_VIEW_TYPES.includes(item.type) : item.type !== "assessment"
+  return typeInDirectorView(item.type, view)
 }
 
 /**
@@ -284,7 +295,7 @@ function CalendarBoard({ user }: { user: User | null }) {
 
   return (
     <div className="grid gap-4">
-      <p className="text-sm text-muted-foreground">{roleDescription(user)}</p>
+      <p className="text-sm text-muted-foreground">{roleDescription(user, directorView)}</p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -370,7 +381,11 @@ function CalendarBoard({ user }: { user: User | null }) {
       )}
 
       <div role="group" aria-label="Filtrar por tipo" className="flex flex-wrap gap-2">
-        {calendarItemTypes.map((type) => {
+        {calendarItemTypes
+          // Direction's switch already excludes some types: no chip that
+          // could never show anything in the current view.
+          .filter((type) => !director || typeInDirectorView(type, directorView))
+          .map((type) => {
           const on = !hidden.includes(type)
           return (
             <button
@@ -421,7 +436,7 @@ function CalendarBoard({ user }: { user: User | null }) {
         />
       )}
 
-      <p className="text-sm text-muted-foreground">{roleNote(user)}</p>
+      <p className="text-sm text-muted-foreground">{roleNote(user, directorView)}</p>
 
       {dialog?.kind === "class" && (
         <ClassScheduleDialog item={dialog.item} onClose={() => setDialog(null)} onSaved={saved} />

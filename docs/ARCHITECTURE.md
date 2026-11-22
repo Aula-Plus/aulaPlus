@@ -311,7 +311,9 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
   P21-DEC-108/PA-124): cada rol crea eventos personales (`CalendarEvent` tipo
   `personal`, `PersonalEventController`, `PersonalEventRequest`) e invita a
   cualquier usuario activo de su colegio (misma escuela, sin `disabled_at`,
-  con contraseña). El evento se guarda una vez y se cuelga del calendario de
+  con contraseña); quien ya está en el evento y después fue desactivado se
+  mantiene al editar (no bloquea la edición ni se le vuelve a avisar), y el
+  creador lo ve en el selector para sacarlo. El evento se guarda una vez y se cuelga del calendario de
   cada participante (pivot `calendar_calendar_event`, `EventParticipants`):
   aparece una sola vez en el feed de cada uno, como ítem `meeting` con
   `shared` (dueño, participantes, alumno). No hay que aceptar: al invitado le
@@ -325,7 +327,8 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
   no amplía permisos. `EventParticipants::invite()` es el mismo mecanismo que
   usarán las reuniones del Espacio de psicopedagogía (pantalla 10).
   Dirección alterna «Mi calendario» / «Calendario institucional» en el SPA
-  (filtro de vista: sin la carga de evaluaciones / sin su agenda personal).
+  (filtro de vista: sin la carga de evaluaciones / sin su agenda personal;
+  el subtítulo, la nota y los chips de tipo siguen a la vista elegida).
 
 ### Glosario (Calendario)
 
