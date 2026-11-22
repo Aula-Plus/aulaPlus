@@ -7,6 +7,7 @@ use App\Enums\MaterialSource;
 use App\Enums\Role;
 use App\Http\Requests\Materials\ListMaterialsRequest;
 use App\Http\Requests\Materials\PublishMaterialRequest;
+use App\Http\Requests\Materials\RemoveFromCatalogRequest;
 use App\Http\Requests\Materials\StoreMaterialRequest;
 use App\Models\Assessment;
 use App\Models\CurricularItem;
@@ -177,29 +178,38 @@ class MaterialController extends Controller
             ['disk' => MaterialStorage::DISK, 'visibility' => 'private'],
         );
 
-        $material = DB::transaction(function () use ($request, $user, $file, $format, $group, $path): Material {
-            $material = Material::create([
-                'owner_id' => $user->id,
-                'group_id' => $group->id,
-                'subject_id' => $request->integer('subject_id'),
-                'school_grade_id' => $group->school_grade_id,
-                'source' => MaterialSource::Upload,
-                'title' => $request->validated('title'),
-                'type' => $request->validated('type'),
-                'tags' => array_values($request->validated('tags', [])),
-                'path' => $path,
-                'original_name' => Str::limit($file->getClientOriginalName(), 250, ''),
-                'format' => $format,
-                'size' => $file->getSize(),
-            ]);
-            $material->curricularItems()->sync($request->validated('curricular_item_ids', []));
+        // The file is stored before the row exists; if the row cannot be
+        // saved, nothing must stay on the disk that no row points to (it is a
+        // file nobody has reviewed yet).
+        try {
+            $material = DB::transaction(function () use ($request, $user, $file, $format, $group, $path): Material {
+                $material = Material::create([
+                    'owner_id' => $user->id,
+                    'group_id' => $group->id,
+                    'subject_id' => $request->integer('subject_id'),
+                    'school_grade_id' => $group->school_grade_id,
+                    'source' => MaterialSource::Upload,
+                    'title' => $request->validated('title'),
+                    'type' => $request->validated('type'),
+                    'tags' => array_values($request->validated('tags', [])),
+                    'path' => $path,
+                    'original_name' => Str::limit($file->getClientOriginalName(), 250, ''),
+                    'format' => $format,
+                    'size' => $file->getSize(),
+                ]);
+                $material->curricularItems()->sync($request->validated('curricular_item_ids', []));
 
-            if ($request->boolean('publish')) {
-                $this->catalog->publishUpload($material, $user);
-            }
+                if ($request->boolean('publish')) {
+                    $this->catalog->publishUpload($material, $user);
+                }
 
-            return $material;
-        });
+                return $material;
+            });
+        } catch (\Throwable $e) {
+            MaterialStorage::disk()->delete($path);
+
+            throw $e;
+        }
 
         return response()->json(['data' => $this->materialRow($material->fresh(['owner:id,name', 'publishedBy:id,name', 'group:id,name', 'curricularItems:id,code,name']), $user, inCatalog: false)], 201);
     }
@@ -251,11 +261,9 @@ class MaterialController extends Controller
         return $this->rowResponse($material, $request->user());
     }
 
-    public function removeFromCatalog(Request $request, Material $material): JsonResponse
+    public function removeFromCatalog(RemoveFromCatalogRequest $request, Material $material): JsonResponse
     {
-        $this->authorize('removeFromCatalog', $material);
-
-        $this->catalog->removeFromCatalog($material, $request->user());
+        $this->catalog->removeFromCatalog($material, $request->user(), $request->reason());
 
         return $this->rowResponse($material, $request->user());
     }

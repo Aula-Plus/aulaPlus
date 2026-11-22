@@ -13,6 +13,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Notifications\MaterialPublishedNotification;
+use App\Notifications\MaterialRemovedNotification;
 use App\Support\Tenancy;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
@@ -350,4 +351,126 @@ it('publishes an assessment copy only from its assessment, and lets Dirección t
         ->assertJsonPath('data.0.kind', 'assessment')
         ->assertJsonPath('data.0.can.remove_from_catalog', true);
     $this->deleteJson("/api/v1/materials/{$id}/catalog")->assertOk()->assertJsonPath('data.catalog_status', 'removed');
+});
+
+it('tells the owner their material was taken out of the catalog, with the reason when written', function () {
+    Sanctum::actingAs($this->teacher);
+    $id = ($this->upload)(['publish' => true, 'confirm_no_student_data' => true])->json('data.id');
+
+    Sanctum::actingAs($this->director);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => '  Ya hay una guía igual en la carpeta.  '])
+        ->assertOk()->assertJsonPath('data.catalog_status', 'removed');
+
+    $material = Material::query()->findOrFail($id);
+    expect($material->removed_reason)->toBe('Ya hay una guía igual en la carpeta.')
+        ->and($material->removed_by_id)->toBe($this->director->id);
+
+    Sanctum::actingAs($this->teacher);
+    $this->getJson('/api/v1/notifications')->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.data.type', 'material_removed')
+        ->assertJsonPath('data.0.data.material_id', $id)
+        ->assertJsonPath('data.0.data.material_title', 'Fracciones equivalentes, guía')
+        ->assertJsonPath('data.0.data.reason', 'Ya hay una guía igual en la carpeta.');
+    $this->getJson('/api/v1/notifications/unread-count')->assertJsonPath('data.count', 1);
+
+    // Nobody else hears about it.
+    Sanctum::actingAs($this->otherTeacher);
+    $this->getJson('/api/v1/notifications')->assertJsonCount(0, 'data');
+});
+
+it('tells the owner without a reason when none is written, and never the owner who takes it out', function () {
+    Notification::fake();
+    Sanctum::actingAs($this->teacher);
+    $id = ($this->upload)(['publish' => true, 'confirm_no_student_data' => true])->json('data.id');
+
+    Sanctum::actingAs($this->psycho);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => '   '])->assertOk();
+
+    expect(Material::query()->findOrFail($id)->removed_reason)->toBeNull();
+    Notification::assertSentTo($this->teacher, MaterialRemovedNotification::class,
+        fn (MaterialRemovedNotification $notice) => $notice->toArray($this->teacher)['reason'] === null
+            && $notice->toArray($this->teacher)['material_id'] === $id);
+    Notification::assertNotSentTo([$this->psycho, $this->director, $this->otherTeacher], MaterialRemovedNotification::class);
+
+    // Psicopedagogía taking its own upload out tells nobody.
+    $own = ($this->upload)(['group_id' => $this->otherGroup->id, 'publish' => true, 'confirm_no_student_data' => true])->json('data.id');
+    $this->deleteJson("/api/v1/materials/{$own}/catalog", ['reason' => 'Lo reviso'])->assertOk();
+    Notification::assertSentToTimes($this->teacher, MaterialRemovedNotification::class, 1);
+    Notification::assertNotSentTo($this->psycho, MaterialRemovedNotification::class);
+});
+
+it('guards «Sacar del catálogo»: teacher non-owner 403, another school 404, too long a reason 422', function () {
+    Notification::fake();
+    Sanctum::actingAs($this->teacher);
+    $id = ($this->upload)(['publish' => true, 'confirm_no_student_data' => true])->json('data.id');
+
+    Sanctum::actingAs($this->otherTeacher);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => 'x'])->assertForbidden();
+    // Not even the owner, being a teacher.
+    Sanctum::actingAs($this->teacher);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog")->assertForbidden();
+
+    $stranger = User::factory()->forSchool(School::factory()->create())->director()->create();
+    Sanctum::actingAs($stranger);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog")->assertNotFound();
+
+    Sanctum::actingAs($this->director);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => str_repeat('a', 501)])
+        ->assertUnprocessable()->assertJsonValidationErrors('reason');
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => ['not', 'text']])
+        ->assertUnprocessable()->assertJsonValidationErrors('reason');
+
+    expect(Material::query()->findOrFail($id)->isPublished())->toBeTrue();
+    Notification::assertNothingSentTo($this->teacher);
+});
+
+it('sends Psicopedagogía and Dirección the usual notice when the owner publishes it again, and clears the removal', function () {
+    Notification::fake();
+    Sanctum::actingAs($this->teacher);
+    $id = ($this->upload)(['publish' => true, 'confirm_no_student_data' => true])->json('data.id');
+
+    Sanctum::actingAs($this->director);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => 'Le falta la consigna'])->assertOk();
+
+    Sanctum::actingAs($this->teacher);
+    ($this->list)('generated')->assertJsonPath('data.0.can.publish', true);
+    $this->postJson("/api/v1/materials/{$id}/publish", ['confirm_no_student_data' => true])
+        ->assertOk()->assertJsonPath('data.catalog_status', 'published');
+
+    Notification::assertSentToTimes($this->psycho, MaterialPublishedNotification::class, 2);
+    Notification::assertSentToTimes($this->director, MaterialPublishedNotification::class, 2);
+    Notification::assertNotSentTo($this->teacher, MaterialPublishedNotification::class);
+
+    $material = Material::query()->findOrFail($id);
+    expect($material->removed_at)->toBeNull()
+        ->and($material->removed_by_id)->toBeNull()
+        ->and($material->removed_reason)->toBeNull();
+});
+
+it('does the same for an assessment\'s catalog copy', function () {
+    Notification::fake();
+    $assessment = Assessment::factory()->create(['group_id' => $this->group->id, 'subject_id' => $this->subject->id, 'teacher_id' => $this->teacher->id]);
+    Sanctum::actingAs($this->teacher);
+    $id = $this->postJson("/api/v1/assessments/{$assessment->id}/material")->assertOk()->json('data.id');
+
+    Sanctum::actingAs($this->psycho);
+    $this->deleteJson("/api/v1/materials/{$id}/catalog", ['reason' => 'Repetida'])->assertOk();
+    Notification::assertSentTo($this->teacher, MaterialRemovedNotification::class,
+        fn (MaterialRemovedNotification $notice) => $notice->toArray($this->teacher)['reason'] === 'Repetida');
+
+    Sanctum::actingAs($this->teacher);
+    $this->postJson("/api/v1/assessments/{$assessment->id}/material")->assertOk()->assertJsonPath('data.catalog_status', 'published');
+    Notification::assertSentToTimes($this->psycho, MaterialPublishedNotification::class, 2);
+    Notification::assertSentToTimes($this->director, MaterialPublishedNotification::class, 2);
+});
+
+it('leaves no file behind when the upload cannot be saved', function () {
+    Material::creating(fn () => throw new RuntimeException('database down'));
+    Sanctum::actingAs($this->teacher);
+
+    $this->withoutExceptionHandling();
+    expect(fn () => ($this->upload)())->toThrow(RuntimeException::class);
+
+    expect(Storage::disk('materials')->allFiles())->toBeEmpty();
 });

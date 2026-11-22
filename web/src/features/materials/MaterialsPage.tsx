@@ -16,6 +16,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
@@ -38,13 +39,59 @@ const TABS: { id: MaterialsTab; label: string }[] = [
   { id: "catalog", label: "Institucional" },
 ]
 
+/** Same limit as the server's RemoveFromCatalogRequest. */
+const REMOVE_REASON_MAX = 500
+
+/**
+ * Spanish headings for the keys an assessment's content usually carries. The
+ * AI schema does not fix them, so an unknown key shows its value without a
+ * heading rather than a raw (often English) JSON key.
+ */
+const CONTENT_KEY_LABELS: Record<string, string> = {
+  title: "Título",
+  titulo: "Título",
+  instructions: "Consignas",
+  instruction: "Consigna",
+  consignas: "Consignas",
+  consigna: "Consigna",
+  prompt: "Consigna",
+  items: "Ítems",
+  questions: "Preguntas",
+  preguntas: "Preguntas",
+  question: "Pregunta",
+  pregunta: "Pregunta",
+  options: "Opciones",
+  opciones: "Opciones",
+  answer: "Respuesta",
+  respuesta: "Respuesta",
+  answer_key: "Respuestas esperadas",
+  answers: "Respuestas",
+  rubric: "Rúbrica",
+  rubrica: "Rúbrica",
+  criteria: "Criterios",
+  criterios: "Criterios",
+  objective: "Objetivo",
+  objectives: "Objetivos",
+  objetivo: "Objetivo",
+  objetivos: "Objetivos",
+  description: "Descripción",
+  descripcion: "Descripción",
+  duration: "Duración",
+  duracion: "Duración",
+  materials: "Materiales",
+  materiales: "Materiales",
+  points: "Puntaje",
+  puntaje: "Puntaje",
+  activities: "Actividades",
+  actividades: "Actividades",
+}
+
 /** Types a person can pick when uploading; «Evaluación» comes from an assessment. */
 const UPLOAD_TYPES = (Object.keys(materialTypeLabels) as MaterialType[]).filter((type) => type !== "assessment")
 
 const SELECT_CLASS =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
-/** «none» is the «Sin grado» folder in the URL and the selects. */
 /** The first validation error or the message of a 4xx the server explained (already in Spanish). */
 function serverMessage(err: unknown): string | undefined {
   const response = (err as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } })
@@ -54,6 +101,7 @@ function serverMessage(err: unknown): string | undefined {
   return firstError ?? response.data?.message
 }
 
+/** «none» is the «Sin grado» folder in the URL and the selects. */
 function gradeKey(id: number | null): string {
   return id === null ? "none" : String(id)
 }
@@ -108,20 +156,40 @@ export function MaterialsPage() {
   // filters changed is dropped.
   const listToken = useRef(0)
 
+  // How many pages «Ver más» has loaded for the current filters, so an action
+  // on a row reloads what is on screen instead of going back to page 1.
+  const loadedPages = useRef(1)
+  const listedFilters = useRef("")
+
   useEffect(() => {
     if (!ready) return
     let cancelled = false
+    const filters = `${tab}|${subjectParam}|${gradeParam}`
+    const sameFilters = filters === listedFilters.current
+    listedFilters.current = filters
+    if (!sameFilters) loadedPages.current = 1
+    const pages = loadedPages.current
+    const grade = gradeParam === "none" ? null : Number(gradeParam)
     listToken.current += 1
-    setRows(null)
-    setMeta(null)
+    if (!sameFilters) {
+      setRows(null)
+      setMeta(null)
+    }
     setListError(false)
     setMoreError(false)
-    materialsApi
-      .fetchMaterials(tab, Number(subjectParam), gradeParam === "none" ? null : Number(gradeParam))
+    Promise.all(
+      Array.from({ length: pages }, (_, index) =>
+        index === 0
+          ? materialsApi.fetchMaterials(tab, Number(subjectParam), grade)
+          : materialsApi.fetchMaterials(tab, Number(subjectParam), grade, index + 1),
+      ),
+    )
       .then((loaded) => {
         if (cancelled) return
-        setRows(loaded.data)
-        setMeta(loaded.meta)
+        const last = loaded[loaded.length - 1]
+        setRows(loaded.flatMap((pageData) => pageData.data))
+        setMeta({ ...last.meta, current_page: Math.min(pages, last.meta.last_page) })
+        loadedPages.current = Math.min(pages, Math.max(1, last.meta.last_page))
       })
       .catch(() => !cancelled && setListError(true))
     return () => {
@@ -144,6 +212,7 @@ export function MaterialsPage() {
       if (token !== listToken.current) return
       setRows((current) => [...(current ?? []), ...next.data])
       setMeta(next.meta)
+      loadedPages.current = next.meta.current_page
     } catch {
       if (token === listToken.current) setMoreError(true)
     } finally {
@@ -444,17 +513,7 @@ function MaterialsTable({
                       </Button>
                     )}
                     {row.can.publish && <PublishDialog row={row} run={run} />}
-                    {row.can.remove_from_catalog && (
-                      <SimpleConfirm
-                        trigger="Sacar del catálogo"
-                        title="¿Sacar este material del catálogo?"
-                        description="Deja de verse en el catálogo del colegio. Quien lo subió lo sigue teniendo en sus materiales."
-                        confirmLabel="Sacar del catálogo"
-                        onConfirm={() =>
-                          run(() => materialsApi.removeFromCatalog(row.material_id ?? row.id), "No pudimos sacarlo del catálogo.")
-                        }
-                      />
-                    )}
+                    {row.can.remove_from_catalog && <RemoveFromCatalogDialog row={row} run={run} />}
                     {row.can.delete && (
                       <SimpleConfirm
                         trigger="Eliminar"
@@ -544,6 +603,80 @@ function PublishDialog({
   )
 }
 
+/**
+ * «Sacar del catálogo» (Psicopedagogía and Dirección): an optional «Motivo»
+ * that goes in the notice to whoever published it.
+ */
+function RemoveFromCatalogDialog({
+  row,
+  run,
+}: {
+  row: MaterialRow
+  run: (action: () => Promise<unknown>, failure: string) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState("")
+  const reasonId = `remove-reason-${row.kind}-${row.id}`
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setReason("")
+      }}
+    >
+      <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        Sacar del catálogo
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>¿Sacar este material del catálogo?</DialogTitle>
+          <DialogDescription>
+            Deja de verse en el catálogo del colegio. Quien lo publicó lo sigue teniendo en sus materiales y recibe un
+            aviso.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor={reasonId}>Motivo (opcional)</Label>
+          <Textarea
+            id={reasonId}
+            value={reason}
+            maxLength={REMOVE_REASON_MAX}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Si lo escribís, va en el aviso a quien lo publicó."
+          />
+          <p className="text-xs text-muted-foreground">
+            {reason.length} de {REMOVE_REASON_MAX} caracteres
+          </p>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              const written = reason.trim()
+              setOpen(false)
+              setReason("")
+              void run(
+                () => materialsApi.removeFromCatalog(row.material_id ?? row.id, written === "" ? null : written),
+                "No pudimos sacarlo del catálogo.",
+              )
+            }}
+          >
+            Sacar del catálogo
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function SimpleConfirm({
   trigger,
   title,
@@ -613,7 +746,11 @@ function ContentView({ value }: { value: unknown }) {
     <dl className="grid gap-2">
       {Object.entries(value as Record<string, unknown>).map(([key, item]) => (
         <div key={key} className="grid gap-1">
-          <dt className="text-xs font-medium text-muted-foreground">{key.replaceAll("_", " ")}</dt>
+          {CONTENT_KEY_LABELS[key.toLowerCase()] ? (
+            <dt className="text-xs font-medium text-muted-foreground">{CONTENT_KEY_LABELS[key.toLowerCase()]}</dt>
+          ) : (
+            <dt className="sr-only">Contenido</dt>
+          )}
           <dd>
             <ContentView value={item} />
           </dd>

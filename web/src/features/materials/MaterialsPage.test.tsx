@@ -114,7 +114,64 @@ describe("MaterialsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sacar del catálogo" }))
     const dialog = await screen.findByRole("dialog")
     await userEvent.click(within(dialog).getByRole("button", { name: "Sacar del catálogo" }))
-    await waitFor(() => expect(materialsApi.removeFromCatalog).toHaveBeenCalledWith(11))
+    await waitFor(() => expect(materialsApi.removeFromCatalog).toHaveBeenCalledWith(11, null))
+  })
+
+  it("sends the optional «Motivo» when taking a material out of the catalog", async () => {
+    roles = ["director"]
+    vi.mocked(materialsApi.fetchMaterials).mockResolvedValue(
+      page([
+        row({
+          group: null,
+          is_mine: false,
+          catalog_status: "published",
+          can: { publish: false, remove_from_catalog: true, delete: false },
+        }),
+      ]),
+    )
+    vi.mocked(materialsApi.removeFromCatalog).mockResolvedValue(row({ catalog_status: "removed" }))
+    renderAt("/materiales?materia=3&nivel=8&solapa=institucional")
+    await screen.findByText("Fracciones equivalentes")
+
+    await userEvent.click(screen.getByRole("button", { name: "Sacar del catálogo" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText(/recibe un aviso/)).toBeInTheDocument()
+    const reason = within(dialog).getByLabelText("Motivo (opcional)")
+    expect(reason).toHaveAttribute("maxLength", "500")
+    await userEvent.type(reason, "  Ya hay una guía igual.  ")
+    expect(within(dialog).getByText("26 de 500 caracteres")).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole("button", { name: "Sacar del catálogo" }))
+
+    await waitFor(() => expect(materialsApi.removeFromCatalog).toHaveBeenCalledWith(11, "Ya hay una guía igual."))
+  })
+
+  it("keeps the pages loaded with «Ver más» after an action", async () => {
+    roles = ["psychopedagogue"]
+    const second = row({
+      id: 12,
+      material_id: 12,
+      title: "Guía de decimales",
+      group: null,
+      is_mine: false,
+      catalog_status: "published",
+      can: { publish: false, remove_from_catalog: true, delete: false },
+    })
+    vi.mocked(materialsApi.fetchMaterials).mockImplementation(async (_tab, _subject, _grade, pageNumber) =>
+      pageNumber === 2 ? page([second], 2, 2, 51) : page([row({ group: null, is_mine: false })], 1, 2, 51),
+    )
+    vi.mocked(materialsApi.removeFromCatalog).mockResolvedValue(second)
+    renderAt("/materiales?materia=3&nivel=8&solapa=institucional")
+    await screen.findByText("Fracciones equivalentes")
+    await userEvent.click(screen.getByRole("button", { name: "Ver más (1 de 51)" }))
+    await screen.findByText("Guía de decimales")
+
+    await userEvent.click(screen.getByRole("button", { name: "Sacar del catálogo" }))
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Sacar del catálogo" }))
+
+    await waitFor(() => expect(materialsApi.removeFromCatalog).toHaveBeenCalledWith(12, null))
+    await waitFor(() => expect(materialsApi.fetchMaterials).toHaveBeenCalledTimes(4))
+    expect(screen.getByText("Fracciones equivalentes")).toBeInTheDocument()
+    expect(screen.getByText("Guía de decimales")).toBeInTheDocument()
   })
 
   it("loads the next page with «Ver más»", async () => {

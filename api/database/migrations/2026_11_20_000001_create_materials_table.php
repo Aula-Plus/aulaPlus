@@ -43,6 +43,10 @@ return new class extends Migration
             $table->foreignId('no_student_data_confirmed_by_id')->nullable()->constrained('users');
             $table->timestamp('removed_at')->nullable();
             $table->foreignId('removed_by_id')->nullable()->constrained('users');
+            // Optional «Motivo» Psicopedagogía or Dirección write when taking it
+            // out; it goes in the owner's notice. Cleared with removed_at/by on
+            // republish (the audit log keeps the history).
+            $table->string('removed_reason', 500)->nullable();
             $table->timestamps();
 
             $table->index(['school_id', 'subject_id', 'school_grade_id']);

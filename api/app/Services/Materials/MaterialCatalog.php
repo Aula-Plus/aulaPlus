@@ -10,6 +10,7 @@ use App\Models\Assessment;
 use App\Models\Material;
 use App\Models\User;
 use App\Notifications\MaterialPublishedNotification;
+use App\Notifications\MaterialRemovedNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
@@ -67,13 +68,28 @@ class MaterialCatalog
         });
     }
 
-    public function removeFromCatalog(Material $material, User $user): Material
+    /**
+     * Take a material out of the catalog. Its owner is told («Sacaron del
+     * catálogo tu material»), with the reason when the remover wrote one —
+     * unless the owner took it out themselves.
+     */
+    public function removeFromCatalog(Material $material, User $user, ?string $reason = null): Material
     {
         $material->forceFill([
             'catalog_status' => MaterialCatalogStatus::Removed,
             'removed_at' => now(),
             'removed_by_id' => $user->id,
+            'removed_reason' => $reason,
         ])->save();
+
+        if ($material->owner_id !== $user->id) {
+            $owner = User::query()
+                ->where('school_id', $material->school_id)
+                ->whereKey($material->owner_id)
+                ->whereNull('disabled_at')
+                ->first();
+            $owner?->notify(new MaterialRemovedNotification($material, $reason));
+        }
 
         return $material;
     }
@@ -88,6 +104,7 @@ class MaterialCatalog
             'published_by_id' => $wasPublished ? $material->published_by_id : $user->id,
             'removed_at' => null,
             'removed_by_id' => null,
+            'removed_reason' => null,
         ])->save();
 
         if (! $wasPublished) {

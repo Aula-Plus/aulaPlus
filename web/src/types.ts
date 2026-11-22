@@ -1264,6 +1264,7 @@ export interface AppNotification {
     | CommentSharedNotice
     | ScreeningDesignNotice
     | MaterialPublishedNotice
+    | MaterialRemovedNotice
   /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
   read_at?: string | null
   created_at: string | null
@@ -2116,6 +2117,20 @@ export interface MaterialRow {
 export interface MaterialDetail extends MaterialRow {
   /** The cleaned content of an assessment's catalog copy; null for a file. */
   content: unknown
+}
+
+/**
+ * «Sacaron del catálogo tu material X» (screen 19): to the owner, with the
+ * optional reason Psicopedagogía or Dirección wrote. `material_title` is
+ * resolved by the server while the owner can still see the material.
+ */
+export interface MaterialRemovedNotice {
+  type: "material_removed"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
+  reason: string | null
+  material_title?: string | null
 }
 
 /** «Se agregó un material al catálogo» (screen 19): to Psicopedagogía and Dirección. */

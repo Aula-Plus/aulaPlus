@@ -89,8 +89,9 @@ export async function publishAssessment(assessmentId: number): Promise<MaterialR
   return data.data
 }
 
-export async function removeFromCatalog(id: number): Promise<MaterialRow> {
-  const { data } = await api.delete<{ data: MaterialRow }>(`/api/v1/materials/${id}/catalog`)
+/** «Sacar del catálogo», with the optional reason the owner's notice carries. */
+export async function removeFromCatalog(id: number, reason: string | null = null): Promise<MaterialRow> {
+  const { data } = await api.delete<{ data: MaterialRow }>(`/api/v1/materials/${id}/catalog`, { data: { reason } })
   return data.data
 }
 

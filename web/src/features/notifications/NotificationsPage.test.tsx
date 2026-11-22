@@ -110,4 +110,44 @@ describe("NotificationsPage", () => {
 
     expect(await screen.findByText("Todavía no tenés avisos.")).toBeInTheDocument()
   })
+
+  it("tells the owner their material was taken out of the catalog, with the reason when written", async () => {
+    vi.spyOn(alertsApi, "fetchMyAlerts").mockResolvedValue([])
+    vi.spyOn(notificationsApi, "fetchNotificationHistory").mockResolvedValue([
+      {
+        id: "m1",
+        data: {
+          type: "material_removed",
+          material_id: 4,
+          subject_id: 3,
+          school_grade_id: 8,
+          reason: "Ya hay una guía igual.",
+          material_title: "Fracciones equivalentes",
+        },
+        read_at: null,
+        created_at: "2026-11-12T10:00:00Z",
+      },
+      {
+        id: "m2",
+        data: { type: "material_removed", material_id: 5, subject_id: 3, school_grade_id: null, reason: null, material_title: null },
+        read_at: null,
+        created_at: "2026-11-11T10:00:00Z",
+      },
+    ])
+
+    renderPage()
+
+    const withReason = (await screen.findByText(/Sacaron del catálogo tu material «Fracciones equivalentes»/)).closest("li")!
+    expect(within(withReason).getByText(/Motivo: Ya hay una guía igual\./)).toBeInTheDocument()
+    expect(within(withReason).getByRole("link", { name: "Ver en Materiales" })).toHaveAttribute(
+      "href",
+      "/materiales?materia=3&nivel=8",
+    )
+    const bare = screen.getByText(/^Sacaron del catálogo tu material\.$/).closest("li")!
+    expect(within(bare).queryByText(/Motivo/)).not.toBeInTheDocument()
+    expect(within(bare).getByRole("link", { name: "Ver en Materiales" })).toHaveAttribute(
+      "href",
+      "/materiales?materia=3&nivel=none",
+    )
+  })
 })
