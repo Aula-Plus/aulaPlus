@@ -27,5 +27,18 @@ export function calendarItemHour(item: CalendarItem): string {
 export function calendarItemLink(item: CalendarItem): string | null {
   if (item.type === "assessment" && item.group) return `/clases/${item.group.id}/evaluaciones`
   if (item.type === "task") return "/alertas"
+  // A class opens its own screen (15): its sections and its one-tap closing.
+  if (item.type === "class") return `/clase/${item.id}`
   return null
+}
+
+/**
+ * The topic of a class (its title), shown small and muted next to
+ * «Matemática · 5.°A» in the Calendar, its list and the Inicio. Null for
+ * other dates, or when the class has no subject and its title already is
+ * the main text.
+ */
+export function calendarItemTopic(item: CalendarItem): string | null {
+  if (item.type !== "class" || !item.detail || item.detail === item.title) return null
+  return item.detail
 }

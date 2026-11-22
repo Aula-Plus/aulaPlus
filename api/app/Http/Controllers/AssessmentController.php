@@ -7,10 +7,12 @@ use App\Http\Requests\UpdateAssessmentRequest;
 use App\Http\Resources\AssessmentResource;
 use App\Models\Assessment;
 use App\Models\Group;
+use App\Models\Material;
 use App\Support\UsageJourney;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 /**
  * CRUD for assessments (docs/prompts/13-evaluaciones-resultados.md §1). Fills
@@ -61,7 +63,12 @@ class AssessmentController extends Controller
     {
         $this->authorize('delete', $assessment);
 
-        $assessment->delete();
+        // Its catalog copy (screen 19) goes with it: left behind, it would stay
+        // published with nobody but Psicopedagogía and Dirección able to manage it.
+        DB::transaction(function () use ($assessment): void {
+            Material::query()->where('assessment_id', $assessment->id)->get()->each->delete();
+            $assessment->delete();
+        });
 
         return response()->noContent();
     }

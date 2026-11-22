@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Material;
 use App\Models\Student;
 use App\Notifications\AccommodationConfirmedNotification;
 use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\AlertOverdueNotification;
 use App\Notifications\CommentSharedNotification;
 use App\Notifications\FollowUpAssignedNotification;
+use App\Notifications\MaterialPublishedNotification;
+use App\Notifications\MaterialRemovedNotification;
+use App\Notifications\MeetingActionAssignedNotification;
+use App\Notifications\MeetingSheetFragmentNotification;
 use App\Notifications\ScreeningDesignChangedNotification;
 use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -49,11 +54,12 @@ class NotificationController extends Controller
             ->limit(self::LIST_LIMIT)
             ->get();
         $studentNames = $this->sharedStudentNames($request, $notices->pluck('data'));
+        $materialTitles = $this->removedMaterialTitles($request, $notices->pluck('data'));
 
         $notifications = $notices
             ->map(fn ($notification) => [
                 'id' => $notification->id,
-                'data' => $this->withStudentName($notification->data, $studentNames),
+                'data' => $this->withMaterialTitle($this->withStudentName($notification->data, $studentNames), $materialTitles),
                 'read_at' => $notification->read_at?->toIso8601String(),
                 'created_at' => $notification->created_at?->toIso8601String(),
             ]);
@@ -96,9 +102,10 @@ class NotificationController extends Controller
 
     /**
      * Notices that name the student: a shared extract (ClickUp 86e3qkwnv) and
-     * a new accommodation in force (screen 22).
+     * a new accommodation in force (screen 22) and a meeting sheet's fragment
+     * that landed in the file (screen 10).
      */
-    private const NAMES_STUDENT = ['comment_shared', 'accommodation_confirmed'];
+    private const NAMES_STUDENT = ['comment_shared', 'accommodation_confirmed', 'meeting_sheet_fragment'];
 
     /**
      * A shared-extract notice names the student (ClickUp 86e3qkwnv), but the
@@ -130,6 +137,48 @@ class NotificationController extends Controller
     }
 
     /**
+     * «Sacaron del catálogo tu material X» names the material, but the stored
+     * payload holds its id; the titles are resolved here in one query, only
+     * for materials the caller may still see (tenant scope + MaterialPolicy).
+     *
+     * @param  Collection<int, array<string, mixed>>  $payloads
+     * @return array<int, string> material id => title
+     */
+    private function removedMaterialTitles(Request $request, Collection $payloads): array
+    {
+        $ids = $payloads
+            ->filter(fn (array $data) => ($data['type'] ?? null) === 'material_removed')
+            ->pluck('material_id')
+            ->filter()
+            ->unique();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return Material::query()
+            ->whereKey($ids->all())
+            ->get(['id', 'school_id', 'owner_id', 'catalog_status', 'title'])
+            ->filter(fn (Material $material) => $request->user()->can('view', $material))
+            ->mapWithKeys(fn (Material $material) => [$material->id => $material->title])
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, string>  $titles
+     * @return array<string, mixed>
+     */
+    private function withMaterialTitle(array $data, array $titles): array
+    {
+        if (($data['type'] ?? null) !== 'material_removed') {
+            return $data;
+        }
+
+        return [...$data, 'material_title' => $titles[$data['material_id'] ?? 0] ?? null];
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @param  array<int, string>  $studentNames
      * @return array<string, mixed>
@@ -149,7 +198,9 @@ class NotificationController extends Controller
      * su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), an
      * accommodation proposal returned to you for corrections (86e3qkwkk), an
      * extract psychopedagogy shared with you (86e3qkwnv), and the screening
-     * design changed/reverted notices (screen 08).
+     * design changed/reverted notices (screen 08), and from screen 10 a
+     * meeting sheet's fragment that landed in a file you read and an action
+     * of a meeting left to you.
      */
     public const LISTED_TYPES = [
         FollowUpAssignedNotification::class,
@@ -159,6 +210,12 @@ class NotificationController extends Controller
         CommentSharedNotification::class,
         ScreeningDesignChangedNotification::class,
         ScreeningDesignRevertedNotification::class,
+        MeetingSheetFragmentNotification::class,
+        MeetingActionAssignedNotification::class,
+        // Screen 19: a material was added to the school's catalog, and the
+        // owner's material was taken out of it.
+        MaterialPublishedNotification::class,
+        MaterialRemovedNotification::class,
     ];
 
     /**

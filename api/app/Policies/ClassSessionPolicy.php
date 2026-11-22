@@ -46,6 +46,15 @@ class ClassSessionPolicy
         return $this->sharesSchool($user, $classSession) && $this->isOwner($user, $classSession);
     }
 
+    /**
+     * Closing a class («Todo / Una parte / Nada», screen 15) is the owning
+     * teacher's — Psicopedagogía and Dirección only read it.
+     */
+    public function close(User $user, ClassSession $classSession): bool
+    {
+        return $this->update($user, $classSession);
+    }
+
     public function delete(User $user, ClassSession $classSession): bool
     {
         return $this->sharesSchool($user, $classSession) && $this->isOwner($user, $classSession);

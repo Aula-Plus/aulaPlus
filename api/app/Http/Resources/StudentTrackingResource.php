@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\Role;
 use App\Models\Accommodation;
 use App\Models\Student;
+use App\Models\TherapeuticCompanion;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
@@ -137,6 +138,13 @@ class StudentTrackingResource extends JsonResource
                 fn () => AlertResource::collection($alerts)
             ),
             'open_alerts_count' => $openAlertsCount,
+            // Who accompanies the student now (screen 10, ClickUp 1dfd3mc4bge):
+            // everyone who sees the file gets name, weekly hours, days and the
+            // companion's role (ClickUp decision: the role is visible to
+            // whoever sees the student has a companion). Ended companions are
+            // history, kept for psychopedagogy's Acompañantes tab. Read per
+            // request, never from the shared cache.
+            'therapeutic_companions' => $this->companions($student),
             // Role-filtered upstream (StudentGradeAccess): a teacher only gets the
             // subjects they teach unless direction opened more, and no general
             // average at all while limited to their own subjects.
@@ -151,6 +159,21 @@ class StudentTrackingResource extends JsonResource
             'grades_truncated' => $this->resource['grades_truncated'],
             'grades_view' => $this->resource['grades_view'],
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    protected function companions(Student $student): array
+    {
+        return $student->therapeuticCompanions()->current()->orderBy('name')->get()
+            ->map(fn (TherapeuticCompanion $companion): array => [
+                'id' => $companion->id,
+                'name' => $companion->name,
+                'weekly_hours' => $companion->weekly_hours,
+                'days' => $companion->days,
+                'role' => $companion->role,
+            ])->values()->all();
     }
 
     /**

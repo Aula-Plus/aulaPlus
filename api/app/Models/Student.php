@@ -120,6 +120,15 @@ class Student extends Model
         return $this->hasMany(StudentAnnualReview::class);
     }
 
+    /**
+     * Who accompanies the student (screen 10 › Acompañantes, ClickUp
+     * 1dfd3mc4bge): records, not user accounts.
+     */
+    public function therapeuticCompanions(): HasMany
+    {
+        return $this->hasMany(TherapeuticCompanion::class);
+    }
+
     public function barriers(): HasMany
     {
         return $this->hasMany(Barrier::class);

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
 import * as onboardingApi from "@/features/onboarding/onboardingApi"
+import * as psychopedagogySpaceApi from "@/features/psychopedagogy-space/psychopedagogySpaceApi"
 import type { OnboardingRecord } from "@/features/onboarding/onboardingApi"
 import type { Role, User } from "@/types"
 import { SchoolStructurePage } from "./SchoolStructurePage"
@@ -92,17 +93,23 @@ describe("SchoolStructurePage", () => {
     expect(onboardingApi.fetchOnboarding).not.toHaveBeenCalled()
   })
 
-  it("shows the ANEP regime of each level read-only, with the way to ask for a correction", async () => {
+  it("shows the ANEP regime of each level read-only in «Institución», with the way to ask for a correction", async () => {
     vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([])
+    vi.spyOn(psychopedagogySpaceApi, "fetchMeetingSheetTypes").mockResolvedValue([])
     renderPage("director")
 
-    expect(screen.getByRole("heading", { name: "Régimen ANEP por nivel" })).toBeInTheDocument()
+    // It opens on «Oferta curricular»: the regime lives in «Institución».
+    expect(screen.queryByRole("heading", { name: "Régimen ANEP por nivel" })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("tab", { name: "Institución" }))
+
+    expect(await screen.findByRole("heading", { name: "Régimen ANEP por nivel" })).toBeInTheDocument()
     expect(await screen.findByRole("row", { name: /Inicial Autorizado Programa propio/ })).toBeInTheDocument()
     expect(screen.getByRole("row", { name: /Primaria Sin cargar por Aula\+/ })).toBeInTheDocument()
     expect(
       screen.getByRole("row", { name: /Ciclo Básico Habilitado Fijo: todos los colegios privados lo están/ }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    const regimeTable = screen.getByRole("row", { name: /Inicial Autorizado/ }).closest("table") as HTMLElement
+    expect(within(regimeTable).queryByRole("textbox")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "¿Algo no coincide con tu colegio?" })).toHaveAttribute(
       "href",
       "/administracion/puesta-en-marcha?solapa=regimen",

@@ -11,7 +11,7 @@ import type { OnboardingRecord } from "@/features/onboarding/onboardingApi"
  * P23-DEC-114 — ClickUp 1dfd3mc4bh4): read-only, loaded by Aula+. Reads the
  * same record as «Puesta en marcha» (screen 29, `SchoolPolicy::viewOnboarding`,
  * Dirección only) and «¿Algo no coincide con tu colegio?» takes Dirección to
- * its correction request. Moves to the «Institución» tab when that tab exists.
+ * its correction request. Shown in the «Institución» tab.
  */
 export function SchoolRegimeCard() {
   const [regimes, setRegimes] = useState<OnboardingRecord["regimes"] | null>(null)

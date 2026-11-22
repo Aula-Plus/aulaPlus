@@ -16,11 +16,17 @@ const FIELD_MESSAGES: Record<string, string> = {
   time: "La hora no es válida.",
   location: "El lugar puede tener hasta 120 caracteres.",
   description: "El detalle puede tener hasta 2000 caracteres.",
+  audience: "Revisá a quién le corresponde: hay una opción repetida, un grupo de otro año, un programa que el colegio ya no ofrece o demasiadas opciones.",
+}
+
+/** `audience.0.framework_id` and `audience.0` count as `audience`. */
+function fieldKey(name: string): string {
+  return name.startsWith("audience.") ? "audience" : name
 }
 
 export function calendarErrorMessage(error: unknown, fallback: string): string {
   if (!isAxiosError(error) || error.response?.status !== 422) return fallback
   const fields = Object.keys((error.response.data as { errors?: Record<string, unknown> })?.errors ?? {})
-  const field = fields.find((name) => FIELD_MESSAGES[name])
+  const field = fields.map(fieldKey).find((name) => FIELD_MESSAGES[name])
   return field ? FIELD_MESSAGES[field] : fallback
 }

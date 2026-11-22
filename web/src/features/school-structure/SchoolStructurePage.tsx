@@ -4,14 +4,16 @@ import { canManageCurricularStructure } from "@/lib/permissions"
 import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 import { CurricularOfferingTab } from "./CurricularOfferingTab"
+import { InstitutionTab } from "./InstitutionTab"
 import { PlannersTab } from "./PlannersTab"
 import { SchoolRegimeCard } from "./SchoolRegimeCard"
 import { SchoolResourcesTab } from "./SchoolResourcesTab"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 
-type Tab = "offering" | "planners" | "resources"
+type Tab = "institution" | "offering" | "planners" | "resources"
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "institution", label: "Institución" },
   { id: "offering", label: "Oferta curricular" },
   { id: "planners", label: "Planificadores" },
   { id: "resources", label: "Recursos disponibles" },
@@ -19,10 +21,13 @@ const TABS: { id: Tab; label: string }[] = [
 
 /**
  * «Colegio y estructura» (screen 23 of the living document), route `/colegio`.
- * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf) and «Recursos
- * disponibles» (ClickUp 1dfd3mc4bh4), with the read-only «Régimen ANEP por
- * nivel» above the tabs until the «Institución» tab exists. Grupos comes later.
- * Director only — UX gate; the server enforces it (CurricularOfferingPolicy,
+ * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf), «Recursos
+ * disponibles» (ClickUp 1dfd3mc4bh4) and «Institución»: the meeting sheet
+ * types (ClickUp 1dfd3mc4bge) and, read-only, the «Régimen ANEP por nivel»
+ * with its link to the correction request of Puesta en marcha (ClickUp
+ * 1dfd3mc4bh4, moved here once «Institución» existed, as Eitán asked). It
+ * still opens on «Oferta curricular». Grupos comes later. Director only — UX
+ * gate; the server enforces it (CurricularOfferingPolicy,
  * SchoolPolicy::viewOnboarding).
  */
 export function SchoolStructurePage() {
@@ -40,7 +45,6 @@ export function SchoolStructurePage() {
         title="Colegio y estructura"
         description="Se configura una vez y el resto del colegio lo hereda: qué programa sigue cada materia y cómo se llama cada campo del planificador."
       />
-      <SchoolRegimeCard />
       <div role="tablist" aria-label="Solapas de Colegio y estructura" className="flex gap-1 border-b">
         {TABS.map((item) => (
           <button
@@ -63,6 +67,12 @@ export function SchoolStructurePage() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+        {tab === "institution" && (
+          <div className="space-y-6">
+            <SchoolRegimeCard />
+            <InstitutionTab />
+          </div>
+        )}
         {tab === "offering" && <CurricularOfferingTab />}
         {tab === "planners" && <PlannersTab />}
         {tab === "resources" && <SchoolResourcesTab />}
