@@ -1,0 +1,495 @@
+<?php
+
+use App\Enums\PlannerFamily;
+use App\Models\CalendarEvent;
+use App\Models\CurricularFramework;
+use App\Models\CurricularOffering;
+use App\Models\EducationLevel;
+use App\Models\Group;
+use App\Models\School;
+use App\Models\SchoolGrade;
+use App\Models\Subject;
+use App\Models\User;
+use App\Services\Calendar\EventAudience;
+use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Sanctum;
+
+/**
+ * Who an institutional event concerns (screen 21, P21-DEC-05/108; ClickUp
+ * 1dfd3mc55zp): the whole school, levels, generations, the groups of a
+ * program within a generation, or a combination. Each person's calendar shows
+ * the ones of their groups; the full calendar shows them all.
+ */
+function audienceLevelId(string $key): int
+{
+    return (int) EducationLevel::query()->where('key', $key)->value('id');
+}
+
+function audienceGradeId(string $key): int
+{
+    return (int) SchoolGrade::query()->where('key', $key)->value('id');
+}
+
+/**
+ * @return array{school: School, director: User, cambridge: CurricularFramework, anep: CurricularFramework, ib: CurricularFramework}
+ */
+function audienceSchool(): array
+{
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    // Catalog names are unique; a test may build two schools.
+    $suffix = ' '.$school->id;
+    $anep = CurricularFramework::factory()->anep()->create(['name' => 'ANEP EBI'.$suffix, 'education_levels' => ['primary']]);
+    $cambridge = CurricularFramework::factory()->family(PlannerFamily::Cambridge)->create(['name' => 'Cambridge Primary'.$suffix, 'education_levels' => ['primary']]);
+    $ib = CurricularFramework::factory()->family(PlannerFamily::IbMyp)->create(['name' => 'IB MYP'.$suffix, 'education_levels' => ['lower_secondary']]);
+    $school->curricularFrameworks()->attach([
+        $anep->id => ['active' => true, 'mandatory' => true],
+        $cambridge->id => ['active' => true, 'mandatory' => false],
+        $ib->id => ['active' => true, 'mandatory' => false],
+    ]);
+
+    return ['school' => $school, 'director' => $director, 'cambridge' => $cambridge, 'anep' => $anep, 'ib' => $ib];
+}
+
+/** A teacher of one group, at a level and grade, optionally following a program. */
+function audienceTeacher(School $school, string $level, ?string $grade, ?CurricularFramework $framework = null, int $year = 2026): User
+{
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->atLevel($level)->create([
+        'school_id' => $school->id,
+        'school_grade_id' => $grade ? audienceGradeId($grade) : null,
+        'school_year' => $year,
+    ]);
+    $subject = Subject::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher, $subject);
+    if ($framework) {
+        CurricularOffering::query()->forceCreate([
+            'school_id' => $school->id,
+            'group_id' => $group->id,
+            'subject_id' => $subject->id,
+            'curricular_framework_id' => $framework->id,
+        ]);
+    }
+
+    return $teacher;
+}
+
+function institutionalTitles(string $scope = 'mine'): array
+{
+    $items = test()->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&types[]=institutional&scope='.$scope)
+        ->assertOk()
+        ->json('data');
+
+    return collect($items)->pluck('title')->sort()->values()->all();
+}
+
+it('creates an event for a combination of targets and returns its audience', function () {
+    ['director' => $director, 'cambridge' => $cambridge] = audienceSchool();
+    Sanctum::actingAs($director);
+
+    $response = $this->postJson('/api/v1/calendar-events', [
+        'title' => 'Feria de ciencias',
+        'date' => '2026-12-10',
+        'audience' => [
+            ['level_id' => audienceLevelId('lower_secondary')],
+            ['level_id' => audienceLevelId('upper_secondary')],
+            ['grade_id' => audienceGradeId('primary_6')],
+            ['grade_id' => audienceGradeId('primary_3'), 'framework_id' => $cambridge->id],
+        ],
+    ])->assertCreated();
+
+    expect($response->json('data.audience'))->toHaveCount(4)
+        ->and($response->json('data.audience.0.level.key'))->toBe('lower_secondary')
+        ->and($response->json('data.audience.2.grade.key'))->toBe('primary_6')
+        ->and($response->json('data.audience.3'))->toMatchArray([
+            'level' => null,
+            'grade' => ['id' => audienceGradeId('primary_3'), 'key' => 'primary_3', 'label' => SchoolGrade::find(audienceGradeId('primary_3'))->label],
+            'framework' => ['id' => $cambridge->id, 'name' => $cambridge->name],
+        ]);
+    expect(CalendarEvent::sole()->audiences)->toHaveCount(4);
+});
+
+it('defaults to the whole school, keeps the audience on edit when not sent and replaces it when sent', function () {
+    ['director' => $director] = audienceSchool();
+    Sanctum::actingAs($director);
+
+    $id = $this->postJson('/api/v1/calendar-events', ['title' => 'Acto', 'date' => '2026-12-15'])
+        ->assertCreated()
+        ->assertJsonPath('data.audience', [])
+        ->json('data.id');
+
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['audience' => [['level_id' => audienceLevelId('primary')]]])
+        ->assertOk()
+        ->assertJsonPath('data.audience.0.level.key', 'primary');
+
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['title' => 'Acto de fin de año'])
+        ->assertOk()
+        ->assertJsonCount(1, 'data.audience');
+
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['audience' => []])
+        ->assertOk()
+        ->assertJsonPath('data.audience', []);
+});
+
+it('validates the audience targets', function (mixed $audience, string $error) {
+    ['director' => $director, 'cambridge' => $cambridge, 'anep' => $anep, 'ib' => $ib] = audienceSchool();
+    Sanctum::actingAs($director);
+
+    $audience = ! is_array($audience) ? $audience : array_map(fn (array $target) => array_map(fn ($value) => match ($value) {
+        'cambridge' => $cambridge->id,
+        'anep' => $anep->id,
+        'ib' => $ib->id,
+        default => is_string($value) ? (str_contains($value, '_') && SchoolGrade::query()->where('key', $value)->exists() ? audienceGradeId($value) : audienceLevelId($value)) : $value,
+    }, $target), $audience);
+
+    $this->postJson('/api/v1/calendar-events', ['title' => 'X', 'date' => '2026-12-15', 'audience' => $audience])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([$error]);
+    expect(CalendarEvent::count())->toBe(0);
+})->with([
+    'unknown level' => [[['level_id' => 999999]], 'audience.0.level_id'],
+    'unknown grade' => [[['grade_id' => 999999]], 'audience.0.grade_id'],
+    'empty target' => [[[]], 'audience.0'],
+    'level and grade at once' => [[['level_id' => 'primary', 'grade_id' => 'primary_3']], 'audience.0'],
+    'program without grade' => [[['level_id' => 'primary', 'framework_id' => 'cambridge']], 'audience.0.framework_id'],
+    'mandatory regime as program' => [[['grade_id' => 'primary_3', 'framework_id' => 'anep']], 'audience.0.framework_id'],
+    'program of another level' => [[['grade_id' => 'primary_3', 'framework_id' => 'ib']], 'audience.0.framework_id'],
+    'repeated target' => [[['level_id' => 'primary'], ['level_id' => 'primary']], 'audience.1'],
+    'unknown key' => [[['level_id' => 'primary', 'student_id' => 3]], 'audience.0'],
+    'unknown group' => [[['group_id' => 999999]], 'audience.0.group_id'],
+    'group and grade at once' => [[['group_id' => 999999, 'grade_id' => 'primary_3']], 'audience.0'],
+    'not a list' => ['primary', 'audience'],
+]);
+
+it('rejects a program the school does not offer, even if another school does (tenant isolation)', function () {
+    ['director' => $director] = audienceSchool();
+    $other = School::factory()->create();
+    $foreign = CurricularFramework::factory()->family(PlannerFamily::Cambridge)->create(['name' => 'Cambridge Lower Secondary', 'education_levels' => null]);
+    $other->curricularFrameworks()->attach($foreign->id, ['active' => true, 'mandatory' => false]);
+    Sanctum::actingAs($director);
+
+    $this->postJson('/api/v1/calendar-events', [
+        'title' => 'X', 'date' => '2026-12-15',
+        'audience' => [['grade_id' => audienceGradeId('grade_8'), 'framework_id' => $foreign->id]],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['audience.0.framework_id']);
+});
+
+it('forbids non-directors from setting an audience or reading the options', function () {
+    ['school' => $school] = audienceSchool();
+
+    foreach (['teacher', 'psychopedagogue'] as $role) {
+        Sanctum::actingAs(User::factory()->forSchool($school)->{$role}()->create());
+        $this->getJson('/api/v1/calendar-events/audience-options')->assertForbidden();
+        $this->postJson('/api/v1/calendar-events', [
+            'title' => 'X', 'date' => '2026-12-15', 'audience' => [['level_id' => audienceLevelId('primary')]],
+        ])->assertForbidden();
+    }
+});
+
+it('offers Direction the levels with their grades and the school\'s non-mandatory programs', function () {
+    ['director' => $director, 'cambridge' => $cambridge, 'ib' => $ib] = audienceSchool();
+    // Another school's program never shows up.
+    School::factory()->create()->curricularFrameworks()->attach(
+        CurricularFramework::factory()->create(['name' => 'Otro'])->id,
+        ['active' => true, 'mandatory' => false],
+    );
+    Sanctum::actingAs($director);
+
+    $data = $this->getJson('/api/v1/calendar-events/audience-options')->assertOk()->json('data');
+
+    expect(array_column($data['levels'], 'key'))->toBe(['initial', 'primary', 'lower_secondary', 'upper_secondary'])
+        ->and(array_column($data['levels'][1]['grades'], 'key'))->toContain('primary_3')
+        ->and(array_column($data['frameworks'], 'id'))->toBe([$cambridge->id, $ib->id]);
+});
+
+it('shows each teacher only the events that concern their groups, and all of them in the full calendar', function () {
+    ['school' => $school, 'director' => $director, 'cambridge' => $cambridge] = audienceSchool();
+    $primary3Cambridge = audienceTeacher($school, 'primary', 'primary_3', $cambridge);
+    $primary3 = audienceTeacher($school, 'primary', 'primary_3');
+    $secondary = audienceTeacher($school, 'lower_secondary', 'grade_8');
+    $noGroups = User::factory()->forSchool($school)->teacher()->create();
+
+    Sanctum::actingAs($director);
+    $events = [
+        'Todo el colegio' => [],
+        'Primaria' => [['level_id' => audienceLevelId('primary')]],
+        'Secundaria' => [['level_id' => audienceLevelId('lower_secondary')], ['level_id' => audienceLevelId('upper_secondary')]],
+        'Tercero' => [['grade_id' => audienceGradeId('primary_3')]],
+        'Cambridge en tercero' => [['grade_id' => audienceGradeId('primary_3'), 'framework_id' => $cambridge->id]],
+        'Sexto o Bachillerato' => [['grade_id' => audienceGradeId('primary_6')], ['level_id' => audienceLevelId('upper_secondary')]],
+    ];
+    foreach ($events as $title => $audience) {
+        $this->postJson('/api/v1/calendar-events', ['title' => $title, 'date' => '2026-12-10', 'audience' => $audience])->assertCreated();
+    }
+    $all = collect(array_keys($events))->sort()->values()->all();
+
+    Sanctum::actingAs($primary3Cambridge);
+    expect(institutionalTitles())->toBe(['Cambridge en tercero', 'Primaria', 'Tercero', 'Todo el colegio'])
+        ->and(institutionalTitles('school'))->toBe($all);
+
+    Sanctum::actingAs($primary3);
+    expect(institutionalTitles())->toBe(['Primaria', 'Tercero', 'Todo el colegio']);
+
+    Sanctum::actingAs($secondary);
+    expect(institutionalTitles())->toBe(['Secundaria', 'Todo el colegio']);
+
+    Sanctum::actingAs($noGroups);
+    expect(institutionalTitles())->toBe(['Todo el colegio'])
+        ->and(institutionalTitles('school'))->toBe($all);
+
+    // The full calendar marks what is not theirs.
+    $items = collect($this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&scope=school')->json('data'))->keyBy('title');
+    expect($items['Todo el colegio']['for_me'])->toBeTrue()
+        ->and($items['Primaria']['for_me'])->toBeFalse()
+        ->and($items['Primaria']['can_edit'])->toBeFalse();
+});
+
+it('only counts a teacher\'s groups of the event\'s school year', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    $lastYear = audienceTeacher($school, 'primary', 'primary_3', year: 2025);
+
+    Sanctum::actingAs($director);
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Tercero', 'date' => '2026-12-10', 'audience' => [['grade_id' => audienceGradeId('primary_3')]]])->assertCreated();
+
+    Sanctum::actingAs($lastYear);
+    expect(institutionalTitles())->toBe([]);
+});
+
+it('shows Psychopedagogy and Direction every institutional event (school-wide roles)', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    Sanctum::actingAs($director);
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Bachillerato', 'date' => '2026-12-10', 'audience' => [['level_id' => audienceLevelId('upper_secondary')]]])->assertCreated();
+
+    expect(institutionalTitles())->toBe(['Bachillerato']);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+    $items = $this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31')->json('data');
+    expect(array_column($items, 'title'))->toBe(['Bachillerato'])
+        ->and($items[0]['for_me'])->toBeTrue();
+});
+
+it('never shows another school\'s events, not even in the full calendar', function () {
+    ['director' => $director] = audienceSchool();
+    $other = audienceSchool();
+    Sanctum::actingAs($other['director']);
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Ajeno', 'date' => '2026-12-10'])->assertCreated();
+
+    Sanctum::actingAs($director);
+    expect(institutionalTitles('school'))->toBe([]);
+});
+
+it('validates the calendar scope', function () {
+    ['director' => $director] = audienceSchool();
+    Sanctum::actingAs($director);
+
+    $this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&scope=everything')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['scope']);
+});
+
+it('matches a program target only in groups whose offering follows it', function () {
+    ['school' => $school, 'cambridge' => $cambridge] = audienceSchool();
+    $event = CalendarEvent::factory()->create(['school_id' => $school->id, 'start_at' => '2026-12-10 12:00:00']);
+    app(EventAudience::class)->replace($event, [['grade_id' => audienceGradeId('primary_3'), 'framework_id' => $cambridge->id]]);
+    $event->load('audiences');
+    $audience = app(EventAudience::class);
+
+    expect($audience->concerns($event, $audience->groupsOf(audienceTeacher($school, 'primary', 'primary_3', $cambridge))))->toBeTrue()
+        ->and($audience->concerns($event, $audience->groupsOf(audienceTeacher($school, 'primary', 'primary_4', $cambridge))))->toBeFalse()
+        ->and($audience->concerns($event, $audience->groupsOf(audienceTeacher($school, 'primary', 'primary_3'))))->toBeFalse();
+});
+
+it('keeps an event editable when the school stops offering a program it already targets, but never re-adds it', function () {
+    ['school' => $school, 'director' => $director, 'cambridge' => $cambridge] = audienceSchool();
+    Sanctum::actingAs($director);
+    $target = ['grade_id' => audienceGradeId('primary_3'), 'framework_id' => $cambridge->id];
+
+    $id = $this->postJson('/api/v1/calendar-events', ['title' => 'Feria', 'date' => '2026-12-10', 'audience' => [$target]])
+        ->assertCreated()
+        ->json('data.id');
+    $school->curricularFrameworks()->updateExistingPivot($cambridge->id, ['active' => false]);
+
+    // The dialog always sends the audience back on edit.
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['title' => 'Feria de ciencias', 'audience' => [$target]])
+        ->assertOk()
+        ->assertJsonPath('data.audience.0.framework.id', $cambridge->id);
+
+    // A grade it did not target before is a new target: the program must be offered.
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['audience' => [['grade_id' => audienceGradeId('primary_4'), 'framework_id' => $cambridge->id]]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['audience.0.framework_id']);
+
+    // Nor on a new event.
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Otra', 'date' => '2026-12-11', 'audience' => [$target]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['audience.0.framework_id']);
+});
+
+it('saves nothing when a target cannot be stored, instead of leaving an event for the whole school', function () {
+    ['director' => $director] = audienceSchool();
+    Sanctum::actingAs($director);
+    $this->mock(EventAudience::class, function ($mock): void {
+        $mock->shouldReceive('pickableFrameworks')->andReturn(collect());
+        $mock->shouldReceive('replace')->andThrow(new RuntimeException('insert failed'));
+    });
+
+    $this->withoutExceptionHandling();
+    expect(fn () => $this->postJson('/api/v1/calendar-events', [
+        'title' => 'Acto', 'date' => '2026-12-15', 'audience' => [['level_id' => audienceLevelId('primary')]],
+    ]))->toThrow(RuntimeException::class);
+
+    expect(CalendarEvent::query()->count())->toBe(0);
+});
+
+/** A group of the school, by its own name, with one teacher (and, optionally, a program). */
+function audienceGroup(School $school, string $name, string $grade, ?CurricularFramework $framework = null, int $year = 2026): array
+{
+    $group = Group::factory()->atLevel(str_starts_with($grade, 'primary') ? 'primary' : 'lower_secondary')->create([
+        'school_id' => $school->id,
+        'name' => $name,
+        'school_grade_id' => audienceGradeId($grade),
+        'school_year' => $year,
+    ]);
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $subject = Subject::factory()->create(['school_id' => $school->id]);
+    leadGroup($group, $teacher, $subject);
+    if ($framework) {
+        CurricularOffering::query()->forceCreate([
+            'school_id' => $school->id,
+            'group_id' => $group->id,
+            'subject_id' => $subject->id,
+            'curricular_framework_id' => $framework->id,
+        ]);
+    }
+
+    return ['group' => $group, 'teacher' => $teacher];
+}
+
+it('targets one group by the name the school gave it, and only its teachers see it as theirs', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    ['group' => $threeB, 'teacher' => $ofThreeB] = audienceGroup($school, '3° B', 'primary_3');
+    ['teacher' => $ofThreeA] = audienceGroup($school, '3° A', 'primary_3');
+    Sanctum::actingAs($director);
+
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Salida de 3° B', 'date' => '2026-12-10', 'audience' => [['group_id' => $threeB->id]]])
+        ->assertCreated()
+        ->assertJsonPath('data.audience.0.group', ['id' => $threeB->id, 'name' => '3° B'])
+        ->assertJsonPath('data.audience.0.groups', [['id' => $threeB->id, 'name' => '3° B']])
+        ->assertJsonPath('data.audience.0.grade', null);
+
+    Sanctum::actingAs($ofThreeB);
+    $items = $this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&types[]=institutional')->assertOk()->json('data');
+    expect(array_column($items, 'title'))->toBe(['Salida de 3° B'])
+        ->and($items[0]['for_me'])->toBeTrue()
+        ->and($items[0]['audience'][0]['group']['name'])->toBe('3° B');
+
+    Sanctum::actingAs($ofThreeA);
+    expect(institutionalTitles())->toBe([]);
+    $items = $this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&types[]=institutional&scope=school')->json('data');
+    expect($items[0]['for_me'])->toBeFalse();
+});
+
+it('rejects a group of another school or of another school year', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    $foreign = audienceGroup(School::factory()->create(), '3° B', 'primary_3')['group'];
+    $lastYear = audienceGroup($school, '3° B', 'primary_3', year: 2025)['group'];
+    Sanctum::actingAs($director);
+
+    foreach ([$foreign, $lastYear] as $group) {
+        $this->postJson('/api/v1/calendar-events', ['title' => 'X', 'date' => '2026-12-10', 'audience' => [['group_id' => $group->id]]])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['audience.0.group_id']);
+    }
+    $this->postJson('/api/v1/calendar-events', ['title' => 'X', 'date' => '2026-12-10', 'audience' => [['group_id' => $lastYear->id], ['group_id' => $lastYear->id]]])
+        ->assertUnprocessable();
+    expect(CalendarEvent::count())->toBe(0);
+});
+
+it('re-checks the stored groups when only the date moves to another school year', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    $group = audienceGroup($school, '3° B', 'primary_3')['group'];
+    Sanctum::actingAs($director);
+    $id = $this->postJson('/api/v1/calendar-events', ['title' => 'X', 'date' => '2026-12-10', 'audience' => [['group_id' => $group->id]]])
+        ->assertCreated()->json('data.id');
+
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['date' => '2027-03-10'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['audience']);
+    $this->patchJson("/api/v1/calendar-events/{$id}", ['date' => '2026-11-30'])->assertOk();
+});
+
+it('lists, for each generation and program target, the groups it reaches by their own name', function () {
+    ['school' => $school, 'director' => $director, 'cambridge' => $cambridge] = audienceSchool();
+    $threeA = audienceGroup($school, '3° A', 'primary_3', $cambridge)['group'];
+    $threeB = audienceGroup($school, '3° B', 'primary_3')['group'];
+    audienceGroup($school, '3° C', 'primary_3', year: 2025);
+    audienceGroup(School::factory()->create(), '3° Z', 'primary_3');
+    Sanctum::actingAs($director);
+
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Feria', 'date' => '2026-12-10', 'audience' => [
+        ['grade_id' => audienceGradeId('primary_3')],
+        ['grade_id' => audienceGradeId('primary_3'), 'framework_id' => $cambridge->id],
+        ['level_id' => audienceLevelId('primary')],
+    ]])->assertCreated()
+        ->assertJsonPath('data.audience.0.groups', [['id' => $threeA->id, 'name' => '3° A'], ['id' => $threeB->id, 'name' => '3° B']])
+        ->assertJsonPath('data.audience.1.groups', [['id' => $threeA->id, 'name' => '3° A']])
+        ->assertJsonPath('data.audience.2.groups', []);
+
+    // The feed «Para: …» carries the same names.
+    $items = $this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&types[]=institutional')->json('data');
+    expect(array_column($items[0]['audience'][0]['groups'], 'name'))->toBe(['3° A', '3° B'])
+        ->and(array_column($items[0]['audience'][1]['groups'], 'name'))->toBe(['3° A']);
+});
+
+it('resolves the «Para: …» groups of every event in a fixed number of queries', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    $groups = collect(range(1, 4))->map(fn (int $n) => audienceGroup($school, "3° {$n}", 'primary_3')['group']);
+    Sanctum::actingAs($director);
+    $count = function (): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/calendar?from=2026-12-01&to=2026-12-31&types[]=institutional')->assertOk();
+
+        return count(DB::getQueryLog());
+    };
+    $this->postJson('/api/v1/calendar-events', ['title' => 'A', 'date' => '2026-12-10', 'audience' => [['group_id' => $groups[0]->id], ['grade_id' => audienceGradeId('primary_3')]]])->assertCreated();
+    $one = $count();
+
+    foreach ($groups->slice(1) as $i => $group) {
+        $this->postJson('/api/v1/calendar-events', ['title' => "E{$i}", 'date' => '2026-12-1'.$i, 'audience' => [['group_id' => $group->id], ['grade_id' => audienceGradeId('primary_3')]]])->assertCreated();
+    }
+
+    expect($count())->toBe($one);
+});
+
+it('offers Direction the school\'s groups by name, never another school\'s', function () {
+    ['school' => $school, 'director' => $director, 'cambridge' => $cambridge] = audienceSchool();
+    $group = audienceGroup($school, '3° B', 'primary_3', $cambridge)['group'];
+    audienceGroup(School::factory()->create(), '3° Z', 'primary_3');
+    Sanctum::actingAs($director);
+
+    $groups = $this->getJson('/api/v1/calendar-events/audience-options')->assertOk()->json('data.groups');
+    expect($groups)->toBe([[
+        'id' => $group->id,
+        'name' => '3° B',
+        'school_year' => 2026,
+        'level_id' => audienceLevelId('primary'),
+        'grade_id' => audienceGradeId('primary_3'),
+        'framework_ids' => [$cambridge->id],
+    ]]);
+});
+
+it('keeps a target whose group was deleted as concerning nobody, never the whole school', function () {
+    ['school' => $school, 'director' => $director] = audienceSchool();
+    ['group' => $group, 'teacher' => $teacher] = audienceGroup($school, '3° B', 'primary_3');
+    Sanctum::actingAs($director);
+    $this->postJson('/api/v1/calendar-events', ['title' => 'Salida', 'date' => '2026-12-10', 'audience' => [['group_id' => $group->id]]])->assertCreated();
+
+    $group->delete();
+    $other = User::factory()->forSchool($school)->teacher()->create();
+
+    Sanctum::actingAs($other);
+    expect(institutionalTitles())->toBe([]);
+    Sanctum::actingAs($teacher);
+    expect(institutionalTitles())->toBe([]);
+});

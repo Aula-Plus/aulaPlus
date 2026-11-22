@@ -9,7 +9,9 @@ use Illuminate\Validation\Rule;
 
 /**
  * GET /api/v1/calendar — a window of school-local days (inclusive) and the
- * types to include (all seven when omitted). The window is capped so a month
+ * types to include (all seven when omitted), and whether institutional
+ * events are the caller's own (`scope=mine`, default) or the school's full
+ * calendar (`scope=school`). The window is capped so a month
  * view with its leading/trailing weeks fits but nobody pulls the whole year.
  */
 class CalendarFeedRequest extends FormRequest
@@ -39,6 +41,9 @@ class CalendarFeedRequest extends FormRequest
             }],
             'types' => ['sometimes', 'array'],
             'types.*' => ['string', Rule::enum(CalendarItemType::class)],
+            // «Ver todo el calendario del colegio» (ClickUp 1dfd3mc55zp): every
+            // institutional event, not only the ones that concern the caller.
+            'scope' => ['sometimes', Rule::in(['mine', 'school'])],
         ];
     }
 
@@ -50,6 +55,11 @@ class CalendarFeedRequest extends FormRequest
     public function to(): CarbonImmutable
     {
         return CarbonImmutable::createFromFormat('!Y-m-d', $this->validated('to'));
+    }
+
+    public function wholeSchool(): bool
+    {
+        return $this->validated('scope') === 'school';
     }
 
     /**

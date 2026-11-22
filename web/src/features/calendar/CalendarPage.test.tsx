@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CalendarItem, User } from "@/types"
+import type { CalendarItem, EventAudienceGroupOption, User } from "@/types"
 import * as calendarApi from "./calendarApi"
 import * as preferencesApi from "@/features/preferences/preferencesApi"
 import { CalendarPage } from "./CalendarPage"
@@ -42,6 +42,36 @@ const assessment = item({
   assessment_type: "written",
   can_edit: false,
 })
+
+const audienceOptions = {
+  levels: [
+    { id: 1, key: "initial", label: "Inicial", grades: [{ id: 1, key: "initial_3", label: "Inicial 3 años" }] },
+    {
+      id: 2,
+      key: "primary",
+      label: "Primaria",
+      grades: [
+        { id: 6, key: "primary_3", label: "3° de Primaria" },
+        { id: 9, key: "primary_6", label: "6° de Primaria" },
+      ],
+    },
+    { id: 3, key: "lower_secondary", label: "Ciclo Básico", grades: [{ id: 11, key: "grade_8", label: "8°" }] },
+    { id: 4, key: "upper_secondary", label: "Bachillerato", grades: [] },
+  ],
+  frameworks: [
+    { id: 20, name: "Cambridge Primary", education_levels: ["primary"] },
+    { id: 21, name: "IB MYP", education_levels: ["lower_secondary"] },
+  ],
+  groups: [] as EventAudienceGroupOption[],
+}
+
+const groupOptions: EventAudienceGroupOption[] = [
+  { id: 31, name: "3° A", school_year: 2026, level_id: 2, grade_id: 6, framework_ids: [20] },
+  { id: 32, name: "3° B", school_year: 2026, level_id: 2, grade_id: 6, framework_ids: [] },
+  { id: 33, name: "6° Azul", school_year: 2026, level_id: 2, grade_id: 9, framework_ids: [] },
+  // Another school year: never offered for a 2026 event.
+  { id: 34, name: "3° C", school_year: 2025, level_id: 2, grade_id: 6, framework_ids: [] },
+]
 
 function renderPage(path = "/calendario") {
   return render(
@@ -175,7 +205,9 @@ describe("CalendarPage", () => {
       time: "10:00",
       location: "Patio",
       description: null,
+      audience: [],
     })
+    vi.spyOn(calendarApi, "fetchAudienceOptions").mockResolvedValue(audienceOptions)
     const remove = vi.spyOn(calendarApi, "deleteInstitutionalEvent").mockResolvedValue()
     const user = userEvent.setup()
     renderPage()
@@ -192,6 +224,7 @@ describe("CalendarPage", () => {
         time: "10:00",
         location: "Patio",
         description: null,
+        audience: [],
       }),
     )
 
@@ -312,11 +345,249 @@ describe("CalendarPage", () => {
 
     expect(
       await screen.findByText(
-        "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional y qué es; lo ven todos y se quita desde la vista Lista.",
+        "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional, qué es y a quién le corresponde; lo ven quienes tienen esos grupos, está en el calendario completo del colegio y se quita desde la vista Lista.",
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText(/nunca para mirar un caso/)).not.toBeInTheDocument()
     expect(screen.queryByRole("checkbox", { name: /total de evaluaciones/ })).not.toBeInTheDocument()
     expect(preferences).not.toHaveBeenCalled()
+  })
+  it("lets Direction choose who an institutional event concerns (ClickUp 1dfd3mc55zp)", async () => {
+    currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+    vi.spyOn(calendarApi, "fetchAudienceOptions").mockResolvedValue(audienceOptions)
+    const create = vi.spyOn(calendarApi, "createInstitutionalEvent").mockResolvedValue({
+      id: 10,
+      type: "institutional",
+      title: "Feria",
+      date: "2026-12-15",
+      time: null,
+      location: null,
+      description: null,
+      audience: [],
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "Evento institucional" }))
+    await user.type(screen.getByLabelText("Qué"), "Feria")
+    const whole = screen.getByRole("checkbox", { name: "Todo el colegio" })
+    expect(whole).toBeChecked()
+    await user.click(whole)
+
+    // Nothing chosen: the form asks for it.
+    await user.click(await screen.findByRole("checkbox", { name: "Secundaria (Ciclo Básico y Bachillerato)" }))
+    expect(screen.getByRole("checkbox", { name: "Ciclo Básico" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "Bachillerato" })).toBeChecked()
+    await user.click(screen.getByRole("checkbox", { name: "Secundaria (Ciclo Básico y Bachillerato)" }))
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    expect(await screen.findByText("Elegí a quién le corresponde, o marcá «Todo el colegio».")).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("checkbox", { name: "Primaria" }))
+    // A generation, and the Cambridge groups of another one (only the programs of its level).
+    await user.selectOptions(screen.getByRole("combobox", { name: "Generación" }), "6° de Primaria")
+    await user.click(screen.getByRole("button", { name: "Agregar generación" }))
+    await user.selectOptions(screen.getByRole("combobox", { name: "Generación" }), "3° de Primaria")
+    const groups = screen.getByRole("combobox", { name: "Grupos de la generación" })
+    expect(within(groups).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Todos sus grupos",
+      "Solo los grupos de Cambridge Primary",
+    ])
+    await user.selectOptions(groups, "Solo los grupos de Cambridge Primary")
+    await user.click(screen.getByRole("button", { name: "Agregar generación" }))
+    expect(screen.getByText("Cambridge Primary en 3° de Primaria")).toBeInTheDocument()
+
+    // Removing one keeps the rest.
+    await user.click(screen.getByRole("button", { name: "Quitar 6° de Primaria" }))
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Feria", audience: [{ level_id: 2 }, { grade_id: 6, framework_id: 20 }] }),
+      ),
+    )
+  })
+
+  it("lets a teacher see the whole school calendar, with who each event concerns", async () => {
+    const mine = item({
+      key: "institutional-1",
+      type: "institutional",
+      id: 1,
+      date: "2026-12-16",
+      title: "Acto",
+      group: null,
+      subject: null,
+      can_edit: false,
+      audience: [],
+      for_me: true,
+    })
+    const other = item({
+      key: "institutional-2",
+      type: "institutional",
+      id: 2,
+      date: "2026-12-17",
+      title: "Salida de Bachillerato",
+      group: null,
+      subject: null,
+      can_edit: false,
+      audience: [
+        {
+          level: { id: 3, key: "lower_secondary", label: "Ciclo Básico" },
+          grade: null,
+          framework: null,
+          group: null,
+          groups: [],
+        },
+        {
+          level: { id: 4, key: "upper_secondary", label: "Bachillerato" },
+          grade: null,
+          framework: null,
+          group: null,
+          groups: [],
+        },
+        {
+          level: null,
+          grade: { id: 6, key: "primary_3", label: "3° de Primaria" },
+          framework: { id: 20, name: "Cambridge Primary" },
+          group: null,
+          groups: [{ id: 31, name: "3° A" }],
+        },
+        { level: null, grade: null, framework: null, group: { id: 33, name: "6° Azul" }, groups: [{ id: 33, name: "6° Azul" }] },
+      ],
+      for_me: false,
+    })
+    const fetch = vi
+      .spyOn(calendarApi, "fetchCalendar")
+      .mockImplementation(async (_from, _to, _types, scope) => (scope === "school" ? [mine, other] : [mine]))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "Lista" }))
+    expect(await screen.findByText("Para: Todo el colegio")).toBeInTheDocument()
+    expect(screen.queryByText("Salida de Bachillerato")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("checkbox", { name: "Ver todo el calendario del colegio" }))
+
+    expect(await screen.findByText("Salida de Bachillerato")).toBeInTheDocument()
+    // Groups by the name the school gave them (Eitán, ClickUp 1dfd3mc55zp).
+    expect(screen.getByText("Para: Secundaria · Cambridge Primary en 3° de Primaria: 3° A · 6° Azul")).toBeInTheDocument()
+    expect(fetch).toHaveBeenLastCalledWith("2026-12-14", "2026-12-27", undefined, "school")
+  })
+
+  it("lists the groups by their own name when choosing who an event concerns (ClickUp 1dfd3mc55zp)", async () => {
+    currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+    vi.spyOn(calendarApi, "fetchAudienceOptions").mockResolvedValue({ ...audienceOptions, groups: groupOptions })
+    const create = vi.spyOn(calendarApi, "createInstitutionalEvent").mockResolvedValue({
+      id: 10,
+      type: "institutional",
+      title: "Salida",
+      date: "2026-12-15",
+      time: null,
+      location: null,
+      description: null,
+      audience: [],
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "Evento institucional" }))
+    await user.type(screen.getByLabelText("Qué"), "Salida")
+    await user.click(screen.getByRole("checkbox", { name: "Todo el colegio" }))
+
+    // The groups of the event's year, under their generation.
+    const group = await screen.findByRole("combobox", { name: "Grupo" })
+    expect(within(group).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Elegí un grupo",
+      "3° A",
+      "3° B",
+      "6° Azul",
+    ])
+    expect(within(group).getByRole("group", { name: "3° de Primaria" })).toBeInTheDocument()
+    await user.selectOptions(group, "3° B")
+    await user.click(screen.getByRole("button", { name: "Agregar grupo" }))
+    expect(within(screen.getByRole("list", { name: "Grupos elegidos" })).getByText("3° B")).toBeInTheDocument()
+
+    // A generation and a program say which groups they reach.
+    await user.selectOptions(screen.getByRole("combobox", { name: "Generación" }), "3° de Primaria")
+    const ofGeneration = screen.getByRole("combobox", { name: "Grupos de la generación" })
+    expect(within(ofGeneration).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Todos sus grupos (3° A, 3° B)",
+      "Solo los grupos de Cambridge Primary (3° A)",
+    ])
+    await user.selectOptions(ofGeneration, "Solo los grupos de Cambridge Primary (3° A)")
+    await user.click(screen.getByRole("button", { name: "Agregar generación" }))
+    expect(screen.getByText("Cambridge Primary en 3° de Primaria: 3° A")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ audience: [{ group_id: 32 }, { grade_id: 6, framework_id: 20 }] }),
+      ),
+    )
+  })
+
+  it("keeps the stored names on edit when a program or group is no longer offered", async () => {
+    currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: ["director"] }
+    const event = item({
+      key: "institutional-5",
+      type: "institutional",
+      id: 5,
+      date: "2026-12-16",
+      title: "Feria",
+      group: null,
+      subject: null,
+      can_edit: true,
+      audience: [
+        {
+          level: null,
+          grade: { id: 6, key: "primary_3", label: "3° de Primaria" },
+          framework: { id: 9, name: "Cambridge Primary" },
+          group: null,
+          groups: [],
+        },
+        { level: null, grade: null, framework: null, group: { id: 77, name: "3° Rojo" }, groups: [] },
+      ],
+    })
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([event])
+    vi.spyOn(calendarApi, "fetchAudienceOptions").mockResolvedValue({ ...audienceOptions, frameworks: [] })
+    const update = vi.spyOn(calendarApi, "updateInstitutionalEvent").mockResolvedValue({
+      id: 5,
+      type: "institutional",
+      title: "Feria",
+      date: "2026-12-16",
+      time: null,
+      location: null,
+      description: null,
+      audience: [],
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "Lista" }))
+    await user.click(await screen.findByRole("button", { name: "Editar" }))
+
+    expect(await screen.findByText("Cambridge Primary en 3° de Primaria")).toBeInTheDocument()
+    expect(within(screen.getByRole("list", { name: "Grupos elegidos" })).getByText("3° Rojo")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Guardar" }))
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({ audience: [{ grade_id: 6, framework_id: 9 }, { group_id: 77 }] }),
+      ),
+    )
+  })
+
+  it("does not offer the whole-school switch to Psychopedagogy and Direction, who already see it all", async () => {
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
+    vi.spyOn(preferencesApi, "fetchUserPreferences").mockResolvedValue({ show_today_assessments_total: true })
+    for (const roles of [["director"], ["psychopedagogue"]] as const) {
+      currentUser = { id: 1, name: "Adriana Ruiz", email: "a@e.com", roles: [...roles] }
+      const { unmount } = renderPage()
+      await screen.findByText("Diciembre 2026")
+      expect(screen.queryByRole("checkbox", { name: "Ver todo el calendario del colegio" })).not.toBeInTheDocument()
+      unmount()
+    }
   })
 })

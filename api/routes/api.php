@@ -461,6 +461,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Direction's institutional events, the time/room of a class, and the
         // teacher's private «Mis horarios», which only pre-fills them.
         Route::get('/calendar', [CalendarController::class, 'index']);
+        Route::get('/calendar-events/audience-options', [CalendarController::class, 'audienceOptions']);
         Route::post('/calendar-events', [CalendarController::class, 'store']);
         Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
         Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);
