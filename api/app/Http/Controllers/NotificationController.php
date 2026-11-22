@@ -6,6 +6,7 @@ use App\Models\Student;
 use App\Notifications\AccommodationConfirmedNotification;
 use App\Notifications\AccommodationProposalReturnedNotification;
 use App\Notifications\AlertOverdueNotification;
+use App\Notifications\CalendarEventInvitedNotification;
 use App\Notifications\CommentSharedNotification;
 use App\Notifications\FollowUpAssignedNotification;
 use App\Notifications\ScreeningDesignChangedNotification;
@@ -153,6 +154,8 @@ class NotificationController extends Controller
      */
     public const LISTED_TYPES = [
         FollowUpAssignedNotification::class,
+        // Added to someone's calendar event (ClickUp 1dfd3mc56kp).
+        CalendarEventInvitedNotification::class,
         AlertOverdueNotification::class,
         AccommodationProposalReturnedNotification::class,
         AccommodationConfirmedNotification::class,

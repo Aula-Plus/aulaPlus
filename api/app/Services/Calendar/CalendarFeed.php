@@ -57,6 +57,12 @@ class CalendarFeed
             $items = $items->concat($this->assessments($user, $from, $to));
         }
 
+        // Events of people's own calendars (personal, shared, and screen 10
+        // meetings): only the caller's, once each (ClickUp 1dfd3mc56kp).
+        if ($wants(CalendarItemType::Meeting)) {
+            $items = $items->concat(app(SharedEvents::class)->for($user, $from, $to));
+        }
+
         if ($wants(CalendarItemType::Task)) {
             $items = $items->concat($this->tasks($user, $from, $to));
         }

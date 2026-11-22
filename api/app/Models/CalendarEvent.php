@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  *
  * `all_day` = no time: `start_at` is the school-local midnight of its day.
  */
-#[Fillable(['title', 'description', 'start_at', 'end_at', 'all_day', 'location', 'type', 'created_by_id'])]
+#[Fillable(['title', 'description', 'start_at', 'end_at', 'all_day', 'location', 'type', 'created_by_id', 'student_id'])]
 class CalendarEvent extends Model
 {
     /** @use HasFactory<CalendarEventFactory> */
@@ -60,5 +60,31 @@ class CalendarEvent extends Model
     public function scopeInstitutional(Builder $query): void
     {
         $query->where('type', CalendarEventType::Institutional->value);
+    }
+
+    /**
+     * The student an event of someone's own calendar names, if any (ClickUp
+     * 1dfd3mc56kp). Participants see the name; only those who could already
+     * open the file get a link to it (App\Services\Calendar\SharedEvents).
+     */
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class);
+    }
+
+    public function isPersonal(): bool
+    {
+        return $this->type === CalendarEventType::Personal->value;
+    }
+
+    /**
+     * Events that live only in the calendars they are linked to — personal
+     * (shared) events and meetings — as opposed to institutional ones.
+     *
+     * @param  Builder<CalendarEvent>  $query
+     */
+    public function scopeLinkedToCalendars(Builder $query): void
+    {
+        $query->where('type', '!=', CalendarEventType::Institutional->value);
     }
 }

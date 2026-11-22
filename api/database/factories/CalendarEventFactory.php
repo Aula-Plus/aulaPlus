@@ -27,6 +27,14 @@ class CalendarEventFactory extends Factory
     }
 
     /**
+     * An event of someone's own calendar (ClickUp 1dfd3mc56kp).
+     */
+    public function personal(): static
+    {
+        return $this->state(['type' => CalendarEventType::Personal->value]);
+    }
+
+    /**
      * A meeting (screen 10, reserved): private to the calendars it is linked to.
      */
     public function meeting(): static
