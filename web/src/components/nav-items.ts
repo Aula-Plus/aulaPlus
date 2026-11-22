@@ -9,10 +9,12 @@ import {
   ChartScatter,
   CalendarCog,
   ClipboardList,
+  FolderOpen,
   PackageCheck,
   Columns2,
   GraduationCap,
   ListChecks,
+  NotebookPen,
   Eye,
   MessageSquare,
   Home,
@@ -29,6 +31,7 @@ import {
   canCompareGroups,
   canOpenAccommodationsInbox,
   canOpenIndicators,
+  canOpenPsychopedagogySpace,
   canEditScreeningTestDesign,
   canGenerateClasses,
   canManageGradesVisibility,
@@ -95,6 +98,11 @@ export function buildNavSections(
         ...(canOpenAccommodationsInbox(user)
           ? [{ to: "/ajustes-y-ptp", label: "Ajustes y PTP", icon: ListChecks }]
           : []),
+        // Screen 10 — Espacio de psicopedagogía (ClickUp 1dfd3mc4bge): the
+        // team's own space; Dirección gets its limited view, no teacher enters.
+        ...(canOpenPsychopedagogySpace(user)
+          ? [{ to: "/espacio-psicopedagogia", label: "Espacio de psicopedagogía", icon: NotebookPen }]
+          : []),
         // One screen for the alerts that reach the user and their own scheduled
         // follow-ups, for every role (ClickUp 86e3jpzdp / 86e3jdkkr).
         { to: "/alertas", label: "Alertas y seguimientos", icon: TriangleAlert },
@@ -104,6 +112,9 @@ export function buildNavSections(
         // Screen 14 «Nueva clase» (ClickUp 86e3jujh0): the direct entry, for
         // teachers only — the unit entry is in the Programa anual.
         ...(canGenerateClasses(user) ? [{ to: "/nueva-clase", label: "Nueva clase", icon: Sparkles }] : []),
+        // Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx): every role; what
+        // each sees and may do is decided server-side (MaterialPolicy).
+        ...(user ? [{ to: "/materiales", label: "Materiales", icon: FolderOpen }] : []),
         // Every role has a Calendar (screen 21); what each sees is decided
         // server-side.
         { to: "/calendario", label: "Calendario", icon: CalendarDays },

@@ -24,6 +24,7 @@ import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
+import { MaterialsPage } from "@/features/materials/MaterialsPage"
 import { SchoolStructurePage } from "@/features/school-structure/SchoolStructurePage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
@@ -39,6 +40,7 @@ import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
 import { NewClassPage } from "@/features/classes/NewClassPage"
 import { ClassProposalPage } from "@/features/classes/ClassProposalPage"
 import { ClassPage } from "@/features/classes/ClassPage"
+import { PsychopedagogySpacePage } from "@/features/psychopedagogy-space/PsychopedagogySpacePage"
 
 function App() {
   return (
@@ -186,6 +188,14 @@ function App() {
             }
           />
           <Route
+            path="/materiales"
+            element={
+              <ProtectedLayout>
+                <MaterialsPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
             path="/materias"
             element={
               <ProtectedLayout>
@@ -274,6 +284,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupComparisonPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Espacio de psicopedagogía (screen 10): Psicopedagogía, and Dirección with its limited view. */}
+          <Route
+            path="/espacio-psicopedagogia"
+            element={
+              <ProtectedLayout>
+                <PsychopedagogySpacePage />
               </ProtectedLayout>
             }
           />

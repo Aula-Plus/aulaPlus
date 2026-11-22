@@ -105,6 +105,11 @@ export interface Student {
   birth_date: string | null
   enrollment_year: number
   has_therapeutic_companion: boolean
+  /**
+   * Only on a single student: the flag comes from the companion records of
+   * the Espacio de psicopedagogía, so the form can't change it.
+   */
+  therapeutic_companion_records?: boolean
   groups: { id: number; name: string; school_year: number }[]
   // Absent from the JSON (not null) when the viewer lacks
   // view-clinical-profile on this student.
@@ -900,6 +905,12 @@ export interface AccommodationChip extends SupportChip, AccommodationScope {}
 
 export interface StudentTracking {
   student: Student
+  /**
+   * Who accompanies the student now (screen 10): name, weekly hours, days and
+   * role, for everyone who sees the file; ended companions never. Optional:
+   * older payloads (and test fixtures) may not carry it.
+   */
+  therapeutic_companions?: TherapeuticCompanion[]
   /** `null` until psychopedagogy writes and confirms it. */
   team_summary: TeamSummary | null
   support_chips: { accommodations: AccommodationChip[]; barriers: SupportChip[] }
@@ -1263,6 +1274,10 @@ export interface AppNotification {
     | AccommodationConfirmedNotice
     | CommentSharedNotice
     | ScreeningDesignNotice
+    | MeetingSheetFragmentNotice
+    | MeetingActionAssignedNotice
+    | MaterialPublishedNotice
+    | MaterialRemovedNotice
   /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
   read_at?: string | null
   created_at: string | null
@@ -1940,6 +1955,44 @@ export interface CalendarItem {
   place: string | null
   assessment_type: AssessmentType | null
   can_edit: boolean
+  /** Institutional events only: who it concerns (empty = the whole school). */
+  audience?: EventAudienceTarget[]
+  /** Institutional events only: whether it concerns the caller's groups. */
+  for_me?: boolean
+}
+
+/**
+ * One target of an institutional event's audience (ClickUp 1dfd3mc55zp): a
+ * level, a generation (grade), a program within a generation, or one group.
+ * Labels are the catalog's own data; group names are the school's own
+ * («3° B»). `groups`: the groups it reaches in the event's school year,
+ * resolved by the server (the group itself, a generation's or program's
+ * groups; empty for a level). All of level/grade/group null = a group that
+ * was deleted (it reaches nobody).
+ */
+export interface EventAudienceTarget {
+  level: { id: number; key: string; label: string } | null
+  grade: { id: number; key: string; label: string } | null
+  framework: { id: number; name: string } | null
+  group: { id: number; name: string } | null
+  groups: { id: number; name: string }[]
+}
+
+/** A group Direction can pick, by its own name, with what decides which targets reach it. */
+export interface EventAudienceGroupOption {
+  id: number
+  name: string
+  school_year: number
+  level_id: number | null
+  grade_id: number | null
+  framework_ids: number[]
+}
+
+/** What Direction can pick as an event's audience (`/calendar-events/audience-options`). */
+export interface EventAudienceOptions {
+  levels: { id: number; key: string; label: string; grades: { id: number; key: string; label: string }[] }[]
+  frameworks: { id: number; name: string; education_levels: string[] | null }[]
+  groups: EventAudienceGroupOption[]
 }
 
 /** An institutional event as returned by `/api/v1/calendar-events`. */
@@ -1951,6 +2004,7 @@ export interface InstitutionalEvent {
   time: string | null
   location: string | null
   description: string | null
+  audience: EventAudienceTarget[]
 }
 
 /** ISO weekday (1 = lunes … 7 = domingo) → Spanish label. */
@@ -2047,4 +2101,239 @@ export const calendarBodyLabels: Record<CalendarBody, string> = {
   anep_upper_secondary: "ANEP Bachillerato",
   cambridge: "Cambridge",
   ib: "IB",
+}
+
+// ── Espacio de psicopedagogía (screen 10, ClickUp 1dfd3mc4bge) ──────────────
+
+/**
+ * A meeting sheet's fragment about a student landed in the file, where I can
+ * read it (P10-DEC-07). Ids only; the server adds `student_name` at read time.
+ */
+export interface MeetingSheetFragmentNotice {
+  type: "meeting_sheet_fragment"
+  student_id: number
+  comment_id: number | null
+  student_name?: string | null
+}
+
+/** An action agreed in a meeting was left to me, with its deadline. */
+export interface MeetingActionAssignedNotice {
+  type: "meeting_action_assigned"
+  meeting_sheet_action_id: number
+  due_date: string
+}
+
+export type Weekday = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"
+
+export const weekdayNameLabels: Record<Weekday, string> = {
+  monday: "Lunes",
+  tuesday: "Martes",
+  wednesday: "Miércoles",
+  thursday: "Jueves",
+  friday: "Viernes",
+  saturday: "Sábado",
+}
+
+export const WEEKDAYS: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+
+/** The four presets of an observation's «Visible para» (`App\Enums\ObservationScope`). */
+export type ObservationScope = "everyone" | "direction_and_psychopedagogy" | "psychopedagogue" | "author_only"
+
+export interface NamedRef {
+  id: number
+  name: string
+}
+
+/**
+ * A therapeutic companion: a record, not an account. `role` («Rol del
+ * acompañante») is free text, visible to whoever sees the companion. An ended
+ * companion (`ended_on`) is history: only Psicopedagogía gets those rows.
+ */
+export interface TherapeuticCompanion {
+  id: number
+  name: string
+  weekly_hours: number
+  days: Weekday[]
+  role?: string | null
+  ended_on?: string | null
+  student?: NamedRef | null
+  group?: NamedRef | null
+}
+
+export interface MeetingSheetType {
+  id: number
+  name: string
+  position: number
+}
+
+/** Header counts and «Carga de la semana»: never with whom. */
+export interface PsychopedagogyOverview {
+  week_start: string
+  week_end: string
+  meetings_this_week: number
+  active_companions: number
+  workload: { key: string; meeting_sheet_type_id: number | null; name: string | null; count: number }[]
+}
+
+export type PsychopedagogyMeetingKind = "individual_session" | "meeting"
+
+export interface PsychopedagogyMeeting {
+  id: number
+  kind: PsychopedagogyMeetingKind
+  sheet_type: NamedRef | null
+  scheduled_on: string
+  start_time: string
+  student: NamedRef | null
+  group: NamedRef | null
+  attendees: NamedRef[]
+  external_attendees: string | null
+  status: "scheduled" | "done"
+  has_note: boolean
+  sheet: { id: number; status: MeetingSheetStatus } | null
+}
+
+export type MeetingSheetStatus = "draft" | "confirmed"
+
+/** A row of «Planillas». Dirección gets only id, date, type and group. */
+export interface MeetingSheetRow {
+  id: number
+  held_on: string
+  sheet_type: NamedRef
+  group: NamedRef | null
+  status?: MeetingSheetStatus
+  students?: NamedRef[]
+  attendees?: NamedRef[]
+  actions_count?: number
+}
+
+export interface MeetingSheetFragment {
+  id?: number
+  student_id: number
+  content: string
+  scope: ObservationScope
+  landed?: boolean
+}
+
+export interface MeetingSheetActionItem {
+  id?: number
+  description: string
+  owner: NamedRef | null
+  due_on: string
+  done?: boolean
+}
+
+export interface MeetingSheet {
+  id: number
+  held_on: string
+  sheet_type: NamedRef
+  psychopedagogy_meeting_id: number | null
+  group: NamedRef | null
+  attendees: NamedRef[]
+  external_attendees: string | null
+  students: NamedRef[]
+  content: string
+  fragments: MeetingSheetFragment[]
+  actions: MeetingSheetActionItem[]
+  status: MeetingSheetStatus
+  confirmed_at: string | null
+  confirmed_by_name: string | null
+}
+
+/** An action of a meeting that is a task of mine (Inicio). */
+export interface MyMeetingAction {
+  id: number
+  description: string
+  due_on: string
+  done: boolean
+  meeting: { sheet_type_name: string; held_on: string }
+}
+
+// ── Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx) ────────────────────────────
+
+export type MaterialType = "guide" | "worksheet" | "activity" | "reading" | "presentation" | "assessment" | "other"
+
+/** Spanish labels for `App\Enums\MaterialType`. */
+export const materialTypeLabels: Record<MaterialType, string> = {
+  guide: "Guía",
+  worksheet: "Ficha de trabajo",
+  activity: "Actividad",
+  reading: "Lectura",
+  presentation: "Presentación",
+  assessment: "Evaluación",
+  other: "Otro",
+}
+
+/** The prefilter and the upload form's choices (`GET /api/v1/materials/options`). */
+export interface MaterialOptions {
+  subjects: { id: number; name: string }[]
+  /** `id` null is the «Sin grado» folder (groups without a grade). */
+  grades: { id: number | null; label: string }[]
+  /** Where the caller may upload; empty for Dirección. */
+  groups: { id: number; name: string; grade_id: number | null; subject_ids: number[] }[]
+}
+
+/** A program element a material can be tagged with (the subject's catalog). */
+export interface MaterialProgramItem {
+  id: number
+  code: string | null
+  name: string
+  type: string
+  catalog: string | null
+  framework: string | null
+}
+
+/**
+ * One row of «Lo generado» or «Institucional». `kind` "upload" is a file;
+ * "assessment" is a confirmed assessment (in «Lo generado», `id` is the
+ * assessment) or its catalog copy (in «Institucional», `id` is the material).
+ * In the catalog `group` is always null: what is published is the resource,
+ * not the case (screen 19 red line).
+ */
+export interface MaterialRow {
+  kind: "upload" | "assessment"
+  id: number
+  material_id: number | null
+  assessment_id: number | null
+  title: string
+  type: MaterialType
+  assessment_type?: string
+  tags: string[]
+  format: string | null
+  group: { id: number; name: string } | null
+  owner_name: string | null
+  is_mine: boolean
+  catalog_status: "published" | "removed" | null
+  published_at: string | null
+  published_by_name: string | null
+  curricular_items: { id: number; code: string | null; name: string }[]
+  created_at: string | null
+  administered_at?: string | null
+  can: { publish: boolean; remove_from_catalog: boolean; delete: boolean }
+}
+
+export interface MaterialDetail extends MaterialRow {
+  /** The cleaned content of an assessment's catalog copy; null for a file. */
+  content: unknown
+}
+
+/**
+ * «Sacaron del catálogo tu material X» (screen 19): to the owner, with the
+ * optional reason Psicopedagogía or Dirección wrote. `material_title` is
+ * resolved by the server while the owner can still see the material.
+ */
+export interface MaterialRemovedNotice {
+  type: "material_removed"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
+  reason: string | null
+  material_title?: string | null
+}
+
+/** «Se agregó un material al catálogo» (screen 19): to Psicopedagogía and Dirección. */
+export interface MaterialPublishedNotice {
+  type: "material_published"
+  material_id: number
+  subject_id: number
+  school_grade_id: number | null
 }

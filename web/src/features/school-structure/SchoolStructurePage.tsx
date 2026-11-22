@@ -4,20 +4,23 @@ import { canManageCurricularStructure } from "@/lib/permissions"
 import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 import { CurricularOfferingTab } from "./CurricularOfferingTab"
+import { InstitutionTab } from "./InstitutionTab"
 import { PlannersTab } from "./PlannersTab"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 
-type Tab = "offering" | "planners"
+type Tab = "institution" | "offering" | "planners"
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "institution", label: "Institución" },
   { id: "offering", label: "Oferta curricular" },
   { id: "planners", label: "Planificadores" },
 ]
 
 /**
  * «Colegio y estructura» (screen 23 of the living document), route `/colegio`.
- * For now only the two tabs the cycle needs (ClickUp 1dfd3mc4bgf): «Oferta
- * curricular» and «Planificadores». Institución, Grupos and Recursos
+ * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf), and
+ * «Institución» with only the meeting sheet types for now (ClickUp
+ * 1dfd3mc4bge). It still opens on «Oferta curricular». Grupos and Recursos
  * disponibles come later. Director only — UX gate; the server enforces it
  * (CurricularOfferingPolicy).
  */
@@ -58,7 +61,9 @@ export function SchoolStructurePage() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "offering" ? <CurricularOfferingTab /> : <PlannersTab />}
+        {tab === "institution" && <InstitutionTab />}
+        {tab === "offering" && <CurricularOfferingTab />}
+        {tab === "planners" && <PlannersTab />}
       </div>
     </div>
   )
