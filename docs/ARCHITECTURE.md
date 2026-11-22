@@ -320,6 +320,31 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
 | Mis horarios        | `TimetableSlot` (tabla `timetable_slots`) |
 | Salón               | `room`                                   |
 
+## Buscar en Aula+ (pantalla 01, PA-134)
+
+ClickUp 1dfd3mc56kr, P01-DEC-118. Botón «Buscar» fuera de la barra lateral
+(arriba del contenido, al lado de la barra, fijo al hacer scroll) y atajo
+Ctrl+K / ⌘K en todas las pantallas (`web/src/features/search/GlobalSearch.tsx`).
+
+- **Endpoint** `GET /api/v1/search?q=` (`GlobalSearchRequest`: `q` de 2 a 80
+  caracteres; `App\Services\Search\GlobalSearch`). Hasta 8 resultados por tipo.
+- **Quién ve qué**: los mismos scopes que los listados — `Student::visibleTo`,
+  `Group::visibleTo` y `Assessment::visibleTo` (espejo de `AssessmentPolicy::view`:
+  el docente, solo las suyas) — sobre el `SchoolScope`. Una evaluación además
+  exige que su grupo sea visible, porque el resultado abre sus evaluaciones.
+  Las secciones del menú se buscan en el SPA sobre `buildNavSections` (la
+  misma lista filtrada por rol que la barra lateral).
+- **Qué devuelve** (sin datos sensibles): alumno → nombre y grupo de su último
+  año; grupo → nombre, nivel y año; evaluación → título (`purpose`, como en el
+  Calendario), tipo, materia, grupo y fecha.
+- **Cómo compara**: solo nombres y títulos; sin mayúsculas ni tildes
+  (á é í ó ú ü ñ) con `LOWER` + `REPLACE` anidados, igual en SQLite y
+  PostgreSQL, sin extensiones (`unaccent` no se usa). Otros diacríticos
+  (à, ç…) sí distinguen. Los comodines `%` `_` del término son literales.
+- **Destinos**: ficha del alumno, perfil del grupo, evaluaciones del grupo o la
+  pantalla. Proyectos y clases se suman cuando existan (pantallas 18 y 14–17).
+- La consulta puede contener nombres de alumnos: no se loguea.
+
 ## Estado actual (scaffolding)
 
 **Implementado**

@@ -2048,3 +2048,39 @@ export const calendarBodyLabels: Record<CalendarBody, string> = {
   cambridge: "Cambridge",
   ib: "IB",
 }
+
+/**
+ * «Buscar en Aula+» (screen 01, P01-DEC-118 / PA-134, ClickUp 1dfd3mc56kr):
+ * `GET /api/v1/search`. Each result carries non-sensitive fields only, and
+ * only what the caller could open (decided server-side).
+ */
+export interface SearchStudentResult {
+  id: number
+  full_name: string
+  /** The group of the student's latest school year. */
+  group: { id: number; name: string } | null
+}
+
+export interface SearchGroupResult {
+  id: number
+  name: string
+  /** Education level label, or null for «Sin nivel». */
+  level: string | null
+  school_year: number | null
+}
+
+export interface SearchAssessmentResult {
+  id: number
+  title: string
+  type: AssessmentType
+  subject: string | null
+  group: { id: number; name: string }
+  /** `YYYY-MM-DD` or null. */
+  date: string | null
+}
+
+export interface SearchResults {
+  students: SearchStudentResult[]
+  groups: SearchGroupResult[]
+  assessments: SearchAssessmentResult[]
+}

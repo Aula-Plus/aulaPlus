@@ -32,6 +32,7 @@ use App\Http\Controllers\EducationLevelController;
 use App\Http\Controllers\ExternalMeasureController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupComparisonController;
@@ -460,6 +461,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // time (the Inicio's «Hoy en tu calendario» reads the same feed),
         // Direction's institutional events, the time/room of a class, and the
         // teacher's private «Mis horarios», which only pre-fills them.
+        // «Buscar en Aula+» (screen 01, P01-DEC-118 / PA-134, ClickUp
+        // 1dfd3mc56kr): what the caller could open, by name or title. The
+        // term may hold a student's name: it is never logged.
+        Route::get('/search', GlobalSearchController::class)->middleware('throttle:120,1');
         Route::get('/calendar', [CalendarController::class, 'index']);
         Route::post('/calendar-events', [CalendarController::class, 'store']);
         Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);

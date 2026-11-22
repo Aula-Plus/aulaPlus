@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Enums\AssessmentType;
+use App\Enums\Role;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\LogsUsageEvents;
 use Database\Factories\AssessmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -81,5 +83,20 @@ class Assessment extends Model
     {
         return $this->belongsToMany(UnitObjective::class, 'assessment_unit_objective')
             ->withTimestamps();
+    }
+
+    /**
+     * Scope a query to the assessments a user may open: every one for a
+     * school-wide role (director/psychopedagogue), only their own for a
+     * teacher. Mirrors AssessmentPolicy::view (the SchoolScope handles the
+     * tenant).
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->hasAnyRole(Role::schoolWideValues())) {
+            return $query;
+        }
+
+        return $query->where($query->qualifyColumn('teacher_id'), $user->id);
     }
 }
