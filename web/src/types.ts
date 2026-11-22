@@ -1942,6 +1942,44 @@ export interface CalendarItem {
   place: string | null
   assessment_type: AssessmentType | null
   can_edit: boolean
+  /** Institutional events only: who it concerns (empty = the whole school). */
+  audience?: EventAudienceTarget[]
+  /** Institutional events only: whether it concerns the caller's groups. */
+  for_me?: boolean
+}
+
+/**
+ * One target of an institutional event's audience (ClickUp 1dfd3mc55zp): a
+ * level, a generation (grade), a program within a generation, or one group.
+ * Labels are the catalog's own data; group names are the school's own
+ * («3° B»). `groups`: the groups it reaches in the event's school year,
+ * resolved by the server (the group itself, a generation's or program's
+ * groups; empty for a level). All of level/grade/group null = a group that
+ * was deleted (it reaches nobody).
+ */
+export interface EventAudienceTarget {
+  level: { id: number; key: string; label: string } | null
+  grade: { id: number; key: string; label: string } | null
+  framework: { id: number; name: string } | null
+  group: { id: number; name: string } | null
+  groups: { id: number; name: string }[]
+}
+
+/** A group Direction can pick, by its own name, with what decides which targets reach it. */
+export interface EventAudienceGroupOption {
+  id: number
+  name: string
+  school_year: number
+  level_id: number | null
+  grade_id: number | null
+  framework_ids: number[]
+}
+
+/** What Direction can pick as an event's audience (`/calendar-events/audience-options`). */
+export interface EventAudienceOptions {
+  levels: { id: number; key: string; label: string; grades: { id: number; key: string; label: string }[] }[]
+  frameworks: { id: number; name: string; education_levels: string[] | null }[]
+  groups: EventAudienceGroupOption[]
 }
 
 /** An institutional event as returned by `/api/v1/calendar-events`. */
@@ -1953,6 +1991,7 @@ export interface InstitutionalEvent {
   time: string | null
   location: string | null
   description: string | null
+  audience: EventAudienceTarget[]
 }
 
 /** ISO weekday (1 = lunes … 7 = domingo) → Spanish label. */
