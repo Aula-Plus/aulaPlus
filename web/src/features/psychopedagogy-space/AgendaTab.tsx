@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -94,31 +94,32 @@ function TeamAgenda({ onChanged }: { onChanged: () => void }) {
   const [sheetFor, setSheetFor] = useState<PsychopedagogyMeeting | null>(null)
   const options = useSheetFormOptions()
 
+  // Bumped after every change to reload the week shown.
+  const [reloadKey, setReloadKey] = useState(0)
+
   // Only the latest request counts: a slower answer for a week left behind
   // must not show under the current one.
-  const latest = useRef(0)
-
-  const load = useCallback(() => {
-    const mine = ++latest.current
+  useEffect(() => {
+    let cancelled = false
     fetchMeetings(week).then(
       (list) => {
-        if (mine !== latest.current) return
+        if (cancelled) return
         setError(null)
         setMeetings(list)
       },
       () => {
-        if (mine === latest.current) setError("No pudimos cargar la agenda.")
+        if (!cancelled) setError("No pudimos cargar la agenda.")
       },
     )
-  }, [week])
-
-  useEffect(() => {
-    load()
     return () => {
-      latest.current++
+      cancelled = true
     }
-  }, [load])
+  }, [week, reloadKey])
 
+  const load = () => setReloadKey((key) => key + 1)
+
+  // The list and the header counts («N encuentros esta semana») refresh
+  // right after scheduling or marking a meeting done.
   function changed() {
     load()
     onChanged()

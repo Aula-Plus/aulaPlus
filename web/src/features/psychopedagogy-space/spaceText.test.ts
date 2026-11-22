@@ -8,10 +8,13 @@ describe("spaceText", () => {
     expect(formatDays(["monday"])).toBe("Lunes")
   })
 
-  it("summarizes a companion without the reason", () => {
+  it("summarizes a companion with its role when it has one", () => {
     expect(formatHours(4.5)).toBe("4,5 h")
+    expect(companionSummary({ id: 1, name: "Romina Silva", weekly_hours: 6, days: ["tuesday", "thursday"] })).toBe(
+      "Romina Silva · 6 h semanales · Martes y jueves",
+    )
     expect(
-      companionSummary({ id: 1, name: "Romina Silva", weekly_hours: 6, days: ["tuesday", "thursday"], reason: "x" }),
-    ).toBe("Romina Silva · 6 h semanales · Martes y jueves")
+      companionSummary({ id: 1, name: "Romina Silva", weekly_hours: 6, days: ["tuesday"], role: "Apoyo en el aula" }),
+    ).toBe("Romina Silva (Apoyo en el aula) · 6 h semanales · Martes")
   })
 })

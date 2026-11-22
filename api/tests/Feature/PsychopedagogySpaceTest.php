@@ -14,6 +14,7 @@ use App\Notifications\MeetingActionAssignedNotification;
 use App\Notifications\MeetingSheetFragmentNotification;
 use App\Support\SchoolTime;
 use App\Support\Tenancy;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
@@ -71,20 +72,21 @@ it('keeps every teacher out of the whole space', function () {
     $this->getJson('/api/v1/meeting-sheet-types')->assertForbidden();
 });
 
-it('lets psychopedagogy load a companion and direction see it without the reason', function () {
+it('lets psychopedagogy load a companion and direction see it with its role', function () {
     ['psycho' => $psycho, 'director' => $director, 'lucia' => $lucia] = spaceScenario();
 
     Sanctum::actingAs($psycho);
     $id = $this->postJson('/api/v1/psychopedagogy/companions', [
         'student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6,
-        'days' => ['tuesday', 'thursday'], 'reason' => 'Apoyo en instancias de evaluación',
-    ])->assertCreated()->assertJsonPath('data.reason', 'Apoyo en instancias de evaluación')->json('data.id');
+        'days' => ['tuesday', 'thursday'], 'role' => 'Apoyo en el aula',
+    ])->assertCreated()->assertJsonPath('data.role', 'Apoyo en el aula')->assertJsonPath('data.ended_on', null)->json('data.id');
     expect($lucia->fresh()->has_therapeutic_companion)->toBeTrue();
 
     $this->getJson('/api/v1/psychopedagogy/companions')->assertOk()
-        ->assertJsonPath('data.0.reason', 'Apoyo en instancias de evaluación');
-    $this->patchJson("/api/v1/psychopedagogy/companions/{$id}", ['weekly_hours' => 4])->assertOk()
-        ->assertJsonPath('data.weekly_hours', 4);
+        ->assertJsonPath('data.0.role', 'Apoyo en el aula');
+    $this->patchJson("/api/v1/psychopedagogy/companions/{$id}", ['weekly_hours' => 4, 'role' => 'Acompañante en recreos'])->assertOk()
+        ->assertJsonPath('data.weekly_hours', 4)
+        ->assertJsonPath('data.role', 'Acompañante en recreos');
 
     Sanctum::actingAs($director);
     $row = $this->getJson('/api/v1/psychopedagogy/companions')->assertOk()->json('data.0');
@@ -93,32 +95,109 @@ it('lets psychopedagogy load a companion and direction see it without the reason
         ->and($row['group']['name'])->toBe('2°EMS-A')
         ->and($row['weekly_hours'])->toEqual(4)
         ->and($row['days'])->toBe(['tuesday', 'thursday'])
+        ->and($row['role'])->toBe('Acompañante en recreos')
+        // No hidden «motivo» left behind the role.
         ->and($row)->not->toHaveKey('reason');
     $this->getJson('/api/v1/psychopedagogy/overview')->assertOk()->assertJsonPath('data.active_companions', 1);
-    // Direction reads, never edits.
+    // Direction reads, never edits nor ends.
     $this->patchJson("/api/v1/psychopedagogy/companions/{$id}", ['weekly_hours' => 2])->assertForbidden();
-    $this->deleteJson("/api/v1/psychopedagogy/companions/{$id}")->assertForbidden();
-
-    Sanctum::actingAs($psycho);
-    $this->deleteJson("/api/v1/psychopedagogy/companions/{$id}")->assertNoContent();
-    expect($lucia->fresh()->has_therapeutic_companion)->toBeFalse();
+    $this->postJson("/api/v1/psychopedagogy/companions/{$id}/end", ['ended_on' => SchoolTime::today()->toDateString()])->assertForbidden();
+    // Ending replaced deleting: there is no delete route.
+    $this->deleteJson("/api/v1/psychopedagogy/companions/{$id}")->assertStatus(405);
+    expect(TherapeuticCompanion::withoutGlobalScopes()->findOrFail($id)->ended_on)->toBeNull();
 });
 
-it('shows the companion in the student file to its teacher, without the reason', function () {
-    ['school' => $school, 'psycho' => $psycho, 'mariana' => $teacher, 'lucia' => $lucia] = spaceScenario();
+it('ends a companion with a date and keeps it in the history only psychopedagogy reads', function () {
+    ['school' => $school, 'psycho' => $psycho, 'director' => $director, 'mariana' => $teacher, 'lucia' => $lucia] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    $old = $this->postJson('/api/v1/psychopedagogy/companions', [
+        'student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['monday'], 'role' => 'Apoyo en el aula',
+    ])->assertCreated()->json('data.id');
+    $today = SchoolTime::today()->toDateString();
+
+    $this->postJson("/api/v1/psychopedagogy/companions/{$old}/end", ['ended_on' => $today])->assertOk()
+        ->assertJsonPath('data.ended_on', $today);
+    expect($lucia->fresh()->has_therapeutic_companion)->toBeFalse();
+    // Not twice, and an ended companion is no longer edited.
+    $this->postJson("/api/v1/psychopedagogy/companions/{$old}/end", ['ended_on' => $today])
+        ->assertUnprocessable()->assertJsonValidationErrors(['ended_on']);
+    $this->patchJson("/api/v1/psychopedagogy/companions/{$old}", ['weekly_hours' => 2])
+        ->assertUnprocessable()->assertJsonValidationErrors(['ended_on']);
+
+    $new = $this->postJson('/api/v1/psychopedagogy/companions', [
+        'student_id' => $lucia->id, 'name' => 'Diego Núñez', 'weekly_hours' => 4, 'days' => ['friday'],
+    ])->assertCreated()->json('data.id');
+    expect($lucia->fresh()->has_therapeutic_companion)->toBeTrue();
+
+    // Psychopedagogy: the current one first, then the history.
+    $rows = $this->getJson('/api/v1/psychopedagogy/companions')->assertOk()->assertJsonCount(2, 'data')->json('data');
+    expect($rows[0]['id'])->toBe($new)
+        ->and($rows[0]['ended_on'])->toBeNull()
+        ->and($rows[1]['id'])->toBe($old)
+        ->and($rows[1]['ended_on'])->toBe($today);
+    $this->getJson('/api/v1/psychopedagogy/overview')->assertOk()->assertJsonPath('data.active_companions', 1);
+    $this->getJson("/api/v1/students/{$lucia->id}/tracking")->assertOk()
+        ->assertJsonCount(1, 'data.therapeutic_companions')
+        ->assertJsonPath('data.therapeutic_companions.0.name', 'Diego Núñez');
+
+    // Direction: only the current ones.
+    Sanctum::actingAs($director);
+    $this->getJson('/api/v1/psychopedagogy/companions')->assertOk()->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $new);
+    $this->getJson('/api/v1/psychopedagogy/overview')->assertOk()->assertJsonPath('data.active_companions', 1);
+
+    // The teacher's file row: only the current one.
+    Sanctum::actingAs($teacher);
+    $this->getJson("/api/v1/students/{$lucia->id}/tracking")->assertOk()
+        ->assertJsonCount(1, 'data.therapeutic_companions')
+        ->assertJsonPath('data.therapeutic_companions.0.name', 'Diego Núñez');
+    $this->postJson("/api/v1/psychopedagogy/companions/{$new}/end", ['ended_on' => $today])->assertForbidden();
+    expect(TherapeuticCompanion::withoutGlobalScopes()->findOrFail($new)->ended_on)->toBeNull();
+});
+
+it('validates the end date of a companion', function () {
+    ['psycho' => $psycho, 'lucia' => $lucia] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    $id = $this->postJson('/api/v1/psychopedagogy/companions', [
+        'student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['monday'],
+    ])->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/psychopedagogy/companions/{$id}/end", [])
+        ->assertUnprocessable()->assertJsonValidationErrors(['ended_on']);
+    $this->postJson("/api/v1/psychopedagogy/companions/{$id}/end", ['ended_on' => '20/11/2026'])
+        ->assertUnprocessable()->assertJsonValidationErrors(['ended_on']);
+    // An end date in the future would make it stop being current today.
+    $this->postJson("/api/v1/psychopedagogy/companions/{$id}/end", ['ended_on' => SchoolTime::today()->addDay()->toDateString()])
+        ->assertUnprocessable()->assertJsonValidationErrors(['ended_on']);
+    $this->postJson('/api/v1/psychopedagogy/companions', [
+        'student_id' => $lucia->id, 'name' => 'X', 'weekly_hours' => 2, 'days' => ['monday'], 'role' => str_repeat('a', 161),
+    ])->assertUnprocessable()->assertJsonValidationErrors(['role']);
+    $this->postJson('/api/v1/psychopedagogy/companions', [
+        'student_id' => $lucia->id, 'name' => 'X', 'weekly_hours' => 2, 'days' => ['monday'], 'ended_on' => '2026-01-01',
+    ])->assertCreated()->assertJsonPath('data.ended_on', null);
+    expect($lucia->fresh()->has_therapeutic_companion)->toBeTrue();
+});
+
+it('shows the current companion with its role in the file to its teacher, and to nobody else of the school', function () {
+    ['school' => $school, 'psycho' => $psycho, 'mariana' => $teacher, 'nico' => $otherTeacher, 'lucia' => $lucia] = spaceScenario();
     Tenancy::forSchool($school, fn () => TherapeuticCompanion::create([
-        'student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['tuesday'], 'reason' => 'Motivo reservado',
+        'student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['tuesday'], 'role' => 'Apoyo en el aula',
     ]));
 
     Sanctum::actingAs($teacher);
     $companion = $this->getJson("/api/v1/students/{$lucia->id}/tracking")->assertOk()->json('data.therapeutic_companions.0');
     expect($companion['name'])->toBe('Romina Silva')
         ->and($companion['days'])->toBe(['tuesday'])
+        ->and($companion['role'])->toBe('Apoyo en el aula')
         ->and($companion)->not->toHaveKey('reason');
+
+    // A teacher who doesn't teach Lucía can't open her file.
+    Sanctum::actingAs($otherTeacher);
+    $this->getJson("/api/v1/students/{$lucia->id}/tracking")->assertForbidden();
 
     Sanctum::actingAs($psycho);
     $this->getJson("/api/v1/students/{$lucia->id}/tracking")->assertOk()
-        ->assertJsonPath('data.therapeutic_companions.0.reason', 'Motivo reservado');
+        ->assertJsonPath('data.therapeutic_companions.0.role', 'Apoyo en el aula');
 });
 
 it('validates the companion record', function () {
@@ -220,7 +299,7 @@ it('splits a teachers meeting about two students, lands each fragment in its fil
 
     $luciaNote = Comment::withoutGlobalScopes()->where('commentable_id', $lucia->id)->sole();
     $nicolasNote = Comment::withoutGlobalScopes()->where('commentable_id', $nicolas->id)->sole();
-    expect($luciaNote->content)->toBe('Reunión de profesores · 18/11/2026 — El tiempo extendido de Lucía viene funcionando.')
+    expect($luciaNote->content)->toBe('Reunión de profesores · 18 nov 2026 — El tiempo extendido de Lucía viene funcionando.')
         ->and($luciaNote->visible_to)->toBeNull()
         ->and($luciaNote->content)->not->toContain('Nicolás')
         ->and($nicolasNote->visible_to)->toBe(['psychopedagogue']);
@@ -284,7 +363,7 @@ it('isolates schools', function () {
     $other = spaceScenario();
 
     [$companion, $sheet, $meeting] = Tenancy::forSchool($school, fn () => [
-        TherapeuticCompanion::create(['student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['monday'], 'reason' => 'x']),
+        TherapeuticCompanion::create(['student_id' => $lucia->id, 'name' => 'Romina Silva', 'weekly_hours' => 6, 'days' => ['monday'], 'role' => 'x']),
         MeetingSheet::create(['meeting_sheet_type_id' => $types[0]->id, 'held_on' => '2026-11-18', 'content' => 'x']),
         PsychopedagogyMeeting::create(['kind' => 'individual_session', 'scheduled_on' => '2026-11-16', 'start_time' => '10:00', 'student_id' => $lucia->id]),
     ]);
@@ -294,6 +373,7 @@ it('isolates schools', function () {
     $this->getJson('/api/v1/psychopedagogy/sheets')->assertOk()->assertJsonCount(0, 'data');
     $this->getJson("/api/v1/psychopedagogy/sheets/{$sheet->id}")->assertNotFound();
     $this->patchJson("/api/v1/psychopedagogy/companions/{$companion->id}", ['name' => 'Y'])->assertNotFound();
+    $this->postJson("/api/v1/psychopedagogy/companions/{$companion->id}/end", ['ended_on' => SchoolTime::today()->toDateString()])->assertNotFound();
     $this->postJson("/api/v1/psychopedagogy/meetings/{$meeting->id}/complete")->assertNotFound();
     $this->postJson('/api/v1/psychopedagogy/companions', [
         'student_id' => $lucia->id, 'name' => 'X', 'weekly_hours' => 2, 'days' => ['monday'],
@@ -414,4 +494,60 @@ it('lets the companion records decide the student flag, not the student form', f
         ->assertOk()
         ->assertJsonPath('data.has_therapeutic_companion', true)
         ->assertJsonPath('data.therapeutic_companion_records', false);
+});
+
+it('says why a confirmation is rejected, in Spanish and with a stable reason', function () {
+    ['psycho' => $psycho, 'lucia' => $lucia, 'nicolas' => $nicolas, 'types' => $types] = spaceScenario();
+    Sanctum::actingAs($psycho);
+    $base = ['meeting_sheet_type_id' => $types[1]->id, 'held_on' => '2026-11-17', 'student_ids' => [$lucia->id], 'content' => 'Entrevista.'];
+
+    $empty = $this->postJson('/api/v1/psychopedagogy/sheets', $base)->assertCreated()->json('data.id');
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$empty}/confirm")->assertUnprocessable()
+        ->assertJsonPath('reason', 'no_fragments')
+        ->assertJsonPath('message', 'Escribí al menos un fragmento antes de confirmar.');
+
+    $payload = [...$base, 'fragments' => [['student_id' => $lucia->id, 'content' => 'x', 'scope' => 'psychopedagogue']]];
+    $id = $this->postJson('/api/v1/psychopedagogy/sheets', $payload)->assertCreated()->json('data.id');
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$id}/confirm")->assertOk();
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$id}/confirm")->assertUnprocessable()
+        ->assertJsonPath('reason', 'already_confirmed')
+        ->assertJsonPath('message', 'Esta planilla ya se confirmó.');
+    $this->putJson("/api/v1/psychopedagogy/sheets/{$id}", $payload)->assertUnprocessable()
+        ->assertJsonPath('reason', 'already_confirmed');
+
+    $removed = $this->postJson('/api/v1/psychopedagogy/sheets', [...$base, 'student_ids' => [$nicolas->id],
+        'fragments' => [['student_id' => $nicolas->id, 'content' => 'x', 'scope' => 'everyone']]])->assertCreated()->json('data.id');
+    $nicolas->delete();
+    $this->postJson("/api/v1/psychopedagogy/sheets/{$removed}/confirm")->assertUnprocessable()
+        ->assertJsonPath('reason', 'student_removed');
+});
+
+it('rejects people and students of another school in meetings and sheets', function () {
+    ['psycho' => $psycho, 'lucia' => $lucia, 'types' => $types] = spaceScenario();
+    $other = spaceScenario();
+    Sanctum::actingAs($psycho);
+
+    $this->postJson('/api/v1/psychopedagogy/meetings', [
+        'kind' => 'meeting', 'meeting_sheet_type_id' => $types[0]->id, 'scheduled_on' => '2026-11-18', 'start_time' => '14:00',
+        'attendee_ids' => [$psycho->id, $other['mariana']->id],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['attendee_ids.1']);
+    $this->postJson('/api/v1/psychopedagogy/meetings', [
+        'kind' => 'individual_session', 'scheduled_on' => '2026-11-18', 'start_time' => '14:00', 'student_id' => $other['lucia']->id,
+    ])->assertUnprocessable()->assertJsonValidationErrors(['student_id']);
+
+    $base = ['meeting_sheet_type_id' => $types[0]->id, 'held_on' => '2026-11-18', 'content' => 'x'];
+    $this->postJson('/api/v1/psychopedagogy/sheets', [...$base, 'student_ids' => [$lucia->id, $other['lucia']->id]])
+        ->assertUnprocessable()->assertJsonValidationErrors(['student_ids.1']);
+    $this->postJson('/api/v1/psychopedagogy/sheets', [...$base, 'student_ids' => [$lucia->id], 'attendee_ids' => [$other['psycho']->id]])
+        ->assertUnprocessable()->assertJsonValidationErrors(['attendee_ids.0']);
+    $this->postJson('/api/v1/psychopedagogy/sheets', [...$base, 'student_ids' => [$lucia->id], 'actions' => [
+        ['description' => 'Llamar a la familia', 'owner_id' => $other['mariana']->id, 'due_on' => '2026-11-27'],
+    ]])->assertUnprocessable()->assertJsonValidationErrors(['actions.0.owner_id']);
+    expect(MeetingSheet::withoutGlobalScopes()->count())->toBe(0)
+        ->and(PsychopedagogyMeeting::withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('writes server-side dates as the app shows them', function () {
+    expect(SchoolTime::shortDate(CarbonImmutable::parse('2026-11-20')))->toBe('20 nov 2026')
+        ->and(SchoolTime::shortDate(CarbonImmutable::parse('2026-09-05')))->toBe('05 sept 2026');
 });

@@ -411,7 +411,7 @@ export function canOpenAccommodationsInbox(user: User | null): boolean {
 
 /**
  * Enter the space: Psicopedagogía, and Dirección with its limited view (the
- * week's workload, the companions without the reason, that each sheet
+ * week's workload, the current companions, that each sheet
  * existed). No teacher enters. Mirror of `PsychopedagogyMeetingPolicy::
  * viewWorkload` / `TherapeuticCompanionPolicy::viewAny` /
  * `MeetingSheetPolicy::viewAny`.
@@ -421,7 +421,7 @@ export function canOpenPsychopedagogySpace(user: User | null): boolean {
 }
 
 /**
- * The agenda rows, the companions' reason, the full sheets and every write in
+ * The agenda rows, the companions' history, the full sheets and every write in
  * the space: Psicopedagogía only. Mirror of `PsychopedagogyMeetingPolicy::
  * viewAny` / `MeetingSheetPolicy::viewContent`.
  */

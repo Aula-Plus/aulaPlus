@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { PageHeader } from "@/components/ui/page-header"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -24,7 +24,7 @@ const TABS: { id: Tab; label: string; param: string }[] = [
  * and the meeting sheets.
  *
  * Psicopedagogía works here. Dirección gets its limited view: the week's
- * workload by type, the companions without the reason and that each sheet
+ * workload by type, the current companions (no history) and that each sheet
  * existed. No teacher enters (P10-AGE-01). All of this is UX only: the server
  * answers 403 to a teacher and leaves out of Dirección's payloads what it
  * may not read.
@@ -37,9 +37,21 @@ export function PsychopedagogySpacePage() {
   const allowed = canOpenPsychopedagogySpace(user)
   const works = canWorkInPsychopedagogySpace(user)
 
+  // Reloaded after every change in a tab (scheduling, marking done,
+  // companions); only the latest answer counts, so a slow earlier one never
+  // puts back an old count.
+  const overviewRequest = useRef(0)
   const loadOverview = useCallback(() => {
     if (!allowed) return
-    fetchOverview().then(setOverview, () => setOverview(null))
+    const mine = ++overviewRequest.current
+    fetchOverview().then(
+      (next) => {
+        if (mine === overviewRequest.current) setOverview(next)
+      },
+      () => {
+        if (mine === overviewRequest.current) setOverview(null)
+      },
+    )
   }, [allowed])
 
   useEffect(() => {

@@ -138,12 +138,13 @@ class StudentTrackingResource extends JsonResource
                 fn () => AlertResource::collection($alerts)
             ),
             'open_alerts_count' => $openAlertsCount,
-            // Who accompanies the student (screen 10, ClickUp 1dfd3mc4bge):
-            // everyone who sees the file gets name, weekly hours and days —
-            // the teacher's only window on the companion — and only
-            // psychopedagogy also the reason (P10-DEC-09). Read per request,
-            // never from the shared cache.
-            'therapeutic_companions' => $this->companions($student, $user),
+            // Who accompanies the student now (screen 10, ClickUp 1dfd3mc4bge):
+            // everyone who sees the file gets name, weekly hours, days and the
+            // companion's role (ClickUp decision: the role is visible to
+            // whoever sees the student has a companion). Ended companions are
+            // history, kept for psychopedagogy's Acompañantes tab. Read per
+            // request, never from the shared cache.
+            'therapeutic_companions' => $this->companions($student),
             // Role-filtered upstream (StudentGradeAccess): a teacher only gets the
             // subjects they teach unless direction opened more, and no general
             // average at all while limited to their own subjects.
@@ -163,17 +164,15 @@ class StudentTrackingResource extends JsonResource
     /**
      * @return list<array<string, mixed>>
      */
-    protected function companions(Student $student, User $user): array
+    protected function companions(Student $student): array
     {
-        $withReason = $user->can('viewReason', TherapeuticCompanion::class);
-
-        return $student->therapeuticCompanions()->orderBy('name')->get()
+        return $student->therapeuticCompanions()->current()->orderBy('name')->get()
             ->map(fn (TherapeuticCompanion $companion): array => [
                 'id' => $companion->id,
                 'name' => $companion->name,
                 'weekly_hours' => $companion->weekly_hours,
                 'days' => $companion->days,
-                ...($withReason ? ['reason' => $companion->reason] : []),
+                'role' => $companion->role,
             ])->values()->all();
     }
 

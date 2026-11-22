@@ -3,9 +3,11 @@
 namespace App\Http\Requests;
 
 use App\Enums\Weekday;
+use App\Models\TherapeuticCompanion;
 use App\Support\Tenancy;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * Create (POST, with `student_id`) or edit (PATCH) a therapeutic companion
@@ -35,7 +37,23 @@ class TherapeuticCompanionRequest extends FormRequest
             'weekly_hours' => [$required, 'numeric', 'min:0.5', 'max:60', 'multiple_of:0.5'],
             'days' => [$required, 'array', 'min:1', 'max:6'],
             'days.*' => ['string', 'distinct', Rule::in(Weekday::values())],
-            'reason' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            // «Rol del acompañante»: free text, no fixed options.
+            'role' => ['sometimes', 'nullable', 'string', 'max:160'],
         ];
+    }
+
+    /**
+     * An ended companion is history: it is no longer edited.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $companion = $this->route('companion');
+            if ($companion instanceof TherapeuticCompanion && ! $companion->isCurrent()) {
+                $validator->errors()->add('ended_on', 'Este acompañante ya dejó de acompañar; queda solo en el historial.');
+            }
+        }];
     }
 }

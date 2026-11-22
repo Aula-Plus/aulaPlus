@@ -97,7 +97,7 @@ English; user-facing Spanish labels live in the frontend (`web/src/types.ts`).
 >
 > For now the therapeutic companion has **no role**: it is a record that
 > psychopedagogy loads (`TherapeuticCompanion`: name, weekly hours, days,
-> reason; ClickUp 1dfd3mc4bge), not a user account. A role may be added later
+> the companion's role, end date; ClickUp 1dfd3mc4bge), not a user account. A role may be added later
 > if it turns out useful or necessary.
 
 ## Security rules (hard requirements)

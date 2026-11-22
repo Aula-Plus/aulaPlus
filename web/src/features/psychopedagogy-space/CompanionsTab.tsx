@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
+import { isAxiosError } from "axios"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
   Dialog,
   DialogContent,
@@ -15,25 +15,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Textarea } from "@/components/ui/textarea"
+import { toDay } from "@/features/calendar/calendarDates"
 import { fetchStudents } from "@/features/students/studentsApi"
+import { formatShortDate } from "@/lib/utils"
 import { WEEKDAYS, weekdayNameLabels, type Student, type TherapeuticCompanion, type Weekday } from "@/types"
-import { createCompanion, deleteCompanion, fetchCompanions, updateCompanion } from "./psychopedagogySpaceApi"
+import { createCompanion, endCompanion, fetchCompanions, updateCompanion } from "./psychopedagogySpaceApi"
 import { formatDays, formatHours } from "./spaceText"
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
 /**
- * «Acompañantes» (P10-ACO-02): who accompanies each student, weekly hours and
- * days. Psicopedagogía assigns and edits, with the reason; Dirección reads the
- * full list without it (P10-DEC-09) — the server never sends it to Dirección,
- * so the column is only drawn when it came.
+ * «Acompañantes» (P10-ACO-02): who accompanies each student, weekly hours,
+ * days and the companion's role (free text, visible to whoever sees the
+ * companion — ClickUp 1dfd3mc4bge). Psicopedagogía assigns, edits and ends a
+ * companion («Dejó de acompañar»: an end date, the record stays in the
+ * student's history). Dirección reads the current ones; the server never sends
+ * it the history.
  */
 export function CompanionsTab({ works, onChanged }: { works: boolean; onChanged: () => void }) {
   const [companions, setCompanions] = useState<TherapeuticCompanion[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<TherapeuticCompanion | "new" | null>(null)
+  const [ending, setEnding] = useState<TherapeuticCompanion | null>(null)
 
   const load = useCallback(() => {
     fetchCompanions().then(setCompanions, () => setError("No pudimos cargar los acompañantes."))
@@ -48,14 +52,8 @@ export function CompanionsTab({ works, onChanged }: { works: boolean; onChanged:
     onChanged()
   }
 
-  async function remove(companion: TherapeuticCompanion) {
-    try {
-      await deleteCompanion(companion.id)
-      changed()
-    } catch {
-      setError("No pudimos quitar el acompañante.")
-    }
-  }
+  const current = companions?.filter((companion) => !companion.ended_on) ?? []
+  const history = companions?.filter((companion) => companion.ended_on) ?? []
 
   return (
     <SectionCard
@@ -71,8 +69,8 @@ export function CompanionsTab({ works, onChanged }: { works: boolean; onChanged:
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
       {companions === null ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
-      ) : companions.length === 0 ? (
-        <EmptyState message="No hay acompañantes registrados." />
+      ) : current.length === 0 ? (
+        <EmptyState message="No hay acompañantes vigentes." />
       ) : (
         <Table>
           <TableHeader>
@@ -80,38 +78,30 @@ export function CompanionsTab({ works, onChanged }: { works: boolean; onChanged:
               <TableHead>Acompañante</TableHead>
               <TableHead>Alumno</TableHead>
               <TableHead>Grupo</TableHead>
+              <TableHead>Rol del acompañante</TableHead>
               <TableHead>Horas semanales</TableHead>
               <TableHead>Días</TableHead>
-              {works && <TableHead>Motivo</TableHead>}
               {works && <TableHead className="sr-only">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {companions.map((companion) => (
+            {current.map((companion) => (
               <TableRow key={companion.id}>
                 <TableCell>{companion.name}</TableCell>
                 <TableCell>{companion.student?.name ?? "—"}</TableCell>
                 <TableCell>{companion.group?.name ?? "—"}</TableCell>
+                <TableCell>{companion.role || "—"}</TableCell>
                 <TableCell>{formatHours(companion.weekly_hours)}</TableCell>
                 <TableCell>{formatDays(companion.days)}</TableCell>
-                {works && <TableCell>{companion.reason || "—"}</TableCell>}
                 {works && (
                   <TableCell>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => setEditing(companion)}>
                         Editar
                       </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button size="sm" variant="ghost">
-                            Quitar
-                          </Button>
-                        }
-                        title="Quitar acompañante"
-                        description={`Se deja de registrar a ${companion.name} como acompañante de ${companion.student?.name ?? "este alumno"}.`}
-                        confirmLabel="Quitar"
-                        onConfirm={() => void remove(companion)}
-                      />
+                      <Button size="sm" variant="ghost" onClick={() => setEnding(companion)}>
+                        Dejó de acompañar
+                      </Button>
                     </div>
                   </TableCell>
                 )}
@@ -120,11 +110,50 @@ export function CompanionsTab({ works, onChanged }: { works: boolean; onChanged:
           </TableBody>
         </Table>
       )}
+      {works && history.length > 0 && (
+        <div className="mt-6 grid gap-2" data-testid="companions-history">
+          <h3 className="text-sm font-medium">Historial: ya no acompañan</h3>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Acompañante</TableHead>
+                <TableHead>Alumno</TableHead>
+                <TableHead>Rol del acompañante</TableHead>
+                <TableHead>Horas semanales</TableHead>
+                <TableHead>Días</TableHead>
+                <TableHead>Hasta</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {history.map((companion) => (
+                <TableRow key={companion.id}>
+                  <TableCell>{companion.name}</TableCell>
+                  <TableCell>{companion.student?.name ?? "—"}</TableCell>
+                  <TableCell>{companion.role || "—"}</TableCell>
+                  <TableCell>{formatHours(companion.weekly_hours)}</TableCell>
+                  <TableCell>{formatDays(companion.days)}</TableCell>
+                  <TableCell>{formatShortDate(companion.ended_on)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       <p className="mt-3 text-sm text-muted-foreground">
         {works
-          ? "Psicopedagogía asigna el acompañante y fija sus horas y días. El colegio contrata y paga; acá solo queda registrada la cobertura, no el contrato."
-          : "Ves quién entra al colegio, a quién acompaña, qué días y cuántas horas. El motivo del acompañamiento es del equipo de Psicopedagogía."}
+          ? "Psicopedagogía asigna el acompañante y fija su rol, sus horas y días. Cuando deja de acompañar se le pone fecha de fin y queda en el historial del alumno. El colegio contrata y paga; acá solo queda registrada la cobertura, no el contrato."
+          : "Ves quién entra al colegio, a quién acompaña, con qué rol, qué días y cuántas horas."}
       </p>
+      {ending && (
+        <EndCompanionDialog
+          companion={ending}
+          onClose={() => setEnding(null)}
+          onEnded={() => {
+            setEnding(null)
+            changed()
+          }}
+        />
+      )}
       {editing && (
         <CompanionDialog
           companion={editing === "new" ? null : editing}
@@ -153,7 +182,7 @@ function CompanionDialog({
   const [name, setName] = useState(companion?.name ?? "")
   const [hours, setHours] = useState(companion ? String(companion.weekly_hours) : "")
   const [days, setDays] = useState<Weekday[]>(companion?.days ?? [])
-  const [reason, setReason] = useState(companion?.reason ?? "")
+  const [role, setRole] = useState(companion?.role ?? "")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -169,7 +198,7 @@ function CompanionDialog({
       return
     }
     setSaving(true)
-    const input = { name: name.trim(), weekly_hours: weekly, days, reason: reason.trim() || null }
+    const input = { name: name.trim(), weekly_hours: weekly, days, role: role.trim() || null }
     try {
       if (companion) await updateCompanion(companion.id, input)
       else await createCompanion({ ...input, student_id: Number(studentId) })
@@ -239,8 +268,11 @@ function CompanionDialog({
             </div>
           </fieldset>
           <div className="grid gap-2">
-            <Label htmlFor="companion-reason">Motivo (solo lo ve Psicopedagogía)</Label>
-            <Textarea id="companion-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <Label htmlFor="companion-role">Rol del acompañante</Label>
+            <Input id="companion-role" maxLength={160} value={role} onChange={(e) => setRole(e.target.value)} />
+            <p className="text-xs text-muted-foreground">
+              Lo ven Dirección y los docentes del alumno, junto con el nombre, las horas y los días.
+            </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
@@ -250,6 +282,75 @@ function CompanionDialog({
           </Button>
           <Button type="button" onClick={() => void save()} disabled={saving}>
             {saving ? "Guardando…" : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** «Dejó de acompañar»: the end date (today by default, never in the future). */
+function EndCompanionDialog({
+  companion,
+  onClose,
+  onEnded,
+}: {
+  companion: TherapeuticCompanion
+  onClose: () => void
+  onEnded: () => void
+}) {
+  const [today] = useState(() => toDay(new Date()))
+  const [endedOn, setEndedOn] = useState(today)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setError(null)
+    if (!endedOn) {
+      setError("Indicá la fecha de fin.")
+      return
+    }
+    setSaving(true)
+    try {
+      await endCompanion(companion.id, endedOn)
+      onEnded()
+    } catch (err) {
+      setError(
+        isAxiosError(err) && err.response?.status === 422
+          ? (err.response.data?.errors?.ended_on?.[0] ?? "Revisá la fecha de fin.")
+          : "No pudimos guardar la fecha de fin.",
+      )
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Dejó de acompañar</DialogTitle>
+          <DialogDescription>
+            {companion.name} deja de acompañar a {companion.student?.name ?? "este alumno"}. Queda en el historial del
+            alumno con esta fecha de fin.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="companion-ended-on">Fecha de fin</Label>
+          <Input
+            id="companion-ended-on"
+            type="date"
+            max={today}
+            value={endedOn}
+            onChange={(e) => setEndedOn(e.target.value)}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={() => void save()} disabled={saving}>
+            {saving ? "Guardando…" : "Guardar fecha de fin"}
           </Button>
         </DialogFooter>
       </DialogContent>

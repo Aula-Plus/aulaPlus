@@ -12,7 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * The part of a sheet that goes to one discussed student's file, with the
  * scope it will have there (P10-PLA-05). Written by psychopedagogy for now
- * (`source` = manual): the AI split proposal is pending a product answer.
+ * (`source` = manual): an AI split proposal waits until family data exists
+ * (product answer C in ClickUp 1dfd3mc4bge).
  * On confirmation it becomes an observation (`comment_id`).
  */
 #[Fillable(['meeting_sheet_id', 'student_id', 'content', 'scope', 'source', 'comment_id'])]

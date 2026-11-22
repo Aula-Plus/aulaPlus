@@ -7,7 +7,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatShortDate } from "@/lib/utils"
 import type { MeetingSheet, MeetingSheetRow } from "@/types"
-import { confirmSheet, fetchSheet, fetchSheets } from "./psychopedagogySpaceApi"
+import { confirmSheet, fetchSheet, fetchSheets, sheetRejection } from "./psychopedagogySpaceApi"
 import { SheetEditorDialog } from "./SheetEditorDialog"
 import { useSheetFormOptions } from "./useSheetFormOptions"
 import { observationScopeLabels } from "./spaceText"
@@ -59,6 +59,7 @@ export function SheetsTab({ works }: { works: boolean }) {
         return [...(previous ?? []), ...result.rows.filter((sheet) => !seen.has(sheet.id))]
       })
       setPage({ current: result.meta.current_page, last: result.meta.last_page })
+      setError(null)
     } catch {
       if (mine === generation.current) setError("No pudimos cargar más planillas.")
     } finally {
@@ -89,7 +90,29 @@ export function SheetsTab({ works }: { works: boolean }) {
     )
   }
 
-  return <TeamSheets sheets={sheets} error={error} reload={load} more={more} />
+  // A saved or confirmed sheet updates its own row in place, so the list
+  // reflects it at once (e.g. «Sin confirmar» → «Repartida») and keeps the
+  // pages already loaded with «Ver más».
+  function replaceRow(sheet: MeetingSheet) {
+    setSheets((previous) =>
+      (previous ?? []).map((row) =>
+        row.id === sheet.id
+          ? {
+              ...row,
+              held_on: sheet.held_on,
+              sheet_type: sheet.sheet_type,
+              group: sheet.group,
+              status: sheet.status,
+              students: sheet.students,
+              attendees: sheet.attendees,
+              actions_count: sheet.actions.length,
+            }
+          : row,
+      ),
+    )
+  }
+
+  return <TeamSheets sheets={sheets} error={error} reload={load} replaceRow={replaceRow} more={more} />
 }
 
 function scopeOf(sheet: { group: { name: string } | null }): string {
@@ -113,7 +136,6 @@ function SheetsTable({
           <TableHead>Fecha</TableHead>
           <TableHead>Tipo</TableHead>
           <TableHead>Alcance</TableHead>
-          {onOpen && <TableHead>Alumnos</TableHead>}
           {onOpen && <TableHead>Estado</TableHead>}
           {onOpen && <TableHead className="sr-only">Abrir</TableHead>}
         </TableRow>
@@ -124,7 +146,6 @@ function SheetsTable({
             <TableCell>{formatShortDate(sheet.held_on)}</TableCell>
             <TableCell>{sheet.sheet_type.name}</TableCell>
             <TableCell>{scopeOf(sheet)}</TableCell>
-            {onOpen && <TableCell>{sheet.students?.map((student) => student.name).join(", ")}</TableCell>}
             {onOpen && (
               <TableCell>
                 {sheet.status === "confirmed" ? (
@@ -152,11 +173,13 @@ function TeamSheets({
   sheets,
   error,
   reload,
+  replaceRow,
   more,
 }: {
   sheets: MeetingSheetRow[] | null
   error: string | null
   reload: () => void
+  replaceRow: (sheet: MeetingSheet) => void
   more: ReactNode
 }) {
   const options = useSheetFormOptions()
@@ -204,7 +227,7 @@ function TeamSheets({
           options={options}
           onChanged={(sheet) => {
             setOpen(sheet)
-            reload()
+            replaceRow(sheet)
           }}
         />
       )}
@@ -248,8 +271,17 @@ export function SheetDetail({
     setError(null)
     try {
       onChanged(await confirmSheet(sheet.id))
-    } catch {
-      setError("No pudimos confirmar el reparto. Revisá que haya al menos un fragmento.")
+    } catch (err) {
+      const rejection = sheetRejection(err)
+      if (rejection?.reason === "already_confirmed") {
+        // Someone else confirmed it meanwhile: show it as it is now.
+        try {
+          onChanged(await fetchSheet(sheet.id))
+        } catch {
+          // The message below still says what happened.
+        }
+      }
+      setError(rejection?.message ?? "No pudimos confirmar el reparto. Probá de nuevo.")
     } finally {
       setConfirming(false)
     }

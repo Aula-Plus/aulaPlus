@@ -59,7 +59,7 @@ class PsychopedagogyMeetingController extends Controller
             'week_start' => $start->toDateString(),
             'week_end' => $end->toDateString(),
             'meetings_this_week' => $meetings->count(),
-            'active_companions' => TherapeuticCompanion::query()->whereHas('student')->count(),
+            'active_companions' => TherapeuticCompanion::query()->current()->whereHas('student')->count(),
             'workload' => [
                 [
                     'key' => PsychopedagogyMeetingKind::IndividualSession->value,

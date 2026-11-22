@@ -101,7 +101,9 @@ class MeetingSheetController extends Controller
             // Under a lock, so a confirmation running at the same time either
             // lands before (and this answers 422) or sees this edit whole.
             $locked = MeetingSheet::query()->whereKey($sheet->id)->lockForUpdate()->firstOrFail();
-            abort_if($locked->isConfirmed(), 422, 'A confirmed sheet can no longer be edited.');
+            if ($locked->isConfirmed()) {
+                MeetingSheetSplit::reject('already_confirmed');
+            }
 
             $sheet->update($this->attributes($request));
             $this->syncParts($sheet, $request);

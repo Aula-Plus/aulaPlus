@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { addDays, toDay } from "@/features/calendar/calendarDates"
 import { getCurrentSchoolYear } from "@/lib/schoolYear"
 import type { MeetingSheet, ObservationScope, PsychopedagogyMeeting } from "@/types"
-import { saveSheet } from "./psychopedagogySpaceApi"
+import { saveSheet, sheetRejection } from "./psychopedagogySpaceApi"
 import type { SheetFormOptions } from "./useSheetFormOptions"
 import { OBSERVATION_SCOPES, observationScopeLabels } from "./spaceText"
 
@@ -146,8 +146,8 @@ export function SheetEditorDialog({
         })),
       })
       onSaved(saved)
-    } catch {
-      setError("No pudimos guardar la planilla. Revisá los datos.")
+    } catch (err) {
+      setError(sheetRejection(err)?.message ?? "No pudimos guardar la planilla. Revisá los datos.")
       setSaving(false)
     }
   }

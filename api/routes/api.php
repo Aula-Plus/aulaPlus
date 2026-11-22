@@ -480,7 +480,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Screen 10 «Espacio de psicopedagogía» (ClickUp 1dfd3mc4bge): the
         // team's agenda, the therapeutic companions and the meeting sheets.
         // No teacher enters (every endpoint 403s for them); direction gets
-        // the workload counts, the companions without the reason and that
+        // the workload counts, the current companions (no history) and that
         // each sheet existed. The actions agreed in a sheet are tasks of
         // their owner, whatever their role (`meeting-actions`).
         Route::prefix('psychopedagogy')->group(function (): void {
@@ -493,7 +493,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
             Route::get('/companions', [TherapeuticCompanionController::class, 'index']);
             Route::post('/companions', [TherapeuticCompanionController::class, 'store']);
             Route::patch('/companions/{companion}', [TherapeuticCompanionController::class, 'update'])->whereNumber('companion');
-            Route::delete('/companions/{companion}', [TherapeuticCompanionController::class, 'destroy'])->whereNumber('companion');
+            Route::post('/companions/{companion}/end', [TherapeuticCompanionController::class, 'end'])->whereNumber('companion');
             Route::get('/sheets', [MeetingSheetController::class, 'index']);
             Route::post('/sheets', [MeetingSheetController::class, 'store']);
             Route::get('/sheets/{sheet}', [MeetingSheetController::class, 'show'])->whereNumber('sheet');

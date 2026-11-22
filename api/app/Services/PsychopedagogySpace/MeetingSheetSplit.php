@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\MeetingActionAssignedNotification;
 use App\Notifications\MeetingSheetFragmentNotification;
 use App\Support\SchoolTime;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -30,9 +31,13 @@ use Illuminate\Support\Facades\DB;
  * fragment reaches no teacher. Each action owner is notified and gets the
  * action as a task in their Inicio.
  *
- * The fragments are written by hand for now. An AI proposal step (pending a
- * product answer about adults' names, ClickUp 1dfd3mc4bge) would fill the
- * draft fragments before this; confirmation stays the only way into a file.
+ * The fragments are written by hand: an AI proposal step waits until family
+ * data exists (product answer C, ClickUp 1dfd3mc4bge). Confirmation stays the
+ * only way into a file.
+ *
+ * A rejected confirmation answers 422 with a stable `reason`
+ * (`already_confirmed`, `no_fragments`, `student_removed`) so the SPA can say
+ * what to do; the `message` is already the Spanish text to show.
  */
 class MeetingSheetSplit
 {
@@ -44,18 +49,20 @@ class MeetingSheetSplit
             // «Editar antes» racing this one must not land the fragments twice
             // or swap them while they are being copied into the files.
             $locked = MeetingSheet::query()->whereKey($sheet->id)->lockForUpdate()->firstOrFail();
-            abort_if($locked->isConfirmed(), 422, 'This sheet was already confirmed.');
+            if ($locked->isConfirmed()) {
+                static::reject('already_confirmed');
+            }
 
             $sheet->setRawAttributes($locked->getAttributes(), true);
             $sheet->load(['sheetType', 'fragments.student', 'attendees', 'actions.owner']);
 
-            abort_if($sheet->fragments->isEmpty(), 422, 'Write at least one fragment before confirming.');
+            if ($sheet->fragments->isEmpty()) {
+                static::reject('no_fragments');
+            }
             // A discussed student removed while the sheet was a draft.
-            abort_if(
-                $sheet->fragments->contains(fn (MeetingSheetFragment $fragment) => $fragment->student === null),
-                422,
-                'A discussed student is no longer enrolled; edit the sheet before confirming.',
-            );
+            if ($sheet->fragments->contains(fn (MeetingSheetFragment $fragment) => $fragment->student === null)) {
+                static::reject('student_removed');
+            }
 
             foreach ($sheet->fragments as $fragment) {
                 $comment = new Comment([
@@ -63,8 +70,10 @@ class MeetingSheetSplit
                     'commentable_type' => Student::class,
                     'commentable_id' => $fragment->student_id,
                     // Where it comes from, in the file's own words: the
-                    // school's type name (data) and the date.
-                    'content' => $sheet->sheetType->name.' · '.$sheet->held_on->format('d/m/Y').' — '.$fragment->content,
+                    // school's type name (data) and the date, written as the
+                    // app writes dates («20 nov 2026»). `held_on` is a calendar
+                    // date (the school's local day), so no timezone shift.
+                    'content' => $sheet->sheetType->name.' · '.SchoolTime::shortDate($sheet->held_on).' — '.$fragment->content,
                     ...$fragment->scope->commentAttributes(),
                 ]);
                 $comment->save();
@@ -120,5 +129,23 @@ class MeetingSheetSplit
                 && $user->can('view', $student)
                 && $fragment->comment->isVisibleTo($user))
             ->values();
+    }
+
+    /**
+     * Ends the request with a 422 the SPA can tell apart (rolls back the
+     * transaction it is thrown from).
+     */
+    public static function reject(string $reason): never
+    {
+        $messages = [
+            'already_confirmed' => 'Esta planilla ya se confirmó.',
+            'no_fragments' => 'Escribí al menos un fragmento antes de confirmar.',
+            'student_removed' => 'Uno de los alumnos ya no está inscripto. Usá «Editar antes» para sacarlo del reparto.',
+        ];
+
+        throw new HttpResponseException(response()->json([
+            'message' => $messages[$reason],
+            'reason' => $reason,
+        ], 422));
     }
 }

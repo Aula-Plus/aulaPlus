@@ -906,8 +906,8 @@ export interface AccommodationChip extends SupportChip, AccommodationScope {}
 export interface StudentTracking {
   student: Student
   /**
-   * Who accompanies the student (screen 10). Name, weekly hours and days for
-   * everyone who sees the file; `reason` only for Psicopedagogía. Optional:
+   * Who accompanies the student now (screen 10): name, weekly hours, days and
+   * role, for everyone who sees the file; ended companions never. Optional:
    * older payloads (and test fixtures) may not carry it.
    */
   therapeutic_companions?: TherapeuticCompanion[]
@@ -2103,13 +2103,18 @@ export interface NamedRef {
   name: string
 }
 
-/** A therapeutic companion: a record, not an account. `reason` only reaches Psicopedagogía. */
+/**
+ * A therapeutic companion: a record, not an account. `role` («Rol del
+ * acompañante») is free text, visible to whoever sees the companion. An ended
+ * companion (`ended_on`) is history: only Psicopedagogía gets those rows.
+ */
 export interface TherapeuticCompanion {
   id: number
   name: string
   weekly_hours: number
   days: Weekday[]
-  reason?: string | null
+  role?: string | null
+  ended_on?: string | null
   student?: NamedRef | null
   group?: NamedRef | null
 }

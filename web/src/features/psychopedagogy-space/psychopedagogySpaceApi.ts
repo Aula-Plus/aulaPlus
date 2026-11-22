@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios"
 import { api } from "@/lib/api"
 import type {
   MeetingSheet,
@@ -16,7 +17,7 @@ import type {
 // «Espacio de psicopedagogía» (screen 10, ClickUp 1dfd3mc4bge). The server
 // decides what each role gets: 403 for any teacher, and Dirección's payloads
 // never carry with whom, the text, the students discussed, the actions nor the
-// companions' reason.
+// companions' history.
 
 export async function fetchOverview(week?: string): Promise<PsychopedagogyOverview> {
   const { data } = await api.get<{ data: PsychopedagogyOverview }>("/api/v1/psychopedagogy/overview", {
@@ -74,7 +75,7 @@ export interface CompanionInput {
   name: string
   weekly_hours: number
   days: Weekday[]
-  reason?: string | null
+  role?: string | null
 }
 
 export async function createCompanion(input: CompanionInput): Promise<TherapeuticCompanion> {
@@ -89,8 +90,12 @@ export async function updateCompanion(id: number, input: CompanionInput): Promis
   return data.data
 }
 
-export async function deleteCompanion(id: number): Promise<void> {
-  await api.delete(`/api/v1/psychopedagogy/companions/${id}`)
+/** «Dejó de acompañar»: an end date, and the record stays in the history. */
+export async function endCompanion(id: number, endedOn: string): Promise<TherapeuticCompanion> {
+  const { data } = await api.post<{ data: TherapeuticCompanion }>(`/api/v1/psychopedagogy/companions/${id}/end`, {
+    ended_on: endedOn,
+  })
+  return data.data
 }
 
 export interface SheetsPage {
@@ -130,6 +135,18 @@ export async function saveSheet(id: number | null, input: SheetInput): Promise<M
     ? await api.put<{ data: MeetingSheet }>(`/api/v1/psychopedagogy/sheets/${id}`, input)
     : await api.post<{ data: MeetingSheet }>("/api/v1/psychopedagogy/sheets", input)
   return data.data
+}
+
+export type SheetRejectionReason = "already_confirmed" | "no_fragments" | "student_removed"
+
+/**
+ * Why the server refused to confirm or edit a sheet (422 with a stable
+ * `reason`; its `message` is already the Spanish text to show), or null.
+ */
+export function sheetRejection(error: unknown): { reason: SheetRejectionReason; message: string } | null {
+  if (!isAxiosError(error) || error.response?.status !== 422) return null
+  const body = error.response.data as { reason?: SheetRejectionReason; message?: string } | undefined
+  return body?.reason && body.message ? { reason: body.reason, message: body.message } : null
 }
 
 export async function confirmSheet(id: number): Promise<MeetingSheet> {

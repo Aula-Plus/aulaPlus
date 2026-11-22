@@ -249,7 +249,7 @@ function App() {
               </ProtectedLayout>
             }
           />
-          {/* Ajustes y PTP (screen 06): psychopedagogy's inbox; other roles get its note. */}
+          {/* Espacio de psicopedagogía (screen 10): Psicopedagogía, and Dirección with its limited view. */}
           <Route
             path="/espacio-psicopedagogia"
             element={
@@ -258,6 +258,7 @@ function App() {
               </ProtectedLayout>
             }
           />
+          {/* Ajustes y PTP (screen 06): psychopedagogy's inbox; other roles get its note. */}
           <Route
             path="/ajustes-y-ptp"
             element={

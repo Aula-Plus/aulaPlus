@@ -254,8 +254,8 @@ export function StudentTrackingPage() {
             <div className="grid gap-2 text-sm">
               <Row label="Año de ingreso" value={String(student.enrollment_year)} />
               <Row label="Fecha de nacimiento" value={formatShortDate(student.birth_date)} />
-              {/* Screen 10: who accompanies the student, with hours and days
-                  — the reason never reaches a teacher (server-side). */}
+              {/* Screen 10: who accompanies the student now, with role, hours
+                  and days (only the current ones come from the server). */}
               <Row
                 label="Acompañante terapéutico"
                 value={

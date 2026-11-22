@@ -14,9 +14,10 @@ export function formatHours(hours: number): string {
   return `${String(hours).replace(".", ",")} h`
 }
 
-/** «Romina Silva · 6 h semanales · Martes y jueves» (never the reason). */
+/** «Romina Silva (Apoyo en el aula) · 6 h semanales · Martes y jueves». */
 export function companionSummary(companion: TherapeuticCompanion): string {
-  return `${companion.name} · ${formatHours(companion.weekly_hours)} semanales · ${formatDays(companion.days)}`
+  const role = companion.role?.trim() ? ` (${companion.role.trim()})` : ""
+  return `${companion.name}${role} · ${formatHours(companion.weekly_hours)} semanales · ${formatDays(companion.days)}`
 }
 
 export const observationScopeLabels: Record<ObservationScope, string> = {

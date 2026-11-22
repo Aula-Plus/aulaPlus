@@ -8,11 +8,13 @@ use App\Models\TherapeuticCompanion;
 use App\Models\User;
 
 /**
- * Screen 10 › Acompañantes (ClickUp 1dfd3mc4bge). Psychopedagogy assigns and
- * edits; direction reads the full list — who comes in, whom they accompany,
- * which days and how many hours — without the reason (P10-DEC-09). A teacher
- * never reads the list (P10-ACO-01): they see the companion of their own
- * student in the file (StudentTrackingResource), also without the reason.
+ * Screen 10 › Acompañantes (ClickUp 1dfd3mc4bge). Psychopedagogy assigns,
+ * edits and ends (an end date, never a delete) and reads the history;
+ * direction reads the current list — who comes in, whom they accompany, which
+ * days, how many hours and in which role. A teacher never reads the list
+ * (P10-ACO-01): they see the current companions of a student they can view in
+ * the file (StudentTrackingResource), role included (ClickUp decision: the
+ * role is visible to whoever sees the student has a companion).
  * Tenant and role are both checked (defence in depth over SchoolScope).
  */
 class TherapeuticCompanionPolicy
@@ -22,8 +24,8 @@ class TherapeuticCompanionPolicy
         return $user->hasAnyRole([Role::Psychopedagogue->value, Role::Director->value]);
     }
 
-    /** The «motivo» is psychopedagogy's alone. */
-    public function viewReason(User $user): bool
+    /** Ended companions (the student's history) are psychopedagogy's alone. */
+    public function viewHistory(User $user): bool
     {
         return $user->hasRole(Role::Psychopedagogue->value);
     }
@@ -40,7 +42,7 @@ class TherapeuticCompanionPolicy
             && $user->hasRole(Role::Psychopedagogue->value);
     }
 
-    public function delete(User $user, TherapeuticCompanion $companion): bool
+    public function end(User $user, TherapeuticCompanion $companion): bool
     {
         return $this->update($user, $companion);
     }

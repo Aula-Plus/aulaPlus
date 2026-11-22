@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  * school-defined sheet types (P10-DEC-01), seeded for every existing school.
  *
  * A companion is a record, not a user account (decision in ClickUp). Free
- * text here (`reason`, `content`, `description`) holds sensitive data about
+ * text here (`content`, `description`) holds sensitive data about
  * minors (CLAUDE.md rule 11) and is excluded from the audit diffs.
  */
 return new class extends Migration
@@ -37,11 +37,17 @@ return new class extends Migration
             $table->string('name', 120);
             $table->decimal('weekly_hours', 4, 1);
             $table->json('days');
-            $table->text('reason')->nullable();
+            // «Rol del acompañante» (ClickUp 1dfd3mc4bge): free text written
+            // by psychopedagogy, visible to whoever sees the companion.
+            $table->string('role', 160)->nullable();
+            // A companion who stops accompanying gets an end date and stays in
+            // the student's history; the current ones have none.
+            $table->date('ended_on')->nullable();
+            $table->foreignId('ended_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->index(['school_id', 'student_id']);
+            $table->index(['school_id', 'student_id', 'ended_on']);
         });
 
         Schema::create('psychopedagogy_meetings', function (Blueprint $table) {
@@ -109,8 +115,8 @@ return new class extends Migration
             $table->foreignId('student_id')->constrained()->cascadeOnDelete();
             $table->text('content');
             $table->string('scope', 40);
-            // Who wrote the proposal: only `manual` for now. An AI proposal
-            // step (pending a product answer) would add another source.
+            // Who wrote the proposal: only `manual`. An AI proposal waits until
+            // family data exists (product answer C, ClickUp 1dfd3mc4bge).
             $table->string('source', 16)->default('manual');
             $table->foreignId('comment_id')->nullable()->constrained()->nullOnDelete();
             $table->timestamps();
