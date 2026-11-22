@@ -42,7 +42,10 @@ class School extends Model
 
     protected static function booted(): void
     {
-        static::created(fn (School $school) => CommentCategory::seedDefaults($school->id));
+        static::created(function (School $school): void {
+            CommentCategory::seedDefaults($school->id);
+            MeetingSheetType::seedDefaults($school->id);
+        });
     }
 
     protected function casts(): array

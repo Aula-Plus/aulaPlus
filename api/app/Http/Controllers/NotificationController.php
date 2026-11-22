@@ -11,6 +11,8 @@ use App\Notifications\CommentSharedNotification;
 use App\Notifications\FollowUpAssignedNotification;
 use App\Notifications\MaterialPublishedNotification;
 use App\Notifications\MaterialRemovedNotification;
+use App\Notifications\MeetingActionAssignedNotification;
+use App\Notifications\MeetingSheetFragmentNotification;
 use App\Notifications\ScreeningDesignChangedNotification;
 use App\Notifications\ScreeningDesignRevertedNotification;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -100,9 +102,10 @@ class NotificationController extends Controller
 
     /**
      * Notices that name the student: a shared extract (ClickUp 86e3qkwnv) and
-     * a new accommodation in force (screen 22).
+     * a new accommodation in force (screen 22) and a meeting sheet's fragment
+     * that landed in the file (screen 10).
      */
-    private const NAMES_STUDENT = ['comment_shared', 'accommodation_confirmed'];
+    private const NAMES_STUDENT = ['comment_shared', 'accommodation_confirmed', 'meeting_sheet_fragment'];
 
     /**
      * A shared-extract notice names the student (ClickUp 86e3qkwnv), but the
@@ -195,7 +198,9 @@ class NotificationController extends Controller
      * su fecha sin salida», ClickUp 86e3jpzdp review of 14/10), an
      * accommodation proposal returned to you for corrections (86e3qkwkk), an
      * extract psychopedagogy shared with you (86e3qkwnv), and the screening
-     * design changed/reverted notices (screen 08).
+     * design changed/reverted notices (screen 08), and from screen 10 a
+     * meeting sheet's fragment that landed in a file you read and an action
+     * of a meeting left to you.
      */
     public const LISTED_TYPES = [
         FollowUpAssignedNotification::class,
@@ -205,6 +210,8 @@ class NotificationController extends Controller
         CommentSharedNotification::class,
         ScreeningDesignChangedNotification::class,
         ScreeningDesignRevertedNotification::class,
+        MeetingSheetFragmentNotification::class,
+        MeetingActionAssignedNotification::class,
         // Screen 19: a material was added to the school's catalog, and the
         // owner's material was taken out of it.
         MaterialPublishedNotification::class,

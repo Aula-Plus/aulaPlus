@@ -37,6 +37,7 @@ import { GroupComparisonPage } from "@/features/group-comparison/GroupComparison
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
 import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
+import { PsychopedagogySpacePage } from "@/features/psychopedagogy-space/PsychopedagogySpacePage"
 
 function App() {
   return (
@@ -254,6 +255,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupComparisonPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Espacio de psicopedagogía (screen 10): Psicopedagogía, and Dirección with its limited view. */}
+          <Route
+            path="/espacio-psicopedagogia"
+            element={
+              <ProtectedLayout>
+                <PsychopedagogySpacePage />
               </ProtectedLayout>
             }
           />

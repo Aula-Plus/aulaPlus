@@ -407,6 +407,33 @@ export function canOpenAccommodationsInbox(user: User | null): boolean {
   return isPsychopedagogue(user)
 }
 
+// ── Espacio de psicopedagogía (screen 10, ClickUp 1dfd3mc4bge) ──────────────
+
+/**
+ * Enter the space: Psicopedagogía, and Dirección with its limited view (the
+ * week's workload, the current companions, that each sheet
+ * existed). No teacher enters. Mirror of `PsychopedagogyMeetingPolicy::
+ * viewWorkload` / `TherapeuticCompanionPolicy::viewAny` /
+ * `MeetingSheetPolicy::viewAny`.
+ */
+export function canOpenPsychopedagogySpace(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
+}
+
+/**
+ * The agenda rows, the companions' history, the full sheets and every write in
+ * the space: Psicopedagogía only. Mirror of `PsychopedagogyMeetingPolicy::
+ * viewAny` / `MeetingSheetPolicy::viewContent`.
+ */
+export function canWorkInPsychopedagogySpace(user: User | null): boolean {
+  return isPsychopedagogue(user)
+}
+
+/** Rename and add the school's sheet types. Mirror of `MeetingSheetTypePolicy::create`. */
+export function canManageMeetingSheetTypes(user: User | null): boolean {
+  return isDirector(user)
+}
+
 /**
  * «Subir un recurso propio» in Materiales (screen 19). Mirror of
  * `MaterialPolicy::create`: Docente and Psicopedagogía; Dirección reads.

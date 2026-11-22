@@ -94,6 +94,11 @@ English; user-facing Spanish labels live in the frontend (`web/src/types.ts`).
 > whether that's deliberate scope-cutting for this phase or something to add now
 > — building Policies and the tracking module on top of a 3-role assumption is
 > expensive to unwind later if it's actually 5.
+>
+> For now the therapeutic companion has **no role**: it is a record that
+> psychopedagogy loads (`TherapeuticCompanion`: name, weekly hours, days,
+> the companion's role, end date; ClickUp 1dfd3mc4bge), not a user account. A role may be added later
+> if it turns out useful or necessary.
 
 ## Security rules (hard requirements)
 

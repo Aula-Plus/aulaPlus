@@ -48,12 +48,19 @@ class StudentController extends Controller
     {
         $this->authorize('view', $student);
 
-        return new StudentResource($student->load('groups'));
+        return new StudentResource($student->load('groups')->loadCount('therapeuticCompanions'));
     }
 
     public function update(UpdateStudentRequest $request, Student $student): StudentResource
     {
-        $student->update($request->safe()->except(['group_id', 'school_year']));
+        $data = $request->safe()->except(['group_id', 'school_year']);
+        // Once psychopedagogy loads companion records (screen 10), they decide
+        // the flag (TherapeuticCompanion::syncStudentFlag); the form's checkbox
+        // only applies to students without records.
+        if ($student->therapeuticCompanions()->exists()) {
+            unset($data['has_therapeutic_companion']);
+        }
+        $student->update($data);
 
         if ($request->filled('group_id')) {
             $previous = $student->groupForYear((int) $request->input('school_year'));
@@ -64,7 +71,7 @@ class StudentController extends Controller
             $this->recordGroupChange($student, $previous?->id, (int) $request->input('group_id'));
         }
 
-        return new StudentResource($student->load('groups'));
+        return new StudentResource($student->load('groups')->loadCount('therapeuticCompanions'));
     }
 
     public function destroy(Student $student): Response
