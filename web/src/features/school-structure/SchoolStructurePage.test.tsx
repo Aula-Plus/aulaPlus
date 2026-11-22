@@ -1,8 +1,10 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AuthContext } from "@/features/auth/AuthContext"
+import * as onboardingApi from "@/features/onboarding/onboardingApi"
+import type { OnboardingRecord } from "@/features/onboarding/onboardingApi"
 import type { Role, User } from "@/types"
 import { SchoolStructurePage } from "./SchoolStructurePage"
 import * as structureApi from "./schoolStructureApi"
@@ -56,6 +58,25 @@ function plannerSettings(): PlannerFamilySettings[] {
   ]
 }
 
+const onboarding: OnboardingRecord = {
+  import_completed_on: null,
+  regime_configured_on: null,
+  opened_on: null,
+  offering_confirmed_on: null,
+  contact: null,
+  regimes: [
+    { level_key: "initial", level_label: "Inicial", regime: "authorized", fixed: false, note: "Programa propio" },
+    { level_key: "primary", level_label: "Primaria", regime: null, fixed: false, note: null },
+    { level_key: "lower_secondary", level_label: "Ciclo Básico", regime: "enabled", fixed: true, note: null },
+  ],
+  sources: [],
+  log: [],
+  support_channels: { whatsapp: null, email: null },
+}
+
+beforeEach(() => {
+  vi.spyOn(onboardingApi, "fetchOnboarding").mockResolvedValue(onboarding)
+})
 afterEach(() => vi.restoreAllMocks())
 
 describe("SchoolStructurePage", () => {
@@ -68,6 +89,24 @@ describe("SchoolStructurePage", () => {
     ).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/")
     expect(fetch).not.toHaveBeenCalled()
+    expect(onboardingApi.fetchOnboarding).not.toHaveBeenCalled()
+  })
+
+  it("shows the ANEP regime of each level read-only, with the way to ask for a correction", async () => {
+    vi.spyOn(structureApi, "fetchCurricularOfferings").mockResolvedValue([])
+    renderPage("director")
+
+    expect(screen.getByRole("heading", { name: "Régimen ANEP por nivel" })).toBeInTheDocument()
+    expect(await screen.findByRole("row", { name: /Inicial Autorizado Programa propio/ })).toBeInTheDocument()
+    expect(screen.getByRole("row", { name: /Primaria Sin cargar por Aula\+/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole("row", { name: /Ciclo Básico Habilitado Fijo: todos los colegios privados lo están/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "¿Algo no coincide con tu colegio?" })).toHaveAttribute(
+      "href",
+      "/administracion/puesta-en-marcha?solapa=regimen",
+    )
   })
 
   it("shows the row with its locked program and lets direction add another one of the group's level", async () => {
@@ -120,7 +159,7 @@ describe("SchoolStructurePage", () => {
     expect(update).toHaveBeenCalledWith(1, { school_name: "Pregunta guía", shown: true })
 
     await userEvent.click(screen.getByRole("button", { name: "IB MYP" }))
-    const table = screen.getByRole("table")
+    const table = within(screen.getByRole("tabpanel")).getByRole("table")
     expect(within(table).getByLabelText("Mostrar Concepto clave")).toBeDisabled()
     expect(within(table).getByText("El programa")).toBeInTheDocument()
   })

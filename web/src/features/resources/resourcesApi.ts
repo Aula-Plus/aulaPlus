@@ -10,10 +10,23 @@ export interface SchoolResource {
   name: string
 }
 
+/** `group`: every teacher of the group sees it; `own`: only the teacher who added it (Dirección and Psicopedagogía too). */
+export type ResourceVisibility = "group" | "own"
+
+export interface GroupAddedResource {
+  id: number
+  name: string
+  visibility: ResourceVisibility
+  created_by_name: string | null
+  can_remove: boolean
+}
+
 export interface GroupResources {
   can_manage: boolean
+  /** Only a teacher of the group adds resources just for themself. */
+  can_add_own: boolean
   school: { id: number; name: string; available: boolean }[]
-  group: { id: number; name: string; created_by_name: string | null }[]
+  group: GroupAddedResource[]
 }
 
 export async function fetchSchoolResources(): Promise<SchoolResource[]> {
@@ -42,8 +55,12 @@ export async function setSchoolResourceAvailable(groupId: number, resourceId: nu
   return data.data
 }
 
-export async function createGroupResource(groupId: number, name: string): Promise<GroupResources> {
-  const { data } = await api.post<{ data: GroupResources }>(`/api/v1/groups/${groupId}/resources`, { name })
+export async function createGroupResource(
+  groupId: number,
+  name: string,
+  visibility: ResourceVisibility = "group",
+): Promise<GroupResources> {
+  const { data } = await api.post<{ data: GroupResources }>(`/api/v1/groups/${groupId}/resources`, { name, visibility })
   return data.data
 }
 

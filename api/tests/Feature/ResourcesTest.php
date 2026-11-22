@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Group;
+use App\Models\GroupWriteWindow;
 use App\Models\School;
 use App\Models\SchoolGrade;
 use App\Models\SchoolYear;
@@ -9,8 +10,9 @@ use App\Services\SchoolYears\SchoolYearCalendar;
 use Laravel\Sanctum\Sanctum;
 
 // Screen 23 «Recursos disponibles» (ClickUp 1dfd3mc4bh4): Dirección loads the
-// school's resources; each group's teachers uncheck what the group does not
-// have and add their own; Psicopedagogía reads.
+// school's resources; each group's teachers, Psicopedagogía and Dirección
+// uncheck what the group does not have and add the group's own; a teacher may
+// add one only for themself.
 
 beforeEach(function () {
     $this->school = School::factory()->create();
@@ -57,22 +59,86 @@ it('lets the group teacher uncheck a school resource and add the group own', fun
     $this->getJson("/api/v1/groups/{$other->id}/resources")->assertJsonPath('data.school.0.available', true);
 });
 
-it('keeps Psicopedagogía and other teachers out of the group resources writes', function () {
+it('lets Psicopedagogía manage the group resources like a teacher, and keeps other teachers out', function () {
     Sanctum::actingAs($this->director);
     $huerta = $this->postJson('/api/v1/school-resources', ['name' => 'Huerta escolar'])->json('data.id');
-    $own = $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele'])->json('data.group.0.id');
+    $tele = $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele'])->json('data.group.0.id');
 
     Sanctum::actingAs($this->psycho);
-    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertOk()->assertJsonPath('data.can_manage', false);
-    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/{$huerta}", ['available' => false])->assertForbidden();
-    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$own}")->assertForbidden();
+    $this->postJson('/api/v1/school-resources', ['name' => 'Piscina'])->assertForbidden();
+    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertOk()
+        ->assertJsonPath('data.can_manage', true)
+        ->assertJsonPath('data.can_add_own', false);
+    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/{$huerta}", ['available' => false])->assertOk()
+        ->assertJsonPath('data.school.0.available', false);
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Proyector'])->assertCreated()
+        ->assertJsonPath('data.group.1.name', 'Proyector')
+        ->assertJsonPath('data.group.1.visibility', 'group')
+        ->assertJsonPath('data.group.1.created_by_name', $this->psycho->name);
+    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$tele}")->assertOk()->assertJsonCount(1, 'data.group');
+
+    // Psicopedagogía of another school does not reach the group.
+    $foreignPsycho = User::factory()->forSchool(School::factory()->create())->psychopedagogue()->create();
+    Sanctum::actingAs($foreignPsycho);
+    $this->putJson("/api/v1/groups/{$this->group->id}/resources/school/{$huerta}", ['available' => true])->assertNotFound();
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele'])->assertNotFound();
 
     Sanctum::actingAs($this->otherTeacher);
     $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertForbidden();
     $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Proyector'])->assertForbidden();
 
+    // Any teacher of the group removes a whole-group resource someone else added.
     Sanctum::actingAs($this->teacher);
-    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$own}")->assertOk()->assertJsonCount(0, 'data.group');
+    $proyector = $this->getJson("/api/v1/groups/{$this->group->id}/resources")
+        ->assertJsonPath('data.group.0.can_remove', true)->json('data.group.0.id');
+    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$proyector}")->assertOk()->assertJsonCount(0, 'data.group');
+});
+
+it('shows a teacher own resource only to its author among teachers, and to Dirección and Psicopedagogía with its owner', function () {
+    $colleague = User::factory()->forSchool($this->school)->teacher()->create(['name' => 'Beto']);
+    leadGroup($this->group, $colleague);
+
+    Sanctum::actingAs($this->teacher);
+    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertJsonPath('data.can_add_own', true);
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele', 'visibility' => 'group'])->assertCreated();
+    $own = $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Mi parlante', 'visibility' => 'own'])
+        ->assertCreated()
+        ->assertJsonPath('data.group.1.visibility', 'own')
+        ->assertJsonPath('data.group.1.created_by_name', 'Ana')
+        ->assertJsonPath('data.group.1.can_remove', true)
+        ->json('data.group.1.id');
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Algo', 'visibility' => 'secret'])->assertUnprocessable();
+
+    // The other teacher of the group sees the whole-group one (with its author), not Ana's own.
+    Sanctum::actingAs($colleague);
+    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertOk()
+        ->assertJsonCount(1, 'data.group')
+        ->assertJsonPath('data.group.0.name', 'Tele')
+        ->assertJsonPath('data.group.0.created_by_name', 'Ana');
+    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$own}")->assertNotFound();
+
+    foreach ([$this->director, $this->psycho] as $reader) {
+        Sanctum::actingAs($reader);
+        $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertOk()
+            ->assertJsonCount(2, 'data.group')
+            ->assertJsonPath('data.group.1.name', 'Mi parlante')
+            ->assertJsonPath('data.group.1.visibility', 'own')
+            ->assertJsonPath('data.group.1.created_by_name', 'Ana')
+            ->assertJsonPath('data.group.1.can_remove', false);
+        $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$own}")->assertForbidden();
+    }
+
+    Sanctum::actingAs($this->teacher);
+    $this->deleteJson("/api/v1/groups/{$this->group->id}/resources/{$own}")->assertOk()->assertJsonCount(1, 'data.group');
+});
+
+it('rejects own resources from Dirección and Psicopedagogía', function () {
+    foreach ([$this->director, $this->psycho] as $user) {
+        Sanctum::actingAs($user);
+        $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele', 'visibility' => 'own'])
+            ->assertUnprocessable()->assertJsonValidationErrors('visibility');
+    }
+    $this->assertDatabaseCount('group_added_resources', 0);
 });
 
 it('never mixes schools', function () {
@@ -134,4 +200,13 @@ it('marks the card read-only and rejects writes in a closed year', function () {
     $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertOk()->assertJsonPath('data.can_manage', false);
     $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele'])
         ->assertForbidden()->assertJsonPath('code', 'school_year_closed');
+
+    // With a loading window Dirección enabled, the card is writable again.
+    GroupWriteWindow::query()->forceCreate([
+        'school_id' => $this->school->id, 'group_id' => $this->group->id, 'reason' => 'Ajustes',
+        'until_on' => now()->addWeek()->toDateString(), 'enabled_by_id' => $this->director->id,
+    ]);
+    app(SchoolYearCalendar::class)->forget();
+    $this->getJson("/api/v1/groups/{$this->group->id}/resources")->assertJsonPath('data.can_manage', true);
+    $this->postJson("/api/v1/groups/{$this->group->id}/resources", ['name' => 'Tele'])->assertCreated();
 });

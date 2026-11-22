@@ -496,7 +496,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
         // Screen 23 «Recursos disponibles» (ClickUp 1dfd3mc4bh4): the
         // school's list (Dirección) and each group's card «Del colegio y del
-        // grupo» (its teachers uncheck and add their own).
+        // grupo» (its teachers, Psicopedagogía and Dirección uncheck and add).
         Route::get('/school-resources', [ResourceController::class, 'schoolIndex']);
         Route::post('/school-resources', [ResourceController::class, 'schoolStore']);
         Route::delete('/school-resources/{resource}', [ResourceController::class, 'schoolDestroy'])->whereNumber('resource');
@@ -505,8 +505,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('group.writable')->whereNumber('resource');
         Route::post('/groups/{group}/resources', [ResourceController::class, 'groupStore'])
             ->middleware('group.writable');
-        Route::delete('/groups/{group}/resources/{groupResource}', [ResourceController::class, 'groupDestroy'])
-            ->middleware('group.writable')->whereNumber('groupResource');
+        Route::delete('/groups/{group}/resources/{addedResource}', [ResourceController::class, 'groupDestroy'])
+            ->middleware('group.writable')->whereNumber('addedResource');
 
         // Screen 29 «Puesta en marcha» (ClickUp 1dfd3mc4bh8): direction reads
         // the onboarding record (loaded by Aula+ with app:onboarding-*) and

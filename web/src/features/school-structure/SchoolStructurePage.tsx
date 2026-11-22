@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 import { CurricularOfferingTab } from "./CurricularOfferingTab"
 import { PlannersTab } from "./PlannersTab"
+import { SchoolRegimeCard } from "./SchoolRegimeCard"
 import { SchoolResourcesTab } from "./SchoolResourcesTab"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 
@@ -19,8 +20,10 @@ const TABS: { id: Tab; label: string }[] = [
 /**
  * «Colegio y estructura» (screen 23 of the living document), route `/colegio`.
  * «Oferta curricular» and «Planificadores» (ClickUp 1dfd3mc4bgf) and «Recursos
- * disponibles» (ClickUp 1dfd3mc4bh4). Institución and Grupos come later. Director only — UX gate; the server enforces it
- * (CurricularOfferingPolicy).
+ * disponibles» (ClickUp 1dfd3mc4bh4), with the read-only «Régimen ANEP por
+ * nivel» above the tabs until the «Institución» tab exists. Grupos comes later.
+ * Director only — UX gate; the server enforces it (CurricularOfferingPolicy,
+ * SchoolPolicy::viewOnboarding).
  */
 export function SchoolStructurePage() {
   const { user } = useAuth()
@@ -37,6 +40,7 @@ export function SchoolStructurePage() {
         title="Colegio y estructura"
         description="Se configura una vez y el resto del colegio lo hereda: qué programa sigue cada materia y cómo se llama cada campo del planificador."
       />
+      <SchoolRegimeCard />
       <div role="tablist" aria-label="Solapas de Colegio y estructura" className="flex gap-1 border-b">
         {TABS.map((item) => (
           <button
@@ -59,7 +63,9 @@ export function SchoolStructurePage() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "offering" ? <CurricularOfferingTab /> : tab === "planners" ? <PlannersTab /> : <SchoolResourcesTab />}
+        {tab === "offering" && <CurricularOfferingTab />}
+        {tab === "planners" && <PlannersTab />}
+        {tab === "resources" && <SchoolResourcesTab />}
       </div>
     </div>
   )
