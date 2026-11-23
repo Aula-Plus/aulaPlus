@@ -31,7 +31,7 @@ function isMacPlatform(): boolean {
  * The «Buscar» button lives outside the sidebar, above the content and next to
  * it, so it stays available when the sidebar is collapsed or closed; Ctrl+K
  * (⌘K on Mac) opens it from any screen. What each role finds is decided by
- * the server (students, groups, assessments) and, for menu sections, by the
+ * the server (students, groups, assessments, classes) and, for menu sections, by the
  * same role-filtered navigation as the sidebar — UX only, never the security
  * boundary.
  */
@@ -180,6 +180,15 @@ function SearchPanel({ onClose }: { onClose: () => void }) {
           to: `/clases/${assessment.group.id}/evaluaciones`,
         })),
       },
+      {
+        heading: "Clases",
+        items: (results?.classes ?? []).map((session) => ({
+          key: `class-${session.id}`,
+          label: session.title,
+          detail: [session.subject, session.group?.name, formatShortDate(session.date)].filter(Boolean).join(" · "),
+          to: `/clase/${session.id}`,
+        })),
+      },
     ]
     return list.filter((group) => group.items.length > 0)
   }, [results, sectionItems])
@@ -230,7 +239,7 @@ function SearchPanel({ onClose }: { onClose: () => void }) {
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-1.5">
-        <Label htmlFor={inputId}>Alumno, grupo, sección o evaluación</Label>
+        <Label htmlFor={inputId}>Alumno, grupo, sección, evaluación o clase</Label>
         <Input
           id={inputId}
           type="search"

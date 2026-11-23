@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Assessment;
+use App\Models\ClassSession;
 use App\Models\EducationLevel;
 use App\Models\Group;
 use App\Models\School;
@@ -30,6 +31,17 @@ function searchAssessment(Group $group, User $teacher, string $purpose, ?Subject
         'subject_id' => ($subject ?? Subject::factory()->create(['school_id' => $group->school_id]))->id,
         'purpose' => $purpose,
         'administered_at' => '2026-05-12',
+    ]);
+}
+
+function searchClass(Group $group, string $title, ?Subject $subject = null, string $date = '2026-05-14'): ClassSession
+{
+    return ClassSession::factory()->create([
+        'school_id' => $group->school_id,
+        'group_id' => $group->id,
+        'subject_id' => $subject?->id,
+        'title' => $title,
+        'date' => $date,
     ]);
 }
 
@@ -86,6 +98,75 @@ it('hides a teacher\'s own assessment once they no longer teach its group', func
     $this->getJson('/api/v1/search?q=geometria')->assertOk()->assertJsonCount(0, 'data.assessments');
 });
 
+it('finds only the classes a teacher could open: their subject in their groups', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $colleague = User::factory()->forSchool($school)->teacher()->create();
+
+    $mine = Group::factory()->create(['school_id' => $school->id]);
+    $other = Group::factory()->create(['school_id' => $school->id]);
+    $math = leadGroup($mine, $teacher);
+    $english = leadGroup($mine, $colleague);
+    leadGroup($other, $colleague);
+
+    $myClass = searchClass($mine, 'Fracciones equivalentes', $math, '2026-05-14');
+    // A class without a subject: any teacher who leads the group (ClassSessionPolicy::view).
+    $groupClass = searchClass($mine, 'Fracciones en la feria', null, '2026-05-10');
+    // A colleague's subject in a shared group, and a group I don't teach: not mine.
+    searchClass($mine, 'Fracciones en inglés', $english);
+    searchClass($other, 'Fracciones de 4B');
+
+    Sanctum::actingAs($teacher);
+
+    $this->getJson('/api/v1/search?q=fracciones')->assertOk()
+        ->assertJsonPath('data.classes', [
+            [
+                'id' => $myClass->id,
+                'title' => 'Fracciones equivalentes',
+                'subject' => $math->name,
+                'group' => ['id' => $mine->id, 'name' => $mine->name],
+                'date' => '2026-05-14',
+            ],
+            [
+                'id' => $groupClass->id,
+                'title' => 'Fracciones en la feria',
+                'subject' => null,
+                'group' => ['id' => $mine->id, 'name' => $mine->name],
+                'date' => '2026-05-10',
+            ],
+        ]);
+
+    foreach ([$myClass, $groupClass] as $class) {
+        $this->getJson("/api/v1/class-sessions/{$class->id}")->assertOk();
+    }
+});
+
+it('never returns a class\'s notes or content, nor matches on them', function () {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    ClassSession::factory()->create([
+        'school_id' => $school->id,
+        'group_id' => $group->id,
+        'title' => 'Ciclo del agua',
+        'objective' => 'objetivo reservado',
+        'description' => 'descripción reservada',
+        'teacher_notes' => 'nota reservada',
+    ]);
+    ClassSession::factory()->create([
+        'school_id' => $school->id,
+        'group_id' => $group->id,
+        'title' => 'Otra clase',
+        'teacher_notes' => 'agua',
+    ]);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
+
+    $response = $this->getJson('/api/v1/search?q=agua')->assertOk()->assertJsonCount(1, 'data.classes');
+
+    expect(array_keys($response->json('data.classes.0')))->toBe(['id', 'title', 'subject', 'group', 'date'])
+        ->and($response->getContent())->not->toContain('reservad');
+});
+
 it('gives psychopedagogy and direction the whole school, never another school', function (string $role) {
     $school = School::factory()->create();
     $otherSchool = School::factory()->create();
@@ -102,6 +183,8 @@ it('gives psychopedagogy and direction the whole school, never another school', 
     leadGroup($foreignGroup, $foreignTeacher);
     searchStudentIn($foreignGroup, 'Soledad Pérez');
     searchAssessment($foreignGroup, $foreignTeacher, 'Sol naciente');
+    $class = searchClass($group, 'Sol y planetas', leadGroup($group, User::factory()->forSchool($school)->teacher()->create()));
+    searchClass($foreignGroup, 'Sol de otro colegio');
 
     Sanctum::actingAs($user);
 
@@ -109,7 +192,8 @@ it('gives psychopedagogy and direction the whole school, never another school', 
 
     expect(collect($response->json('data.students'))->pluck('id')->all())->toBe([$student->id])
         ->and(collect($response->json('data.groups'))->pluck('id')->all())->toBe([$group->id])
-        ->and(collect($response->json('data.assessments'))->pluck('id')->all())->toBe([$assessment->id]);
+        ->and(collect($response->json('data.assessments'))->pluck('id')->all())->toBe([$assessment->id])
+        ->and(collect($response->json('data.classes'))->pluck('id')->all())->toBe([$class->id]);
 })->with(['director', 'psychopedagogue']);
 
 it('ignores case and accents in both directions', function () {

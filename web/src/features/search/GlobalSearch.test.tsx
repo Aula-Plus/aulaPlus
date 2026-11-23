@@ -20,6 +20,15 @@ const results: SearchResults = {
       date: "2026-05-12",
     },
   ],
+  classes: [
+    {
+      id: 21,
+      title: "Martes de fracciones",
+      subject: "Matemática",
+      group: { id: 3, name: "3° A" },
+      date: "2026-05-14",
+    },
+  ],
 }
 
 function Where() {
@@ -119,6 +128,21 @@ describe("GlobalSearch", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/clases/3/seguimiento")
   })
 
+  it("opens a class", async () => {
+    vi.spyOn(searchApi, "searchAula").mockResolvedValue(results)
+    const user = userEvent.setup()
+    renderSearch()
+
+    await user.click(screen.getByRole("button", { name: /buscar/i }))
+    await user.type(screen.getByRole("combobox"), "mart")
+    expect(await screen.findByRole("group", { name: "Clases" })).toBeInTheDocument()
+    const option = screen.getByRole("option", { name: /Martes de fracciones/ })
+    expect(option).toHaveTextContent("Matemática · 3° A")
+
+    await user.click(option)
+    expect(screen.getByTestId("where")).toHaveTextContent("/clase/21")
+  })
+
   it("opens a student's file", async () => {
     vi.spyOn(searchApi, "searchAula").mockResolvedValue(results)
     const user = userEvent.setup()
@@ -131,7 +155,7 @@ describe("GlobalSearch", () => {
   })
 
   it("finds only the menu sections of the role, ignoring accents", async () => {
-    vi.spyOn(searchApi, "searchAula").mockResolvedValue({ students: [], groups: [], assessments: [] })
+    vi.spyOn(searchApi, "searchAula").mockResolvedValue({ students: [], groups: [], assessments: [], classes: [] })
     const user = userEvent.setup()
     renderSearch("teacher")
 
@@ -148,7 +172,7 @@ describe("GlobalSearch", () => {
   })
 
   it("shows the director's admin sections", async () => {
-    vi.spyOn(searchApi, "searchAula").mockResolvedValue({ students: [], groups: [], assessments: [] })
+    vi.spyOn(searchApi, "searchAula").mockResolvedValue({ students: [], groups: [], assessments: [], classes: [] })
     const user = userEvent.setup()
     renderSearch("director")
 

@@ -6,7 +6,7 @@ export const SEARCH_MIN_LENGTH = 2
 export const SEARCH_MAX_LENGTH = 80
 
 /**
- * «Buscar en Aula+»: students, groups and assessments the caller could open,
+ * «Buscar en Aula+»: students, groups, assessments and classes the caller could open,
  * matched by name or title. Role filtering happens server-side.
  */
 export async function searchAula(q: string, signal?: AbortSignal): Promise<SearchResults> {

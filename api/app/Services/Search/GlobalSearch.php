@@ -3,6 +3,7 @@
 namespace App\Services\Search;
 
 use App\Models\Assessment;
+use App\Models\ClassSession;
 use App\Models\Group;
 use App\Models\Student;
 use App\Models\User;
@@ -15,12 +16,15 @@ use Illuminate\Support\Str;
  *
  * Each role finds only what it could open (Eitán, ClickUp): the same
  * visibility scopes as the listings decide it — Student::visibleTo,
- * Group::visibleTo and Assessment::visibleTo, on top of the SchoolScope — so
- * no rule is restated here. An assessment also needs its group to be visible,
- * because the result opens that group's assessments.
+ * Group::visibleTo, Assessment::visibleTo and ClassSession::visibleTo (the
+ * mirror of ClassSessionPolicy::view, which guards the class's own screen),
+ * on top of the SchoolScope — so no rule is restated here. An assessment also
+ * needs its group to be visible, because the result opens that group's
+ * assessments.
  *
  * Matching is by name or title only (a student's full name, a group's name,
- * an assessment's purpose — what the Calendar shows as its title), ignoring
+ * an assessment's purpose — what the Calendar shows as its title —, a class's
+ * title), ignoring
  * case and the Spanish accents/diacritics listed in ACCENTS, in SQL that runs
  * the same on SQLite and PostgreSQL (nested REPLACE + LOWER, no extension).
  *
@@ -45,7 +49,7 @@ class GlobalSearch
     ];
 
     /**
-     * @return array{students: list<array<string, mixed>>, groups: list<array<string, mixed>>, assessments: list<array<string, mixed>>}
+     * @return array{students: list<array<string, mixed>>, groups: list<array<string, mixed>>, assessments: list<array<string, mixed>>, classes: list<array<string, mixed>>}
      */
     public function for(User $user, string $term): array
     {
@@ -55,6 +59,7 @@ class GlobalSearch
             'students' => $this->students($user, $pattern),
             'groups' => $this->groups($user, $pattern),
             'assessments' => $this->assessments($user, $pattern),
+            'classes' => $this->classes($user, $pattern),
         ];
     }
 
@@ -129,6 +134,33 @@ class GlobalSearch
                 'subject' => $assessment->subject?->name,
                 'group' => ['id' => $assessment->group->id, 'name' => $assessment->group->name],
                 'date' => $assessment->administered_at?->toDateString(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Classes (screens 14–15): title, subject, group and date only — never
+     * their objective, description, sections or the teacher's notes.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function classes(User $user, string $pattern): array
+    {
+        $query = ClassSession::query()->visibleTo($user);
+
+        return $this->matching($query, 'class_sessions.title', $pattern)
+            ->with(['group:id,name', 'subject:id,name'])
+            ->orderByDesc('class_sessions.date')
+            ->orderByDesc('class_sessions.id')
+            ->limit(self::LIMIT_PER_TYPE)
+            ->get(['class_sessions.id', 'class_sessions.title', 'class_sessions.group_id', 'class_sessions.subject_id', 'class_sessions.date'])
+            ->map(fn (ClassSession $class): array => [
+                'id' => $class->id,
+                'title' => Str::limit($class->title, self::TITLE_LENGTH),
+                'subject' => $class->subject?->name,
+                'group' => $class->group ? ['id' => $class->group->id, 'name' => $class->group->name] : null,
+                'date' => $class->date->toDateString(),
             ])
             ->values()
             ->all();

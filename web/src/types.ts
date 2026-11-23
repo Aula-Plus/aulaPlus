@@ -2133,10 +2133,21 @@ export interface SearchAssessmentResult {
   date: string | null
 }
 
+/** A class (screens 14–15); opens `/clase/:id`. */
+export interface SearchClassResult {
+  id: number
+  title: string
+  subject: string | null
+  group: { id: number; name: string } | null
+  /** `YYYY-MM-DD`. */
+  date: string
+}
+
 export interface SearchResults {
   students: SearchStudentResult[]
   groups: SearchGroupResult[]
   assessments: SearchAssessmentResult[]
+  classes: SearchClassResult[]
 }
 
 // ── Espacio de psicopedagogía (screen 10, ClickUp 1dfd3mc4bge) ──────────────

@@ -8,7 +8,8 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * «Buscar en Aula+» (screen 01, P01-DEC-118 / PA-134, ClickUp 1dfd3mc56kr):
- * students, groups and assessments the caller could open, by name or title.
+ * students, groups, assessments and classes the caller could open, by name
+ * or title.
  * Menu sections are matched in the SPA from the same role-filtered navigation
  * as the sidebar.
  */

@@ -358,20 +358,25 @@ Ctrl+K / ⌘K en todas las pantallas (`web/src/features/search/GlobalSearch.tsx`
 - **Endpoint** `GET /api/v1/search?q=` (`GlobalSearchRequest`: `q` de 2 a 80
   caracteres; `App\Services\Search\GlobalSearch`). Hasta 8 resultados por tipo.
 - **Quién ve qué**: los mismos scopes que los listados — `Student::visibleTo`,
-  `Group::visibleTo` y `Assessment::visibleTo` (espejo de `AssessmentPolicy::view`:
-  el docente, solo las suyas) — sobre el `SchoolScope`. Una evaluación además
+  `Group::visibleTo`, `Assessment::visibleTo` (espejo de `AssessmentPolicy::view`:
+  el docente, solo las suyas) y `ClassSession::visibleTo` (espejo de
+  `ClassSessionPolicy::view`: el docente, las clases de su materia en sus
+  grupos, o de sus grupos si la clase no tiene materia) — sobre el
+  `SchoolScope`. Una evaluación además
   exige que su grupo sea visible, porque el resultado abre sus evaluaciones.
   Las secciones del menú se buscan en el SPA sobre `buildNavSections` (la
   misma lista filtrada por rol que la barra lateral).
 - **Qué devuelve** (sin datos sensibles): alumno → nombre y grupo de su último
   año; grupo → nombre, nivel y año; evaluación → título (`purpose`, como en el
-  Calendario), tipo, materia, grupo y fecha.
+  Calendario), tipo, materia, grupo y fecha; clase → título, materia, grupo y
+  fecha (nunca objetivo, descripción, secciones ni notas del docente).
 - **Cómo compara**: solo nombres y títulos; sin mayúsculas ni tildes
   (á é í ó ú ü ñ) con `LOWER` + `REPLACE` anidados, igual en SQLite y
   PostgreSQL, sin extensiones (`unaccent` no se usa). Otros diacríticos
   (à, ç…) sí distinguen. Los comodines `%` `_` del término son literales.
-- **Destinos**: ficha del alumno, perfil del grupo, evaluaciones del grupo o la
-  pantalla. Proyectos y clases se suman cuando existan (pantallas 18 y 14–17).
+- **Destinos**: ficha del alumno, perfil del grupo, evaluaciones del grupo, la
+  clase (`/clase/:id`, pantalla 15) o la pantalla. Los proyectos se suman
+  cuando existan (pantalla 18, hoy fuera de alcance).
 - La consulta puede contener nombres de alumnos: no se loguea.
 
 ## Estado actual (scaffolding)
