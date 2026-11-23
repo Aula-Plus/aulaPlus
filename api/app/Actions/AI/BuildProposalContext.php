@@ -2,6 +2,7 @@
 
 namespace App\Actions\AI;
 
+use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
 use App\Models\Accommodation;
 use App\Models\AIProposal;
@@ -42,7 +43,7 @@ class BuildProposalContext
         $parameters = $proposal->input_parameters ?? [];
         $inScope = $this->accommodationsInScope($parameters, $proposal->requestedBy);
 
-        return [
+        $context = [
             'group' => [
                 'name' => $group->name,
                 // The level chosen from the list when there is one; the old
@@ -59,6 +60,55 @@ class BuildProposalContext
             'accommodation_input' => (new BuildAccommodationInput)($group, $inScope),
             'target_student' => $this->targetStudent($parameters, $inScope),
             'reference_example' => $this->referenceExample($proposal),
+        ];
+
+        // Class and assessment drafts also get the group's performance and
+        // class data, whether or not tied to a unit (PA-116, ClickUp
+        // 86e3jujh0 Q4): aggregated, as visible to the requester.
+        if (in_array($proposal->type, [AIProposalType::ClassSession, AIProposalType::Assessment], true)) {
+            $context['group_performance'] = app(BuildGroupPerformanceInput::class)(
+                $group,
+                $this->subjectId($parameters),
+                $proposal->requestedBy,
+            );
+        }
+
+        if ($proposal->type === AIProposalType::ClassSession) {
+            $unit = isset($parameters['unit_id']) ? Unit::query()->find($parameters['unit_id']) : null;
+            $context['unit'] = $this->classUnit($unit, $parameters);
+            // Screens 14–15 start without a planner (Q3): the prepared place.
+            $context['unit_planner'] = (new BuildUnitPlannerInput)($unit);
+        }
+
+        return $context;
+    }
+
+    /**
+     * The unit a class hangs from, with the objectives the teacher chose to
+     * work (they are the teacher's, written in the Programa anual; the AI
+     * never proposes objectives). Null for a free class (Q2).
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return array<string, mixed>|null
+     */
+    protected function classUnit(?Unit $unit, array $parameters): ?array
+    {
+        if ($unit === null) {
+            return null;
+        }
+
+        $chosen = array_map('intval', (array) ($parameters['unit_objective_ids'] ?? []));
+
+        return [
+            'name' => $unit->name,
+            'position' => $unit->position,
+            'start_date' => $unit->start_date?->toDateString(),
+            'end_date' => $unit->end_date?->toDateString(),
+            'chosen_objectives' => $chosen === [] ? [] : $unit->objectives()
+                ->whereKey($chosen)
+                ->orderBy('position')
+                ->pluck('description')
+                ->all(),
         ];
     }
 

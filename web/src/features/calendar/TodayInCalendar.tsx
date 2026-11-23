@@ -9,6 +9,7 @@ import { fetchUserPreferences, updateUserPreferences } from "@/features/preferen
 import { type CalendarItem, type CalendarItemType, type User } from "@/types"
 import { fetchCalendar } from "./calendarApi"
 import { toDay } from "./calendarDates"
+import { CalendarItemTopic } from "./CalendarItemTopic"
 import { calendarItemLink, calendarItemTypeLabel, calendarItemWhat } from "./calendarItemText"
 
 /**
@@ -189,6 +190,7 @@ export function TodayInCalendar({ user }: { user: User }) {
                       <TableCell className="pl-6 tabular-nums">{item.time ?? "—"}</TableCell>
                       <TableCell>
                         <span className="font-medium">{calendarItemWhat(item)}</span>
+                        <CalendarItemTopic item={item} />
                         {item.type !== "class" && (
                           <span className="ml-2 text-xs text-muted-foreground">{calendarItemTypeLabel(item)}</span>
                         )}

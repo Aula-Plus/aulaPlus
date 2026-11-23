@@ -64,6 +64,31 @@ export function NoticeText({ notice, studentName }: { notice: AppNotification; s
           </Link>
         </span>
       )
+    case "material_published":
+      return (
+        <span>
+          Se agregó un material al catálogo del colegio.{" "}
+          <Link
+            className="underline"
+            to={`/materiales?solapa=institucional&materia=${data.subject_id}&nivel=${data.school_grade_id ?? "none"}`}
+          >
+            Ver en Materiales
+          </Link>
+        </span>
+      )
+    case "material_removed":
+      return (
+        <span>
+          Sacaron del catálogo tu material{data.material_title ? ` «${data.material_title}»` : ""}.
+          {data.reason ? ` Motivo: ${data.reason}` : ""}{" "}
+          <Link
+            className="underline"
+            to={`/materiales?materia=${data.subject_id}&nivel=${data.school_grade_id ?? "none"}`}
+          >
+            Ver en Materiales
+          </Link>
+        </span>
+      )
     case "follow_up_assigned":
       return (
         <span>
@@ -71,6 +96,25 @@ export function NoticeText({ notice, studentName }: { notice: AppNotification; s
           {studentName ? ` de ${studentName}` : ""} con fecha {formatShortDate(data.due_date)}.{" "}
           <Link className="underline" to={`/alumnos/${data.student_id}/seguimiento`}>
             Ver ficha del alumno
+          </Link>
+        </span>
+      )
+    case "meeting_sheet_fragment":
+      return (
+        <span>
+          Te llegó una planilla de una reunión: lo que te corresponde ya está en la ficha
+          {data.student_name ? ` de ${data.student_name}` : " del alumno"}.{" "}
+          <Link className="underline" to={`/alumnos/${data.student_id}/seguimiento`}>
+            Ver ficha del alumno
+          </Link>
+        </span>
+      )
+    case "meeting_action_assigned":
+      return (
+        <span>
+          Te quedó una acción de una reunión, con plazo al {formatShortDate(data.due_date)}.{" "}
+          <Link className="underline" to="/">
+            Verla en Inicio
           </Link>
         </span>
       )

@@ -1,3 +1,4 @@
+import { companionSummary } from "@/features/psychopedagogy-space/spaceText"
 import { useCallback, useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { Ban, CircleCheck, FileText, GraduationCap, HeartHandshake } from "lucide-react"
@@ -253,9 +254,17 @@ export function StudentTrackingPage() {
             <div className="grid gap-2 text-sm">
               <Row label="Año de ingreso" value={String(student.enrollment_year)} />
               <Row label="Fecha de nacimiento" value={formatShortDate(student.birth_date)} />
+              {/* Screen 10: who accompanies the student now, with role, hours
+                  and days (only the current ones come from the server). */}
               <Row
                 label="Acompañante terapéutico"
-                value={student.has_therapeutic_companion ? "Sí" : "No"}
+                value={
+                  tracking.therapeutic_companions && tracking.therapeutic_companions.length > 0
+                    ? tracking.therapeutic_companions.map(companionSummary).join(" / ")
+                    : student.has_therapeutic_companion
+                      ? "Sí"
+                      : "No"
+                }
               />
               <Row
                 label="Grupos"

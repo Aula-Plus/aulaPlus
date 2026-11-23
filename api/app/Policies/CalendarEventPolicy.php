@@ -9,8 +9,11 @@ use App\Models\User;
 /**
  * Who sees and manages a stored Calendar date (screen 21).
  *
- * - Institutional events: every staff member of the school sees them; only
- *   Direction creates, edits and removes them (P21-DEC-05).
+ * - Institutional events: every staff member of the school may see them (the
+ *   school's full calendar); only Direction creates, edits and removes them
+ *   (P21-DEC-05). Who an event concerns (its audience, ClickUp 1dfd3mc55zp)
+ *   only decides what each person's own calendar shows by default
+ *   (EventAudience) — it never hides an event from anyone who looks for it.
  * - Any other type (meetings, reserved for screen 10): seen and managed only
  *   by the people whose own calendar it is linked to (calendar_calendar_event
  *   pivot) — the red line of screen 21: a meeting with a treating team exists

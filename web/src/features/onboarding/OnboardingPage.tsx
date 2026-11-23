@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,8 @@ import { canViewOnboarding } from "@/lib/permissions"
 import { cn, formatShortDate } from "@/lib/utils"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 import * as onboardingApi from "./onboardingApi"
-import type { LevelRegime, OnboardingRecord, OnboardingStepStatus, SupportChannels } from "./onboardingApi"
+import { levelRegimeLabels } from "./onboardingApi"
+import type { OnboardingRecord, OnboardingStepStatus, SupportChannels } from "./onboardingApi"
 
 type Tab = "import" | "regime" | "log"
 
@@ -28,8 +30,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "regime", label: "Régimen, oferta y plantillas" },
   { id: "log", label: "Bitácora" },
 ]
-
-const regimeLabels: Record<LevelRegime, string> = { enabled: "Habilitado", authorized: "Autorizado" }
 
 const statusLabels: Record<OnboardingStepStatus, { label: string; tone: "neutral" | "warning" | "success" }> = {
   pending: { label: "Pendiente", tone: "neutral" },
@@ -73,7 +73,10 @@ export function OnboardingPage() {
   const { user } = useAuth()
   const [record, setRecord] = useState<OnboardingRecord | null>(null)
   const [error, setError] = useState(false)
-  const [tab, setTab] = useState<Tab>("import")
+  // «¿Algo no coincide con tu colegio?» in Colegio y estructura links here
+  // with `?solapa=regimen` to open the regime correction directly.
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(searchParams.get("solapa") === "regimen" ? "regime" : "import")
   const [instructiveOpen, setInstructiveOpen] = useState(false)
   const allowed = canViewOnboarding(user)
 
@@ -267,7 +270,7 @@ function RegimeTab({ record }: { record: OnboardingRecord }) {
               <div key={level.level_key} className="grid gap-0.5">
                 <dt className="font-medium">{level.level_label}</dt>
                 <dd className="text-muted-foreground">
-                  {level.regime ? regimeLabels[level.regime] : "Sin cargar por Aula+"}
+                  {level.regime ? levelRegimeLabels[level.regime] : "Sin cargar por Aula+"}
                   {level.fixed ? " · Fijo: todos los colegios privados lo están" : ""}
                   {level.note ? ` · ${level.note}` : ""}
                 </dd>

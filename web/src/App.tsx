@@ -24,6 +24,7 @@ import { AssessmentsPage } from "@/features/assessments/AssessmentsPage"
 import { ScreeningTestDesignPage } from "@/features/screening-tests/ScreeningTestDesignPage"
 import { ScreeningTestApplicationPage } from "@/features/screening-tests/ScreeningTestApplicationPage"
 import { SubjectsPage } from "@/features/subjects/SubjectsPage"
+import { MaterialsPage } from "@/features/materials/MaterialsPage"
 import { SchoolStructurePage } from "@/features/school-structure/SchoolStructurePage"
 import { UsersListPage } from "@/features/users/UsersListPage"
 import { UserFormPage } from "@/features/users/UserFormPage"
@@ -36,6 +37,10 @@ import { GroupComparisonPage } from "@/features/group-comparison/GroupComparison
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { AccommodationsPtpPage } from "@/features/accommodations-ptp/AccommodationsPtpPage"
 import { IndicatorsPage } from "@/features/indicators/IndicatorsPage"
+import { NewClassPage } from "@/features/classes/NewClassPage"
+import { ClassProposalPage } from "@/features/classes/ClassProposalPage"
+import { ClassPage } from "@/features/classes/ClassPage"
+import { PsychopedagogySpacePage } from "@/features/psychopedagogy-space/PsychopedagogySpacePage"
 
 function App() {
   return (
@@ -156,6 +161,40 @@ function App() {
               </ProtectedLayout>
             }
           />
+          {/* Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0).
+              «/clases» is the groups list, so a class lives under «/clase». */}
+          <Route
+            path="/nueva-clase"
+            element={
+              <ProtectedLayout>
+                <NewClassPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/propuesta-de-clase/:id"
+            element={
+              <ProtectedLayout>
+                <ClassProposalPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/clase/:id"
+            element={
+              <ProtectedLayout>
+                <ClassPage />
+              </ProtectedLayout>
+            }
+          />
+          <Route
+            path="/materiales"
+            element={
+              <ProtectedLayout>
+                <MaterialsPage />
+              </ProtectedLayout>
+            }
+          />
           <Route
             path="/materias"
             element={
@@ -245,6 +284,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <GroupComparisonPage />
+              </ProtectedLayout>
+            }
+          />
+          {/* Espacio de psicopedagogía (screen 10): Psicopedagogía, and Dirección with its limited view. */}
+          <Route
+            path="/espacio-psicopedagogia"
+            element={
+              <ProtectedLayout>
+                <PsychopedagogySpacePage />
               </ProtectedLayout>
             }
           />
