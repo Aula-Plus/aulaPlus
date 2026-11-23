@@ -940,9 +940,12 @@ it('starts on the groups\' year on a first visit in February, not on the new cal
 it('puts every write route on a group or its data behind group.writable', function () {
     // Writes that are deliberately not blocked by a closed year (the
     // student's own record has no group parameter and carries over by
-    // itself): discarding an AI proposal changes nothing of the group.
+    // itself): discarding an AI proposal changes nothing of the group, and
+    // sharing an assessment to the Materiales catalog (screen 19) only stores
+    // a cleaned copy outside the group's records.
     $exempt = [
         'POST api/v1/ai-proposals/{ai_proposal}/discard',
+        'POST api/v1/assessments/{assessment}/material',
     ];
     $parameters = ['group', 'assessment', 'annualPlan', 'unit', 'objective', 'classSession', 'application', 'result', 'ai_proposal'];
 

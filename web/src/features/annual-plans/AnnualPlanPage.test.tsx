@@ -197,6 +197,20 @@ describe("AnnualPlanPage", () => {
     expect(screen.getByText(/Resolver ecuaciones/)).toBeInTheDocument()
   })
 
+  it("opens «Nueva clase» from a unit and from one of its objectives (screen 14)", async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole("tab", { name: "Unidades" }))
+    await userEvent.click(screen.getAllByRole("button", { name: "Objetivos" })[0])
+    expect(screen.getByRole("link", { name: /Nueva clase desde esta unidad/ })).toHaveAttribute(
+      "href",
+      "/nueva-clase?programa=7&unidad=11",
+    )
+    expect(screen.getAllByRole("link", { name: "Nueva clase" })[0]).toHaveAttribute(
+      "href",
+      "/nueva-clase?programa=7&unidad=11&objetivo=1",
+    )
+  })
+
   it("shows the derived status of each unit, never a status picker", async () => {
     renderPage()
     await screen.findByRole("heading", { name: "Matemática · 2°EMS-A" })
@@ -342,6 +356,7 @@ describe("AnnualPlanPage", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "Objetivos" })[0])
     expect(screen.getByText(/Representar una función/)).toBeInTheDocument()
     expect(screen.queryByLabelText("Escribir un objetivo")).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /Nueva clase/ })).not.toBeInTheDocument()
   })
 })
 

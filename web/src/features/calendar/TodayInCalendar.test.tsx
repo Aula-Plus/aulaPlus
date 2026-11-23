@@ -48,6 +48,20 @@ describe("TodayInCalendar", () => {
     vi.restoreAllMocks()
   })
 
+  it("shows a class's topic next to its subject, small, muted and truncated", async () => {
+    vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([
+      item({ key: "class-1", id: 1, time: "08:30", place: "Aula 12", detail: "Comparar fracciones con tiras" }),
+    ])
+
+    renderBlock(teacher)
+
+    const topic = await screen.findByTestId("class-topic")
+    expect(topic).toHaveTextContent("Comparar fracciones con tiras")
+    expect(topic).toHaveClass("truncate", "text-xs", "text-muted-foreground")
+    const row = screen.getAllByRole("row")[1]
+    expect(within(row).getAllByRole("cell")[1]).toHaveTextContent("MatemáticaComparar fracciones con tiras")
+  })
+
   it("shows the teacher's classes of the day with time, subject, group and room, read from the calendar", async () => {
     const fetch = vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([
       item({ key: "class-3", id: 3, time: null, place: null, title: "Lengua" }),
@@ -71,8 +85,10 @@ describe("TodayInCalendar", () => {
       "Matemática",
       "5°A",
       "Aula 12",
-      "",
+      "Abrir",
     ])
+    // A class opens its own screen (15, ClickUp 86e3jujh0).
+    expect(within(rows[2]).getByRole("link", { name: "Abrir" })).toHaveAttribute("href", "/clase/1")
     // A class without a time is listed without one.
     expect(within(rows[1]).getAllByRole("cell")[0]).toHaveTextContent("—")
     expect(rows).toHaveLength(4)

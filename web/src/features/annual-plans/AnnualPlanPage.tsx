@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useParams } from "react-router-dom"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Sparkles, Trash2 } from "lucide-react"
 
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
@@ -57,6 +57,7 @@ import {
   todayIso,
   unitSummary,
 } from "./timeline"
+import { newClassPath } from "@/features/classes/classesApi"
 
 type Tab = "schedule" | "units" | "coverage" | "relations"
 
@@ -469,6 +470,7 @@ function UnitsTab({
               {plan.units.map((unit) => (
                 <UnitRow
                   key={unit.id}
+                  planId={plan.id}
                   unit={unit}
                   canEdit={plan.can_edit}
                   open={openUnit?.id === unit.id}
@@ -494,6 +496,7 @@ function UnitsTab({
 }
 
 function UnitRow({
+  planId,
   unit,
   canEdit,
   open,
@@ -502,6 +505,7 @@ function UnitRow({
   onWriteObjectives,
   onChanged,
 }: {
+  planId: number
   unit: PlanUnit
   canEdit: boolean
   open: boolean
@@ -567,6 +571,13 @@ function UnitRow({
                   />
                 ) : (
                   <div className="flex flex-wrap gap-2">
+                    {/* Screen 14 (ClickUp 86e3jujh0): group, subject and unit come fixed. */}
+                    <Button size="sm" asChild>
+                      <Link to={newClassPath(planId, unit.id)}>
+                        <Sparkles aria-hidden="true" />
+                        Nueva clase desde esta unidad
+                      </Link>
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
                       Editar unidad
                     </Button>
@@ -588,6 +599,7 @@ function UnitRow({
                   </div>
                 ))}
               <ObjectivesList
+                planId={planId}
                 unit={unit}
                 canEdit={canEdit}
                 autoFocusInput={focusObjective}
@@ -602,11 +614,13 @@ function UnitRow({
 }
 
 function ObjectivesList({
+  planId,
   unit,
   canEdit,
   autoFocusInput,
   onChanged,
 }: {
+  planId: number
   unit: PlanUnit
   canEdit: boolean
   autoFocusInput: boolean
@@ -693,6 +707,9 @@ function ObjectivesList({
                   )}
                   {canEdit && (
                     <>
+                      <Button size="xs" variant="ghost" asChild>
+                        <Link to={newClassPath(planId, unit.id, objective.id)}>Nueva clase</Link>
+                      </Button>
                       <Button
                         size="xs"
                         variant="ghost"

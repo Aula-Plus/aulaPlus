@@ -291,13 +291,39 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
   («Hoy en tu calendario», P01-HOY-01) lee el mismo feed para hoy.
 - **Quién ve qué** (línea roja): clases solo el docente que da esa materia en
   ese grupo; evaluaciones el docente dueño, Psicopedagogía y Dirección todas
-  (sin notas ni alumnos); tareas solo las propias; institucionales todos. Una
+  (sin notas ni alumnos); tareas solo las propias; institucionales, los que
+  le corresponden (ver abajo) y, en «Ver todo el calendario del colegio»
+  (`scope=school`), todos los del colegio. Una
   reunión (`CalendarEvent` tipo `meeting`) la ve solo quien la tiene en su
   calendario (pivot `calendar_calendar_event`) — ni Dirección la ve si no está
   citada. Ningún ítem lleva nombre de alumno.
 - **Evento institucional**: la única fecha que nace acá. Solo Dirección crea,
   edita y quita (`CalendarEventPolicy`). Fecha, hora opcional (`all_day`),
   lugar opcional; fechas/horas en hora local del colegio, guardadas en UTC.
+- **A quién le corresponde** (ClickUp 1dfd3mc55zp, P21-DEC-05/108):
+  `calendar_event_audiences`, una fila por destinatario y el evento toca los
+  grupos que cumplan **cualquiera** (combinación). Destinatario = un nivel
+  (`education_level_id`; «Secundaria» = Ciclo Básico + Bachillerato, dos
+  filas), una generación (`school_grade_id`) o los grupos de un programa
+  dentro de una generación (`school_grade_id` + `curricular_framework_id`,
+  según la oferta curricular del grupo en cualquier materia) o un grupo
+  (`group_id`, del colegio y del año lectivo de la fecha del evento; Eitán,
+  ClickUp 1dfd3mc55zp). Los grupos se muestran siempre con el nombre que les
+  puso el colegio («3° B»): cada destinatario trae `groups`, los grupos a los
+  que llega en el año del evento (el propio grupo, o los de la generación o
+  programa; vacío para un nivel), resuelto en el servidor con una consulta
+  para todo el feed. Si se borra el grupo, la fila queda con todo en null y no
+  le corresponde a nadie (nunca «todo el colegio»). Sin filas = todo
+  el colegio (los eventos previos quedan así). Validación en
+  `InstitutionalEventRequest`: el programa tiene que estar activo y no ser el
+  régimen obligatorio del colegio y aplicar al nivel del grado
+  (`GET /calendar-events/audience-options`, solo Dirección).
+  `EventAudience`: al docente le corresponden los de los grupos donde da una
+  materia, del año lectivo de la fecha del evento; a Psicopedagogía y
+  Dirección (roles de todo el colegio) todos. Es un filtro de la vista, no de
+  permisos: cualquier persona del colegio puede leer todos los eventos
+  institucionales (`CalendarEventPolicy::view`). Cada ítem trae `audience` y
+  `for_me`.
 - **Hora y salón de una clase**: datos de la clase (`class_sessions.start_time`,
   `room`, ambos opcionales), editables por su docente en cualquier momento.
   `class_sessions.subject_id` dice de qué materia es la clase.
@@ -313,6 +339,9 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
 |---------------------|------------------------------------------|
 | Calendario          | calendar feed (`CalendarFeed`)           |
 | Evento institucional| `CalendarEvent` tipo `institutional`     |
+| A quién le corresponde (destinatarios) | `CalendarEventAudience` (`calendar_event_audiences`) |
+| Generación          | grado (`SchoolGrade`) de los grupos del año |
+| Calendario completo del colegio | `scope=school` del feed          |
 | Reunión             | `CalendarEvent` tipo `meeting` / item `meeting` |
 | Cierre de período   | item `period_closing`                    |
 | Etapa de proyecto   | item `project_stage`                     |
@@ -365,6 +394,21 @@ Se agregan acá a medida que aparecen.
 | Organismo (del calendario) | `CalendarBody` (`curricular_frameworks.calendar_body`) | ANEP Bachillerato, ANEP Ciclo Básico y Primaria, Cambridge, IB: una fila de períodos por organismo de la oferta del colegio (`PeriodCalendars`). Dato del catálogo. |
 | Separar por programa | `school_years.split_calendar_bodies` | Solo Cambridge e IB, con al menos dos programas en la oferta: cada programa arranca con una copia de los períodos del organismo. Volver a una fila solo si todos tienen los mismos períodos. Pasa al año siguiente al abrirlo. |
 | Habilitar la carga (en un grupo de un año cerrado) | `GroupWriteWindow` (`group_write_windows`) | Motivo, fecha hasta la que vale (inclusive, día local), quién (`enabled_by_id`) y cuándo (`created_at`); se puede terminar antes (`ended_at`). Pasada la fecha, el grupo vuelve solo a lectura. Mientras dura también deja corregir la estructura del grupo; cada escritura que pasa gracias a ella deja una fila en `audit_logs` sobre la habilitación (quién, cuándo, grupo y ruta; el porqué es su motivo). |
+| Recursos disponibles (del colegio / del grupo) | `SchoolResource`, `GroupAddedResource` (`group_added_resources`, `ResourceVisibility`: `group` / `own`), `GroupResourceExclusion` | La huerta, el laboratorio, las computadoras (pantalla 23 P23-REC-02, PA-085). Dirección carga los del colegio (solo ella). En el perfil del grupo, sus docentes, Psicopedagogía y Dirección destildan los que el grupo no tiene a mano (`group_resource_exclusions`) y suman o quitan recursos del grupo, `GroupPolicy::manageResources`. Al sumar, el docente elige «Todo el grupo» (lo ven todos los docentes del grupo, con el nombre de quien lo sumó) o «Solo mío» (entre docentes, solo él; Dirección y Psicopedagogía ven que existe y de quién es). Dirección y Psicopedagogía no tienen recursos propios: lo que suman es para todo el grupo (`own` de ellas → 422). Quita uno de todo el grupo quien gestiona los recursos del grupo; uno «solo mío», solo su autor (`GroupAddedResourcePolicy`). `GroupAddedResource` no es `App\Http\Resources\GroupResource` (el API Resource del grupo). No confundir con Materiales (pantalla 19). |
+| Nueva clase / Propuesta de clase (pantallas 14–15) | `AIProposal` tipo `class_session` → `ClassSession` | ClickUp 86e3jujh0. Solo el docente que dicta la materia en el grupo pide clases y evaluaciones a la IA (PA-104: `AIProposalPolicy::generateClass` + `GenerateAIProposalRequest`; Psicopedagogía y Dirección reciben 403); desde una unidad la materia sale del programa (`unit_id`), directo se elige (`subject_id`); sin una de las dos, 422. La IA propone por secciones (`App\Enums\ClassSection`: `opening` apertura, `central_activity` actividad central, `closing` cierre, `materials` materiales, `assessment` evaluación de la clase) y el docente decide cada una (`ClassSectionDecision`: aprobada, editada, rechazada) al confirmar (`POST /ai-proposals/{id}/apply`); regenerar secciones es un pedido nuevo con `reference_proposal_id` + `regenerate_sections` y lo no tocado se copia del borrador anterior. Confirmar crea la `ClassSession` con `sections` (solo lo aprobado/editado) y, si cuelga de una unidad, la vincula a los objetivos elegidos (cuentan como planificados). Una «clase libre» no tiene unidad: no lee planificador ni suma a la cobertura. |
+| «Lo que recibe la IA» para una clase | `BuildProposalContext` (`unit`, `unit_planner`, `group_performance`) | `group_performance` (`BuildGroupPerformanceInput`): promedios por evaluación del grupo, de cualquier unidad o de ninguna (PA-116), con la misma visibilidad de notas que el perfil del grupo y solo con 3+ resultados; y cómo se cerraron sus clases recientes. Nunca alumnos ni nombres. `unit_planner` (`BuildUnitPlannerInput`) es el lugar para conectar el planificador de la Unidad (pantalla 13): hoy siempre «no leído». |
+| «¿Por qué la IA generó esta propuesta?» / Datos usados | `raw_response.rationale`, `raw_response.data_used`, `raw_response.planner` | `data_used`: qué dato tomó, de dónde sale y por qué. `planner`: si se leyó el planificador (lo pone el servidor, no la IA). |
+| Cerrar la clase (Todo / Una parte / Nada) | `POST /class-sessions/{id}/close`, `class_sessions.closing_result` (`ObjectiveCoverage`) + `closed_at` | Un toque (P15-DEC-03), desde el día de la clase, solo su docente. Todo → objetivos `full`; Una parte → por objetivo, «Se dio» `full` (`given_objective_ids`) o «Se empezó» `partial` (`started_objective_ids`, empezado, se termina con «Lo terminé»); el no marcado queda sin registro (`coverage` null: sigue planificado, P15-PRO-05); Nada → `none` (siguen planificados). Volver a cerrar reescribe todos los objetivos de la clase. Todo y Una parte pasan la clase a `delivered`. |
+| Espacio de psicopedagogía (pantalla 10) | rutas `/v1/psychopedagogy/*` | Agenda, Acompañantes y Planillas. Ningún docente entra (403 en todo). Dirección ve la carga de la semana por tipo, los acompañantes vigentes (con su rol, sin el historial) y que cada planilla existió (fecha, tipo, grupo o «Individual»); nunca con quién, el texto, los alumnos tratados ni las acciones. |
+| Encuentro (de la agenda) | `PsychopedagogyMeeting` (`psychopedagogy_meetings`) | `kind`: `individual_session` (sesión individual, con un alumno) o `meeting` (reunión de uno de los tipos de planilla). Estado `scheduled` / `done` («Programada» / «Realizada»). La nota de una sesión individual es una observación (`Comment`) con su alcance, «solo Psicopedagogía» por defecto (`note_comment_id`). |
+| Acompañante terapéutico | `TherapeuticCompanion` (`therapeutic_companions`) | Registro que carga Psicopedagogía (nombre, horas semanales, días, rol del acompañante); **no** es una cuenta ni un rol de usuario. Cuando deja de acompañar se le pone fecha de fin (`ended_on`, «Dejó de acompañar») y queda en el historial del alumno, que solo ve Psicopedagogía; **vigente** = sin fecha de fin. Solo los vigentes mantienen `students.has_therapeutic_companion`, cuentan como activos, salen en la lista de Dirección y en la ficha. |
+| Rol del acompañante | `TherapeuticCompanion.role` | Texto libre que escribe Psicopedagogía, sin opciones fijas (ClickUp 1dfd3mc4bge; reemplaza al «motivo»). Lo ve quien puede ver que el alumno tiene acompañante: Psicopedagogía, Dirección en su lista y los docentes del alumno en la fila «Acompañante terapéutico» de la ficha. |
+| Tipo de planilla | `MeetingSheetType` (`meeting_sheet_types`) | Del colegio, iguales para todas las planillas (P10-DEC-01). Arrancan los tres de siempre; Dirección los renombra y suma en Colegio y estructura › Institución. No se borran. |
+| Planilla | `MeetingSheet` (`meeting_sheets`) | Una por reunión (P10-DEC-02). `draft` hasta «Confirmar el reparto» (`confirmed`); nada baja a las fichas antes. |
+| Fragmento (del reparto) | `MeetingSheetFragment` | La parte de la planilla que va a la ficha de un alumno tratado, con su alcance (`ObservationScope`). Al confirmar se vuelve una observación (`comment_id`). Lo escribe Psicopedagogía a mano (`source = manual`): la propuesta de reparto con IA espera a que existan los datos de la familia (respuesta C de Eitán en ClickUp). Arranca en «Solo Psicopedagogía» y se abre a mano por alumno. Al confirmar se antepone «Tipo · 20 nov 2026 — ». |
+| Acción (de una planilla) | `MeetingSheetAction` | Con responsable y plazo; al confirmar es una tarea en el Inicio de su responsable (`/v1/meeting-actions/mine`) y le llega un aviso. |
+| Materiales (pantalla 19) | `Material` (`materials`) | Material pedagógico: archivo que sube Docente o Psicopedagogía (`source = upload`, disco privado `materials`, solo enlaces temporales) o copia de catálogo de una evaluación confirmada (`source = assessment`, `content` sin marcas de alumno: `StudentMarkCleaner`). Las carpetas del catálogo son materia × grado (`subject_id`, `school_grade_id`). Antes se llamaba «Recursos»; «Recursos disponibles» es otra cosa (la huerta, el laboratorio). |
+| Catálogo institucional / Sacar del catálogo | `materials.catalog_status` (`published` / `removed`) | Se publica al guardar (sin aprobación hasta que exista Usuarios y permisos › Aprobaciones) y se avisa a Psicopedagogía y Dirección (`MaterialPublishedNotification`), que lo pueden sacar con un motivo opcional (`removed_reason`, hasta 500 caracteres); a quien lo publicó le llega «Sacaron del catálogo tu material» con ese motivo (`MaterialRemovedNotification`), salvo que lo haya sacado él mismo. Si la dueña lo vuelve a publicar, Psicopedagogía y Dirección reciben otra vez el aviso de publicación y `removed_at/_by_id/_reason` vuelven a null (el historial queda en `audit_logs`). Un archivo solo se publica con «Revisé que no tenga datos de alumnos» (`no_student_data_confirmed_at/_by_id`). |
 | Puesta en marcha (pantalla 29) | `SchoolOnboarding`, `OnboardingSource`, `OnboardingLogEntry` | Registro de cómo entró la información del colegio: fechas del encabezado y contacto de Aula+, «Qué se recibió» y «Bitácora». Lo carga el equipo de Aula+ con `php artisan app:onboarding-status|-source|-log` (no hay rol ni pantalla para Aula+); Dirección solo lo lee (`SchoolPolicy::viewOnboarding`). Migración, no sincronización. |
 | Régimen ANEP por nivel (habilitado / autorizado) | `SchoolLevelRegime` (`LevelRegime`: `enabled` / `authorized`) | Lo carga Aula+ (`app:onboarding-regime`), nunca lo declara el colegio (P29-DEC-01). Ciclo Básico y Bachillerato se leen «Habilitado» hasta que se cargue otra cosa. Distinto de `school_curricular_framework.mandatory` (qué programa es obligatorio). |
 | Corrección de régimen | `SupportMessage::KIND_REGIME_CORRECTION` | «Solicitar corrección» de la pantalla 29: mismo camino que «Ayuda y sugerencias» (se guarda y sale mail a soporte), con máxima urgencia. Después se ofrecen `SUPPORT_WHATSAPP_NUMBER` / `SUPPORT_CONTACT_EMAIL` si están configurados. |

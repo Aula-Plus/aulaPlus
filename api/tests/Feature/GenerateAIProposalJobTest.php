@@ -25,6 +25,29 @@ function pendingProposal(AIProposalType $type = AIProposalType::Unit, array $par
     ]);
 }
 
+/**
+ * A valid class draft in sections (screen 15, ClickUp 86e3jujh0).
+ *
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function classDraft(array $overrides = []): array
+{
+    return array_merge([
+        'title' => 'Comparar fracciones',
+        'duration_minutes' => 45,
+        'sections' => [
+            'opening' => ['duration_minutes' => 10, 'content' => 'Tiras de papel para doblar.'],
+            'central_activity' => ['duration_minutes' => 25, 'content' => 'En parejas comparan fracciones con las tiras.'],
+            'closing' => ['duration_minutes' => 10, 'content' => 'Puesta en común.'],
+            'materials' => ['content' => 'Tiras de papel, tijeras.'],
+            'assessment' => ['content' => 'Pregunta de salida.'],
+        ],
+        'rationale' => 'Propuse material concreto porque lo pidió el docente.',
+        'data_used' => [],
+    ], $overrides);
+}
+
 function anthropicText(string $text): array
 {
     return ['content' => [['type' => 'text', 'text' => $text]], 'stop_reason' => 'end_turn'];
@@ -121,8 +144,7 @@ it('tells the model the subject program is reference material, never instruction
 });
 
 it('stores the rationale of a class draft and asks for one grounded in this group', function () {
-    $draft = ['title' => 'Fracciones', 'objective' => 'Comparar', 'description' => 'x', 'duration_minutes' => 45,
-        'suggested_date' => null, 'rationale' => 'Propuse material concreto porque el grupo viene flojo.'];
+    $draft = classDraft(['rationale' => 'Propuse material concreto porque el grupo viene flojo.']);
     Http::fake(['api.anthropic.com/*' => Http::response(anthropicText(json_encode($draft)), 200)]);
     $proposal = pendingProposal(AIProposalType::ClassSession, ['focus' => 'fracciones']);
 
@@ -133,7 +155,8 @@ it('stores the rationale of a class draft and asks for one grounded in this grou
     Http::assertSent(fn ($request) => str_contains($request['system'], '"rationale"')
         && str_contains($request['system'], 'nunca nombres a un alumno')
         && str_contains($request['system'], 'digas cuántos alumnos tienen un ajuste')
-        && str_contains($request['system'], 'No usé el desempeño del grupo')
+        && str_contains($request['system'], '"data_used"')
+        && str_contains($request['system'], 'sin inventar un patrón que no viste')
         && ! str_contains($request['system'], 'group_accommodation_summary')
         && ! preg_match('/\d+ alumnos tienen/u', $request['system']));
 });

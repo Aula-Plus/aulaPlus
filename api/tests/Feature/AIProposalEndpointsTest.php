@@ -162,9 +162,11 @@ it('accepts a class session with a subject chosen directly, only one taught in t
     // A subject a colleague teaches in the group is not the teacher's to pick.
     $this->postJson($url, $body($science))->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
 
-    Sanctum::actingAs($psychopedagogue);
-    $this->postJson($url, $body($science))->assertStatus(202);
     $this->postJson($url, $body($notTaught))->assertStatus(422)->assertJsonValidationErrors('parameters.subject_id');
+
+    // Psicopedagogía and Dirección don't generate classes (P14-DEC-04).
+    Sanctum::actingAs($psychopedagogue);
+    $this->postJson($url, $body($science))->assertForbidden();
 });
 
 it('does not take a subject alongside a unit (the unit already carries it)', function () {
@@ -172,6 +174,7 @@ it('does not take a subject alongside a unit (the unit already carries it)', fun
     [$school, $teacher, $group, $plan] = teacherWithGroupAndPlan();
     $unit = Unit::factory()->create(['annual_plan_id' => $plan->id]);
     $subject = $group->teachers()->first()->pivot->subject_id;
+    $plan->update(['subject_id' => $subject]);
     Sanctum::actingAs($teacher);
 
     $this->postJson("/api/v1/groups/{$group->id}/assistant/generate", [

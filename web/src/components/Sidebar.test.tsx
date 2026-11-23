@@ -157,6 +157,19 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("link", { name: "Screenings" })).not.toBeInTheDocument()
   })
 
+  it("gives the direct «Nueva clase» entry to teachers only (screen 14)", () => {
+    renderSidebar("teacher")
+    expect(screen.getByRole("link", { name: "Nueva clase" })).toHaveAttribute("href", "/nueva-clase")
+    cleanup()
+
+    renderSidebar("psychopedagogue")
+    expect(screen.queryByRole("link", { name: "Nueva clase" })).not.toBeInTheDocument()
+    cleanup()
+
+    renderSidebar("director")
+    expect(screen.queryByRole("link", { name: "Nueva clase" })).not.toBeInTheDocument()
+  })
+
   it("shows the adoption link and its section only to a director", () => {
     renderSidebar("director")
     expect(screen.getByRole("link", { name: "Adopción" })).toBeInTheDocument()
