@@ -812,6 +812,8 @@ export interface Accommodation extends AccommodationScope {
    */
   review_status: AccommodationReviewStatus | null
   proposed_by_id: number | null
+  /** Who the proposal comes from (ClickUp 1dfd3mc55zu); null when not a proposal. */
+  proposed_as: "director" | "teacher" | null
   proposed_by_name: string | null
   /** Who confirmed, withdrew or rejected the proposal, and when. */
   reviewed_by_id: number | null
@@ -855,6 +857,8 @@ export interface AccommodationInput {
   review_due_date?: string
   review_recipients?: "role" | "people"
   reviewer_ids?: number[]
+  /** A new proposal only: «Lo que observaste», optional (ClickUp 1dfd3mc55zu). */
+  observation?: string | null
 }
 
 export interface Barrier {
@@ -1361,6 +1365,8 @@ export interface ScheduledFollowUp {
    * description is empty, and it closes with the proposal (never by hand).
    */
   accommodation_id?: number | null
+  /** Who made the proposal a review task is about (ClickUp 1dfd3mc55zu). */
+  accommodation_proposed_as?: "director" | "teacher" | null
   description: string
   /** General deadline: the latest due date among the stages (server-computed). */
   due_date: string

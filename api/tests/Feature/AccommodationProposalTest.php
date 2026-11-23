@@ -253,8 +253,10 @@ it('keeps each step to its role', function () {
         $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/{$step}", ['reason' => 'x'])->assertForbidden();
     }
 
+    // A teacher's list only holds their own proposals (ClickUp 1dfd3mc55zu):
+    // never direction's.
     Sanctum::actingAs($teacher);
-    $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")->assertForbidden();
+    $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")->assertOk()->assertJsonCount(0, 'data');
     $this->getJson("/api/v1/accommodations/{$proposal->id}/proposal/history")->assertForbidden();
     $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/confirm")->assertForbidden();
 });

@@ -110,7 +110,7 @@ const cases: {
     fn: createsAccommodationProposals,
     director: true,
     psychopedagogue: false,
-    teacher: false,
+    teacher: true,
   },
   {
     name: "canEditConfirmedAccommodations",

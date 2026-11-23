@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canReviewAccommodationProposals, createsAccommodationProposals } from "@/lib/permissions"
+import { canReviewAccommodationProposals, createsAccommodationProposals, isDirector } from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
 import {
   accommodationCategoryLabels,
@@ -40,6 +40,11 @@ interface AccommodationProposalsSectionProps {
   onEdit: (proposal: Accommodation) => void
   /** After psychopedagogy confirmed one: it is in force, the parent refetches. */
   onConfirmed: () => void
+  /**
+   * A teacher's own proposals (ClickUp 1dfd3mc55zu; the server only sends
+   * those): titled «Tus propuestas de ajuste» and left out while empty.
+   */
+  teacherView?: boolean
 }
 
 /**
@@ -65,7 +70,9 @@ export function AccommodationProposalsSection({
   refreshKey,
   onEdit,
   onConfirmed,
+  teacherView = false,
 }: AccommodationProposalsSectionProps) {
+  const title = teacherView ? "Tus propuestas de ajuste" : "Propuestas de ajuste"
   const [proposals, setProposals] = useState<Accommodation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Bumped on every fetch: each row remounts with the fresh data, so an open
@@ -96,7 +103,7 @@ export function AccommodationProposalsSection({
 
   if (error) {
     return (
-      <SectionCard title="Propuestas de ajuste">
+      <SectionCard title={title}>
         <p className="text-sm text-destructive">{error}</p>
       </SectionCard>
     )
@@ -104,7 +111,7 @@ export function AccommodationProposalsSection({
 
   if (!proposals) {
     return (
-      <SectionCard title="Propuestas de ajuste">
+      <SectionCard title={title}>
         <p className="text-muted-foreground" role="status">
           Cargando…
         </p>
@@ -113,15 +120,16 @@ export function AccommodationProposalsSection({
   }
 
   if (proposals.length === 0) {
+    if (teacherView) return null
     return (
-      <SectionCard title="Propuestas de ajuste">
+      <SectionCard title={title}>
         <EmptyState message="No hay propuestas de ajuste." />
       </SectionCard>
     )
   }
 
   return (
-    <SectionCard title="Propuestas de ajuste">
+    <SectionCard title={title}>
       <ul className="grid gap-2">
         {proposals.map((proposal) => (
           <ProposalItem
@@ -186,7 +194,12 @@ export function ProposalItem({
 }) {
   const { user } = useAuth()
   const reviews = canReviewAccommodationProposals(user)
-  const proposes = createsAccommodationProposals(user)
+  const fromTeacher = proposal.proposed_as === "teacher"
+  // A teacher's proposal is taken back or resubmitted only by that teacher
+  // (ClickUp 1dfd3mc55zu); direction's, by direction. UX only.
+  const proposes =
+    createsAccommodationProposals(user) &&
+    (fromTeacher ? proposal.proposed_by_id === user?.id : isDirector(user))
   const status = proposal.review_status
   const isOpen = status === "pending" || status === "returned"
   const [openForm, setOpenForm] = useState<OpenForm>(null)
@@ -289,7 +302,19 @@ export function ProposalItem({
         </p>
       )}
       {status === "returned" && proposes && (
-        <p className="text-xs text-muted-foreground">Le toca responder a Dirección.</p>
+        <p className="text-xs text-muted-foreground">
+          {fromTeacher
+            ? "Te toca responder: corregila y reenviala a revisión, o retirala."
+            : "Le toca responder a Dirección."}
+        </p>
+      )}
+      {status === "pending" && fromTeacher && proposes && (
+        <p className="text-xs text-muted-foreground">
+          Psicopedagogía la está revisando. Mientras tanto la ven solo vos y Psicopedagogía.
+        </p>
+      )}
+      {fromTeacher && reviews && proposal.proposed_by_name && (
+        <p className="text-xs text-muted-foreground">Propuesta de {proposal.proposed_by_name} (docente)</p>
       )}
 
       {isOpen && openForm === null && (
@@ -332,7 +357,9 @@ export function ProposalItem({
       {openForm && (
         <div className="grid gap-2 border-t pt-2">
           <Label htmlFor={`proposal-${openForm}-${proposal.id}`} className="text-xs">
-            {STEP_FORMS[openForm].label}
+            {openForm === "return" && fromTeacher
+              ? "Comentario o contrapropuesta para el docente"
+              : STEP_FORMS[openForm].label}
           </Label>
           {openForm === "confirm" ? (
             <Input

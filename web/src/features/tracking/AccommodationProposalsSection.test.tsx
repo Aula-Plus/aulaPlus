@@ -24,6 +24,7 @@ function proposal(overrides: Partial<Accommodation> = {}): Accommodation {
     is_effective: false,
     review_status: "pending",
     proposed_by_id: 9,
+    proposed_as: "director",
     proposed_by_name: "Dora Directora",
     reviewed_by_id: null,
     reviewed_by_name: null,

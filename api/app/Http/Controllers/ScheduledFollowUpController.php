@@ -32,13 +32,11 @@ class ScheduledFollowUpController extends Controller
     {
         $this->authorize('viewForStudent', [ScheduledFollowUp::class, $student]);
 
-        $query = $student->scheduledFollowUps()->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles'])->latest();
+        $query = $student->scheduledFollowUps()->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles', 'accommodation:id,proposed_as'])->latest();
 
-        // Review tasks of accommodation proposals are school-wide only
-        // (ScheduledFollowUpPolicy::view).
-        if (! $request->user()->hasAnyRole(Role::schoolWideValues())) {
-            $query->whereNull('accommodation_id');
-        }
+        // Review tasks of accommodation proposals: school-wide only, and not
+        // a teacher's private proposal for direction (ScheduledFollowUpPolicy::view).
+        $query->reviewTasksVisibleTo($request->user());
 
         // The endpoint returns every follow-up unless the caller narrows it
         // with ?resolved=true|false — the default filter is a client concern,
@@ -71,11 +69,11 @@ class ScheduledFollowUpController extends Controller
         $studentIds = $group->students()->pluck('students.id');
 
         $followUps = ScheduledFollowUp::query()
-            ->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles'])
+            ->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles', 'accommodation:id,proposed_as'])
             ->whereIn('student_id', $studentIds)
             // Review tasks of accommodation proposals are school-wide only
             // (ScheduledFollowUpPolicy::view).
-            ->when(! $request->user()->hasAnyRole(Role::schoolWideValues()), fn ($query) => $query->whereNull('accommodation_id'))
+            ->reviewTasksVisibleTo($request->user())
             ->latest()
             ->get();
 
@@ -124,7 +122,7 @@ class ScheduledFollowUpController extends Controller
         $user = $request->user();
 
         $followUps = ScheduledFollowUp::query()
-            ->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles', 'student'])
+            ->with(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles', 'accommodation:id,proposed_as', 'student'])
             ->where('resolved', false)
             ->whereHas('members', fn ($query) => $query->where('user_id', $user->id)->whereNull('hidden_at'))
             ->orderBy('due_date')
@@ -138,7 +136,7 @@ class ScheduledFollowUpController extends Controller
     {
         $followUp = $workflow->create($student, $request->user(), $request->validated());
 
-        $followUp->load(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles']);
+        $followUp->load(['assignedTo.roles', 'sharedWith.roles', 'members.user.roles', 'accommodation:id,proposed_as']);
 
         return (new ScheduledFollowUpResource($followUp))->response()->setStatusCode(201);
     }

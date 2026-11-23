@@ -48,9 +48,10 @@ class AccommodationController extends Controller
     {
         $validated = $request->validated();
         $user = $request->user();
-        $proposes = AccommodationProposalWorkflow::createsProposals($user);
+        $proposerRole = AccommodationProposalWorkflow::proposerRole($user);
+        $proposes = $proposerRole !== null;
 
-        $accommodation = DB::transaction(function () use ($validated, $student, $user, $proposes): Accommodation {
+        $accommodation = DB::transaction(function () use ($validated, $student, $user, $proposes, $proposerRole): Accommodation {
             $accommodation = Accommodation::create([
                 ...$this->attributes($validated),
                 'student_id' => $student->id,
@@ -58,6 +59,7 @@ class AccommodationController extends Controller
                     'active' => true,
                     'review_status' => AccommodationReviewStatus::Pending,
                     'proposed_by_id' => $user->id,
+                    'proposed_as' => $proposerRole?->value,
                 ] : []),
             ]);
             $accommodation->subjects()->sync($validated['subject_ids'] ?? []);
@@ -68,6 +70,7 @@ class AccommodationController extends Controller
                     $user,
                     $validated['review_due_date'],
                     $validated['review_recipients'] === 'people' ? $validated['reviewer_ids'] : null,
+                    $validated['observation'] ?? null,
                 );
             } else {
                 // Registered already in force: the teachers it reaches learn
@@ -133,7 +136,7 @@ class AccommodationController extends Controller
      */
     protected function attributes(array $validated): array
     {
-        $attributes = Arr::except($validated, ['subject_ids', 'review_due_date', 'review_recipients', 'reviewer_ids']);
+        $attributes = Arr::except($validated, ['subject_ids', 'review_due_date', 'review_recipients', 'reviewer_ids', 'observation']);
 
         if (array_key_exists('assessment_types', $attributes) && empty($attributes['assessment_types'])) {
             $attributes['assessment_types'] = null;

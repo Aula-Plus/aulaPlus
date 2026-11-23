@@ -4,10 +4,12 @@ namespace App\Models;
 
 use App\Enums\FollowUpMemberRole;
 use App\Enums\FollowUpStageStatus;
+use App\Enums\Role;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\ScheduledFollowUpFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -95,6 +97,31 @@ class ScheduledFollowUp extends Model
     /**
      * The direction proposal this review task belongs to, if any.
      */
+    /**
+     * The review tasks of accommodation proposals the user may see, plus
+     * every other follow-up: psychopedagogy, all; direction, all but the
+     * review task of a teacher's proposal that is not public yet (ClickUp
+     * 1dfd3mc55zu, P06-AJU-02); anyone else, none.
+     *
+     * @param  Builder<ScheduledFollowUp>  $query
+     */
+    public function scopeReviewTasksVisibleTo(Builder $query, User $user): void
+    {
+        if ($user->hasRole(Role::Psychopedagogue->value)) {
+            return;
+        }
+
+        if ($user->hasRole(Role::Director->value)) {
+            $query->where(fn (Builder $visible) => $visible
+                ->whereNull('scheduled_follow_ups.accommodation_id')
+                ->orWhereHas('accommodation', fn (Builder $accommodation) => $accommodation->visibleTo($user)));
+
+            return;
+        }
+
+        $query->whereNull('scheduled_follow_ups.accommodation_id');
+    }
+
     public function accommodation(): BelongsTo
     {
         return $this->belongsTo(Accommodation::class);

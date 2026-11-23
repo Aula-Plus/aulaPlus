@@ -1,5 +1,5 @@
 import { companionSummary } from "@/features/psychopedagogy-space/spaceText"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { Link, useParams } from "react-router-dom"
 import { Ban, CircleCheck, FileText, GraduationCap, HeartHandshake } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -11,6 +11,7 @@ import {
   canResolveAlert,
   canViewStudentHistory,
   createsAccommodationProposals,
+  proposesAccommodationsAsTeacher,
   isPsychopedagogue,
   isSchoolWideStaff,
 } from "@/lib/permissions"
@@ -82,6 +83,9 @@ export function StudentTrackingPage() {
   // Direction proposes (psychopedagogy confirms) and never edits an
   // accommodation in force (ClickUp 86e3qkwkk).
   const proposesAccommodations = createsAccommodationProposals(user)
+  // A teacher proposes from the file too (ClickUp 1dfd3mc55zu, PA-002); the
+  // server decides it is a proposal and who sees it.
+  const teacherProposes = proposesAccommodationsAsTeacher(user)
   const showEditAccommodations = canEditConfirmedAccommodations(user)
   const newAccommodationLabel = proposesAccommodations ? "Proponer ajuste" : "Nuevo ajuste"
   const showHistoryLink = canViewStudentHistory(user)
@@ -491,7 +495,26 @@ export function StudentTrackingPage() {
           )}
 
             {!tracking.accommodations && !tracking.barriers && (
-              <SupportsReadOnly chips={tracking.support_chips} />
+              <SupportsReadOnly
+                chips={tracking.support_chips}
+                action={
+                  teacherProposes ? (
+                    <Button type="button" size="sm" onClick={handleNewAccommodation}>
+                      Proponer ajuste
+                    </Button>
+                  ) : undefined
+                }
+              />
+            )}
+
+            {teacherProposes && (
+              <AccommodationProposalsSection
+                studentId={studentId}
+                refreshKey={proposalsRefreshKey}
+                onEdit={handleEditAccommodation}
+                onConfirmed={loadTracking}
+                teacherView
+              />
             )}
           </>
         )}
@@ -673,7 +696,7 @@ export function StudentTrackingPage() {
         />
       )}
 
-      {showManageAccommodations && (
+      {(showManageAccommodations || teacherProposes) && (
         <AccommodationFormDialog
           open={accommodationDialogOpen}
           onOpenChange={setAccommodationDialogOpen}
@@ -681,6 +704,7 @@ export function StudentTrackingPage() {
           accommodation={editingAccommodation}
           onSaved={handleAccommodationSaved}
           proposal={proposesAccommodations}
+          proposedByTeacher={teacherProposes}
         />
       )}
     </div>
@@ -759,10 +783,17 @@ function Row({ label, value }: { label: string; value: string }) {
  * the general accommodations and those scoped to a subject they teach the
  * student, and never their origin, validator or review date.
  */
-function SupportsReadOnly({ chips }: { chips: StudentTracking["support_chips"] }) {
+function SupportsReadOnly({
+  chips,
+  action,
+}: {
+  chips: StudentTracking["support_chips"]
+  /** «Proponer ajuste» for a teacher (ClickUp 1dfd3mc55zu). */
+  action?: ReactNode
+}) {
   return (
     <>
-      <SectionCard title="Ajustes vigentes">
+      <SectionCard title="Ajustes vigentes" action={action}>
         {chips.accommodations.length === 0 ? (
           <EmptyState icon={HeartHandshake} message="Sin ajustes vigentes." />
         ) : (

@@ -27,6 +27,7 @@ function row(overrides: Partial<AccommodationInboxRow>): AccommodationInboxRow {
     is_effective: true,
     review_status: null,
     proposed_by_id: null,
+    proposed_as: null,
     proposed_by_name: null,
     reviewed_by_id: null,
     reviewed_by_name: null,

@@ -85,9 +85,10 @@ export function AccommodationsPtpPage() {
 }
 
 /**
- * P06-AJU-03 / P06-AJU-04, without what does not exist yet (the PTP, and the
- * teacher proposing from the file): it tells each role where it does see the
- * accommodations, not what it can't do here.
+ * P06-AJU-03 / P06-AJU-04, without what does not exist yet (the PTP): it
+ * tells each role where it does see the accommodations and how to propose one
+ * from the file (a teacher too since ClickUp 1dfd3mc55zu), not what it can't
+ * do here.
  */
 function RoleNote({ director }: { director: boolean }) {
   return (
@@ -97,7 +98,7 @@ function RoleNote({ director }: { director: boolean }) {
         <p className="text-sm text-muted-foreground">
           {director
             ? "Los ajustes de cada alumno los ves completos en su ficha, con quién los confirmó y de dónde salieron. Para proponer un ajuste, usá «Proponer ajuste» en la ficha: tu propuesta le llega a Psicopedagogía acá y como seguimiento vinculado."
-            : "Los ajustes de tus alumnos los ves en la ficha de cada uno (los de tu materia y los generales) y, en el perfil del grupo, agregados por tipo."}
+            : "Los ajustes de tus alumnos los ves en la ficha de cada uno (los de tu materia y los generales) y, en el perfil del grupo, agregados por tipo. Para proponer un ajuste, usá «Proponer ajuste» en la ficha del alumno: tu propuesta le llega a Psicopedagogía y, hasta que la confirme, la ven solo vos y Psicopedagogía."}
         </p>
         <div className="mt-4">
           <Button asChild>
@@ -526,7 +527,8 @@ function InboxRow({
           {row.proposed_by_name && (
             <span className="font-normal text-muted-foreground">
               {" "}
-              · Propuesta de Dirección por {row.proposed_by_name}
+              · {row.proposed_as === "teacher" ? "Propuesta de un docente" : "Propuesta de Dirección"} por{" "}
+              {row.proposed_by_name}
             </span>
           )}
         </p>
