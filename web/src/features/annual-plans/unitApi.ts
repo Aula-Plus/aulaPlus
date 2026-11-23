@@ -34,9 +34,25 @@ export interface PlannerField {
   value: PlannerValue
 }
 
+/**
+ * One of the group's «Recursos disponibles» (PA-118), as the plan's teacher
+ * sees them: the school's ones the group has, the whole-group ones and that
+ * teacher's own. The `resources` planner field stores the keys the teacher
+ * unchecked for this unit.
+ */
+export interface UnitResource {
+  key: string
+  name: string
+  source: "school" | "group" | "own"
+}
+
+/** The automatic planner field that lists the group's resources. */
+export const RESOURCES_FIELD_KEY = "resources"
+
 export interface UnitPlanner {
   frameworks: { id: number; name: string; planner_family: string | null }[]
   fields: PlannerField[]
+  resources: UnitResource[]
 }
 
 /** A catalog element as it is shown and cited («con su fuente y página»). */

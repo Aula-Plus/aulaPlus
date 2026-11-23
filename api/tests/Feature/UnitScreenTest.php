@@ -132,6 +132,74 @@ it('rejects planner values that do not fit their field', function () {
         ]);
 });
 
+/**
+ * «Recursos disponibles» in the unit (answer of 2026-11-21, PA-118): the
+ * group's list as the plan's teacher sees it, and the teacher unchecks what
+ * they do not use in this unit.
+ */
+it('lists the group resources as the plan teacher sees them and stores the ones unchecked for the unit', function () {
+    [$school, , $teacher, $group, , $unit] = unitScreenSetup();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $colleague = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $colleague);
+
+    Sanctum::actingAs($director);
+    $garden = $this->postJson('/api/v1/school-resources', ['name' => 'Huerta escolar'])->json('data.id');
+    $lab = $this->postJson('/api/v1/school-resources', ['name' => 'Laboratorio'])->json('data.id');
+    $this->putJson("/api/v1/groups/{$group->id}/resources/school/{$lab}", ['available' => false])->assertOk();
+
+    Sanctum::actingAs($teacher);
+    $tv = $this->postJson("/api/v1/groups/{$group->id}/resources", ['name' => 'Tele', 'visibility' => 'group'])
+        ->assertCreated()->json('data.group.0.id');
+    $own = $this->postJson("/api/v1/groups/{$group->id}/resources", ['name' => 'Calculadoras', 'visibility' => 'own'])
+        ->json('data.group.1.id');
+    Sanctum::actingAs($colleague);
+    $colleagueOwn = $this->postJson("/api/v1/groups/{$group->id}/resources", ['name' => 'Parlante', 'visibility' => 'own'])
+        ->assertCreated()->json('data.group.1.id');
+
+    // The school's resource the group unchecked and the colleague's own are not listed.
+    $expected = [
+        ['key' => "school:{$garden}", 'name' => 'Huerta escolar', 'source' => 'school'],
+        ['key' => "group:{$tv}", 'name' => 'Tele', 'source' => 'group'],
+        ['key' => "group:{$own}", 'name' => 'Calculadoras', 'source' => 'own'],
+    ];
+    Sanctum::actingAs($teacher);
+    $this->getJson("/api/v1/units/{$unit->id}")->assertOk()->assertJsonPath('data.planner.resources', $expected);
+    // Dirección and Psicopedagogía read the same list, from the plan teacher's view.
+    foreach ([$director, User::factory()->forSchool($school)->psychopedagogue()->create()] as $reader) {
+        Sanctum::actingAs($reader);
+        $this->getJson("/api/v1/units/{$unit->id}")->assertJsonPath('data.planner.resources', $expected);
+    }
+
+    Sanctum::actingAs($teacher);
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['resources' => ["school:{$garden}"]]])
+        ->assertOk()
+        ->assertJsonPath('data.resources.0.key', "school:{$garden}");
+    expect($unit->refresh()->planner_values)->toMatchArray(['resources' => ["school:{$garden}"]]);
+    $field = collect($this->getJson("/api/v1/units/{$unit->id}")->json('data.planner.fields'))->firstWhere('key', 'resources');
+    expect($field['value'])->toBe(["school:{$garden}"]);
+
+    // Only keys of the listed resources: not the unchecked school one, not a colleague's own, not free text.
+    foreach ([["school:{$lab}"], ["group:{$colleagueOwn}"], ['Huerta escolar'], 'school:1'] as $invalid) {
+        $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['resources' => $invalid]])
+            ->assertUnprocessable()->assertJsonValidationErrors(['values.resources']);
+    }
+
+    // A resource removed from the group since drops out of the saved value.
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['resources' => ["school:{$garden}", "group:{$tv}"]]])->assertOk();
+    $this->deleteJson("/api/v1/groups/{$group->id}/resources/{$tv}")->assertOk();
+    $field = collect($this->getJson("/api/v1/units/{$unit->id}")->json('data.planner.fields'))->firstWhere('key', 'resources');
+    expect($field['value'])->toBe(["school:{$garden}"]);
+
+    // Checking everything again clears the value.
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['resources' => []]])->assertOk();
+    expect($unit->refresh()->planner_values)->toBeNull();
+
+    // Only the plan owner writes it.
+    Sanctum::actingAs($director);
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => ['resources' => ["school:{$garden}"]]])->assertForbidden();
+});
+
 it('offers the program catalog and links objectives to its items', function () {
     [, $framework, $teacher, , , $unit, $objective] = unitScreenSetup();
     $catalog = CurricularCatalog::factory()->create(['curricular_framework_id' => $framework->id, 'name' => 'MCN 2022']);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom"
-import { Lock, PanelRightOpen, X } from "lucide-react"
+import { Lock, PanelRightOpen, Sparkles, X } from "lucide-react"
 
 import { PageHeader } from "@/components/ui/page-header"
 import { SectionCard } from "@/components/ui/section-card"
@@ -23,6 +23,7 @@ import { formatShortDate } from "@/lib/utils"
 import { accommodationCategoryLabels } from "@/types"
 import { ClosedYearNotice } from "@/features/school-year/ClosedYearNotice"
 import { closedYearError } from "@/features/school-year/closedYearError"
+import { newClassPath } from "@/features/classes/classesApi"
 import {
   createObjective,
   objectiveStatusLabels,
@@ -38,6 +39,7 @@ import {
   fetchUnitAccommodations,
   fetchUnitCurricularItems,
   fieldLabel,
+  RESOURCES_FIELD_KEY,
   saveObjectiveCurricularItems,
   saveUnitPlanner,
   type CurricularItemRow,
@@ -46,6 +48,7 @@ import {
   type UnitAccommodationType,
   type UnitDetail,
   type UnitObjective,
+  type UnitResource,
 } from "./unitApi"
 
 type Tab = "planning" | "objectives"
@@ -82,9 +85,14 @@ const objectiveTone: Record<ObjectiveStatus, BadgeTone> = {
  * read-only for everybody, with the group's notice, unless direction enabled
  * loading in it; the server rejects the writes either way (`group.writable`).
  *
- * Not here yet, by decision in ClickUp: «Nueva clase desde esta unidad»
- * (screen 14, task 86e3jujh0), the PTP block (second PR of Ajustes y PTP,
- * 1dfd3mc4bgc) and the group's available resources (screen 23 / group profile).
+ * «Nueva clase desde esta unidad» and each objective's «Nueva clase» open
+ * screen 14 (ClickUp 86e3jujh0) with the unit — and the objective — fixed.
+ * «Recursos disponibles» is the group's list (screen 23, PA-118): the planner
+ * field and «A mano» show it, and the teacher unchecks what this unit does not
+ * use.
+ *
+ * Not here yet, by decision in ClickUp: the PTP block (second PR of Ajustes y
+ * PTP, 1dfd3mc4bgc).
  */
 export function UnitPage() {
   const { id } = useParams()
@@ -145,6 +153,14 @@ export function UnitPage() {
         title={`Unidad ${unit.position} — ${unit.name}`}
         description={meta}
       >
+        {editable && (
+          <Button asChild>
+            <Link to={newClassPath(unit.plan.id, unit.id)}>
+              <Sparkles aria-hidden="true" />
+              Nueva clase desde esta unidad
+            </Link>
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setPanelOpen(true)} aria-expanded={panelOpen}>
           <PanelRightOpen aria-hidden="true" />A mano
         </Button>
@@ -202,6 +218,8 @@ export function UnitPage() {
         <AtHandPanel
           accommodations={accommodations}
           failed={accommodationsError}
+          resources={unit.planner.resources}
+          unchecked={uncheckedResources(unit)}
           readOnly={!editable}
           onClose={() => setPanelOpen(false)}
         />
@@ -330,6 +348,12 @@ function UnitDataCard({
   )
 }
 
+/** The resources the teacher unchecked for this unit (saved value). */
+function uncheckedResources(unit: UnitDetail): string[] {
+  const value = unit.planner.fields.find((f) => f.key === RESOURCES_FIELD_KEY)?.value
+  return Array.isArray(value) ? value : []
+}
+
 function differentiationLine(accommodations: UnitAccommodationType[]): string {
   return accommodations
     .map((a) => `${a.type} (${a.student_count} ${a.student_count === 1 ? "alumno" : "alumnos"})`)
@@ -401,6 +425,7 @@ function PlannerCard({
             readOnly={!editable}
             accommodations={accommodations}
             accommodationsFailed={accommodationsFailed}
+            resources={unit.planner.resources}
             onChange={(value) => set(field.key, value)}
           />
         ))}
@@ -430,6 +455,7 @@ function PlannerFieldControl({
   readOnly,
   accommodations,
   accommodationsFailed,
+  resources,
   onChange,
 }: {
   field: PlannerField
@@ -437,6 +463,7 @@ function PlannerFieldControl({
   readOnly: boolean
   accommodations: UnitAccommodationType[] | null
   accommodationsFailed: boolean
+  resources: UnitResource[]
   onChange: (value: PlannerValue) => void
 }) {
   const inputId = `planner-${field.key}`
@@ -468,13 +495,23 @@ function PlannerFieldControl({
             </p>
           </>
         )
+      ) : field.key === RESOURCES_FIELD_KEY ? (
+        <ResourcesChecklist
+          id={inputId}
+          resources={resources}
+          unchecked={Array.isArray(value) ? value : []}
+          readOnly={readOnly}
+          onChange={onChange}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">Aula+ lo completa con los datos del grupo.</p>
       )
 
     return (
       <div className="grid gap-1">
-        <span className="text-sm font-medium">{label}</span>
+        <span id={`${inputId}-label`} className="text-sm font-medium">
+          {label}
+        </span>
         {officialHint}
         {body}
       </div>
@@ -572,6 +609,72 @@ function PlannerFieldControl({
   )
 }
 
+const resourceSourceLabels: Record<UnitResource["source"], string> = {
+  school: "Del colegio",
+  group: "Del grupo",
+  own: "Propio del docente",
+}
+
+/**
+ * «Recursos disponibles» (PA-118): the group's list comes checked; the teacher
+ * unchecks what this unit does not use. `unchecked` holds those keys.
+ */
+function ResourcesChecklist({
+  id,
+  resources,
+  unchecked,
+  readOnly,
+  onChange,
+}: {
+  id: string
+  resources: UnitResource[]
+  unchecked: string[]
+  readOnly: boolean
+  onChange: (value: PlannerValue) => void
+}) {
+  if (resources.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        El grupo todavía no tiene recursos cargados. Se cargan en el perfil del grupo, solapa «Recursos disponibles».
+      </p>
+    )
+  }
+
+  if (readOnly) {
+    const used = resources.filter((r) => !unchecked.includes(r.key))
+    return used.length === 0 ? (
+      <p className="text-sm text-muted-foreground">No usa ningún recurso del grupo.</p>
+    ) : (
+      <p className="text-sm">{used.map((r) => r.name).join(" · ")}</p>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-3" role="group" aria-labelledby={`${id}-label`}>
+        {resources.map((resource) => (
+          <label key={resource.key} className="inline-flex items-center gap-1.5 text-sm">
+            <input
+              type="checkbox"
+              checked={!unchecked.includes(resource.key)}
+              onChange={(e) =>
+                onChange(
+                  e.target.checked
+                    ? unchecked.filter((key) => key !== resource.key)
+                    : [...unchecked, resource.key],
+                )
+              }
+            />
+            {resource.name}
+            <span className="text-xs text-muted-foreground">({resourceSourceLabels[resource.source]})</span>
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">Vienen del perfil del grupo. Destildá lo que no usás en esta unidad.</p>
+    </>
+  )
+}
+
 type AddMode = "write" | "catalog"
 
 function ObjectivesTab({
@@ -637,9 +740,13 @@ function ObjectivesTab({
                   </ul>
                 )}
                 {editable && (
-                  <div>
+                  <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => setPicking(objective)}>
                       Elementos curriculares
+                    </Button>
+                    {/* Screen 14 (ClickUp 86e3jujh0): unit and objective come fixed. */}
+                    <Button size="sm" variant="ghost" asChild>
+                      <Link to={newClassPath(unit.plan.id, unit.id, objective.id)}>Nueva clase</Link>
                     </Button>
                   </div>
                 )}
@@ -986,11 +1093,15 @@ function CurricularItemsDialog({
 function AtHandPanel({
   accommodations,
   failed,
+  resources,
+  unchecked,
   readOnly,
   onClose,
 }: {
   accommodations: UnitAccommodationType[] | null
   failed: boolean
+  resources: UnitResource[]
+  unchecked: string[]
   readOnly: boolean
   onClose: () => void
 }) {
@@ -1061,6 +1172,25 @@ function AtHandPanel({
               </Button>
             </div>
           </>
+        )}
+      </section>
+      <section className="grid gap-2">
+        <h3 className="font-medium">Recursos disponibles</h3>
+        {resources.length === 0 ? (
+          <p className="text-sm text-muted-foreground">El grupo todavía no tiene recursos cargados.</p>
+        ) : (
+          <ul className="grid gap-1 text-sm">
+            {resources.map((r) => (
+              <li key={r.key} className="flex flex-wrap items-center justify-between gap-2">
+                <span className={unchecked.includes(r.key) ? "text-muted-foreground line-through" : undefined}>
+                  {r.name}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {unchecked.includes(r.key) ? "No se usa en esta unidad" : resourceSourceLabels[r.source]}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </aside>

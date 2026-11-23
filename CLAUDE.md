@@ -169,9 +169,11 @@ skeleton is done, until explicitly asked:
     picked from the program catalog; an objective can also be picked straight
     from the catalog, taking the element's text and link) and the «A mano»
     side panel. In a group of a closed year it is read-only unless direction
-    enabled loading (screen 26, `group.writable`). «Nueva clase
-    desde esta unidad», the PTP block and the group's resources are not there
-    yet (their own tasks).
+    enabled loading (screen 26, `group.writable`). It links to screen 14
+    («Nueva clase desde esta unidad» and per objective), and its planner and
+    «A mano» show the group's resources as the plan's teacher sees them, with
+    the ones unchecked for the unit (`planner_values.resources`, PA-118). The
+    PTP block is not there yet (its own task).
   - Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0,
     first delivery): a teacher asks the AI for a class of a group-subject they
     teach (from a unit of their Programa anual or directly; subject

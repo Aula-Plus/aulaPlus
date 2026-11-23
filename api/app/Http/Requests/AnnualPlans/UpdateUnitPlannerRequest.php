@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\AnnualPlans;
 
+use App\Enums\PlannerFieldType;
 use App\Models\Unit;
 use App\Services\Units\UnitPlanner;
 use Illuminate\Foundation\Http\FormRequest;
@@ -59,7 +60,11 @@ class UpdateUnitPlannerRequest extends FormRequest
 
                         continue;
                     }
-                    $result = $planner->normalize($field, $value);
+                    // The only automatic field that takes a value: the
+                    // group's resources unchecked for this unit (PA-118).
+                    $result = $field['key'] === UnitPlanner::RESOURCES_KEY && ($field['type'] ?? null) === PlannerFieldType::Automatic->value
+                        ? $planner->normalizeResources($unit, $value)
+                        : $planner->normalize($field, $value);
                     if (! $result['ok']) {
                         $validator->errors()->add("values.$key", $result['error']);
 

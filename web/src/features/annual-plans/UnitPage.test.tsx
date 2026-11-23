@@ -81,6 +81,24 @@ function makeUnit(overrides: Partial<UnitDetail> = {}): UnitDetail {
           required_by_program: false,
           value: null,
         },
+        {
+          id: 3,
+          source: "catalog",
+          family: "common",
+          key: "resources",
+          official_name: "Recursos disponibles",
+          school_name: null,
+          description: null,
+          type: "automatic",
+          options: null,
+          required_by_program: false,
+          value: ["group:12"],
+        },
+      ],
+      resources: [
+        { key: "school:4", name: "Huerta escolar", source: "school" },
+        { key: "group:11", name: "Tele en el salón", source: "group" },
+        { key: "group:12", name: "Calculadoras", source: "own" },
       ],
     },
     can_edit: true,
@@ -133,6 +151,48 @@ describe("UnitPage", () => {
 
     await waitFor(() =>
       expect(unitApi.saveUnitPlanner).toHaveBeenCalledWith(5, { problem_question: "¿Cómo lo verifico?" }),
+    )
+  })
+
+  it("shows the group resources checked except the ones unchecked for this unit, and saves the change", async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const garden = await screen.findByRole("checkbox", { name: /Huerta escolar/ })
+    expect(garden).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: /Calculadoras/ })).not.toBeChecked()
+    expect(screen.queryByText("Aula+ lo completa con los datos del grupo.")).not.toBeInTheDocument()
+
+    await user.click(garden)
+    await user.click(screen.getByRole("checkbox", { name: /Calculadoras/ }))
+    await user.click(screen.getByRole("button", { name: "Guardar planificación" }))
+
+    await waitFor(() => expect(unitApi.saveUnitPlanner).toHaveBeenCalledWith(5, { resources: ["school:4"] }))
+  })
+
+  it("lists the group resources in «A mano», marking the ones this unit does not use", async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "A mano" }))
+    const panel = screen.getByRole("dialog", { name: "A mano" })
+    expect(within(panel).getByText("Huerta escolar")).toBeInTheDocument()
+    expect(within(panel).getByText("Calculadoras")).toHaveClass("line-through")
+    expect(within(panel).getByText("No se usa en esta unidad")).toBeInTheDocument()
+  })
+
+  it("starts a new class from the unit and from each objective", async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByRole("link", { name: "Nueva clase desde esta unidad" })).toHaveAttribute(
+      "href",
+      "/nueva-clase?programa=7&unidad=5",
+    )
+    await user.click(screen.getByRole("tab", { name: "Objetivos" }))
+    expect(screen.getByRole("link", { name: "Nueva clase" })).toHaveAttribute(
+      "href",
+      "/nueva-clase?programa=7&unidad=5&objetivo=9",
     )
   })
 
@@ -204,6 +264,9 @@ describe("UnitPage", () => {
 
     await screen.findByText("Unidad 3 — Ecuaciones de primer grado")
     expect(screen.queryByRole("button", { name: "Guardar planificación" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Nueva clase desde esta unidad" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: /Huerta escolar/ })).not.toBeInTheDocument()
+    expect(screen.getByText("Huerta escolar · Tele en el salón")).toBeInTheDocument()
     await user.click(screen.getByRole("tab", { name: "Objetivos" }))
     expect(screen.queryByRole("button", { name: "Elementos curriculares" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Escribir un objetivo" })).not.toBeInTheDocument()
