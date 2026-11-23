@@ -173,7 +173,7 @@ function SidebarContent({ collapsed, onToggleCollapsed, onCloseMobile }: Sidebar
       </div>
 
       {/* Navigation sections */}
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-2">
+      <nav className="nav-scrollbar flex-1 space-y-4 overflow-y-auto px-2 py-2">
         {sections.map((section, index) => (
           <div key={section.heading ?? `section-${index}`} className="space-y-1">
             {section.heading && !collapsed && (
