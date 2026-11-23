@@ -3,6 +3,8 @@ import { api } from "@/lib/api"
 /** Screen 29 «Puesta en marcha» (ClickUp 1dfd3mc4bh8): read-only record + regime correction. */
 
 export type LevelRegime = "enabled" | "authorized"
+
+export const levelRegimeLabels: Record<LevelRegime, string> = { enabled: "Habilitado", authorized: "Autorizado" }
 export type OnboardingStepStatus = "pending" | "in_progress" | "done"
 
 export interface SupportChannels {

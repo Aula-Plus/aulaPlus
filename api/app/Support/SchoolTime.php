@@ -38,4 +38,16 @@ class SchoolTime
             ->startOfDay()
             ->setTimezone((string) config('app.timezone'));
     }
+
+    /**
+     * A date as the SPA shows it (`formatShortDate` in web/src/lib/utils.ts),
+     * e.g. «20 nov 2026», for text built server-side. Spelled out by hand so it
+     * does not depend on the intl extension or the ICU version.
+     */
+    public static function shortDate(CarbonInterface $date): string
+    {
+        $months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+
+        return $date->format('d').' '.$months[$date->month - 1].' '.$date->format('Y');
+    }
 }

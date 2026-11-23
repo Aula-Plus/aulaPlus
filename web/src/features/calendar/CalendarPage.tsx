@@ -7,7 +7,13 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageInstitutionalEvents, hasTimetable, isDirector, isPsychopedagogue } from "@/lib/permissions"
+import {
+  canManageInstitutionalEvents,
+  hasTimetable,
+  isDirector,
+  isPsychopedagogue,
+  isSchoolWideStaff,
+} from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { fetchUserPreferences, updateUserPreferences } from "@/features/preferences/preferencesApi"
 import {
@@ -35,7 +41,9 @@ import {
   weekdayDayMonth,
   type CalendarView,
 } from "./calendarDates"
-import { calendarItemHour, calendarItemLink, calendarItemWhat } from "./calendarItemText"
+import { CalendarItemTopic } from "./CalendarItemTopic"
+import { calendarItemHour, calendarItemLink, calendarItemTopic, calendarItemWhat } from "./calendarItemText"
+import { audienceLabel } from "./eventAudience"
 import { ClassScheduleDialog } from "./ClassScheduleDialog"
 import { InstitutionalEventDialog } from "./InstitutionalEventDialog"
 import { TimetablePanel } from "./TimetablePanel"
@@ -61,12 +69,17 @@ function roleDescription(user: User | null): string {
 
 function roleNote(user: User | null): string {
   if (isDirector(user)) {
-    return "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional y qué es; lo ven todos y se quita desde la vista Lista."
+    return "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional, qué es y a quién le corresponde; lo ven quienes tienen esos grupos, está en el calendario completo del colegio y se quita desde la vista Lista."
   }
   if (isPsychopedagogue(user)) {
     return "Ves todas las evaluaciones del colegio y tu agenda. Una reunión con equipo tratante aparece solo para quienes están citados."
   }
-  return "Ves tus materias y tus grupos, tus clases y las reuniones a las que te citaron."
+  return "Ves tus materias y tus grupos, tus clases, las reuniones a las que te citaron y los eventos del colegio que tocan a tus grupos."
+}
+
+/** For institutional dates: «Para: Primaria · Cambridge Primary en 3° de Primaria». */
+function audienceSuffix(item: CalendarItem): string {
+  return item.type === "institutional" ? `Para: ${audienceLabel(item.audience)}` : ""
 }
 
 /**
@@ -125,9 +138,14 @@ type Dialogs =
 /**
  * The feed for a window of any length (the list grows with «Ver más»): split
  * into the chunks the server accepts (at most 62 days each), in order.
+ * `wholeSchool` = «Ver todo el calendario del colegio».
  */
-async function fetchCalendarRange(from: string, to: string): Promise<CalendarItem[]> {
-  const results = await Promise.all(chunkRange(from, to).map((chunk) => fetchCalendar(chunk.from, chunk.to)))
+async function fetchCalendarRange(from: string, to: string, wholeSchool: boolean): Promise<CalendarItem[]> {
+  const results = await Promise.all(
+    chunkRange(from, to).map((chunk) =>
+      wholeSchool ? fetchCalendar(chunk.from, chunk.to, undefined, "school") : fetchCalendar(chunk.from, chunk.to),
+    ),
+  )
   return results.flat()
 }
 
@@ -168,8 +186,12 @@ function CalendarBoard({ user }: { user: User | null }) {
   const [error, setError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialogs>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  // «Ver todo el calendario del colegio» (ClickUp 1dfd3mc55zp): the
+  // institutional events that don't touch the teacher's groups too.
+  // Psychopedagogy and Direction already see them all.
+  const [wholeSchool, setWholeSchool] = useState(false)
   const { from, to } = view === "list" ? listRange : rangeFor(view, anchor)
-  const rangeKey = `${from}|${to}|${reloadKey}`
+  const rangeKey = `${from}|${to}|${reloadKey}|${wholeSchool}`
   // Only what was loaded for the range on screen counts: while a new range
   // loads, «Cargando…» shows instead of the previous range's dates.
   const items = loaded?.key === rangeKey ? loaded.items : null
@@ -178,10 +200,10 @@ function CalendarBoard({ user }: { user: User | null }) {
   // once the range changes (or the component goes away).
   useEffect(() => {
     let active = true
-    fetchCalendarRange(from, to)
+    fetchCalendarRange(from, to, wholeSchool)
       .then((result) => {
         if (!active) return
-        setLoaded({ key: `${from}|${to}|${reloadKey}`, items: result })
+        setLoaded({ key: `${from}|${to}|${reloadKey}|${wholeSchool}`, items: result })
         setError(null)
       })
       .catch(() => {
@@ -190,7 +212,7 @@ function CalendarBoard({ user }: { user: User | null }) {
     return () => {
       active = false
     }
-  }, [from, to, reloadKey])
+  }, [from, to, reloadKey, wholeSchool])
 
   const reload = () => setReloadKey((key) => key + 1)
 
@@ -320,6 +342,18 @@ function CalendarBoard({ user }: { user: User | null }) {
         })}
       </div>
 
+      {!isSchoolWideStaff(user) && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={wholeSchool}
+            onChange={(event) => setWholeSchool(event.target.checked)}
+          />
+          Ver todo el calendario del colegio
+        </label>
+      )}
+
       {isPsychopedagogue(user) && <TodayTotalSwitch />}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -372,18 +406,31 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   const hour = calendarItemHour(item)
   const what = calendarItemWhat(item)
   const group = item.group ? ` · ${item.group.name}` : ""
-  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${hour ? ` · ${hour}` : ""}`
+  const topic = calendarItemTopic(item)
+  const audience = audienceSuffix(item)
+  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${topic ? ` · ${topic}` : ""}${hour ? ` · ${hour}` : ""}${audience ? ` · ${audience}` : ""}`
   const className = cn(
     "block w-full truncate rounded border px-1.5 py-0.5 text-left text-xs",
     typeTone[item.type],
     full && "whitespace-normal",
+    // In «Ver todo el calendario del colegio»: not one of the caller's groups.
+    item.for_me === false && "opacity-60",
   )
   const content = (
     <>
       {item.time && <span className="mr-1 font-semibold tabular-nums">{item.time}</span>}
-      {what}
-      {full && group}
-      {full && item.place && ` · ${item.place}`}
+      {/* A class reads «Matemática · 5.°A» with its topic next to it, discreet. */}
+      <span>
+        {what}
+        {(full || item.type === "class") && group}
+        {full && item.place && ` · ${item.place}`}
+      </span>
+      {topic && (
+        <span data-testid="class-topic" className="ml-1 font-normal opacity-70">
+          {topic}
+        </span>
+      )}
+      {full && audience && <span className="block text-[11px] opacity-80">{audience}</span>}
     </>
   )
   const link = calendarItemLink(item)
@@ -572,7 +619,7 @@ function ListTable({
           const link = calendarItemLink(item)
           const detail = [calendarItemWhat(item), item.group?.name, item.place].filter(Boolean).join(" · ")
           return (
-            <TableRow key={item.key}>
+            <TableRow key={item.key} className={cn(item.for_me === false && "opacity-60")}>
               <TableCell className="whitespace-nowrap">
                 {weekdayDayMonth(item.date)}
                 {hour && ` · ${hour}`}
@@ -582,7 +629,15 @@ function ListTable({
                   {calendarItemTypeLabels[item.type]}
                 </span>
               </TableCell>
-              <TableCell>{detail}</TableCell>
+              <TableCell className="max-w-md">
+                <span className="flex min-w-0 items-baseline">
+                  <span className="shrink-0">{detail}</span>
+                  <CalendarItemTopic item={item} className="min-w-0 max-w-none" />
+                </span>
+                {item.type === "institutional" && (
+                  <span className="block text-xs text-muted-foreground">{audienceSuffix(item)}</span>
+                )}
+              </TableCell>
               <TableCell>{calendarItemSourceLabels[item.type]}</TableCell>
               <TableCell className="text-right whitespace-nowrap">
                 {item.type === "class" && item.can_edit && (
@@ -602,7 +657,7 @@ function ListTable({
                         </Button>
                       }
                       title="Quitar el evento"
-                      description={`«${item.title ?? ""}» deja de aparecer en el calendario de todos.`}
+                      description={`«${item.title ?? ""}» deja de aparecer en el calendario del colegio.`}
                       confirmLabel="Quitar"
                       onConfirm={() => onRemove(item)}
                     />

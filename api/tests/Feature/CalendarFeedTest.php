@@ -67,6 +67,32 @@ it('shows a teacher their classes of the day with time, group, subject and room 
         ]);
 });
 
+it('sends a class\'s topic next to its subject, without a query per class (Calendario, Inicio, Lista)', function () {
+    $school = School::factory()->create();
+    [$teacher, $group, $subject] = calendarTeacher($school);
+    foreach (['Comparar fracciones con tiras', 'Ordenar decimales', 'Problemas con dinero'] as $title) {
+        ClassSession::factory()->create([
+            'group_id' => $group->id, 'subject_id' => $subject->id, 'date' => '2026-12-15', 'title' => $title,
+        ]);
+    }
+    Sanctum::actingAs($teacher);
+
+    DB::enableQueryLog();
+    $items = $this->getJson(feed('2026-12-15', '2026-12-15', ['class']))->assertOk()->json('data');
+    $queries = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect(array_column($items, 'title'))->toBe(['Matemática', 'Matemática', 'Matemática'])
+        ->and(array_column($items, 'detail'))->toEqualCanonicalizing(['Comparar fracciones con tiras', 'Ordenar decimales', 'Problemas con dinero']);
+
+    // Same query count with one more class: the topic comes with the row.
+    ClassSession::factory()->create(['group_id' => $group->id, 'subject_id' => $subject->id, 'date' => '2026-12-15']);
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $this->getJson(feed('2026-12-15', '2026-12-15', ['class']))->assertOk()->assertJsonCount(4, 'data');
+    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual($queries);
+});
+
 it('never shows a teacher the classes of a group or subject they do not teach', function () {
     $school = School::factory()->create();
     [$teacher, $group] = calendarTeacher($school);

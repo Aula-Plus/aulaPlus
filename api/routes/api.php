@@ -21,6 +21,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CurrentUserController;
 use App\Http\Controllers\BarrierAccommodationController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\ClassSessionController;
 use App\Http\Controllers\ClassSessionObjectiveController;
 use App\Http\Controllers\ClassSessionScheduleController;
 use App\Http\Controllers\CommentCategoryController;
@@ -45,12 +46,18 @@ use App\Http\Controllers\IndicatorChartController;
 use App\Http\Controllers\IndicatorController;
 use App\Http\Controllers\IndicatorDataController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\MaterialController;
+use App\Http\Controllers\MeetingSheetActionController;
+use App\Http\Controllers\MeetingSheetController;
+use App\Http\Controllers\MeetingSheetTypeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NumericGradeSettingsController;
 use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlannerSettingsController;
+use App\Http\Controllers\PsychopedagogyMeetingController;
 use App\Http\Controllers\ReportDocumentController;
+use App\Http\Controllers\ResourceController;
 use App\Http\Controllers\ScheduledFollowUpController;
 use App\Http\Controllers\SchoolYearController;
 use App\Http\Controllers\ScreeningTestApplicationController;
@@ -70,6 +77,7 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\SubjectSyllabusController;
 use App\Http\Controllers\SupportMessageController;
 use App\Http\Controllers\TeacherOptionsController;
+use App\Http\Controllers\TherapeuticCompanionController;
 use App\Http\Controllers\TimetableSlotController;
 use App\Http\Controllers\UnitController;
 use App\Http\Controllers\UnitObjectiveController;
@@ -373,6 +381,20 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('group.writable');
         Route::get('/students/{student}/results', [StudentResultController::class, 'index']);
 
+        // Screen 19 «Materiales» (ClickUp 1dfd3mc4bgx): own materials, the
+        // school's catalog behind the subject × grade prefilter, private
+        // uploads opened through temporary URLs only.
+        Route::get('/materials/options', [MaterialController::class, 'options']);
+        Route::get('/materials/curricular-items', [MaterialController::class, 'curricularItems']);
+        Route::get('/materials', [MaterialController::class, 'index']);
+        Route::post('/materials', [MaterialController::class, 'store']);
+        Route::get('/materials/{material}', [MaterialController::class, 'show'])->whereNumber('material');
+        Route::get('/materials/{material}/download', [MaterialController::class, 'download'])->whereNumber('material');
+        Route::post('/materials/{material}/publish', [MaterialController::class, 'publish'])->whereNumber('material');
+        Route::delete('/materials/{material}/catalog', [MaterialController::class, 'removeFromCatalog'])->whereNumber('material');
+        Route::delete('/materials/{material}', [MaterialController::class, 'destroy'])->whereNumber('material');
+        Route::post('/assessments/{assessment}/material', [MaterialController::class, 'publishAssessment']);
+
         // Session 13: screening tests ("pruebas de sondeo", docs/prompts/
         // 11-pruebas-de-sondeo.md). School-wide, psychopedagogy-led module;
         // teachers see nothing here. Catalog + versioned design (a saved design
@@ -466,16 +488,55 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // term may hold a student's name: it is never logged.
         Route::get('/search', GlobalSearchController::class)->middleware('throttle:120,1');
         Route::get('/calendar', [CalendarController::class, 'index']);
+        Route::get('/calendar-events/audience-options', [CalendarController::class, 'audienceOptions']);
         Route::post('/calendar-events', [CalendarController::class, 'store']);
         Route::patch('/calendar-events/{calendarEvent}', [CalendarController::class, 'update']);
         Route::delete('/calendar-events/{calendarEvent}', [CalendarController::class, 'destroy']);
         Route::get('/class-sessions/suggested-slot', [ClassSessionScheduleController::class, 'suggestedSlot']);
+        // Screens 14–15 (ClickUp 86e3jujh0): «Tus clases», one confirmed
+        // class and its one-tap closing («Todo / Una parte / Nada»).
+        Route::get('/my-classes', [ClassSessionController::class, 'index']);
+        Route::get('/class-sessions/{classSession}', [ClassSessionController::class, 'show'])->whereNumber('classSession');
+        Route::post('/class-sessions/{classSession}/close', [ClassSessionController::class, 'close'])
+            ->middleware('group.writable')
+            ->whereNumber('classSession');
         Route::patch('/class-sessions/{classSession}', [ClassSessionScheduleController::class, 'update'])
             ->middleware('group.writable');
         Route::get('/timetable-slots', [TimetableSlotController::class, 'index']);
         Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
         Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
         Route::delete('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'destroy']);
+
+        // Screen 10 «Espacio de psicopedagogía» (ClickUp 1dfd3mc4bge): the
+        // team's agenda, the therapeutic companions and the meeting sheets.
+        // No teacher enters (every endpoint 403s for them); direction gets
+        // the workload counts, the current companions (no history) and that
+        // each sheet existed. The actions agreed in a sheet are tasks of
+        // their owner, whatever their role (`meeting-actions`).
+        Route::prefix('psychopedagogy')->group(function (): void {
+            Route::get('/overview', [PsychopedagogyMeetingController::class, 'overview']);
+            Route::get('/staff', [PsychopedagogyMeetingController::class, 'staff']);
+            Route::get('/meetings', [PsychopedagogyMeetingController::class, 'index']);
+            Route::post('/meetings', [PsychopedagogyMeetingController::class, 'store']);
+            Route::put('/meetings/{meeting}', [PsychopedagogyMeetingController::class, 'update'])->whereNumber('meeting');
+            Route::post('/meetings/{meeting}/complete', [PsychopedagogyMeetingController::class, 'complete'])->whereNumber('meeting');
+            Route::get('/companions', [TherapeuticCompanionController::class, 'index']);
+            Route::post('/companions', [TherapeuticCompanionController::class, 'store']);
+            Route::patch('/companions/{companion}', [TherapeuticCompanionController::class, 'update'])->whereNumber('companion');
+            Route::post('/companions/{companion}/end', [TherapeuticCompanionController::class, 'end'])->whereNumber('companion');
+            Route::get('/sheets', [MeetingSheetController::class, 'index']);
+            Route::post('/sheets', [MeetingSheetController::class, 'store']);
+            Route::get('/sheets/{sheet}', [MeetingSheetController::class, 'show'])->whereNumber('sheet');
+            Route::put('/sheets/{sheet}', [MeetingSheetController::class, 'update'])->whereNumber('sheet');
+            Route::post('/sheets/{sheet}/confirm', [MeetingSheetController::class, 'confirm'])->whereNumber('sheet');
+        });
+        // Its types are school-wide (P10-DEC-01): direction renames and adds
+        // them from «Colegio y estructura › Institución».
+        Route::get('/meeting-sheet-types', [MeetingSheetTypeController::class, 'index']);
+        Route::post('/meeting-sheet-types', [MeetingSheetTypeController::class, 'store']);
+        Route::patch('/meeting-sheet-types/{meetingSheetType}', [MeetingSheetTypeController::class, 'update'])->whereNumber('meetingSheetType');
+        Route::get('/meeting-actions/mine', [MeetingSheetActionController::class, 'mine']);
+        Route::post('/meeting-actions/{action}/complete', [MeetingSheetActionController::class, 'complete'])->whereNumber('action');
 
         // Session: user management (docs/superpowers/specs/2026-09-15-user-
         // management-design.md). Director-only staff onboarding + lifecycle.
@@ -497,6 +558,20 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/school-years/{schoolYear}/open-next', [SchoolYearController::class, 'openNext']);
         Route::post('/school-years/{schoolYear}/write-windows', [SchoolYearController::class, 'storeWriteWindow']);
         Route::post('/group-write-windows/{window}/end', [SchoolYearController::class, 'endWriteWindow']);
+
+        // Screen 23 «Recursos disponibles» (ClickUp 1dfd3mc4bh4): the
+        // school's list (Dirección) and each group's card «Del colegio y del
+        // grupo» (its teachers, Psicopedagogía and Dirección uncheck and add).
+        Route::get('/school-resources', [ResourceController::class, 'schoolIndex']);
+        Route::post('/school-resources', [ResourceController::class, 'schoolStore']);
+        Route::delete('/school-resources/{resource}', [ResourceController::class, 'schoolDestroy'])->whereNumber('resource');
+        Route::get('/groups/{group}/resources', [ResourceController::class, 'groupIndex']);
+        Route::put('/groups/{group}/resources/school/{resource}', [ResourceController::class, 'setAvailability'])
+            ->middleware('group.writable')->whereNumber('resource');
+        Route::post('/groups/{group}/resources', [ResourceController::class, 'groupStore'])
+            ->middleware('group.writable');
+        Route::delete('/groups/{group}/resources/{addedResource}', [ResourceController::class, 'groupDestroy'])
+            ->middleware('group.writable')->whereNumber('addedResource');
 
         // Screen 29 «Puesta en marcha» (ClickUp 1dfd3mc4bh8): direction reads
         // the onboarding record (loaded by Aula+ with app:onboarding-*) and

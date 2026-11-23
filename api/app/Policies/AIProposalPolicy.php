@@ -33,6 +33,21 @@ class AIProposalPolicy
             && ($user->teachesGroup($group) || $user->hasAnyRole(Role::schoolWideValues()));
     }
 
+    /**
+     * Whether $user may ask the AI for a class or an assessment of $group
+     * (screen 14, ClickUp 86e3jujh0): only a teacher who teaches in the
+     * group. Psicopedagogía and Dirección don't generate classes nor
+     * assessments — they read and comment the proposal (P14-DEC-04,
+     * P14-DEC-61, PA-104). The subject itself (one the teacher teaches in
+     * that group) is checked by GenerateAIProposalRequest.
+     */
+    public function generateClass(User $user, Group $group): bool
+    {
+        return $user->school_id === $group->school_id
+            && $user->hasRole(Role::Teacher->value)
+            && $user->teachesGroup($group);
+    }
+
     public function view(User $user, AIProposal $proposal): bool
     {
         if ($user->school_id !== $proposal->school_id) {

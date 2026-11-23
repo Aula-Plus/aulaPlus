@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\TimeOfDay;
 use App\Enums\ClassSessionStatus;
+use App\Enums\ObjectiveCoverage;
 use App\Models\Concerns\BelongsToSchool;
 use App\Models\Concerns\LogsUsageEvents;
 use Database\Factories\ClassSessionFactory;
@@ -25,15 +26,23 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
     'title',
     'objective',
     'description',
+    'sections',
     'outcome',
     'teacher_notes',
     'status',
+    'closing_result',
+    'closed_at',
 ])]
 /**
  * A class of a group. Its `start_time` and `room` (both optional) are data of
  * the class itself (ClickUp 1dfd3mc4bgh): the Calendar and the Inicio read
  * them from here, never from a school timetable (P21-DEC-03). A teacher's
  * «Mis horarios» only pre-fills them; changing it never touches a class.
+ *
+ * A class confirmed from an AI proposal (screens 14–15, ClickUp 86e3jujh0)
+ * keeps the sections the teacher approved in `sections`, and its one-tap
+ * closing («Todo / Una parte / Nada») in `closing_result` (an
+ * ObjectiveCoverage value) and `closed_at`.
  */
 class ClassSession extends Model
 {
@@ -49,6 +58,9 @@ class ClassSession extends Model
             'date' => 'date',
             'start_time' => TimeOfDay::class,
             'status' => ClassSessionStatus::class,
+            'sections' => 'array',
+            'closing_result' => ObjectiveCoverage::class,
+            'closed_at' => 'datetime',
         ];
     }
 

@@ -4,16 +4,18 @@ namespace App\Http\Requests;
 
 use App\Enums\AIProposalType;
 use App\Enums\AssessmentType;
-use App\Enums\Role;
+use App\Enums\ClassSection;
 use App\Models\AIProposal;
 use App\Models\Group;
 use App\Models\Subject;
 use App\Models\Unit;
+use App\Models\UnitObjective;
 use App\Services\CurricularStructure\CurricularOfferings;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
+use Illuminate\Validation\Validator;
 
 /**
  * Validates POST /groups/{group}/assistant/generate.
@@ -34,6 +36,13 @@ class GenerateAIProposalRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        // Only the teacher generates classes and assessments (P14-DEC-04,
+        // P14-DEC-61, PA-104): Psicopedagogía and Dirección read and comment
+        // the proposal.
+        if (in_array($this->input('type'), [AIProposalType::ClassSession->value, AIProposalType::Assessment->value], true)) {
+            return $this->user()->can('generateClass', [AIProposal::class, $this->group()]);
+        }
+
         return $this->user()->can('generate', [AIProposal::class, $this->group()]);
     }
 
@@ -91,17 +100,38 @@ class GenerateAIProposalRequest extends FormRequest
             // plan (annual_plans.subject_id is NOT NULL); a class session gets
             // it from its unit or, when it hangs from none, chosen directly —
             // never both, so there's a single source of truth.
+            //
+            // Screen 14 (ClickUp 86e3jujh0, P14-DEC-01): from a unit, its
+            // plan fixes group and subject; entering directly, the subject is
+            // chosen and the unit is optional — a free class reads no planner
+            // and adds nothing to coverage. Either way the subject must be
+            // one the requester teaches in the group (PA-104).
             AIProposalType::ClassSession => [
-                'parameters.unit_id' => ['nullable', 'required_without:parameters.subject_id', $this->unitBelongsToGroup()],
+                'parameters.unit_id' => ['nullable', 'integer', 'required_without:parameters.subject_id', $this->unitBelongsToGroup()],
                 'parameters.subject_id' => [
                     'nullable',
+                    'integer',
                     'required_without:parameters.unit_id',
                     'prohibits:parameters.unit_id',
                     Rule::exists('subjects', 'id')->where('school_id', $this->user()->school_id),
                     $this->subjectTaughtInGroup(),
                 ],
-                'parameters.focus' => ['required', 'string'],
-                'parameters.duration_minutes' => ['nullable', 'integer'],
+                // «Tema» of screen 14.
+                'parameters.focus' => ['required', 'string', 'max:300'],
+                // «Qué querés que logren»: the teacher's own objectives.
+                'parameters.objectives' => ['nullable', 'string', 'max:2000'],
+                // Objectives of the unit chosen to work in this class.
+                'parameters.unit_objective_ids' => ['nullable', 'array', 'max:20', 'prohibits:parameters.subject_id'],
+                'parameters.unit_objective_ids.*' => ['integer', 'distinct', $this->objectiveBelongsToUnit()],
+                'parameters.date' => ['nullable', 'date_format:Y-m-d'],
+                'parameters.duration_minutes' => ['nullable', 'integer', 'min:10', 'max:300'],
+                'parameters.requirements' => ['nullable', 'string', 'max:2000'],
+                // «Quiero cambiar algo» / regenerate: the sections to redo of
+                // an earlier draft of the same requester, in one call.
+                'parameters.regenerate_sections' => ['nullable', 'array'],
+                'parameters.regenerate_sections.*' => ['string', 'distinct', Rule::in(ClassSection::values())],
+                'parameters.change_requests' => ['nullable', 'array'],
+                'parameters.change_requests.*' => ['nullable', 'string', 'max:1000'],
             ],
             AIProposalType::Assessment => [
                 'parameters.focus' => ['required', 'string'],
@@ -140,11 +170,10 @@ class GenerateAIProposalRequest extends FormRequest
     }
 
     /**
-     * A subject chosen directly for a class session must be taught in the
-     * route group. A teacher may only pick one they teach there themselves
-     * (User::teachesSubjectInGroup, as for assessments); psychopedagogy and
-     * direction, who aren't assigned subjects, any subject someone teaches in
-     * the group.
+     * A subject chosen directly for a class session must be one the
+     * requesting teacher teaches in the route group (User::
+     * teachesSubjectInGroup, as for assessments; PA-104). Only teachers get
+     * here (AIProposalPolicy::generateClass).
      */
     protected function subjectTaughtInGroup(): callable
     {
@@ -154,14 +183,66 @@ class GenerateAIProposalRequest extends FormRequest
                 return;
             }
 
-            $allowed = $this->user()->hasAnyRole(Role::schoolWideValues())
-                ? $this->group()->teachers()->wherePivot('subject_id', $subject->id)->exists()
-                : $this->user()->teachesSubjectInGroup($this->group(), $subject);
-
-            if (! $allowed) {
+            if (! $this->user()->teachesSubjectInGroup($this->group(), $subject)) {
                 $fail('The selected subject is not taught in this group.');
             }
         };
+    }
+
+    /**
+     * A chosen unit objective must be one of the requested unit's.
+     */
+    protected function objectiveBelongsToUnit(): callable
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            $unitId = $this->input('parameters.unit_id');
+            $belongs = is_numeric($unitId) && UnitObjective::query()
+                ->whereKey($value)
+                ->where('unit_id', (int) $unitId)
+                ->exists();
+
+            if (! $belongs) {
+                $fail('The selected objective does not belong to this unit.');
+            }
+        };
+    }
+
+    /**
+     * For a class: a unit's plan subject must be one the requester teaches in
+     * the group (a co-teacher of the subject may plan from a colleague's
+     * unit, P14-DEC-61), and a regeneration must point at an earlier class
+     * draft of the same requester and group.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                if ($validator->errors()->isNotEmpty() || $this->input('type') !== AIProposalType::ClassSession->value) {
+                    return;
+                }
+
+                $unitId = $this->input('parameters.unit_id');
+                if ($unitId !== null) {
+                    $subject = Unit::query()->find($unitId)?->annualPlan?->subject;
+                    if ($subject === null || ! $this->user()->teachesSubjectInGroup($this->group(), $subject)) {
+                        $validator->errors()->add('parameters.unit_id', 'You do not teach the subject of this unit in this group.');
+                    }
+                }
+
+                if ($this->filled('parameters.regenerate_sections')) {
+                    $reference = AIProposal::query()->find($this->input('parameters.reference_proposal_id'));
+                    if ($reference === null
+                        || $reference->type !== AIProposalType::ClassSession
+                        || $reference->requested_by_id !== $this->user()->id
+                        || $reference->group_id !== $this->group()->id
+                        || $reference->raw_response === null) {
+                        $validator->errors()->add('parameters.reference_proposal_id', 'Regenerating needs an earlier class draft of yours for this group.');
+                    }
+                }
+            },
+        ];
     }
 
     /**
