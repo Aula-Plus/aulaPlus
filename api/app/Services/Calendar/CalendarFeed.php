@@ -36,7 +36,7 @@ use Illuminate\Support\Collection;
  *   member may read. Each carries its audience and whether it is the
  *   caller's (`for_me`).
  * - Meetings: the events of people's own calendars (personal and shared
- *   events today, screen 10 meetings later — see SharedEvents). Each reaches
+ *   events, and screen 10 meetings — see SharedEvents, MeetingEvents). Each reaches
  *   only the calendars it is linked to, once each.
  * - Period closings, project stages: no source yet (screens 26, 18), always
  *   empty.

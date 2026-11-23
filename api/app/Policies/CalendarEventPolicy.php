@@ -14,7 +14,7 @@ use App\Models\User;
  *   (P21-DEC-05). Who an event concerns (its audience, ClickUp 1dfd3mc55zp)
  *   only decides what each person's own calendar shows by default
  *   (EventAudience) — it never hides an event from anyone who looks for it.
- * - Any other type (meetings, reserved for screen 10): seen and managed only
+ * - Any other type (personal events, screen 10 meetings): seen and managed only
  *   by the people whose own calendar it is linked to (calendar_calendar_event
  *   pivot) — the red line of screen 21: a meeting with a treating team exists
  *   only for its invitees.

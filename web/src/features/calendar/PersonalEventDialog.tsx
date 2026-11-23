@@ -111,7 +111,7 @@ export function PersonalEventDialog({
     const owner = item?.shared?.owner?.id
     for (const participant of item?.shared?.participants ?? []) {
       if (participant.id === owner || list.some((option) => option.id === participant.id)) continue
-      list.push({ id: participant.id, label: `${participant.name} · ya no está activa en el colegio` })
+      list.push({ id: participant.id, label: `${participant.name} · sin acceso al colegio` })
     }
     return list
   }, [options, item])

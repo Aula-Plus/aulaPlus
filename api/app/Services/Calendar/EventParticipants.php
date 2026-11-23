@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\DB;
  * them. Being added reaches the person directly — there is nothing to
  * accept — with a notice (screen 22).
  *
- * Reusable by any event linked to calendars: personal events today, the
- * meetings of the Psychopedagogy space (screen 10) later («el encuentro
+ * Reusable by any event linked to calendars: personal events and the
+ * meetings of the Psychopedagogy space (screen 10, MeetingEvents: «el encuentro
  * aparece en el calendario de cada presente y les llega un aviso, como
  * cualquier evento compartido»).
  *

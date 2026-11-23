@@ -12,7 +12,8 @@ namespace App\Enums;
  *   of the school; it is stored once and appears in the calendar of each
  *   participant (calendar_calendar_event pivot). Only its creator edits or
  *   deletes it; each invitee may remove it from their own calendar.
- * - `meeting`: reserved for screen 10 (meetings with a treating team). Same
+ * - `meeting`: a meeting of psychopedagogy's agenda (screen 10), created and
+ *   kept in step by App\Services\Calendar\MeetingEvents. Same
  *   participants mechanism as `personal` (App\Services\Calendar\EventParticipants);
  *   seen only by the people linked to it through their own calendar (screen
  *   21 red line).

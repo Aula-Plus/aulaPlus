@@ -13,8 +13,8 @@ use Illuminate\Support\Collection;
 
 /**
  * The events that live in people's own calendars (ClickUp 1dfd3mc56kp,
- * P21-DEC-108): personal events — and, once screen 10 schedules them,
- * meetings. Each one is stored once and reaches only the calendars it is
+ * P21-DEC-108): personal events and the meetings screen 10 schedules
+ * (MeetingEvents). Each one is stored once and reaches only the calendars it is
  * linked to, so it appears once in the feed of each participant and never
  * for anybody else (screen 21 red line). Feed items of type `meeting`.
  *

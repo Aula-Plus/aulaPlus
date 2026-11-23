@@ -13,6 +13,7 @@ use App\Models\PsychopedagogyMeeting;
 use App\Models\Student;
 use App\Models\TherapeuticCompanion;
 use App\Models\User;
+use App\Services\Calendar\MeetingEvents;
 use App\Support\SchoolTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -34,10 +35,16 @@ use Illuminate\Support\Facades\DB;
  * - `staff`: the school's active people, to pick who was there and action
  *   owners. Psychopedagogy only.
  *
+ * Scheduling or editing a meeting also puts it in the calendar of its
+ * creator and of each person cited, who is notified (MeetingEvents, ClickUp
+ * 1dfd3mc56kp, P21-DEC-01) — in the same transaction.
+ *
  * Teachers get 403 on every endpoint: no teacher enters the space.
  */
 class PsychopedagogyMeetingController extends Controller
 {
+    public function __construct(protected MeetingEvents $meetingEvents) {}
+
     public function overview(Request $request): JsonResponse
     {
         $this->authorize('viewWorkload', PsychopedagogyMeeting::class);
@@ -98,6 +105,7 @@ class PsychopedagogyMeetingController extends Controller
                 'created_by_id' => $request->user()->id,
             ]);
             $meeting->attendees()->sync($this->attendeeIds($request));
+            $this->meetingEvents->sync($meeting, $request->user());
 
             return $meeting;
         });
@@ -108,8 +116,10 @@ class PsychopedagogyMeetingController extends Controller
     public function update(PsychopedagogyMeetingRequest $request, PsychopedagogyMeeting $meeting): JsonResponse
     {
         DB::transaction(function () use ($request, $meeting): void {
+            $previous = $meeting->attendees()->pluck('users.id')->map(fn ($id) => (int) $id)->all();
             $meeting->update($this->attributes($request));
             $meeting->attendees()->sync($this->attendeeIds($request));
+            $this->meetingEvents->sync($meeting, $request->user(), $previous);
         });
 
         return response()->json(['data' => $this->present($this->reload($meeting))]);

@@ -231,7 +231,7 @@ describe("Personal and shared events (ClickUp 1dfd3mc56kp)", () => {
     await user.click(within(await screen.findByRole("table")).getByRole("button", { name: "Ver" }))
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Editar" }))
     const dialog = await screen.findByRole("dialog")
-    expect(await within(dialog).findByText("Pablo Suárez · ya no está activa en el colegio")).toBeInTheDocument()
+    expect(await within(dialog).findByText("Pablo Suárez · sin acceso al colegio")).toBeInTheDocument()
 
     // Saving as is keeps him (the server accepts people already in it).
     await user.click(within(dialog).getByRole("button", { name: "Guardar" }))
