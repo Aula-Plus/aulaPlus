@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\AccommodationCategory;
 use App\Enums\AccommodationReviewStatus;
+use App\Enums\Role;
 use App\Models\Accommodation;
 use App\Models\Student;
 use App\Models\User;
@@ -48,6 +49,7 @@ class AccommodationFactory extends Factory
         return $this->state(fn (): array => [
             'review_status' => $status,
             'proposed_by_id' => User::factory(),
+            'proposed_as' => Role::Director->value,
         ]);
     }
 }

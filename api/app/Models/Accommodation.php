@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AccommodationCategory;
+use App\Enums\AccommodationReviewAction;
 use App\Enums\AccommodationReviewStatus;
 use App\Enums\AssessmentType;
 use App\Enums\Role;
@@ -372,6 +373,19 @@ class Accommodation extends Model
     public function latestReviewEvent(): HasOne
     {
         return $this->hasOne(AccommodationReviewEvent::class)->latestOfMany('id');
+    }
+
+    /**
+     * The step that first sent a proposal to review: its note is «Lo que
+     * observaste» (ClickUp 1dfd3mc55zu). Eager-load it on lists so the
+     * resource's `observation` costs no query per row.
+     */
+    public function submittedReviewEvent(): HasOne
+    {
+        return $this->hasOne(AccommodationReviewEvent::class)->ofMany(
+            ['id' => 'min'],
+            fn ($query) => $query->where('action', AccommodationReviewAction::Submitted->value),
+        );
     }
 
     /**

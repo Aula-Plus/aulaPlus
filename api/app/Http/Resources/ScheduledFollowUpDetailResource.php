@@ -46,6 +46,8 @@ class ScheduledFollowUpDetailResource extends ScheduledFollowUpResource
             'stages.notes.author.roles',
             'events.actor.roles',
             'events.subjectUser.roles',
+            // For the title of a proposal's review task (ClickUp 1dfd3mc55zu).
+            'accommodation:id,proposed_as',
         ]);
         foreach ($followUp->stages as $stage) {
             $stage->setRelation('followUp', $followUp);

@@ -59,7 +59,7 @@ class AccommodationReviewController extends Controller
                 AccommodationReviewStatus::Rejected->value,
             ])
             // Everything AccommodationResource reads, so no query per row.
-            ->with(['subjects', 'proposedBy', 'reviewedBy', 'latestReviewEvent'])
+            ->with(['subjects', 'proposedBy', 'reviewedBy', 'latestReviewEvent', 'submittedReviewEvent'])
             ->latest('id')
             ->get()
             ->sortBy(fn (Accommodation $proposal): int => $proposal->isOpenProposal() ? 0 : 1)

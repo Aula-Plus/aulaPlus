@@ -14,8 +14,9 @@ use Illuminate\Validation\Rule;
  * the remaining fields are `sometimes` so a partial patch is allowed.
  *
  * Authorization reuses AccommodationPolicy::update: same school AND
- * psychopedagogy, or direction on a proposal still under review — a teacher
- * never edits one (ClickUp 86e3dpbwy follow-up, 86e3qkwkk).
+ * psychopedagogy, or direction on its proposal still under review; a teacher
+ * only their own open proposal (ClickUp 86e3dpbwy follow-up, 86e3qkwkk,
+ * 1dfd3mc55zu).
  * `requires_external_approval` is no longer accepted (ClickUp 86e3qkwkk). The scope fields (start date, subjects,
  * assessment types) come from ValidatesAccommodationScope.
  */

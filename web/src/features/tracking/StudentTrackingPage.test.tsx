@@ -68,6 +68,7 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     reviewed_by_name: null,
     reviewed_at: null,
     review_note: null,
+    observation: null,
     created_by_id: 5,
     created_at: "2026-08-05T10:00:00+00:00",
     updated_at: "2026-08-05T10:00:00+00:00",

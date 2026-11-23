@@ -561,6 +561,8 @@ export interface AccommodationReviewEvent {
   /** `edited` only: the API names of the fields changed (never their content). */
   changed_fields: string[] | null
   user: StaffMember | null
+  /** A teacher never learns who reviewed their proposal: the step is psychopedagogy's. */
+  actor_hidden?: boolean
   created_at: string | null
 }
 
@@ -821,6 +823,8 @@ export interface Accommodation extends AccommodationScope {
   reviewed_at: string | null
   /** Comment/reason of the step that left it returned, withdrawn or rejected. */
   review_note: string | null
+  /** «Lo que observaste»: the note it was first sent to review with (ClickUp 1dfd3mc55zu). */
+  observation: string | null
   created_by_id: number | null
   created_at: string | null
   updated_at: string | null

@@ -30,6 +30,7 @@ function proposal(overrides: Partial<Accommodation> = {}): Accommodation {
     reviewed_by_name: null,
     reviewed_at: null,
     review_note: null,
+    observation: null,
     created_by_id: 9,
     created_at: "2026-10-21T10:00:00+00:00",
     updated_at: "2026-10-21T10:00:00+00:00",
@@ -237,6 +238,47 @@ describe("AccommodationProposalsSection", () => {
     expect(screen.getByText(/la rechazó/i)).toBeInTheDocument()
     // Who changed what: the fields an edit touched, never their content.
     expect(screen.getByText(/editó la propuesta \(descripción, materias donde aplica\)/i)).toBeInTheDocument()
+  })
+
+  it("shows a teacher what they observed and never who reviewed their proposal", async () => {
+    vi.spyOn(trackingApi, "fetchAccommodationProposals").mockResolvedValue([
+      proposal({
+        proposed_by_id: 1,
+        proposed_as: "teacher",
+        proposed_by_name: "Ana",
+        review_status: "rejected",
+        review_note: "No corresponde",
+        observation: "Resuelve mejor con un paso por vez.",
+      }),
+    ])
+    vi.spyOn(trackingApi, "fetchAccommodationProposalHistory").mockResolvedValue([
+      {
+        id: 1,
+        action: "submitted",
+        note: "Resuelve mejor con un paso por vez.",
+        changed_fields: null,
+        user: { id: 1, name: "Ana", role: "teacher" },
+        actor_hidden: false,
+        created_at: "2026-10-20T10:00:00+00:00",
+      },
+      {
+        id: 2,
+        action: "rejected",
+        note: "No corresponde",
+        changed_fields: null,
+        user: null,
+        actor_hidden: true,
+        created_at: "2026-10-21T10:00:00+00:00",
+      },
+    ])
+    renderSection("teacher")
+
+    expect(await screen.findByText(/lo que observaste/i)).toBeInTheDocument()
+    expect(screen.getByText("Resuelve mejor con un paso por vez.")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: /ver historial/i }))
+    expect(await screen.findByText(/psicopedagogía: la rechazó/i)).toBeInTheDocument()
+    expect(screen.queryByText(/usuario eliminado/i)).not.toBeInTheDocument()
   })
 
   it("refetches the list when someone else already moved the proposal", async () => {

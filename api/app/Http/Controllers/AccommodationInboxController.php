@@ -60,6 +60,7 @@ class AccommodationInboxController extends Controller
                 'reviewedBy:id,name',
                 'createdBy:id,name',
                 'latestReviewEvent',
+                'submittedReviewEvent',
                 'barriers:id,description',
                 'student' => fn ($student) => $student->select('id', 'school_id', 'full_name'),
                 'student.groups' => fn ($groups) => $groups->wherePivot('school_year', $year)->select('groups.id', 'groups.name'),

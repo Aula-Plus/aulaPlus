@@ -33,6 +33,7 @@ function row(overrides: Partial<AccommodationInboxRow>): AccommodationInboxRow {
     reviewed_by_name: null,
     reviewed_at: null,
     review_note: null,
+    observation: null,
     created_by_id: 5,
     created_at: null,
     updated_at: null,

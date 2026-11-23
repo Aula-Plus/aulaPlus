@@ -67,10 +67,28 @@ class AccommodationResource extends JsonResource
             'reviewed_by_name' => $schoolWide && $this->reviewed_by_id !== null ? $this->reviewedBy?->name : null,
             'reviewed_at' => $this->reviewed_at?->toIso8601String(),
             'review_note' => $this->reviewNote(),
+            // «Lo que observaste» (ClickUp 1dfd3mc55zu, P06-AJU-02): the note
+            // the proposer sent it to review with, shown on the card.
+            'observation' => $this->observation(),
             'created_by_id' => $this->created_by_id,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * The note of the step that first sent the proposal to review, if any.
+     */
+    protected function observation(): ?string
+    {
+        if ($this->review_status === null) {
+            return null;
+        }
+
+        // Eager-loaded on lists (no query per row); queried for a single one.
+        return $this->resource->relationLoaded('submittedReviewEvent')
+            ? $this->resource->submittedReviewEvent?->note
+            : $this->resource->submittedReviewEvent()->value('note');
     }
 
     /**

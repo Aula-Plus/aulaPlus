@@ -95,9 +95,6 @@ class ScheduledFollowUp extends Model
     }
 
     /**
-     * The direction proposal this review task belongs to, if any.
-     */
-    /**
      * The review tasks of accommodation proposals the user may see, plus
      * every other follow-up: psychopedagogy, all; direction, all but the
      * review task of a teacher's proposal that is not public yet (ClickUp
@@ -122,6 +119,10 @@ class ScheduledFollowUp extends Model
         $query->whereNull('scheduled_follow_ups.accommodation_id');
     }
 
+    /**
+     * The accommodation proposal (direction's or a teacher's) this review
+     * task belongs to, if any.
+     */
     public function accommodation(): BelongsTo
     {
         return $this->belongsTo(Accommodation::class);

@@ -4,6 +4,7 @@ use App\Enums\AccommodationReviewStatus;
 use App\Models\Accommodation;
 use App\Models\Group;
 use App\Models\ScheduledFollowUp;
+use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\AccommodationProposalReturnedNotification;
@@ -184,4 +185,67 @@ it('records the proposals direction made before as direction proposals', functio
     ['director' => $director, 'student' => $student] = proposalScenario();
 
     expect(proposeAs($director, $student)->proposed_as)->toBe('director');
+});
+
+it('shows «Lo que observaste» on the proposal card, to psychopedagogy and to its proposer', function () {
+    ['psycho' => $psycho, 'teacher' => $teacher, 'student' => $student] = proposalScenario();
+    $proposal = teacherProposes($teacher, $student, ['observation' => 'Resuelve mejor con un paso por vez.']);
+
+    Sanctum::actingAs($teacher);
+    $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")
+        ->assertOk()->assertJsonPath('data.0.observation', 'Resuelve mejor con un paso por vez.');
+
+    Sanctum::actingAs($psycho);
+    $this->getJson('/api/v1/accommodation-inbox')
+        ->assertOk()
+        ->assertJsonFragment(['id' => $proposal->id, 'observation' => 'Resuelve mejor con un paso por vez.']);
+
+    // Still the first step's note after a return and a resubmission.
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/return", ['note' => 'Decí en qué materias.'])->assertOk();
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/resubmit", ['note' => 'Listo.'])
+        ->assertOk()->assertJsonPath('data.observation', 'Resuelve mejor con un paso por vez.');
+});
+
+it('never tells the teacher in the history who reviewed their proposal', function () {
+    ['psycho' => $psycho, 'teacher' => $teacher, 'student' => $student] = proposalScenario();
+    $proposal = teacherProposes($teacher, $student);
+
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/reject", ['reason' => 'No corresponde.'])->assertOk();
+    $this->getJson("/api/v1/accommodations/{$proposal->id}/proposal/history")
+        ->assertOk()
+        ->assertJsonPath('data.1.user.name', 'Ana Psico')
+        ->assertJsonPath('data.1.actor_hidden', false);
+
+    Sanctum::actingAs($teacher);
+    $this->getJson("/api/v1/accommodations/{$proposal->id}/proposal/history")
+        ->assertOk()
+        ->assertJsonPath('data.0.action', 'submitted')
+        ->assertJsonPath('data.0.user.id', $teacher->id)
+        ->assertJsonPath('data.1.action', 'rejected')
+        ->assertJsonPath('data.1.user', null)
+        ->assertJsonPath('data.1.actor_hidden', true)
+        ->assertDontSee('Ana Psico');
+});
+
+it('says who proposed it in the review task detail', function () {
+    ['psycho' => $psycho, 'teacher' => $teacher, 'student' => $student] = proposalScenario();
+    teacherProposes($teacher, $student);
+    $followUp = ScheduledFollowUp::query()->sole();
+
+    Sanctum::actingAs($psycho);
+    $this->getJson("/api/v1/scheduled-follow-ups/{$followUp->id}")
+        ->assertOk()->assertJsonPath('data.accommodation_proposed_as', 'teacher');
+});
+
+it('hides a teacher proposal from a teacher of another school', function () {
+    ['teacher' => $teacher, 'student' => $student] = proposalScenario();
+    $proposal = teacherProposes($teacher, $student);
+    $outsider = User::factory()->forSchool(School::factory()->create())->teacher()->create();
+
+    Sanctum::actingAs($outsider);
+    $this->getJson("/api/v1/students/{$student->id}/accommodation-proposals")->assertNotFound();
+    $this->getJson("/api/v1/accommodations/{$proposal->id}/proposal/history")->assertNotFound();
+    $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(reviewRouting()))->assertNotFound();
 });

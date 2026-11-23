@@ -301,6 +301,12 @@ export function ProposalItem({
           <span className="font-medium">{noteLabel}:</span> {proposal.review_note}
         </p>
       )}
+      {proposal.observation && (
+        <p className="whitespace-pre-wrap">
+          <span className="font-medium">{proposes ? "Lo que observaste" : "Lo que observó"}:</span>{" "}
+          {proposal.observation}
+        </p>
+      )}
       {status === "returned" && proposes && (
         <p className="text-xs text-muted-foreground">
           {fromTeacher
@@ -430,7 +436,9 @@ export function ProposalItem({
                   {formatShortDate(event.created_at)} ·{" "}
                   {event.user
                     ? `${event.user.name}${event.user.role ? ` (${roleLabels[event.user.role]})` : ""}`
-                    : "Usuario eliminado"}
+                    : event.actor_hidden
+                      ? "Psicopedagogía"
+                      : "Usuario eliminado"}
                   : {accommodationReviewActionLabels[event.action]}
                   {event.changed_fields && event.changed_fields.length > 0 && (
                     <>
