@@ -17,6 +17,16 @@ final class AnthropicMessages
 
     private const ANTHROPIC_VERSION = '2023-06-01';
 
+    /**
+     * One attempt, no retries: the whole call (5 s + 70 s) fits in a job's
+     * `$timeout` of 80 s, below the queue's `retry_after` (90 s), so a slow
+     * call is never handed to a second worker and paid twice (same budget as
+     * InterpretReportDocument).
+     */
+    public const CONNECT_TIMEOUT_SECONDS = 5;
+
+    public const HTTP_TIMEOUT_SECONDS = 70;
+
     public static function text(string $system, string $user, int $maxTokens = 1024): ?string
     {
         try {
@@ -25,8 +35,8 @@ final class AnthropicMessages
                 'anthropic-version' => self::ANTHROPIC_VERSION,
                 'content-type' => 'application/json',
             ])
-                ->timeout(60)
-                ->retry(3, 1000, throw: false)
+                ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
+                ->timeout(self::HTTP_TIMEOUT_SECONDS)
                 ->post(self::ENDPOINT, [
                     'model' => config('services.anthropic.model'),
                     'max_tokens' => $maxTokens,

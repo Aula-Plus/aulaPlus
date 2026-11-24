@@ -16,6 +16,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * «Ver ejemplo» of screen 24 (P24-JUI-02, P24-DEC-110 / PA-126; ClickUp
@@ -36,6 +37,14 @@ class GenerateJudgmentStylePreviewJob implements ShouldQueue
     public const EXAMPLE_NAME = 'Sofía';
 
     protected const MAX_UNITS = 8;
+
+    /** Never retried by the queue: a retry would call the AI again. */
+    public int $tries = 1;
+
+    /** Seconds; above AnthropicMessages' budget (75), below the queue's `retry_after` (90). */
+    public int $timeout = 80;
+
+    public bool $failOnTimeout = true;
 
     public function __construct(public JudgmentStylePreview $preview) {}
 
@@ -118,6 +127,22 @@ class GenerateJudgmentStylePreviewJob implements ShouldQueue
         $draft = is_array($decoded) ? ($decoded['draft'] ?? null) : null;
 
         return is_string($draft) && trim($draft) !== '' ? trim($draft) : null;
+    }
+
+    /**
+     * The job died (timeout, exception): the preview must not stay «pending»,
+     * or «Ver ejemplo» keeps showing «Generando…».
+     */
+    public function failed(?Throwable $e): void
+    {
+        Tenancy::forSchool($this->preview->school_id, function (): void {
+            $preview = $this->preview->fresh();
+
+            if ($preview !== null && $preview->status === JudgmentStylePreviewStatus::Pending) {
+                $this->preview = $preview;
+                $this->markError('The preview did not finish.');
+            }
+        });
     }
 
     protected function markError(string $message): void

@@ -16,7 +16,8 @@ use Illuminate\Support\Collection;
  * - Which rule applies to a group: the most specific one that covers it
  *   (P24-DEC-02): a rule for its grade (or the narrowest range of grades of
  *   its level that includes it), then one for its whole level, then the
- *   institution-wide one.
+ *   institution-wide one. A level or range rule with nothing written yet
+ *   does not compete; ties go to the oldest rule.
  * - The text the model receives: Aula+'s fixed base (it never changes and no
  *   school text can turn its red line off) plus the school's layer, rendered
  *   exactly as it is sent. «Así le llega a la IA» shows this same text.
@@ -105,11 +106,18 @@ class SchoolAIInstructions
 
         return $rules
             ->map(fn (SchoolAIInstruction $rule) => [$rule, $this->specificity($rule, $group)])
-            ->filter(fn (array $pair) => $pair[1] !== null)
+            // A level or range rule that still says nothing (just created
+            // with «+ Nueva regla…», or all its fields cleared) does not
+            // compete: otherwise it would silently take the institution's
+            // rule away from every group of that level.
+            ->filter(fn (array $pair) => $pair[1] !== null
+                && ($pair[0]->isInstitutionWide() || $this->renderLayer($type, $pair[0]->settings) !== null))
+            // Ties (two overlapping ranges of the same width) go to the
+            // oldest rule, so which one applies never changes just because
+            // one of them was edited (the screen saves on every keystroke).
             ->sortBy([
                 fn (array $a, array $b) => $b[1] <=> $a[1],
-                fn (array $a, array $b) => $b[0]->updated_at <=> $a[0]->updated_at,
-                fn (array $a, array $b) => $b[0]->id <=> $a[0]->id,
+                fn (array $a, array $b) => $a[0]->id <=> $b[0]->id,
             ])
             ->first()[0] ?? null;
     }

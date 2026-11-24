@@ -7,6 +7,7 @@ import * as groupsApi from "@/features/groups/groupsApi"
 import type { AIInstructionType, SchoolAIInstruction, User } from "@/types"
 import { OfficialScalesPage } from "./OfficialScalesPage"
 import * as aiInstructionsApi from "./aiInstructionsApi"
+import { PREVIEW_MAX_POLLS, PREVIEW_POLL_MS } from "./JudgmentPreviewCard"
 
 const LEVELS = {
   data: [
@@ -160,5 +161,56 @@ describe("Evaluación y juicios · «Juicios» and «Evaluaciones» (ClickUp 1df
     expect(screen.getByText(/No cambia la escala, los criterios ni la regla de una sola evaluación accesible/)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "+ Nueva regla para un nivel o grado" })).toBeInTheDocument()
     expect(screen.queryByText(/alumno de ejemplo/)).not.toBeInTheDocument()
+  })
+  it("still saves the last change when Direction switches to another rule before it was saved", async () => {
+    mockLoad([rule(), rule({ id: 2, education_level_id: 2, school_grade_ids: [], settings: { tone: "close" } })])
+    const update = vi.spyOn(aiInstructionsApi, "updateAIInstruction").mockResolvedValue(rule())
+    renderPage()
+
+    const levelTab = await screen.findByRole("tab", { name: "Todo Primaria" })
+    const goal = screen.getByLabelText("Qué querés lograr con los juicios")
+    fireEvent.change(goal, { target: { value: "Nombrar un logro." } })
+    fireEvent.click(levelTab)
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(1, expect.objectContaining({ goal: "Nombrar un logro." })),
+    )
+    expect(update).toHaveBeenCalledTimes(1)
+  })
+
+  it("says the rule could not be deleted, not that a change could not be saved", async () => {
+    mockLoad([rule(), rule({ id: 2, education_level_id: 2, school_grade_ids: [], settings: { tone: "close" } })])
+    vi.spyOn(aiInstructionsApi, "deleteAIInstruction").mockRejectedValue(new Error("boom"))
+    renderPage()
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Todo Primaria" }))
+    await userEvent.click(screen.getByRole("button", { name: "Borrar esta regla" }))
+    await userEvent.click(screen.getByRole("button", { name: "Borrar" }))
+
+    expect(await screen.findByText("No pudimos borrar la regla. Probá de nuevo.")).toBeInTheDocument()
+    expect(screen.queryByText(/No pudimos guardar el último cambio/)).not.toBeInTheDocument()
+  })
+
+  it("stops waiting for «Ver ejemplo» after a while and lets Direction ask again", async () => {
+    mockLoad()
+    vi.spyOn(aiInstructionsApi, "requestJudgmentPreview").mockResolvedValue({
+      id: 7, status: "pending", draft: null, error: false,
+    })
+    const fetchPreview = vi
+      .spyOn(aiInstructionsApi, "fetchJudgmentPreview")
+      .mockResolvedValue({ id: 7, status: "pending", draft: null, error: false })
+    renderPage()
+
+    await waitFor(() => expect(screen.getByLabelText("Grupo y materia")).not.toBeDisabled())
+    fireEvent.change(screen.getByLabelText("Grupo y materia"), { target: { value: "5:9" } })
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole("button", { name: "Ver ejemplo" }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PREVIEW_POLL_MS * (PREVIEW_MAX_POLLS + 1))
+    })
+
+    expect(fetchPreview).toHaveBeenCalledTimes(PREVIEW_MAX_POLLS)
+    expect(screen.getByText(/El ejemplo está tardando demasiado/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Ver ejemplo" })).not.toBeDisabled()
   })
 })

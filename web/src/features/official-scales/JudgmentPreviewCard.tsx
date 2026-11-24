@@ -4,7 +4,10 @@ import { SectionCard } from "@/components/ui/section-card"
 import type { JudgmentPreviewGroupOption, JudgmentStylePreview } from "@/types"
 import * as aiInstructionsApi from "./aiInstructionsApi"
 
-const POLL_MS = 2000
+export const PREVIEW_POLL_MS = 2000
+
+/** Two minutes: the job gives up after 80 s, so a preview still pending by then is lost. */
+export const PREVIEW_MAX_POLLS = 60
 
 /**
  * «Así quedaría un juicio con tu estilo (alumno de ejemplo)» — screen 24,
@@ -30,16 +33,25 @@ export function JudgmentPreviewCard() {
     }
   }, [])
 
-  function poll(id: number) {
+  function poll(id: number, attempt = 1) {
     timer.current = setTimeout(() => {
       aiInstructionsApi
         .fetchJudgmentPreview(id)
         .then((next) => {
+          if (next.status === "pending" && attempt >= PREVIEW_MAX_POLLS) {
+            setPreview(null)
+            setError("El ejemplo está tardando demasiado. Probá de nuevo en un rato.")
+            return
+          }
           setPreview(next)
-          if (next.status === "pending") poll(id)
+          if (next.status === "pending") poll(id, attempt + 1)
         })
-        .catch(() => setError("No pudimos traer el ejemplo."))
-    }, POLL_MS)
+        .catch(() => {
+          // Never leave «Generando…» stuck: let Direction ask again.
+          setPreview(null)
+          setError("No pudimos traer el ejemplo. Probá de nuevo.")
+        })
+    }, PREVIEW_POLL_MS)
   }
 
   async function generate() {

@@ -100,7 +100,7 @@ class SchoolAIInstructionController extends Controller
         $this->authorizeSchool($request);
 
         $groups = Group::query()
-            ->with(['teachers', 'educationLevel'])
+            ->with('teachers')
             ->orderByDesc('school_year')
             ->orderBy('name')
             ->get();

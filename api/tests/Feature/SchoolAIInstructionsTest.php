@@ -141,10 +141,11 @@ it('applies the most specific rule: grade, then range, then level, then institut
     [$first, $second, $third] = $level->grades->take(3)->pluck('id')->all();
     $service = app(SchoolAIInstructions::class);
 
+    $said = ['settings' => ['tone' => 'formal']];
     $institution = aiRule($school, AIRequestType::Judgment);
-    $wholeLevel = aiRule($school, AIRequestType::Judgment, ['education_level_id' => $level->id]);
-    $range = aiRule($school, AIRequestType::Judgment, ['education_level_id' => $level->id, 'school_grade_ids' => [$first, $second, $third]]);
-    $single = aiRule($school, AIRequestType::Judgment, ['education_level_id' => $level->id, 'school_grade_ids' => [$second]]);
+    $wholeLevel = aiRule($school, AIRequestType::Judgment, ['education_level_id' => $level->id, ...$said]);
+    $range = aiRule($school, AIRequestType::Judgment, ['education_level_id' => $level->id, 'school_grade_ids' => [$first, $second, $third], ...$said]);
+    $single = aiRule($school, AIRequestType::Judgment, ['education_level_id' => $level->id, 'school_grade_ids' => [$second], ...$said]);
 
     $group = fn (?int $grade, ?int $levelId = null) => Group::factory()->create([
         'school_id' => $school->id, 'education_level_id' => $levelId ?? $level->id, 'school_grade_id' => $grade,
@@ -284,4 +285,66 @@ it('records an error when the answer is not the expected JSON', function () {
     (new GenerateJudgmentStylePreviewJob($preview))->handle(app(SchoolAIInstructions::class));
 
     expect($preview->refresh()->status)->toBe(JudgmentStylePreviewStatus::Error);
+});
+
+it('ignores a level or range rule that still says nothing, so the institution rule keeps applying', function () {
+    $school = School::factory()->create();
+    $level = primaryLevel();
+    [$first, $second] = $level->grades->take(2)->pluck('id')->all();
+    $service = app(SchoolAIInstructions::class);
+
+    $institution = aiRule($school, AIRequestType::Assessment, ['settings' => ['avoid' => 'Preguntas trampa.']]);
+    // Just created with «+ Nueva regla para un nivel o rango», nothing written yet.
+    aiRule($school, AIRequestType::Assessment, ['education_level_id' => $level->id]);
+    aiRule($school, AIRequestType::Assessment, ['education_level_id' => $level->id, 'school_grade_ids' => [$first], 'settings' => ['goal' => '  ']]);
+    $group = Group::factory()->create(['school_id' => $school->id, 'education_level_id' => $level->id, 'school_grade_id' => $first]);
+
+    Tenancy::forSchool($school, function () use ($service, $group, $institution): void {
+        expect($service->resolveFor(AIRequestType::Assessment, $group)->id)->toBe($institution->id);
+    });
+
+    // Two overlapping ranges of the same width: the oldest one applies, and
+    // editing the newer one does not change that.
+    $older = aiRule($school, AIRequestType::Assessment, ['education_level_id' => $level->id, 'school_grade_ids' => [$first, $second], 'settings' => ['goal' => 'A']]);
+    $newer = aiRule($school, AIRequestType::Assessment, ['education_level_id' => $level->id, 'school_grade_ids' => [$second, $level->grades[2]->id], 'settings' => ['goal' => 'B']]);
+    $other = Group::factory()->create(['school_id' => $school->id, 'education_level_id' => $level->id, 'school_grade_id' => $second]);
+
+    Tenancy::forSchool($school, function () use ($service, $other, $older, $newer): void {
+        $newer->update(['settings' => ['goal' => 'B, editada']]);
+        expect($service->resolveFor(AIRequestType::Assessment, $other)->id)->toBe($older->id);
+    });
+});
+
+it('shows a «Ver ejemplo» only to direction of the same school', function (string $role) {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $subject = leadGroup($group, User::factory()->forSchool($school)->teacher()->create());
+    $preview = Tenancy::forSchool($school, fn () => JudgmentStylePreview::query()->create([
+        'group_id' => $group->id, 'subject_id' => $subject->id, 'status' => JudgmentStylePreviewStatus::Pending,
+    ]));
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->{$role}()->create());
+    $this->getJson("/api/v1/judgment-style-previews/{$preview->id}")->assertForbidden();
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    $this->getJson("/api/v1/judgment-style-previews/{$preview->id}")->assertNotFound();
+})->with(['teacher', 'psychopedagogue']);
+
+it('marks «Ver ejemplo» as failed when the job dies, so it never stays pending', function () {
+    $school = School::factory()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $subject = leadGroup($group, User::factory()->forSchool($school)->teacher()->create());
+    $preview = Tenancy::forSchool($school, fn () => JudgmentStylePreview::query()->create([
+        'group_id' => $group->id, 'subject_id' => $subject->id, 'status' => JudgmentStylePreviewStatus::Pending,
+    ]));
+
+    $job = new GenerateJudgmentStylePreviewJob($preview);
+    expect($job->tries)->toBe(1)->and($job->failOnTimeout)->toBeTrue();
+
+    $job->failed(new RuntimeException('timed out'));
+
+    expect($preview->refresh()->status)->toBe(JudgmentStylePreviewStatus::Error);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
+    $this->getJson("/api/v1/judgment-style-previews/{$preview->id}")->assertOk()->assertJsonPath('data.error', true);
 });

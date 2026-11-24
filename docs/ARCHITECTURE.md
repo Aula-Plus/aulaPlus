@@ -189,7 +189,10 @@ en el backend: `App\Services\AIInstructions\SchoolAIInstructions`.
   + `school_grade_ids`, de la lista de Colegio y estructura). Gana la más
   específica para el nivel y el grado del grupo: grado o rango más angosto,
   después el nivel entero, después la institución (P24-DEC-02). Un mismo
-  alcance no se repite.
+  alcance no se repite. Una regla de nivel o rango que todavía no dice nada
+  no compite (el grupo sigue con la institucional) y, entre dos rangos que se
+  pisan con el mismo ancho, gana la más vieja. No hay herencia campo por campo:
+  la regla que gana se envía entera.
 - **Evaluaciones:** `BuildProposalContext` suma `school_instruction` (la regla
   que aplica al grupo) a cada evaluación que genera la IA; no cambia escala,
   criterios ni la regla de una sola evaluación accesible.

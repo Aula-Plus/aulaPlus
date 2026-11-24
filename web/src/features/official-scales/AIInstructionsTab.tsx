@@ -349,19 +349,31 @@ function RuleEditor({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ruleId = useRef<number | null>(rule?.id ?? null)
   const pending = useRef<Promise<unknown> | null>(null)
+  const unsaved = useRef<AIInstructionSettings | null>(null)
+  const [deleteFailed, setDeleteFailed] = useState(false)
 
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current)
-  }, [])
+  // «Se guarda solo» (P24-DEC-07): leaving the rule or the tab before the
+  // debounce fires still saves the last change instead of dropping it.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+      if (unsaved.current) void save(unsaved.current)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, on unmount
+    [],
+  )
 
   function change(patch: AIInstructionSettings) {
     const next = { ...settings, ...patch }
     setSettings(next)
+    unsaved.current = next
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void save(next), AUTOSAVE_MS)
   }
 
   async function save(next: AIInstructionSettings) {
+    timer.current = null
+    if (unsaved.current === next) unsaved.current = null
     setStatus("saving")
     // The institution rule exists only once something is written: the first
     // save creates it; later saves wait for it.
@@ -411,6 +423,11 @@ function RuleEditor({
             No pudimos guardar el último cambio. Revisá que ningún campo sea demasiado largo.
           </span>
         )}
+        {deleteFailed && (
+          <span role="alert" className="text-xs text-destructive">
+            No pudimos borrar la regla. Probá de nuevo.
+          </span>
+        )}
         {!isInstitution && rule && (
           <ConfirmDialog
             trigger={
@@ -422,10 +439,11 @@ function RuleEditor({
             description="Los grupos de este nivel o rango pasan a usar la regla más específica que quede, o la de toda la institución."
             confirmLabel="Borrar"
             onConfirm={() => {
+              setDeleteFailed(false)
               void aiInstructionsApi
                 .deleteAIInstruction(rule.id)
                 .then(() => onDeleted(rule.id))
-                .catch(() => setStatus("error"))
+                .catch(() => setDeleteFailed(true))
             }}
           />
         )}
