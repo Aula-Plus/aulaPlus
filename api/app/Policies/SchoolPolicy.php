@@ -88,6 +88,17 @@ class SchoolPolicy
     }
 
     /**
+     * Screen 24 «Evaluación y juicios», tabs «Juicios» and «Evaluaciones»
+     * (ClickUp 1dfd3mc4bh6): only direction reads and writes the school's
+     * layer of AI instructions and asks for «Ver ejemplo».
+     */
+    public function manageAIInstructions(User $user, School $school): bool
+    {
+        return $user->school_id === $school->id
+            && $user->hasRole(Role::Director->value);
+    }
+
+    /**
      * Screen 29 «Puesta en marcha»: only direction reads its school's
      * onboarding record and asks for a regime correction (P29-DEC-115).
      */

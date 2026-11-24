@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useAuth } from "@/features/auth/AuthContext"
 import { canViewOfficialScales } from "@/lib/permissions"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +9,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import type { NumericGradeSettings, OfficialScale } from "@/types"
 import { NoAccessPage } from "@/pages/NoAccessPage"
 import * as officialScalesApi from "./officialScalesApi"
+import { AIInstructionsTab } from "./AIInstructionsTab"
 
 /** Visible label of a scale: the framework's name, then which part of it. */
 function scaleLabel(scale: OfficialScale): string {
@@ -21,10 +23,65 @@ function citationText(scale: OfficialScale): string {
 
 const NUMBERS = Array.from({ length: 10 }, (_, i) => 10 - i)
 
+type Tab = "judgment" | "assessment" | "scales"
+
+const TABS: { key: Tab; param: string; label: string }[] = [
+  { key: "judgment", param: "juicios", label: "Juicios" },
+  { key: "assessment", param: "evaluaciones", label: "Evaluaciones" },
+  { key: "scales", param: "escalas", label: "Escalas oficiales" },
+]
+
 /**
- * Screen 24 «Evaluación y juicios», route `/administracion/evaluacion-y-juicios`
- * (ClickUp 1dfd3mc4bgg). Only the «Escalas oficiales» tab exists for now; the
- * «Juicios» and «Evaluaciones» tabs are out of scope and not shown.
+ * Screen 24 «Evaluación y juicios», route `/administracion/evaluacion-y-juicios`,
+ * with its three tabs (`?solapa=`):
+ *
+ * - «Juicios» and «Evaluaciones» (ClickUp 1dfd3mc4bh6): the school's own
+ *   indication for the AI, institution-wide and per level or range, with
+ *   «Así le llega a la IA» and, for judgments, «Ver ejemplo».
+ * - «Escalas oficiales» (ClickUp 1dfd3mc4bgg): see OfficialScalesTab.
+ *
+ * Direction only (UX gate; the server enforces it).
+ */
+export function OfficialScalesPage() {
+  const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  if (!canViewOfficialScales(user)) {
+    return <NoAccessPage />
+  }
+
+  const tab = TABS.find((t) => t.param === searchParams.get("solapa"))?.key ?? "judgment"
+
+  return (
+    <div className="grid gap-6">
+      <PageHeader
+        title="Evaluación y juicios"
+        description="Lo que el colegio le indica a la IA para los juicios y las evaluaciones, y las escalas oficiales de sus marcos."
+      />
+      <div role="tablist" aria-label="Solapas de Evaluación y juicios" className="flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setSearchParams({ solapa: t.param })}
+            className={
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
+              (tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")
+            }
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "scales" ? <OfficialScalesTab /> : <AIInstructionsTab key={tab} type={tab} />}
+    </div>
+  )
+}
+
+/**
+ * «Escalas oficiales» (ClickUp 1dfd3mc4bgg):
  *
  * - The official scales of the school's frameworks, each expandable with its
  *   levels in order and its citation. Read-only: nobody edits them
@@ -32,12 +89,8 @@ const NUMBERS = Array.from({ length: 10 }, (_, i) => 10 - i)
  * - What the school decides (P24-ESC-02 / P24-EVA-03): the switch «Mostrar la
  *   calificación numérica junto al nivel de avance» and, optionally, its own
  *   equivalence level → 1..10 for the Primaria scale.
- *
- * Direction only (UX gate; the server enforces it).
  */
-export function OfficialScalesPage() {
-  const { user } = useAuth()
-  const canView = canViewOfficialScales(user)
+function OfficialScalesTab() {
 
   const [scales, setScales] = useState<OfficialScale[] | null>(null)
   const [settings, setSettings] = useState<NumericGradeSettings | null>(null)
@@ -49,14 +102,13 @@ export function OfficialScalesPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!canView) return
     Promise.all([officialScalesApi.fetchOfficialScales(), officialScalesApi.fetchNumericGradeSettings()])
       .then(([loadedScales, loadedSettings]) => {
         setScales(loadedScales)
         applySettings(loadedSettings)
       })
       .catch(() => setError("No pudimos cargar las escalas oficiales."))
-  }, [canView])
+  }, [])
 
   function applySettings(next: NumericGradeSettings) {
     setSettings(next)
@@ -65,10 +117,6 @@ export function OfficialScalesPage() {
     setNumbers(
       Object.fromEntries(next.equivalences.map((row) => [row.level_id, String(row.numeric_grade)])),
     )
-  }
-
-  if (!canView) {
-    return <NoAccessPage />
   }
 
   const primaryScale = scales?.find((scale) => scale.id === settings?.primary_scale_id) ?? null
@@ -102,10 +150,6 @@ export function OfficialScalesPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader
-        title="Evaluación y juicios"
-        description="Escalas oficiales de los marcos que usa el colegio."
-      />
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

@@ -21,11 +21,11 @@ const PRIMARY: OfficialScale = {
   ],
 }
 
-function renderPage(role: Role) {
+function renderPage(role: Role, path = "/?solapa=escalas") {
   const user = { id: 1, name: "Dir", email: "d@x.uy", school_id: 1, roles: [role] } as unknown as User
   return render(
     <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout: vi.fn() } as never}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <OfficialScalesPage />
       </MemoryRouter>
     </AuthContext.Provider>,

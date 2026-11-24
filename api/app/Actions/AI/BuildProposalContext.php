@@ -3,6 +3,7 @@
 namespace App\Actions\AI;
 
 use App\Enums\AIProposalType;
+use App\Enums\AIRequestType;
 use App\Enums\AssessmentType;
 use App\Models\Accommodation;
 use App\Models\AIProposal;
@@ -14,6 +15,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\AIInstructions\SchoolAIInstructions;
 use App\Services\CurricularStructure\CurricularOfferings;
 use Closure;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -70,6 +72,18 @@ class BuildProposalContext
                 $group,
                 $this->subjectId($parameters),
                 $proposal->requestedBy,
+            );
+        }
+
+        // Screen 24 (ClickUp 1dfd3mc4bh6, PA-126): the school's own
+        // indication for its assessments, the most specific rule for this
+        // group's level or grade. Reference text written by Direction — the
+        // system prompt tells the model to ignore any order inside it.
+        if ($proposal->type === AIProposalType::Assessment) {
+            $instructions = app(SchoolAIInstructions::class);
+            $context['school_instruction'] = $instructions->renderLayer(
+                AIRequestType::Assessment,
+                $instructions->resolveFor(AIRequestType::Assessment, $group)?->settings,
             );
         }
 

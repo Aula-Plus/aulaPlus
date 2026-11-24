@@ -170,8 +170,9 @@ export function buildNavSections(
         ...(canManageGradesVisibility(user)
           ? [{ to: "/ajustes/calificaciones", label: "Visibilidad de calificaciones", icon: Eye }]
           : []),
-        // Screen 24 «Evaluación y juicios» (only «Escalas oficiales» for
-        // now): director-only (mirror of SchoolPolicy::viewOfficialScales).
+        // Screen 24 «Evaluación y juicios» (Juicios, Evaluaciones, Escalas
+        // oficiales): director-only (mirror of SchoolPolicy::viewOfficialScales
+        // and ::manageAIInstructions).
         ...(canViewOfficialScales(user)
           ? [{ to: "/administracion/evaluacion-y-juicios", label: "Evaluación y juicios", icon: Scale }]
           : []),
