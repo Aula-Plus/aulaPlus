@@ -225,6 +225,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and deadline; plus who it can be handed to.
         Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
         Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
+        // «Avisarme a mí también cuando llegue el plazo», for whoever handed
+        // the alert off (ClickUp 86e3jpzdp, decision of 24/10).
+        Route::put('/alerts/{alert}/deadline-notice', [AlertOutcomeController::class, 'deadlineNotice']);
         // Notes in an alert's thread, by whoever has it (ClickUp 86e3jpzdp
         // follow-up). Working a case with several people happens on a
         // follow-up linked to the alert, not on the alert itself.

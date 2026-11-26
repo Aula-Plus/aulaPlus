@@ -40,6 +40,15 @@ class AlertPolicy
     }
 
     /**
+     * «Avisarme a mí también cuando llegue el plazo» — see
+     * {@see Alert::canToggleDeadlineNoticeBy()}.
+     */
+    public function toggleDeadlineNotice(User $user, Alert $alert): bool
+    {
+        return $alert->canToggleDeadlineNoticeBy($user);
+    }
+
+    /**
      * Create a scheduled follow-up linked to the alert ("Crear seguimiento
      * vinculado") — see {@see Alert::canLinkFollowUpBy()}. Whoever handed the
      * alert off keeps reading it but cannot do this.
