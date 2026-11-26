@@ -126,13 +126,13 @@ describe("ScreeningTestDesignPage", () => {
     )
   })
 
-  it("does not offer creating a screening to Dirección, but lets it open and edit one", async () => {
+  it("offers creating a screening to Dirección too, and lets it open and edit one", async () => {
     vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([type()])
 
     renderPage("director")
 
+    expect(await screen.findByRole("button", { name: "Crear screening" })).toBeInTheDocument()
     await userEvent.click(await screen.findByRole("button", { name: "Abrir y editar" }))
-    expect(screen.queryByRole("button", { name: "Crear screening" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Guardar datos generales" })).toBeInTheDocument()
   })
 
@@ -215,7 +215,7 @@ describe("ScreeningTestDesignPage", () => {
     )
   })
 
-  it("shows the change that already rules and lets only Dirección go back", async () => {
+  it("shows the change that already rules and lets Psicopedagogía and Dirección go back", async () => {
     vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
       type({
         current_design: design(11, bandsNow, { reason: "Subir el corte de Adecuado" }),
@@ -237,19 +237,43 @@ describe("ScreeningTestDesignPage", () => {
     })
     const revert = vi.spyOn(screeningApi, "revertScreeningTestDesign").mockResolvedValue(design(11, bandsNow))
 
-    const { unmount } = renderPage("psychopedagogue", "/pruebas-de-sondeo/tipos?abrir=1")
+    const { unmount } = renderPage("teacher", "/pruebas-de-sondeo/tipos?abrir=1")
     expect(await screen.findByText("Prueba de atención · cambio que ya rige")).toBeInTheDocument()
     expect(await screen.findByText(/En proceso · más de 34 hasta 59 · 35/)).toBeInTheDocument()
     expect(screen.getByText(/En proceso · más de 34 hasta 64 · 50/)).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Volver atrás" })).not.toBeInTheDocument()
     unmount()
 
-    renderPage("director", "/pruebas-de-sondeo/tipos?abrir=1")
+    for (const role of ["psychopedagogue", "director"] as const) {
+      revert.mockClear()
+      const view = renderPage(role, "/pruebas-de-sondeo/tipos?abrir=1")
+      await userEvent.click(await screen.findByRole("button", { name: "Volver atrás" }))
+      const dialog = await screen.findByRole("dialog")
+      await userEvent.click(within(dialog).getByRole("button", { name: "Volver atrás" }))
+
+      await waitFor(() => expect(revert).toHaveBeenCalledWith(11))
+      view.unmount()
+    }
+  })
+
+  it("says «Volviendo atrás…» while it goes back", async () => {
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type({ current_design: design(11, bandsNow), previous_design: design(10, bandsBefore) }),
+    ])
+    vi.spyOn(screeningApi, "previewScreeningTestImpact").mockResolvedValue({
+      students: 0, groups_without_level: 0,
+      current: [],
+      proposed: [],
+    })
+    vi.spyOn(screeningApi, "revertScreeningTestDesign").mockReturnValue(new Promise(() => {}))
+
+    renderPage("psychopedagogue", "/pruebas-de-sondeo/tipos?abrir=1")
     await userEvent.click(await screen.findByRole("button", { name: "Volver atrás" }))
     const dialog = await screen.findByRole("dialog")
     await userEvent.click(within(dialog).getByRole("button", { name: "Volver atrás" }))
 
-    await waitFor(() => expect(revert).toHaveBeenCalledWith(11))
+    expect(await within(dialog).findByRole("button", { name: "Volviendo atrás…" })).toBeDisabled()
+    expect(within(dialog).queryByText("Eliminando…")).not.toBeInTheDocument()
   })
 
   it("refills the bands form with the design that rules again after going back", async () => {

@@ -31,13 +31,14 @@ class ScreeningTestDesignPolicy
     }
 
     /**
-     * "Volver atrás" is Dirección's (screen 08). Role/tenant only — whether
-     * the design is the one in force is a business-state precondition the
-     * controller checks separately (422, not 403).
+     * "Volver atrás": Psicopedagogía and Dirección (screen 08, ClickUp
+     * 86e3dt70g, decision of 24/10). Role/tenant only — whether the design is
+     * the one in force is a business-state precondition the controller checks
+     * separately (422, not 403).
      */
     public function revert(User $user, ScreeningTestDesign $design): bool
     {
         return $user->school_id === $design->school_id
-            && $user->hasRole(Role::Director->value);
+            && $user->hasAnyRole([Role::Psychopedagogue->value, Role::Director->value]);
     }
 }

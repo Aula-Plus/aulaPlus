@@ -56,16 +56,28 @@ it('stores the optional area of a type and validates its length', function () {
         ->assertJsonValidationErrors('area');
 });
 
-it('forbids a teacher and a director from creating a type', function () {
+it('forbids a teacher from creating a type', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
-    $director = User::factory()->forSchool($school)->director()->create();
 
     Sanctum::actingAs($teacher);
     $this->postJson('/api/v1/screening-test-types', ['name' => 'X'])->assertForbidden();
 
+    $this->assertDatabaseCount('screening_test_types', 0);
+});
+
+it('lets Dirección create a type too, in its own school (decision of 24/10)', function () {
+    $school = School::factory()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
     Sanctum::actingAs($director);
-    $this->postJson('/api/v1/screening-test-types', ['name' => 'X'])->assertForbidden();
+
+    $this->postJson('/api/v1/screening-test-types', ['name' => 'TECLE', 'school_id' => School::factory()->create()->id])
+        ->assertCreated()
+        ->assertJsonPath('data.created_by_id', $director->id);
+
+    $this->assertDatabaseHas('screening_test_types', ['name' => 'TECLE', 'school_id' => $school->id]);
+
+    $this->postJson('/api/v1/screening-test-types', [])->assertUnprocessable()->assertJsonValidationErrors('name');
 });
 
 it('forbids a teacher from listing types', function () {
@@ -240,9 +252,6 @@ it('lets Dirección revert the design in force so the previous one rules again',
         'created_by_id' => $psychopedagogue->id,
     ]);
 
-    Sanctum::actingAs($psychopedagogue);
-    $this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")->assertForbidden();
-
     Sanctum::actingAs($director);
     $this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")
         ->assertOk()
@@ -259,6 +268,54 @@ it('lets Dirección revert the design in force so the previous one rules again',
         ->assertJsonPath('data.0.reverted_by_name', $director->name);
 
     Notification::assertSentTo($psychopedagogue, ScreeningDesignRevertedNotification::class);
+    Notification::assertNotSentTo($director, ScreeningDesignRevertedNotification::class);
+});
+
+it('lets Psicopedagogía revert too, and tells Dirección (decision of 24/10)', function () {
+    Notification::fake();
+    $school = School::factory()->create();
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $colleague = User::factory()->forSchool($school)->psychopedagogue()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $disabledDirector = User::factory()->forSchool($school)->director()->create(['disabled_at' => now()]);
+    $foreignDirector = User::factory()->forSchool(School::factory()->create())->director()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    $previous = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => threeBands(34, 59)]);
+    $current = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create([
+        'bands' => threeBands(34, 64),
+        'created_by_id' => $colleague->id,
+    ]);
+
+    Sanctum::actingAs($psychopedagogue);
+    $this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")
+        ->assertOk()
+        ->assertJsonPath('data.reverted_by_id', $psychopedagogue->id);
+
+    $this->getJson('/api/v1/screening-test-types')->assertJsonPath('data.0.current_design.id', $previous->id);
+
+    // The other role, and whoever made the change.
+    Notification::assertSentTo($director, ScreeningDesignRevertedNotification::class);
+    Notification::assertSentTo($colleague, ScreeningDesignRevertedNotification::class);
+    Notification::assertNotSentTo($psychopedagogue, ScreeningDesignRevertedNotification::class);
+    Notification::assertNotSentTo($disabledDirector, ScreeningDesignRevertedNotification::class);
+    Notification::assertNotSentTo($foreignDirector, ScreeningDesignRevertedNotification::class);
+    Notification::assertNotSentTo($teacher, ScreeningDesignRevertedNotification::class);
+});
+
+it('forbids a teacher and another school from reverting a design', function () {
+    $school = School::factory()->create();
+    $type = ScreeningTestType::factory()->create(['school_id' => $school->id]);
+    ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => threeBands(34, 59)]);
+    $current = ScreeningTestDesign::factory()->for($type, 'type')->approved()->create(['bands' => threeBands(34, 64)]);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+    $this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")->assertForbidden();
+
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->psychopedagogue()->create());
+    expect($this->postJson("/api/v1/screening-test-designs/{$current->id}/revert")->status())->toBeIn([403, 404]);
+
+    expect($current->fresh()->reverted_at)->toBeNull();
 });
 
 it('returns 422 when reverting a design that is not in force or has nothing before it', function () {
