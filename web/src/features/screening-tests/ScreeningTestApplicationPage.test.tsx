@@ -152,15 +152,69 @@ describe("ScreeningTestApplicationPage", () => {
       },
     ])
 
+    const fetchResults = vi.spyOn(screeningApi, "fetchScreeningTestResults").mockResolvedValue([
+      {
+        id: 7,
+        screening_test_application_id: 50,
+        code: "01",
+        score: 45,
+        screening_test_design_id: 9,
+        band: "Bajo",
+        color: "red",
+        current_design_id: 10,
+        current_band: "Alto",
+        current_color: "green",
+        band_changed: true,
+        loaded_by_id: 1,
+        loaded_at: "2026-09-16T10:00:00Z",
+      },
+    ])
+    const updateResult = vi.spyOn(screeningApi, "updateScreeningTestResult")
+
     renderPage("director")
 
     expect(await screen.findByText("Screenings — 3° A")).toBeInTheDocument()
-    // The application is listed…
+    // The application is listed, counting students — not codes…
     expect(screen.getByText("Comprensión lectora")).toBeInTheDocument()
+    expect(screen.getByText(/2026-09-15 · 3 alumnos/)).toBeInTheDocument()
+    expect(screen.queryByText(/códigos/)).not.toBeInTheDocument()
     // …but no create form, roster sheet, or results loader (psychopedagogy only).
     expect(screen.queryByText(/nueva aplicación/i)).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /hoja para aplicar/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /cargar resultados/i })).not.toBeInTheDocument()
+
+    // Dirección reads the results (decision of 24/10): band and the reading
+    // with the previous design, with no score inputs.
+    await userEvent.click(screen.getByRole("button", { name: "Ver resultados" }))
+    expect(fetchResults).toHaveBeenCalledWith(50)
+    expect(await screen.findByText("Alto")).toBeInTheDocument()
+    expect(screen.getByText("Con el diseño anterior era Bajo.")).toBeInTheDocument()
+    expect(screen.getByText("45")).toBeInTheDocument()
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument()
+    expect(updateResult).not.toHaveBeenCalled()
+  })
+
+  it("says «1 alumno» for an application of one student, and psychopedagogy keeps «Cargar resultados»", async () => {
+    vi.spyOn(groupsApi, "fetchGroup").mockResolvedValue(group())
+    vi.spyOn(screeningApi, "fetchScreeningTestTypes").mockResolvedValue([
+      type(1, "Comprensión lectora", true),
+    ])
+    vi.spyOn(screeningApi, "fetchGroupScreeningTestApplications").mockResolvedValue([
+      {
+        id: 51,
+        screening_test_type_id: 1,
+        group_id: 1,
+        applied_by_id: 1,
+        application_date: "2026-09-15",
+        results_count: 1,
+      },
+    ])
+
+    renderPage("psychopedagogue")
+
+    expect(await screen.findByText(/2026-09-15 · 1 alumno$/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Cargar resultados" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Ver resultados" })).not.toBeInTheDocument()
   })
 
   it("does not offer a screening without population and says it has to be chosen first", async () => {

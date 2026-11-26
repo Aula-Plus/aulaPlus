@@ -63,10 +63,15 @@ class ScreeningTestApplicationPolicy
     }
 
     /**
-     * The by-code results view (no names): psychopedagogy only (spec §3).
+     * Read the by-code results (no names, no roster): Psicopedagogía and
+     * Dirección (ClickUp 86e3dt70g, decision of 24/10; screen 07 «Resultados
+     * por grupo»). Reading is separate from loading/correcting scores
+     * ({@see ScreeningTestResultPolicy::update}, psychopedagogy only) and from
+     * the code → student roster ({@see self::viewRoster()}).
      */
     public function viewResults(User $user, ScreeningTestApplication $application): bool
     {
-        return $this->viewRoster($user, $application);
+        return $user->school_id === $application->school_id
+            && $user->hasAnyRole([Role::Psychopedagogue->value, Role::Director->value]);
     }
 }
