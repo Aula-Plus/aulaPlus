@@ -24,6 +24,7 @@ import { accommodationCategoryLabels } from "@/types"
 import { ClosedYearNotice } from "@/features/school-year/ClosedYearNotice"
 import { closedYearError } from "@/features/school-year/closedYearError"
 import { newClassPath } from "@/features/classes/classesApi"
+import { GroupResourcesCard } from "@/features/resources/GroupResourcesCard"
 import {
   createObjective,
   objectiveStatusLabels,
@@ -221,6 +222,8 @@ export function UnitPage() {
           resources={unit.planner.resources}
           unchecked={uncheckedResources(unit)}
           readOnly={!editable}
+          groupId={unit.plan.group.id}
+          onResourcesChanged={reload}
           onClose={() => setPanelOpen(false)}
         />
       )}
@@ -659,9 +662,11 @@ function ResourcesChecklist({
               checked={!unchecked.includes(resource.key)}
               onChange={(e) =>
                 onChange(
-                  e.target.checked
-                    ? unchecked.filter((key) => key !== resource.key)
-                    : [...unchecked, resource.key],
+                  uncheckedValue(
+                    e.target.checked
+                      ? unchecked.filter((key) => key !== resource.key)
+                      : [...unchecked, resource.key],
+                  ),
                 )
               }
             />
@@ -673,6 +678,11 @@ function ResourcesChecklist({
       <p className="text-xs text-muted-foreground">Vienen del perfil del grupo. Destildá lo que no usás en esta unidad.</p>
     </>
   )
+}
+
+/** All resources checked again is stored as null (the server answers null for `[]`), so the form is not left dirty. */
+function uncheckedValue(keys: string[]): PlannerValue {
+  return keys.length === 0 ? null : keys
 }
 
 type AddMode = "write" | "catalog"
@@ -1096,6 +1106,8 @@ function AtHandPanel({
   resources,
   unchecked,
   readOnly,
+  groupId,
+  onResourcesChanged,
   onClose,
 }: {
   accommodations: UnitAccommodationType[] | null
@@ -1103,6 +1115,8 @@ function AtHandPanel({
   resources: UnitResource[]
   unchecked: string[]
   readOnly: boolean
+  groupId: number | null
+  onResourcesChanged: () => void
   onClose: () => void
 }) {
   const [detail, setDetail] = useState(false)
@@ -1174,25 +1188,44 @@ function AtHandPanel({
           </>
         )}
       </section>
-      <section className="grid gap-2">
-        <h3 className="font-medium">Recursos disponibles</h3>
-        {resources.length === 0 ? (
-          <p className="text-sm text-muted-foreground">El grupo todavía no tiene recursos cargados.</p>
-        ) : (
-          <ul className="grid gap-1 text-sm">
-            {resources.map((r) => (
-              <li key={r.key} className="flex flex-wrap items-center justify-between gap-2">
-                <span className={unchecked.includes(r.key) ? "text-muted-foreground line-through" : undefined}>
-                  {r.name}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {unchecked.includes(r.key) ? "No se usa en esta unidad" : resourceSourceLabels[r.source]}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {readOnly || groupId === null ? (
+        <section className="grid gap-2">
+          <h3 className="font-medium">Recursos disponibles</h3>
+          {resources.length === 0 ? (
+            <p className="text-sm text-muted-foreground">El grupo todavía no tiene recursos cargados.</p>
+          ) : (
+            <ul className="grid gap-1 text-sm">
+              {resources.map((r) => (
+                <li key={r.key} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={unchecked.includes(r.key) ? "text-muted-foreground line-through" : undefined}>
+                    {r.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {unchecked.includes(r.key) ? "No se usa en esta unidad" : resourceSourceLabels[r.source]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : (
+        // PA-118: the group's teacher changes the group's resources here and
+        // it stays in the group's profile (same editor and GroupPolicy as the
+        // group page). Unchecking one only for this unit is in the planner.
+        <div className="grid gap-2">
+          <GroupResourcesCard groupId={groupId} onChanged={onResourcesChanged} />
+          {unchecked.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              No se usan en esta unidad:{" "}
+              {resources
+                .filter((r) => unchecked.includes(r.key))
+                .map((r) => r.name)
+                .join(" · ")}
+              . Lo cambiás en la planificación.
+            </p>
+          )}
+        </div>
+      )}
     </aside>
   )
 }

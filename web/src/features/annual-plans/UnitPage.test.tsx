@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { UnitPage } from "./UnitPage"
 import * as unitApi from "./unitApi"
 import type { UnitDetail } from "./unitApi"
+import * as resourcesApi from "@/features/resources/resourcesApi"
+import type { GroupResources } from "@/features/resources/resourcesApi"
 
 vi.mock("./unitApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./unitApi")>()
@@ -19,6 +21,25 @@ vi.mock("./unitApi", async (importOriginal) => {
     createObjectiveFromCatalog: vi.fn(),
   }
 })
+
+vi.mock("@/features/resources/resourcesApi", () => ({
+  fetchGroupResources: vi.fn(),
+  setSchoolResourceAvailable: vi.fn(),
+  createGroupResource: vi.fn(),
+  deleteGroupResource: vi.fn(),
+}))
+
+function makeGroupResources(overrides: Partial<GroupResources> = {}): GroupResources {
+  return {
+    can_manage: true,
+    can_add_own: true,
+    school: [{ id: 4, name: "Huerta escolar", available: true }],
+    group: [
+      { id: 11, name: "Tele en el salón", visibility: "group", created_by_name: "Mariana López", can_remove: true },
+    ],
+    ...overrides,
+  }
+}
 
 function makeUnit(overrides: Partial<UnitDetail> = {}): UnitDetail {
   return {
@@ -131,6 +152,7 @@ describe("UnitPage", () => {
       },
     ])
     vi.mocked(unitApi.saveUnitPlanner).mockResolvedValue(makeUnit().planner)
+    vi.mocked(resourcesApi.fetchGroupResources).mockResolvedValue(makeGroupResources())
   })
 
   it("shows the header and the differentiation aggregated by type, without names", async () => {
@@ -170,7 +192,39 @@ describe("UnitPage", () => {
     await waitFor(() => expect(unitApi.saveUnitPlanner).toHaveBeenCalledWith(5, { resources: ["school:4"] }))
   })
 
-  it("lists the group resources in «A mano», marking the ones this unit does not use", async () => {
+  it("saves null, not an empty list, when every resource is checked again (the form is not left dirty)", async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("checkbox", { name: /Calculadoras/ }))
+    await user.click(screen.getByRole("button", { name: "Guardar planificación" }))
+
+    await waitFor(() => expect(unitApi.saveUnitPlanner).toHaveBeenCalledWith(5, { resources: null }))
+  })
+
+  it("lets the group's teacher change the group's resources from «A mano», reloading the unit", async () => {
+    vi.mocked(resourcesApi.setSchoolResourceAvailable).mockResolvedValue(
+      makeGroupResources({ school: [{ id: 4, name: "Huerta escolar", available: false }] }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: "A mano" }))
+    const panel = screen.getByRole("dialog", { name: "A mano" })
+    expect(resourcesApi.fetchGroupResources).toHaveBeenCalledWith(1)
+    expect(within(panel).getByText("No se usan en esta unidad: Calculadoras. Lo cambiás en la planificación.")).toBeInTheDocument()
+    expect(within(panel).getByText("· lo sumó Mariana López")).toBeInTheDocument()
+    expect(within(panel).getByRole("textbox", { name: "Agregar un recurso del grupo" })).toBeInTheDocument()
+
+    const callsBefore = vi.mocked(unitApi.fetchUnit).mock.calls.length
+    await user.click(await within(panel).findByRole("checkbox", { name: "Huerta escolar" }))
+
+    await waitFor(() => expect(resourcesApi.setSchoolResourceAvailable).toHaveBeenCalledWith(1, 4, false))
+    await waitFor(() => expect(vi.mocked(unitApi.fetchUnit).mock.calls.length).toBeGreaterThan(callsBefore))
+  })
+
+  it("shows «A mano»'s resources read-only for Psicopedagogía and Dirección, marking the ones this unit does not use", async () => {
+    vi.mocked(unitApi.fetchUnit).mockResolvedValue(makeUnit({ can_edit: false }))
     const user = userEvent.setup()
     renderPage()
 
@@ -179,6 +233,9 @@ describe("UnitPage", () => {
     expect(within(panel).getByText("Huerta escolar")).toBeInTheDocument()
     expect(within(panel).getByText("Calculadoras")).toHaveClass("line-through")
     expect(within(panel).getByText("No se usa en esta unidad")).toBeInTheDocument()
+    expect(within(panel).queryByRole("checkbox")).not.toBeInTheDocument()
+    expect(within(panel).queryByRole("textbox", { name: "Agregar un recurso del grupo" })).not.toBeInTheDocument()
+    expect(resourcesApi.fetchGroupResources).not.toHaveBeenCalled()
   })
 
   it("starts a new class from the unit and from each objective", async () => {
