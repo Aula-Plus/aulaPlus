@@ -320,6 +320,12 @@ export interface Alert {
    * once a way out was chosen): it is «a tu cargo» for them.
    */
   is_in_charge?: boolean
+  /**
+   * «Avisarme a mí también cuando llegue el plazo» (ClickUp 86e3jpzdp): only
+   * for whoever handed the alert off and doesn't have it now; `null`
+   * otherwise. Decided server-side.
+   */
+  deadline_notice?: { enabled: boolean } | null
   /** What the current user may do, decided by `AlertPolicy`. */
   can?: { act: boolean; note?: boolean; resolve: boolean; link_follow_up?: boolean }
   resolved: boolean

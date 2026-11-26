@@ -137,7 +137,12 @@ endpoint de candidatos y `ChooseAlertOutcomeRequest`).
 - **A quién se avisa**: a quien tiene la alerta, si sigue activo y con permiso
   vigente (ve la alerta). Hoy es el único participante de la alerta en sí —
   quienes trabajan el caso en un seguimiento vinculado se gestionan en ese
-  seguimiento. Quien la transfirió no recibe avisos. El aviso es una
+  seguimiento. Quien la transfirió no recibe avisos, salvo que haya prendido
+  «Avisarme a mí también cuando llegue el plazo» (`alert_user.
+  notify_at_deadline`, `PUT /alerts/{id}/deadline-notice`, decisión del 24/10):
+  viene apagada, la cambia desde la lectura de la alerta cualquier rol que la
+  haya pasado y no la tenga ahora, y se mantiene si la alerta se vuelve a
+  pasar. El aviso es una
   notificación de base de datos (`alert_overdue`, solo ids y fecha) y se ve en
   «Mis seguimientos».
 - **Dirección no se suma por plazo**: está desde el inicio si la

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AlertActionKind;
 use App\Enums\AlertOutcome;
 use App\Http\Requests\ChooseAlertOutcomeRequest;
+use App\Http\Requests\UpdateAlertDeadlineNoticeRequest;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\User;
@@ -77,6 +78,31 @@ class AlertOutcomeController extends Controller
             ]);
 
             return $alert;
+        });
+
+        return new AlertResource($alert->fresh()->load(AlertResource::RELATIONS));
+    }
+
+    /**
+     * PUT /api/v1/alerts/{alert}/deadline-notice — «Avisarme a mí también
+     * cuando llegue el plazo» (decision of 24/10): whoever handed the alert
+     * off switches it on or off from reading the alert. Off by default; kept
+     * on the person's own `alert_user` row, so it survives the alert being
+     * handed off again.
+     */
+    public function deadlineNotice(UpdateAlertDeadlineNoticeRequest $request, Alert $alert): AlertResource
+    {
+        $user = $request->user();
+
+        DB::transaction(function () use ($request, $alert, $user): void {
+            $locked = Alert::query()->whereKey($alert->id)->lockForUpdate()->firstOrFail();
+            if (! $locked->canToggleDeadlineNoticeBy($user)) {
+                throw new AuthorizationException;
+            }
+
+            $locked->people()->syncWithoutDetaching([
+                $user->id => ['notify_at_deadline' => $request->boolean('enabled')],
+            ]);
         });
 
         return new AlertResource($alert->fresh()->load(AlertResource::RELATIONS));
