@@ -271,4 +271,28 @@ describe("Personal and shared events (ClickUp 1dfd3mc56kp)", () => {
       "/calendario?vista=lista&desde=2026-12-17&hasta=2026-12-17",
     )
   })
+
+  it("words the cancellation notice with what and when, and no link", () => {
+    const notice: AppNotification = {
+      id: "n2",
+      created_at: null,
+      data: {
+        type: "calendar_event_cancelled",
+        event_type: "personal",
+        title: "Coordinar salida",
+        date: "2026-12-17",
+        time: "10:30",
+        cancelled_by_id: 7,
+        cancelled_by_name: "Laura Ferrando",
+      },
+    }
+    render(
+      <MemoryRouter>
+        <NoticeText notice={notice} />
+      </MemoryRouter>,
+    )
+    const text = screen.getByText(/Se canceló «Coordinar salida»/)
+    expect(text).toHaveTextContent("a las 10:30: Laura Ferrando lo borró. Ya no está en tu calendario.")
+    expect(screen.queryByRole("link")).not.toBeInTheDocument()
+  })
 })

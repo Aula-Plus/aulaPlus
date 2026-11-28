@@ -120,7 +120,7 @@ class PersonalEventController extends Controller
         abort_unless($calendarEvent->isPersonal(), 403);
         $this->authorize('delete', $calendarEvent);
 
-        $calendarEvent->delete();
+        $this->participants->cancel($calendarEvent, $request->user());
 
         return response()->noContent();
     }

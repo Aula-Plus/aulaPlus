@@ -6,6 +6,7 @@ use App\Models\Group;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Notifications\CalendarEventCancelledNotification;
 use App\Notifications\CalendarEventInvitedNotification;
 use App\Services\Calendar\EventParticipants;
 use Illuminate\Database\Events\TransactionRolledBack;
@@ -389,4 +390,83 @@ it('lists the invitation notice on the notifications screen', function () {
         ->assertJsonPath('data.0.data.type', 'calendar_event_invited')
         ->assertJsonPath('data.0.data.title', 'Coordinar salida didáctica');
     $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 1);
+});
+
+it('tells each invitee «Se canceló…» when the creator deletes a shared event, without the student', function () {
+    $school = School::factory()->create();
+    $owner = User::factory()->forSchool($school)->psychopedagogue()->create(['name' => 'Laura Ferrando']);
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $left = User::factory()->forSchool($school)->teacher()->create();
+    $student = Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Lucía Pereyra']);
+    Sanctum::actingAs($owner);
+    $id = $this->postJson('/api/v1/personal-events', personalPayload([
+        'student_id' => $student->id,
+        'invitee_ids' => [$teacher->id, $director->id, $left->id],
+    ]))->assertCreated()->json('data.id');
+
+    // Someone who already took it out of their calendar is no longer told.
+    Sanctum::actingAs($left);
+    $this->deleteJson("/api/v1/calendar-events/{$id}/participation")->assertNoContent();
+
+    Notification::fake();
+    Sanctum::actingAs($owner);
+    $this->deleteJson("/api/v1/personal-events/{$id}")->assertNoContent();
+
+    expect(CalendarEvent::query()->whereKey($id)->exists())->toBeFalse();
+    Notification::assertSentTo([$teacher, $director], CalendarEventCancelledNotification::class, function ($notification, $channels, $notifiable) use ($owner) {
+        $data = $notification->toArray($notifiable);
+
+        return $data === [
+            'type' => 'calendar_event_cancelled',
+            'event_type' => 'personal',
+            'title' => 'Coordinar salida didáctica',
+            'date' => '2026-12-15',
+            'time' => '10:30',
+            'cancelled_by_id' => $owner->id,
+            'cancelled_by_name' => 'Laura Ferrando',
+        ] && ! str_contains(json_encode($data), 'Lucía') && ! str_contains(json_encode($data), 'autorizaciones');
+    });
+    Notification::assertNotSentTo([$owner, $left], CalendarEventCancelledNotification::class);
+});
+
+it('sends no cancellation when a non-creator tries to delete, nor across schools', function () {
+    $school = School::factory()->create();
+    $owner = User::factory()->forSchool($school)->teacher()->create();
+    $invitee = User::factory()->forSchool($school)->director()->create();
+    Sanctum::actingAs($owner);
+    $id = $this->postJson('/api/v1/personal-events', personalPayload(['invitee_ids' => [$invitee->id]]))->json('data.id');
+
+    Notification::fake();
+    Sanctum::actingAs($invitee);
+    $this->deleteJson("/api/v1/personal-events/{$id}")->assertForbidden();
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    $this->deleteJson("/api/v1/personal-events/{$id}")->assertNotFound();
+
+    expect(CalendarEvent::query()->withoutGlobalScopes()->whereKey($id)->exists())->toBeTrue();
+    Notification::assertNothingSent();
+});
+
+it('sends no cancellation for an event nobody else was invited to', function () {
+    $owner = User::factory()->forSchool(School::factory()->create())->teacher()->create();
+    Sanctum::actingAs($owner);
+    $id = $this->postJson('/api/v1/personal-events', personalPayload())->json('data.id');
+
+    Notification::fake();
+    $this->deleteJson("/api/v1/personal-events/{$id}")->assertNoContent();
+    Notification::assertNothingSent();
+});
+
+it('lists the cancellation notice on the notifications screen', function () {
+    $school = School::factory()->create();
+    $owner = User::factory()->forSchool($school)->teacher()->create();
+    $invitee = User::factory()->forSchool($school)->teacher()->create();
+    Sanctum::actingAs($owner);
+    $id = $this->postJson('/api/v1/personal-events', personalPayload(['invitee_ids' => [$invitee->id]]))->json('data.id');
+    $this->deleteJson("/api/v1/personal-events/{$id}")->assertNoContent();
+
+    Sanctum::actingAs($invitee);
+    $types = collect($this->getJson('/api/v1/notifications')->assertOk()->json('data'))->pluck('data.type')->all();
+    expect($types)->toContain('calendar_event_cancelled');
+    $this->getJson('/api/v1/notifications/unread-count')->assertOk()->assertJsonPath('data.count', 2);
 });

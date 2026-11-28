@@ -1276,6 +1276,7 @@ export interface AppNotification {
   data:
     | FollowUpAssignedNotice
     | CalendarEventInvitedNotice
+    | CalendarEventCancelledNotice
     | AlertOverdueNotice
     | AccommodationProposalReturnedNotice
     | AccommodationConfirmedNotice
@@ -1303,6 +1304,20 @@ export interface CalendarEventInvitedNotice {
   time: string | null
   invited_by_id: number | null
   invited_by_name: string | null
+}
+
+/**
+ * The creator deleted an event I was invited to (ClickUp 1dfd3mc56kp, 26/11):
+ * it left my calendar. A snapshot of what and when; never the student.
+ */
+export interface CalendarEventCancelledNotice {
+  type: "calendar_event_cancelled"
+  event_type: "personal" | "meeting"
+  title: string
+  date: string
+  time: string | null
+  cancelled_by_id: number | null
+  cancelled_by_name: string | null
 }
 
 /**

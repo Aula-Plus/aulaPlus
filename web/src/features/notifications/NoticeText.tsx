@@ -25,6 +25,14 @@ export function NoticeText({ notice, studentName }: { notice: AppNotification; s
           </Link>
         </span>
       )
+    case "calendar_event_cancelled":
+      return (
+        <span>
+          Se canceló «{data.title}» del {formatShortDate(data.date)}
+          {data.time ? ` a las ${data.time}` : ""}
+          {data.cancelled_by_name ? `: ${data.cancelled_by_name} lo borró` : ""}. Ya no está en tu calendario.
+        </span>
+      )
     case "comment_shared":
       return (
         <span>

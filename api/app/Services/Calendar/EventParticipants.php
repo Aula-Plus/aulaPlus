@@ -5,6 +5,7 @@ namespace App\Services\Calendar;
 use App\Models\Calendar;
 use App\Models\CalendarEvent;
 use App\Models\User;
+use App\Notifications\CalendarEventCancelledNotification;
 use App\Notifications\CalendarEventInvitedNotification;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
@@ -123,6 +124,26 @@ class EventParticipants
         }
 
         $this->invite($event, $users, $invitedBy);
+    }
+
+    /**
+     * The creator deletes the event: it leaves every calendar, and each other
+     * participant gets «Se canceló…» (Eitán, 26/11). The notices are built
+     * before the delete, from a snapshot of the event.
+     */
+    public function cancel(CalendarEvent $event, User $cancelledBy): void
+    {
+        $inviteeIds = array_values(array_diff($this->participantIds($event), [$event->created_by_id]));
+        $invitees = $inviteeIds === []
+            ? collect()
+            : User::query()->where('school_id', $event->school_id)->whereKey($inviteeIds)->get();
+        $notice = new CalendarEventCancelledNotification($event, $cancelledBy);
+
+        $event->delete();
+
+        foreach ($invitees as $invitee) {
+            $invitee->notify($notice);
+        }
     }
 
     /**
