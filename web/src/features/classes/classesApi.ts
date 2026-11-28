@@ -44,7 +44,7 @@ export interface DataUsed {
 
 export interface PlannerNote {
   read: boolean
-  reason: "class_without_unit" | "planner_not_available" | string | null
+  reason: "class_without_unit" | string | null
 }
 
 /** The class draft as the server stores it (GenerateAIProposalJob). */
@@ -246,9 +246,10 @@ export const closingLabels: Record<ObjectiveCoverage, string> = {
   none: "Nada",
 }
 
-/** Why the proposal read no unit planner (Q3 of ClickUp 86e3jujh0). */
+/** Whether the proposal read the unit planner, and why not (Q3 of ClickUp 86e3jujh0). */
 export function plannerNote(planner: PlannerNote | null | undefined): string | null {
-  if (!planner || planner.read) return null
+  if (!planner) return null
+  if (planner.read) return "La IA leyó el planificador de la unidad: los campos completos y los recursos tildados."
   return planner.reason === "class_without_unit"
     ? "Clase libre: no cuelga de una unidad, así que la IA no leyó ningún planificador y esta clase no suma a la cobertura del programa."
     : "La IA no leyó el planificador de la unidad: todavía no está disponible. La propuesta se armó con el programa, los objetivos y los datos del grupo."

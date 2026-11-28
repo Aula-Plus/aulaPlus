@@ -173,7 +173,9 @@ skeleton is done, until explicitly asked:
     («Nueva clase desde esta unidad» and per objective), and its planner and
     «A mano» show the group's resources as the plan's teacher sees them, with
     the ones unchecked for the unit (`planner_values.resources`, PA-118). The
-    PTP block is not there yet (its own task).
+    PTP block is not there yet (its own task). A class proposal from a unit
+    reads its planner (`BuildUnitPlannerInput`: filled fields not marked
+    «Solo para registro» and the checked resources' names).
   - Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0,
     first delivery): a teacher asks the AI for a class of a group-subject they
     teach (from a unit of their Programa anual or directly; subject
@@ -186,8 +188,7 @@ skeleton is done, until explicitly asked:
   `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
   full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
   scope: screens 16–17 (Nueva evaluación / Propuesta de evaluación with AI, the
-  next delivery of the same task), reading the unit planner in the class
-  proposal (`BuildUnitPlannerInput`, after screen 13), comments of
+  next delivery of the same task), comments of
   Psicopedagogía/Dirección on a proposal, the extended class closing (Repaso,
   «no previsto», free text) and creating classes by hand (without the AI).
 - ~~"PTP y enriquecimiento"~~ — no longer deferred (ClickUp 1dfd3mc4bgc): it is

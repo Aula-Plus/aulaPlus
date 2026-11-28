@@ -1,7 +1,11 @@
 <?php
 
+use App\Actions\AI\BuildProposalContext;
+use App\Actions\AI\BuildUnitPlannerInput;
+use App\Enums\AIProposalType;
 use App\Enums\CurricularItemType;
 use App\Models\Accommodation;
+use App\Models\AIProposal;
 use App\Models\AnnualPlan;
 use App\Models\CurricularCatalog;
 use App\Models\CurricularFramework;
@@ -9,6 +13,7 @@ use App\Models\CurricularItem;
 use App\Models\Group;
 use App\Models\GroupWriteWindow;
 use App\Models\School;
+use App\Models\SchoolPlannerField;
 use App\Models\SchoolYear;
 use App\Models\Student;
 use App\Models\Subject;
@@ -16,6 +21,7 @@ use App\Models\Unit;
 use App\Models\UnitObjective;
 use App\Models\User;
 use App\Services\SchoolYears\SchoolYearCalendar;
+use App\Support\Tenancy;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
@@ -546,4 +552,83 @@ it('names each linked item\'s parent without a query per item', function () {
         ->filter(fn (array $q) => str_contains($q['query'], 'from "curricular_items"') && ! str_contains($q['query'], 'inner join'))
         ->count();
     expect($parentLookups)->toBeLessThanOrEqual(1);
+});
+
+// ── What the AI reads of the planner (ClickUp 1dfd3mc4bga, Eitán 2026-11-26) ─
+
+it('gives the AI the filled planner fields and the checked resources, never record-only fields nor student data', function () {
+    [$school, , $teacher, $group, , $unit] = unitScreenSetup();
+    $director = User::factory()->forSchool($school)->director()->create();
+    $colleague = User::factory()->forSchool($school)->teacher()->create();
+    leadGroup($group, $colleague);
+    $student = Student::factory()->create(['school_id' => $school->id, 'full_name' => 'Lucía Secreta Gómez']);
+    $student->groups()->attach($group, ['school_year' => now()->year]);
+
+    Sanctum::actingAs($director);
+    $garden = $this->postJson('/api/v1/school-resources', ['name' => 'Huerta escolar'])->json('data.id');
+    $this->postJson('/api/v1/school-resources', ['name' => 'Laboratorio'])->assertCreated();
+    $forAI = new SchoolPlannerField;
+    $forAI->forceFill(['school_id' => $school->id, 'name' => 'Salida didáctica', 'description' => 'Si la unidad tiene salida',
+        'purpose' => 'ai', 'type' => 'short_text', 'shown' => true, 'required_by_school' => false, 'position' => 1])->save();
+    $recordOnly = new SchoolPlannerField;
+    $recordOnly->forceFill(['school_id' => $school->id, 'name' => 'Código interno', 'purpose' => 'record',
+        'type' => 'short_text', 'shown' => true, 'required_by_school' => false, 'position' => 2])->save();
+
+    Sanctum::actingAs($teacher);
+    $this->postJson("/api/v1/groups/{$group->id}/resources", ['name' => 'Tele', 'visibility' => 'group'])->assertCreated();
+    Sanctum::actingAs($colleague);
+    $this->postJson("/api/v1/groups/{$group->id}/resources", ['name' => 'Parlante', 'visibility' => 'own'])->assertCreated();
+
+    Sanctum::actingAs($teacher);
+    $this->patchJson("/api/v1/units/{$unit->id}/planner", ['values' => [
+        'problem_question' => '¿Cómo repartimos una pizza?',
+        'duration_hours' => 12,
+        "school_{$forAI->id}" => 'Visita a la feria',
+        "school_{$recordOnly->id}" => 'MAT-07',
+        'resources' => ["school:{$garden}"],
+    ]])->assertOk();
+
+    Tenancy::useSchool($school);
+    $input = app(BuildUnitPlannerInput::class)($unit->refresh());
+
+    expect($input['read'])->toBeTrue()
+        ->and($input['reason'])->toBeNull()
+        ->and(collect($input['values']['fields'])->pluck('value', 'name')->all())->toMatchArray([
+            'Duración en horas' => 12,
+            'Pregunta problematizadora' => '¿Cómo repartimos una pizza?',
+            'Salida didáctica' => 'Visita a la feria',
+        ])
+        ->and(collect($input['values']['fields'])->firstWhere('name', 'Salida didáctica')['description'])->toBe('Si la unidad tiene salida')
+        // Only filled fields are sent; the unchecked resource and a colleague's own are not.
+        ->and(collect($input['values']['fields'])->pluck('name')->all())->not->toContain('Contenidos')
+        ->and($input['values']['resources'])->toBe(['Laboratorio', 'Tele'])
+        ->and($input['values']['differentiation'])->toBe('accommodation_input');
+    $json = json_encode($input, JSON_UNESCAPED_UNICODE);
+    expect($json)->not->toContain('MAT-07')
+        ->and($json)->not->toContain('Código interno')
+        ->and($json)->not->toContain('Parlante')
+        ->and($json)->not->toContain('Lucía Secreta Gómez');
+});
+
+it('reads an empty planner as read and empty, and never reads a unit of another school', function () {
+    [$school, , $teacher, $group, , $unit] = unitScreenSetup();
+    [$otherSchool, , , , , $otherUnit] = unitScreenSetup();
+    $otherUnit->forceFill(['planner_values' => ['problem_question' => 'Pregunta del otro colegio']])->save();
+
+    $proposal = fn (Unit $target) => AIProposal::factory()->completed(['title' => 'x'])->create([
+        'school_id' => $school->id,
+        'group_id' => $group->id,
+        'requested_by_id' => $teacher->id,
+        'type' => AIProposalType::ClassSession,
+        'input_parameters' => ['unit_id' => $target->id, 'subject_id' => $unit->annualPlan->subject_id, 'duration_minutes' => 45],
+    ]);
+
+    Tenancy::useSchool($school);
+    $own = app(BuildProposalContext::class)($proposal($unit))['unit_planner'];
+    expect($own['read'])->toBeTrue()
+        ->and($own['values']['fields'])->toBe([]);
+
+    $foreign = app(BuildProposalContext::class)($proposal($otherUnit))['unit_planner'];
+    expect($foreign['read'])->toBeFalse()
+        ->and(json_encode($foreign))->not->toContain('otro colegio');
 });

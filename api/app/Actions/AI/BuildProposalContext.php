@@ -74,10 +74,17 @@ class BuildProposalContext
         }
 
         if ($proposal->type === AIProposalType::ClassSession) {
-            $unit = isset($parameters['unit_id']) ? Unit::query()->find($parameters['unit_id']) : null;
+            // Units carry no school_id of their own: they are reached only
+            // through an annual plan of this group (SchoolScope on the plan),
+            // on top of the request's validation (defence in depth).
+            $unit = isset($parameters['unit_id'])
+                ? Unit::query()
+                    ->whereHas('annualPlan', fn ($plan) => $plan->where('group_id', $group->id))
+                    ->find($parameters['unit_id'])
+                : null;
             $context['unit'] = $this->classUnit($unit, $parameters);
-            // Screens 14–15 start without a planner (Q3): the prepared place.
-            $context['unit_planner'] = (new BuildUnitPlannerInput)($unit);
+            // What the teacher wrote in the unit's planner (screen 13).
+            $context['unit_planner'] = app(BuildUnitPlannerInput::class)($unit);
         }
 
         return $context;

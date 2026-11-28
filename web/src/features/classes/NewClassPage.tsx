@@ -384,7 +384,7 @@ function NewClassForm() {
           </p>
           {(fromUnit || unit) && (
             <p className="text-muted-foreground">
-              El planificador de la unidad todavía no está disponible: la propuesta va a decir que no lo leyó.
+              También le llega lo que completaste en el planificador de la unidad y los recursos que tenés tildados.
             </p>
           )}
           {error && <p className="text-destructive">{error}</p>}
