@@ -6,11 +6,11 @@ import { SectionCard } from "@/components/ui/section-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { isPsychopedagogue, isTeacher } from "@/lib/permissions"
 import { fetchUserPreferences, updateUserPreferences } from "@/features/preferences/preferencesApi"
-import { calendarItemTypeLabels, type CalendarItem, type CalendarItemType, type User } from "@/types"
+import { type CalendarItem, type CalendarItemType, type User } from "@/types"
 import { fetchCalendar } from "./calendarApi"
 import { toDay } from "./calendarDates"
 import { CalendarItemTopic } from "./CalendarItemTopic"
-import { calendarItemLink, calendarItemWhat } from "./calendarItemText"
+import { calendarItemLink, calendarItemTypeLabel, calendarItemWhat } from "./calendarItemText"
 
 /**
  * Teachers: every date of their day except tasks/follow-ups, which keep their
@@ -192,7 +192,7 @@ export function TodayInCalendar({ user }: { user: User }) {
                         <span className="font-medium">{calendarItemWhat(item)}</span>
                         <CalendarItemTopic item={item} />
                         {item.type !== "class" && (
-                          <span className="ml-2 text-xs text-muted-foreground">{calendarItemTypeLabels[item.type]}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{calendarItemTypeLabel(item)}</span>
                         )}
                       </TableCell>
                       {teacher ? (

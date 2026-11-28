@@ -8,7 +8,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import { crossingsUsingBandsMessage } from "@/features/indicators/saveErrors"
 import {
   canEditScreeningTestDesign,
-  canManageScreeningTests,
+  canCreateScreeningTest,
   canRevertScreeningTestDesign,
 } from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
@@ -53,7 +53,7 @@ const MAX_BANDS = 5
  */
 export function ScreeningTestDesignPage() {
   const { user } = useAuth()
-  const canCreate = canManageScreeningTests(user)
+  const canCreate = canCreateScreeningTest(user)
   const canEdit = canEditScreeningTestDesign(user)
   const canRevert = canRevertScreeningTestDesign(user)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -358,8 +358,9 @@ function LastChangeCard({
               </Button>
             }
             title="Volver atrás este cambio"
-            description="Vuelve a regir el diseño anterior. El cambio queda en la historia y se le avisa a quien lo hizo."
+            description="Vuelve a regir el diseño anterior. El cambio queda en la historia y se le avisa a quien lo hizo y al otro rol (Psicopedagogía o Dirección)."
             confirmLabel="Volver atrás"
+            confirmingLabel="Volviendo atrás…"
             isConfirming={reverting}
             onConfirm={revert}
           />

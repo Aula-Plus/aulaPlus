@@ -313,15 +313,34 @@ export function canManageAccommodations(user: User | null | undefined): boolean 
 /**
  * Manage the screening-test module: create a type, author/edit a design, apply
  * a test to a group, load results, and view the code→student roster. Mirror of
- * the role portion shared by `ScreeningTestTypePolicy::create`,
- * `ScreeningTestDesignPolicy::create`, `ScreeningTestApplicationPolicy::create`
- * /`viewRoster`/`viewResults` and `ScreeningTestResultPolicy::update` — all
- * **psychopedagogy only**. No helper here ever enables `teacher`: this module
+ * the role portion shared by `ScreeningTestApplicationPolicy::create`
+ * /`viewRoster` and `ScreeningTestResultPolicy::update` — all
+ * **psychopedagogy only**. Creating a screening and reading results are
+ * also Dirección's: see `canCreateScreeningTest` / `canReadScreeningTestResults`. No helper here ever enables `teacher`: this module
  * has no teacher view at all (docs/prompts/12-frontend-pruebas-de-sondeo.md §3,
  * the same "línea roja" applied to PTP/ajustes in earlier sessions).
  */
 export function canManageScreeningTests(user: User | null): boolean {
   return isPsychopedagogue(user)
+}
+
+/**
+ * Create a new screening («Nuevo screening»). Mirror of
+ * `ScreeningTestTypePolicy::create` (role portion): Psicopedagogía and
+ * Dirección (ClickUp 86e3dt70g, decision of 24/10).
+ */
+export function canCreateScreeningTest(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
+}
+
+/**
+ * Read an application's results by code (no names). Mirror of
+ * `ScreeningTestApplicationPolicy::viewResults` (role portion): Psicopedagogía
+ * and Dirección. Loading and correcting scores, and the code sheet, stay
+ * `canManageScreeningTests` (psychopedagogy only).
+ */
+export function canReadScreeningTestResults(user: User | null): boolean {
+  return hasAnyRole(user, ["psychopedagogue", "director"])
 }
 
 /**
@@ -344,10 +363,11 @@ export function canRecalculateScreeningTestApplication(user: User | null): boole
 
 /**
  * "Volver atrás" on the design in force. Mirror of
- * `ScreeningTestDesignPolicy::revert` (role portion): Dirección only.
+ * `ScreeningTestDesignPolicy::revert` (role portion): Psicopedagogía and
+ * Dirección (decision of 24/10).
  */
 export function canRevertScreeningTestDesign(user: User | null): boolean {
-  return hasAnyRole(user, ["director"])
+  return hasAnyRole(user, ["psychopedagogue", "director"])
 }
 
 /**

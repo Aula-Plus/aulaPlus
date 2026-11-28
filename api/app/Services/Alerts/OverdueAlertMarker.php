@@ -26,7 +26,9 @@ use Illuminate\Support\Facades\DB;
  * Who is told: whoever has the alert now (`assignee`), only while they still
  * see it (active, and still with access to the student per
  * {@see Alert::scopeVisibleTo()}). Whoever handed it off keeps read access but
- * gets no new notices; Direction is never added because of a deadline (it is
+ * gets no new notices, unless they switched on «Avisarme a mí también cuando
+ * llegue el plazo» (decision of 24/10) — then they are told as well, under
+ * the same conditions, also if the alert was handed off again since; Direction is never added because of a deadline (it is
  * there only if the school's settings put it there from the start, or if the
  * alert was explicitly handed to someone in Direction).
  *
@@ -71,6 +73,7 @@ class OverdueAlertMarker
 
             $marked++;
             $this->notifyHolder($alert);
+            $this->notifyThoseWhoAskedToo($alert);
         }
 
         return $marked;
@@ -108,5 +111,27 @@ class OverdueAlertMarker
             'student_id' => $alert->student_id,
             'assignee_id' => $holder->id,
         ]);
+    }
+
+    /**
+     * Whoever handed the alert off and switched on «Avisarme a mí también
+     * cuando llegue el plazo»: told too, while they are active, still see the
+     * alert and don't have it now (then they were already told as holder).
+     */
+    protected function notifyThoseWhoAskedToo(Alert $alert): void
+    {
+        $people = $alert->people()
+            ->wherePivot('notify_at_deadline', true)
+            ->whereNull('users.disabled_at')
+            ->when($alert->assignee_id !== null, fn ($query) => $query->whereKeyNot($alert->assignee_id))
+            ->get();
+
+        foreach ($people as $person) {
+            if (! $alert->wasHandedOffBy($person) || ! $alert->isVisibleTo($person)) {
+                continue;
+            }
+
+            $person->notify(new AlertOverdueNotification($alert));
+        }
     }
 }

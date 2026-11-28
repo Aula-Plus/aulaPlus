@@ -33,6 +33,7 @@ use App\Http\Controllers\EducationLevelController;
 use App\Http\Controllers\ExternalMeasureController;
 use App\Http\Controllers\FollowUpMemberController;
 use App\Http\Controllers\FollowUpStageController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\GradesVisibilitySettingsController;
 use App\Http\Controllers\GroupCommentController;
 use App\Http\Controllers\GroupComparisonController;
@@ -53,6 +54,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NumericGradeSettingsController;
 use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\PersonalEventController;
 use App\Http\Controllers\PlannerSettingsController;
 use App\Http\Controllers\PsychopedagogyMeetingController;
 use App\Http\Controllers\ReportDocumentController;
@@ -225,6 +227,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and deadline; plus who it can be handed to.
         Route::post('/alerts/{alert}/outcome', [AlertOutcomeController::class, 'store']);
         Route::get('/alerts/{alert}/handoff-candidates', [AlertOutcomeController::class, 'candidates']);
+        // «Avisarme a mí también cuando llegue el plazo», for whoever handed
+        // the alert off (ClickUp 86e3jpzdp, decision of 24/10).
+        Route::put('/alerts/{alert}/deadline-notice', [AlertOutcomeController::class, 'deadlineNotice']);
         // Notes in an alert's thread, by whoever has it (ClickUp 86e3jpzdp
         // follow-up). Working a case with several people happens on a
         // follow-up linked to the alert, not on the alert itself.
@@ -482,6 +487,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // time (the Inicio's «Hoy en tu calendario» reads the same feed),
         // Direction's institutional events, the time/room of a class, and the
         // teacher's private «Mis horarios», which only pre-fills them.
+        // «Buscar en Aula+» (screen 01, P01-DEC-118 / PA-134, ClickUp
+        // 1dfd3mc56kr): what the caller could open, by name or title. The
+        // term may hold a student's name: it is never logged, and it travels
+        // in the request body (POST), never in the URL (Eitán, 26/11).
+        Route::post('/search', GlobalSearchController::class)->middleware('throttle:120,1');
         Route::get('/calendar', [CalendarController::class, 'index']);
         Route::get('/calendar-events/audience-options', [CalendarController::class, 'audienceOptions']);
         Route::post('/calendar-events', [CalendarController::class, 'store']);
@@ -501,6 +511,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
         Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
         Route::delete('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'destroy']);
+
+        // Each person's own calendar (ClickUp 1dfd3mc56kp): personal events,
+        // stored once, in the calendar of each participant; only the creator
+        // edits/deletes, each invitee may leave. Read through `/calendar`.
+        Route::get('/personal-events/options', [PersonalEventController::class, 'options']);
+        Route::post('/personal-events', [PersonalEventController::class, 'store']);
+        Route::patch('/personal-events/{calendarEvent}', [PersonalEventController::class, 'update']);
+        Route::delete('/personal-events/{calendarEvent}', [PersonalEventController::class, 'destroy']);
+        Route::delete('/calendar-events/{calendarEvent}/participation', [PersonalEventController::class, 'leave']);
 
         // Screen 10 «Espacio de psicopedagogía» (ClickUp 1dfd3mc4bge): the
         // team's agenda, the therapeutic companions and the meeting sheets.
