@@ -375,10 +375,23 @@ describe("CalendarPage", () => {
     vi.spyOn(calendarApi, "fetchCalendar").mockResolvedValue([])
     const preferences = vi.spyOn(preferencesApi, "fetchUserPreferences")
 
+    const user = userEvent.setup()
     renderPage()
 
+    // «Mi calendario» (its default) has no assessment load: the texts say so.
+    expect(await screen.findByText("Tu agenda, los eventos que compartís y los eventos del colegio.")).toBeInTheDocument()
     expect(
-      await screen.findByText(
+      screen.getByText(
+        "Ves tus eventos, los que te compartieron y los eventos del colegio. La carga de evaluaciones de todo el colegio está en «Calendario institucional».",
+      ),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Calendario institucional" }))
+    expect(
+      screen.getByText("Los eventos institucionales y la carga de evaluaciones de todo el colegio."),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
         "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional, qué es y a quién le corresponde; lo ven quienes tienen esos grupos, está en el calendario completo del colegio y se quita desde la vista Lista.",
       ),
     ).toBeInTheDocument()

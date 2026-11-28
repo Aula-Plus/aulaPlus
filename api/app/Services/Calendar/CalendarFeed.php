@@ -35,15 +35,23 @@ use Illuminate\Support\Collection;
  *   el calendario del colegio»), every one of the school, which any staff
  *   member may read. Each carries its audience and whether it is the
  *   caller's (`for_me`).
- * - Meetings, period closings, project stages: no source yet (screens 10, 26,
- *   18), always empty. A meeting, when it exists, reaches only the calendars
- *   it is linked to.
+ * - Meetings: the events of people's own calendars (personal and shared
+ *   events, and screen 10 meetings — see SharedEvents, MeetingEvents). Each reaches
+ *   only the calendars it is linked to, once each.
+ * - Period closings, project stages: no source yet (screens 26, 18), always
+ *   empty.
  *
- * Items never carry a student's name.
+ * Items never carry a student's name, except the student a shared event
+ * names, for its participants only (decision 3B of ClickUp 1dfd3mc56kp; the
+ * viewer's StudentPolicy still decides whether the file opens — see
+ * SharedEvents).
  */
 class CalendarFeed
 {
-    public function __construct(protected EventAudience $audience) {}
+    public function __construct(
+        protected EventAudience $audience,
+        protected SharedEvents $sharedEvents,
+    ) {}
 
     /**
      * @param  list<CalendarItemType>  $types
@@ -61,6 +69,12 @@ class CalendarFeed
 
         if ($wants(CalendarItemType::Assessment)) {
             $items = $items->concat($this->assessments($user, $from, $to));
+        }
+
+        // Events of people's own calendars (personal, shared, and screen 10
+        // meetings): only the caller's, once each (ClickUp 1dfd3mc56kp).
+        if ($wants(CalendarItemType::Meeting)) {
+            $items = $items->concat($this->sharedEvents->for($user, $from, $to));
         }
 
         if ($wants(CalendarItemType::Task)) {

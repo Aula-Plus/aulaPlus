@@ -291,8 +291,9 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
 - **Feed** `GET /api/v1/calendar?from&to&types[]` (`App\Services\Calendar\CalendarFeed`):
   lee cada fecha de su propio registro. Siete tipos (`App\Enums\CalendarItemType`);
   hoy tienen fuente `assessment`, `class`, `task` (seguimientos propios con
-  plazo) e `institutional`. `meeting`, `period_closing` y `project_stage`
-  devuelven vacío hasta que existan las pantallas 10, 26 y 18. El Inicio
+  plazo), `institutional` y `meeting` (eventos del calendario propio, ver
+  abajo). `period_closing` y `project_stage` devuelven vacío hasta que existan
+  las pantallas 26 y 18. El Inicio
   («Hoy en tu calendario», P01-HOY-01) lee el mismo feed para hoy.
 - **Quién ve qué** (línea roja): clases solo el docente que da esa materia en
   ese grupo; evaluaciones el docente dueño, Psicopedagogía y Dirección todas
@@ -337,6 +338,28 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
   salón al crear (aplicar una propuesta de IA) o editar una clase
   (`TimetableSlotSuggester`: el horario libre de ese día; si no hay, el
   primero). Nunca crea clases; cambiarlo no toca las ya creadas.
+- **Calendario propio y eventos compartidos** (ClickUp 1dfd3mc56kp,
+  P21-DEC-108/PA-124): cada rol crea eventos personales (`CalendarEvent` tipo
+  `personal`, `PersonalEventController`, `PersonalEventRequest`) e invita a
+  cualquier usuario activo de su colegio (misma escuela, sin `disabled_at`,
+  con contraseña); quien ya está en el evento y después fue desactivado se
+  mantiene al editar (no bloquea la edición ni se le vuelve a avisar), y el
+  creador lo ve en el selector para sacarlo. El evento se guarda una vez y se cuelga del calendario de
+  cada participante (pivot `calendar_calendar_event`, `EventParticipants`):
+  aparece una sola vez en el feed de cada uno, como ítem `meeting` con
+  `shared` (dueño, participantes, alumno). No hay que aceptar: al invitado le
+  llega `CalendarEventInvitedNotification` (pantalla 22, sin nombre de
+  alumno). Solo el creador edita o borra; cada invitado lo quita de su
+  calendario (`DELETE /calendar-events/{id}/participation`,
+  `CalendarEventPolicy::leave`) sin borrarlo para los demás. Alumno vinculado
+  opcional (`calendar_events.student_id`): el creador solo puede elegir uno
+  que ya ve; todos los participantes ven el nombre y `shared.student.can_view`
+  (StudentPolicy de quien mira) decide si se ofrece la ficha — la invitación
+  no amplía permisos. `EventParticipants::invite()` es el mismo mecanismo que
+  usarán las reuniones del Espacio de psicopedagogía (pantalla 10).
+  Dirección alterna «Mi calendario» / «Calendario institucional» en el SPA
+  (filtro de vista: sin la carga de evaluaciones / sin su agenda personal;
+  el subtítulo, la nota y los chips de tipo siguen a la vista elegida).
 
 ### Glosario (Calendario)
 
@@ -353,6 +376,10 @@ pantallas; no es un calendario nuevo (P21-DEC-02) ni reemplaza el del colegio
 | Tarea (en Calendario)| item `task` (= `ScheduledFollowUp` propio) |
 | Mis horarios        | `TimetableSlot` (tabla `timetable_slots`) |
 | Salón               | `room`                                   |
+| Evento personal     | `CalendarEvent` tipo `personal` (item `meeting` con `shared`) |
+| Invitado / participante | `Calendar` del usuario ligado por `calendar_calendar_event` (`EventParticipants`) |
+| Quitar de mi calendario | `leave` (`DELETE /calendar-events/{id}/participation`) |
+| Mi calendario / Calendario institucional | vista de Dirección en `CalendarPage` |
 
 ## Buscar en Aula+ (pantalla 01, PA-134)
 

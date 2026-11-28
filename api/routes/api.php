@@ -54,6 +54,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NumericGradeSettingsController;
 use App\Http\Controllers\OfficialScaleController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\PersonalEventController;
 use App\Http\Controllers\PlannerSettingsController;
 use App\Http\Controllers\PsychopedagogyMeetingController;
 use App\Http\Controllers\ReportDocumentController;
@@ -510,6 +511,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/timetable-slots', [TimetableSlotController::class, 'store']);
         Route::patch('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'update']);
         Route::delete('/timetable-slots/{timetableSlot}', [TimetableSlotController::class, 'destroy']);
+
+        // Each person's own calendar (ClickUp 1dfd3mc56kp): personal events,
+        // stored once, in the calendar of each participant; only the creator
+        // edits/deletes, each invitee may leave. Read through `/calendar`.
+        Route::get('/personal-events/options', [PersonalEventController::class, 'options']);
+        Route::post('/personal-events', [PersonalEventController::class, 'store']);
+        Route::patch('/personal-events/{calendarEvent}', [PersonalEventController::class, 'update']);
+        Route::delete('/personal-events/{calendarEvent}', [PersonalEventController::class, 'destroy']);
+        Route::delete('/calendar-events/{calendarEvent}/participation', [PersonalEventController::class, 'leave']);
 
         // Screen 10 «Espacio de psicopedagogía» (ClickUp 1dfd3mc4bge): the
         // team's agenda, the therapeutic companions and the meeting sheets.

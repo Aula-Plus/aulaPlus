@@ -7,19 +7,29 @@ use App\Models\User;
 
 /**
  * Screen 21 (ClickUp 1dfd3mc4bgh): institutional events are seen by the whole
- * school and managed by Direction only; any other stored date (a meeting) is
- * seen and managed only by the people whose calendar it is linked to.
+ * school and managed by Direction only; any other stored date (a meeting, a
+ * personal event) is seen only by the people whose calendar it is linked to
+ * and managed only by its creator (ClickUp 1dfd3mc56kp).
  */
-it('lets a user view, update and delete a meeting on their own calendar', function () {
+it('lets the creator view, update and delete a meeting on their calendar; an invitee only views and leaves it', function () {
     $school = School::factory()->create();
     $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $invitee = User::factory()->forSchool($school)->teacher()->create();
     $calendar = Calendar::factory()->create(['school_id' => $school->id, 'user_id' => $teacher->id]);
-    $event = CalendarEvent::factory()->meeting()->create(['school_id' => $school->id]);
+    $event = CalendarEvent::factory()->meeting()->create(['school_id' => $school->id, 'created_by_id' => $teacher->id]);
     $calendar->events()->attach($event);
+    Calendar::factory()->create(['school_id' => $school->id, 'user_id' => $invitee->id])->events()->attach($event);
 
     expect($teacher->can('view', $event))->toBeTrue()
         ->and($teacher->can('update', $event))->toBeTrue()
-        ->and($teacher->can('delete', $event))->toBeTrue();
+        ->and($teacher->can('delete', $event))->toBeTrue()
+        ->and($teacher->can('leave', $event))->toBeFalse();
+
+    // ClickUp 1dfd3mc56kp: only the creator edits or deletes it.
+    expect($invitee->can('view', $event))->toBeTrue()
+        ->and($invitee->can('update', $event))->toBeFalse()
+        ->and($invitee->can('delete', $event))->toBeFalse()
+        ->and($invitee->can('leave', $event))->toBeTrue();
 });
 
 it('denies everyone else a meeting that is not on their own calendar, direction included', function () {
