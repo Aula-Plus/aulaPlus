@@ -27,11 +27,13 @@ class ScreeningTestTypePolicy
     }
 
     /**
-     * Only psychopedagogy creates a type (spec §1).
+     * Psicopedagogía and Dirección create a screening (ClickUp 86e3dt70g,
+     * decision of 24/10). The tenant is the user's own: the type is created
+     * in their school.
      */
     public function create(User $user): bool
     {
-        return $user->hasRole(Role::Psychopedagogue->value);
+        return $user->hasAnyRole([Role::Psychopedagogue->value, Role::Director->value]);
     }
 
     /**

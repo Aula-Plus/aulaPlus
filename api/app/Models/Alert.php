@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AlertActionKind;
 use App\Enums\AlertOutcome;
 use App\Enums\AlertRecipient;
 use App\Enums\AlertSeverity;
@@ -166,7 +167,9 @@ class Alert extends Model
      */
     public function people(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'alert_user')->withTimestamps();
+        return $this->belongsToMany(User::class, 'alert_user')
+            ->withPivot('notify_at_deadline')
+            ->withTimestamps();
     }
 
     /**
@@ -188,6 +191,43 @@ class Alert extends Model
     public function isInChargeBy(User $user): bool
     {
         return $this->assignee_id !== null && $this->assignee_id === $user->id;
+    }
+
+    /**
+     * Whether the user ever handed this alert off («Se la paso a otro rol»),
+     * from the thread. Uses the loaded thread when there is one.
+     */
+    public function wasHandedOffBy(User $user): bool
+    {
+        $actions = $this->relationLoaded('actions') ? $this->actions : $this->actions()->get();
+
+        return $actions->contains(fn (AlertAction $action) => $action->kind === AlertActionKind::Outcome
+            && $action->outcome === AlertOutcome::HandedOff
+            && $action->actor_id === $user->id);
+    }
+
+    /**
+     * Whether the user may switch «Avisarme a mí también cuando llegue el
+     * plazo» (ClickUp 86e3jpzdp, decision of 24/10): any role, as long as
+     * they handed the alert off, don't have it now (whoever has it is told
+     * anyway), still see it, and the alert is still open.
+     */
+    public function canToggleDeadlineNoticeBy(User $user): bool
+    {
+        return ! $this->resolved
+            && $this->type !== AlertType::EscalatedOverdue
+            && ! $this->isInChargeBy($user)
+            && $this->wasHandedOffBy($user)
+            && $this->isVisibleTo($user);
+    }
+
+    /** Whether the user asked to be told too when the deadline passes. */
+    public function wantsDeadlineNotice(User $user): bool
+    {
+        return $this->people()
+            ->whereKey($user->id)
+            ->wherePivot('notify_at_deadline', true)
+            ->exists();
     }
 
     /**

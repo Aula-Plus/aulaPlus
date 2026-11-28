@@ -17,8 +17,17 @@ import { screeningColorDot } from "./ScreeningBandList"
  * since the score was loaded and the band differs, it adds «con el diseño
  * anterior era X» (decided 15/10). That second reading can be hidden so the
  * table doesn't get overloaded.
+ *
+ * `readOnly` (Dirección, decision of 24/10): the same table and readings,
+ * with the score as text — no inputs, nothing is sent.
  */
-export function ScreeningTestResultsEditor({ applicationId }: { applicationId: number }) {
+export function ScreeningTestResultsEditor({
+  applicationId,
+  readOnly = false,
+}: {
+  applicationId: number
+  readOnly?: boolean
+}) {
   const [results, setResults] = useState<ScreeningTestResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Per-row editing state: the text in the input and any per-row error.
@@ -129,24 +138,28 @@ export function ScreeningTestResultsEditor({ applicationId }: { applicationId: n
             <TableRow key={result.id}>
               <TableCell className="font-mono">{result.code}</TableCell>
               <TableCell>
-                <Input
-                  type="number"
-                  step="any"
-                  className="w-28"
-                  aria-label={`Puntaje del código ${result.code}`}
-                  value={drafts[result.id] ?? ""}
-                  disabled={savingId === result.id}
-                  onChange={(event) =>
-                    setDrafts((prev) => ({ ...prev, [result.id]: event.target.value }))
-                  }
-                  onBlur={() => commit(result)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault()
-                      event.currentTarget.blur()
+                {readOnly ? (
+                  <span className="text-sm">{result.score === null ? "—" : String(result.score)}</span>
+                ) : (
+                  <Input
+                    type="number"
+                    step="any"
+                    className="w-28"
+                    aria-label={`Puntaje del código ${result.code}`}
+                    value={drafts[result.id] ?? ""}
+                    disabled={savingId === result.id}
+                    onChange={(event) =>
+                      setDrafts((prev) => ({ ...prev, [result.id]: event.target.value }))
                     }
-                  }}
-                />
+                    onBlur={() => commit(result)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        event.currentTarget.blur()
+                      }
+                    }}
+                  />
+                )}
                 {rowError[result.id] && (
                   <p className="mt-1 text-xs text-destructive">{rowError[result.id]}</p>
                 )}
