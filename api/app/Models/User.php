@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -127,6 +128,28 @@ class User extends Authenticatable
     public function teachesGroup(Group $group): bool
     {
         return $group->isLedBy($this);
+    }
+
+    /**
+     * The subjects this user gives the student: the group_teacher subjects of
+     * this user in any group the student belongs to (the same groups
+     * teachesStudent() looks at). What a teacher may restrict an
+     * accommodation proposal to (ClickUp 1dfd3mc55zu, answer 2B of
+     * 2026-11-26: «las materias que él le da al alumno, o Todas»).
+     *
+     * @return list<int>
+     */
+    public function subjectIdsTaughtTo(Student $student): array
+    {
+        return DB::table('group_teacher')
+            ->where('teacher_id', $this->id)
+            ->whereIn('group_id', $student->groups()->select('groups.id'))
+            ->whereNotNull('subject_id')
+            ->distinct()
+            ->pluck('subject_id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
     }
 
     /**

@@ -10,7 +10,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { fetchSubjects } from "@/features/subjects/subjectsApi"
+import { fetchSubjects, fetchTaughtSubjects } from "@/features/subjects/subjectsApi"
 import {
   accommodationCategoryLabels,
   assessmentTypeLabels,
@@ -162,7 +162,7 @@ export function AccommodationFormDialog({
   const asksReview = proposal && !isEdit
   const asksObservation = asksReview && proposedByTeacher
   const [formError, setFormError] = useState<string | null>(null)
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjects, setSubjects] = useState<Pick<Subject, "id" | "name">[]>([])
   const [reviewers, setReviewers] = useState<StaffMember[]>([])
   const asksBarrier = withBarrier && !isEdit && !proposal
   const [barriers, setBarriers] = useState<StudentBarrier[]>([])
@@ -223,12 +223,14 @@ export function AccommodationFormDialog({
     ]
   }, [subjects, accommodation])
 
+  // A teacher only picks among the subjects they give the student, or none
+  // = «Todas las materias» (answer 2B, ClickUp 1dfd3mc55zu); the server
+  // enforces it. Psychopedagogy can change them when confirming.
   useEffect(() => {
     if (!open) return
-    fetchSubjects()
-      .then(setSubjects)
-      .catch(() => setSubjects([]))
-  }, [open])
+    const load = proposedByTeacher ? fetchTaughtSubjects(studentId) : fetchSubjects()
+    load.then(setSubjects).catch(() => setSubjects([]))
+  }, [open, proposedByTeacher, studentId])
 
   useEffect(() => {
     if (!open || !asksReview) return
@@ -434,8 +436,9 @@ export function AccommodationFormDialog({
               )}
             />
             <p className="text-xs text-muted-foreground">
-              Sin materias elegidas, aplica en todas. Si elegís materias, solo lo ven los docentes
-              que le dan esas materias al alumno.
+              {proposedByTeacher
+                ? "Podés elegir entre las materias que le das al alumno. Sin materias elegidas, aplica en todas. Psicopedagogía lo puede cambiar al confirmar."
+                : "Sin materias elegidas, aplica en todas. Si elegís materias, solo lo ven los docentes que le dan esas materias al alumno."}
             </p>
           </div>
           <fieldset className="grid gap-2">

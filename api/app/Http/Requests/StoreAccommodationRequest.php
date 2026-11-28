@@ -84,7 +84,7 @@ class StoreAccommodationRequest extends FormRequest
                 ? ['sometimes', 'nullable', 'string', 'max:255']
                 : ['prohibited'],
             'llm_rule' => ['nullable', 'array'],
-            ...$this->accommodationScopeRules(),
+            ...$this->teacherScopedRules($this->accommodationScopeRules()),
             // «Vigente desde» of a proposal is set by psychopedagogy when it
             // confirms it, never by direction (same rule as the screen).
             ...($proposes ? ['starts_on' => ['prohibited']] : []),
@@ -147,5 +147,24 @@ class StoreAccommodationRequest extends FormRequest
                 },
             ],
         ];
+    }
+
+    /**
+     * A teacher only picks among the subjects they give the student (answer
+     * 2B, ClickUp 1dfd3mc55zu); direction and psychopedagogy pick any.
+     *
+     * @param  array<string, array<int, mixed>>  $rules
+     * @return array<string, array<int, mixed>>
+     */
+    protected function teacherScopedRules(array $rules): array
+    {
+        $user = $this->user();
+        $student = $this->route('student');
+
+        if (! $user->hasAnyRole(Role::schoolWideValues()) && $student instanceof Student) {
+            $rules['subject_ids.*'][] = $this->taughtSubjectRule($user, $student);
+        }
+
+        return $rules;
     }
 }

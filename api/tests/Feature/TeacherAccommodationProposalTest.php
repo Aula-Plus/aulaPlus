@@ -249,3 +249,64 @@ it('hides a teacher proposal from a teacher of another school', function () {
     $this->getJson("/api/v1/accommodations/{$proposal->id}/proposal/history")->assertNotFound();
     $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload(reviewRouting()))->assertNotFound();
 });
+
+// ── «Materias donde aplica» of a teacher's proposal (answer 2B, 2026-11-26) ─
+
+it('lets a teacher restrict a proposal only to the subjects they give the student, or to none', function () {
+    ['school' => $school, 'psycho' => $psycho, 'teacher' => $teacher, 'group' => $group, 'student' => $student] = proposalScenario();
+    $mine = $group->teachers()->wherePivot('teacher_id', $teacher->id)->first()->pivot->subject_id;
+    $colleagues = leadGroup($group, User::factory()->forSchool($school)->teacher()->create());
+    // A subject the teacher gives in another group, not this student's.
+    $elsewhere = leadGroup(Group::factory()->create(['school_id' => $school->id]), $teacher);
+
+    Sanctum::actingAs($teacher);
+    foreach ([$colleagues->id, $elsewhere->id] as $notMine) {
+        $this->postJson("/api/v1/students/{$student->id}/accommodations", proposalPayload([...reviewRouting(), 'subject_ids' => [$notMine]]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrorFor('subject_ids.0');
+    }
+    expect(Accommodation::query()->count())->toBe(0);
+
+    // «Todas las materias» (none chosen) and their own subject both go through.
+    teacherProposes($teacher, $student, ['subject_ids' => []]);
+    $proposal = teacherProposes($teacher, $student, ['subject_ids' => [$mine]]);
+    expect($proposal->subjects()->pluck('subjects.id')->all())->toBe([$mine]);
+
+    // Resending it keeps to their subjects too.
+    Sanctum::actingAs($psycho);
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/return", ['note' => 'Revisá las materias.'])->assertOk();
+    Sanctum::actingAs($teacher);
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['subject_ids' => [$mine, $colleagues->id]]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrorFor('subject_ids.1');
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['subject_ids' => [$mine]]))->assertOk();
+    $this->postJson("/api/v1/accommodations/{$proposal->id}/proposal/resubmit")->assertOk();
+
+    // Psychopedagogy may change them to any subject of the school when confirming.
+    Sanctum::actingAs($psycho);
+    $this->patchJson("/api/v1/accommodations/{$proposal->id}", proposalPayload(['subject_ids' => [$colleagues->id]]))->assertOk();
+    expect($proposal->subjects()->pluck('subjects.id')->all())->toBe([$colleagues->id]);
+});
+
+it('lists the subjects the teacher gives the student, and only to who can open the file', function () {
+    ['school' => $school, 'psycho' => $psycho, 'teacher' => $teacher, 'group' => $group, 'student' => $student] = proposalScenario();
+    $mine = $group->teachers()->wherePivot('teacher_id', $teacher->id)->first()->pivot->subject_id;
+    leadGroup($group, User::factory()->forSchool($school)->teacher()->create());
+    leadGroup(Group::factory()->create(['school_id' => $school->id]), $teacher);
+
+    Sanctum::actingAs($teacher);
+    $this->getJson("/api/v1/students/{$student->id}/taught-subjects")
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $mine);
+
+    // A teacher who does not teach the student: 403; another school: 404.
+    Sanctum::actingAs(User::factory()->forSchool($school)->teacher()->create());
+    $this->getJson("/api/v1/students/{$student->id}/taught-subjects")->assertForbidden();
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->teacher()->create());
+    $this->getJson("/api/v1/students/{$student->id}/taught-subjects")->assertNotFound();
+
+    // Psychopedagogy gives no subject: the list is empty (it picks from the catalog).
+    Sanctum::actingAs($psycho);
+    $this->getJson("/api/v1/students/{$student->id}/taught-subjects")->assertOk()->assertJsonCount(0, 'data');
+});

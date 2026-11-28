@@ -114,6 +114,7 @@ describe("StudentTrackingPage", () => {
       { id: 4, name: "Matemática", short_code: null, color: null },
       { id: 5, name: "Ciencias", short_code: null, color: null },
     ])
+    vi.spyOn(subjectsApi, "fetchTaughtSubjects").mockResolvedValue([{ id: 4, name: "Matemática" }])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -293,6 +294,20 @@ describe("StudentTrackingPage", () => {
     // Neither «Origen» nor «Vigente desde»: psychopedagogy sets them.
     expect(within(dialog).queryByLabelText("Origen")).not.toBeInTheDocument()
     expect(within(dialog).queryByLabelText("Vigente desde")).not.toBeInTheDocument()
+  })
+
+  it("offers a proposing teacher only the subjects they give the student (answer 2B)", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Proponer ajuste" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText(/entre las materias que le das al alumno/)).toBeInTheDocument()
+    expect(subjectsApi.fetchTaughtSubjects).toHaveBeenCalled()
+    expect(subjectsApi.fetchSubjects).not.toHaveBeenCalled()
   })
 
   it("shows a teacher only their own proposals, and nothing while they have none", async () => {

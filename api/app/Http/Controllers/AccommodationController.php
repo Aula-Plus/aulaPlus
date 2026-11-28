@@ -8,9 +8,11 @@ use App\Http\Requests\UpdateAccommodationRequest;
 use App\Http\Resources\AccommodationResource;
 use App\Models\Accommodation;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Services\Accommodations\AccommodationConfirmedNotifier;
 use App\Services\Accommodations\AccommodationProposalWorkflow;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -43,6 +45,26 @@ class AccommodationController extends Controller
         protected AccommodationProposalWorkflow $workflow,
         protected AccommodationConfirmedNotifier $notifier,
     ) {}
+
+    /**
+     * The subjects the authed user gives the student, by name: the options of
+     * «Materias donde aplica» when a teacher proposes an accommodation
+     * (ClickUp 1dfd3mc55zu, answer 2B; none chosen = «Todas las materias»).
+     * Only who can open the student's file asks (StudentPolicy::view); the
+     * student resolves through the SchoolScope, so another school's 404s.
+     */
+    public function taughtSubjects(Request $request, Student $student): JsonResponse
+    {
+        Gate::authorize('view', $student);
+
+        $subjects = Subject::query()
+            ->whereKey($request->user()->subjectIdsTaughtTo($student))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Subject $subject): array => ['id' => $subject->id, 'name' => $subject->name]);
+
+        return response()->json(['data' => $subjects]);
+    }
 
     public function store(StoreAccommodationRequest $request, Student $student): JsonResponse
     {
