@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { cn, formatShortDate } from "@/lib/utils"
 import type { SearchResults } from "@/types"
-import { SEARCH_MAX_LENGTH, SEARCH_MIN_LENGTH, foldForSearch, searchAula } from "./searchApi"
+import { SEARCH_MAX_LENGTH, SEARCH_MIN_LENGTH, assessmentSearchLabel, foldForSearch, searchAula } from "./searchApi"
 
 /** Wait this long after the last keystroke before asking the server. */
 export const SEARCH_DEBOUNCE_MS = 250
@@ -173,10 +173,13 @@ function SearchPanel({ onClose }: { onClose: () => void }) {
         heading: "Evaluaciones",
         items: (results?.assessments ?? []).map((assessment) => ({
           key: `assessment-${assessment.id}`,
-          label: assessment.title,
-          detail: [assessment.subject, assessment.group.name, assessment.date ? formatShortDate(assessment.date) : null]
-            .filter(Boolean)
-            .join(" · "),
+          label: assessmentSearchLabel(assessment),
+          // An untitled one already shows subject, group and date in its name.
+          detail: assessment.title
+            ? [assessment.subject, assessment.group.name, assessment.date ? formatShortDate(assessment.date) : null]
+                .filter(Boolean)
+                .join(" · ")
+            : null,
           to: `/clases/${assessment.group.id}/evaluaciones`,
         })),
       },

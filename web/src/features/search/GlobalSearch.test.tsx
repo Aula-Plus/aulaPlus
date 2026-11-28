@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { GlobalSearch } from "./GlobalSearch"
 import * as searchApi from "./searchApi"
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext"
+import { api } from "@/lib/api"
 import type { Role, SearchResults } from "@/types"
 
 const results: SearchResults = {
@@ -180,6 +181,48 @@ describe("GlobalSearch", () => {
     await user.type(screen.getByRole("combobox"), "ano y calen")
     await user.click(await screen.findByRole("option", { name: /Año y calendario/ }))
     expect(screen.getByTestId("where")).toHaveTextContent("/administracion/ano-y-calendario")
+  })
+
+  it("names an assessment without a purpose «tipo · materia · grupo · fecha»", async () => {
+    vi.spyOn(searchApi, "searchAula").mockResolvedValue({
+      students: [],
+      groups: [],
+      assessments: [
+        {
+          id: 12,
+          title: null,
+          type: "written",
+          subject: "Matemática",
+          group: { id: 5, name: "5.°A" },
+          date: "2026-11-12",
+        },
+      ],
+      classes: [],
+    })
+    const user = userEvent.setup()
+    renderSearch()
+
+    await user.click(screen.getByRole("button", { name: /buscar/i }))
+    await user.type(screen.getByRole("combobox"), "escrito")
+    const option = await screen.findByRole("option", { name: "Escrita · Matemática · 5.°A · 12/11" })
+    await user.click(option)
+    expect(screen.getByTestId("where")).toHaveTextContent("/clases/5/evaluaciones")
+  })
+
+  it("sends the term in the body of a POST, never in the URL", async () => {
+    const post = vi
+      .spyOn(api, "post")
+      .mockResolvedValue({ data: { data: { students: [], groups: [], assessments: [], classes: [] } } })
+    const get = vi.spyOn(api, "get")
+
+    await searchApi.searchAula("Valentina")
+
+    expect(get).not.toHaveBeenCalled()
+    expect(post).toHaveBeenCalledTimes(1)
+    const [url, body] = post.mock.calls[0]
+    expect(url).toBe("/api/v1/search")
+    expect(url).not.toContain("Valentina")
+    expect(body).toEqual({ q: "Valentina" })
   })
 
   it("says so when the search fails", async () => {

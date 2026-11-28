@@ -13,7 +13,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * the same visibility scopes as the listings (see GlobalSearch), so this gate
  * reuses the listing policies instead of allowing everything blindly.
  *
- * The query may hold a student's name: it is validated here but never logged.
+ * The query may hold a student's name: it is validated here but never logged,
+ * and it is read from the request body only (POST), never from the URL, so it
+ * stays out of access logs and browser history (Eitán, 26/11).
  */
 class GlobalSearchRequest extends FormRequest
 {
@@ -26,6 +28,16 @@ class GlobalSearchRequest extends FormRequest
         $user = $this->user();
 
         return $user->can('viewAny', Group::class) && $user->can('viewAny', Student::class);
+    }
+
+    /**
+     * The body only: a `q` in the query string is ignored.
+     *
+     * @return array<string, mixed>
+     */
+    public function validationData(): array
+    {
+        return $this->getInputSource()->all();
     }
 
     /**

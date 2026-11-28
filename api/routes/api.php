@@ -488,8 +488,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // teacher's private «Mis horarios», which only pre-fills them.
         // «Buscar en Aula+» (screen 01, P01-DEC-118 / PA-134, ClickUp
         // 1dfd3mc56kr): what the caller could open, by name or title. The
-        // term may hold a student's name: it is never logged.
-        Route::get('/search', GlobalSearchController::class)->middleware('throttle:120,1');
+        // term may hold a student's name: it is never logged, and it travels
+        // in the request body (POST), never in the URL (Eitán, 26/11).
+        Route::post('/search', GlobalSearchController::class)->middleware('throttle:120,1');
         Route::get('/calendar', [CalendarController::class, 'index']);
         Route::get('/calendar-events/audience-options', [CalendarController::class, 'audienceOptions']);
         Route::post('/calendar-events', [CalendarController::class, 'store']);

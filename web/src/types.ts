@@ -2131,7 +2131,8 @@ export interface SearchGroupResult {
 
 export interface SearchAssessmentResult {
   id: number
-  title: string
+  /** Its purpose, or null when it has none (see `assessmentSearchLabel`). */
+  title: string | null
   type: AssessmentType
   subject: string | null
   group: { id: number; name: string }

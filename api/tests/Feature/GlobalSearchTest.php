@@ -46,16 +46,16 @@ function searchClass(Group $group, string $title, ?Subject $subject = null, stri
 }
 
 it('requires authentication', function () {
-    $this->getJson('/api/v1/search?q=ana')->assertUnauthorized();
+    $this->postJson('/api/v1/search', ['q' => 'ana'])->assertUnauthorized();
 });
 
 it('validates the term', function () {
     $school = School::factory()->create();
     Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
 
-    $this->getJson('/api/v1/search')->assertUnprocessable()->assertJsonValidationErrors('q');
-    $this->getJson('/api/v1/search?q=a')->assertUnprocessable()->assertJsonValidationErrors('q');
-    $this->getJson('/api/v1/search?q='.str_repeat('a', 81))->assertUnprocessable()->assertJsonValidationErrors('q');
+    $this->postJson('/api/v1/search')->assertUnprocessable()->assertJsonValidationErrors('q');
+    $this->postJson('/api/v1/search', ['q' => 'a'])->assertUnprocessable()->assertJsonValidationErrors('q');
+    $this->postJson('/api/v1/search', ['q' => str_repeat('a', 81)])->assertUnprocessable()->assertJsonValidationErrors('q');
 });
 
 it('limits a teacher to their groups, their students and their own assessments', function () {
@@ -79,7 +79,7 @@ it('limits a teacher to their groups, their students and their own assessments',
 
     Sanctum::actingAs($teacher);
 
-    $response = $this->getJson('/api/v1/search?q=mart')->assertOk();
+    $response = $this->postJson('/api/v1/search', ['q' => 'mart'])->assertOk();
 
     expect(collect($response->json('data.students'))->pluck('id')->all())->toBe([$myStudent->id])
         ->and(collect($response->json('data.groups'))->pluck('id')->all())->toBe([$mine->id])
@@ -95,7 +95,7 @@ it('hides a teacher\'s own assessment once they no longer teach its group', func
 
     Sanctum::actingAs($teacher);
 
-    $this->getJson('/api/v1/search?q=geometria')->assertOk()->assertJsonCount(0, 'data.assessments');
+    $this->postJson('/api/v1/search', ['q' => 'geometria'])->assertOk()->assertJsonCount(0, 'data.assessments');
 });
 
 it('finds only the classes a teacher could open: their subject in their groups', function () {
@@ -118,7 +118,7 @@ it('finds only the classes a teacher could open: their subject in their groups',
 
     Sanctum::actingAs($teacher);
 
-    $this->getJson('/api/v1/search?q=fracciones')->assertOk()
+    $this->postJson('/api/v1/search', ['q' => 'fracciones'])->assertOk()
         ->assertJsonPath('data.classes', [
             [
                 'id' => $myClass->id,
@@ -161,7 +161,7 @@ it('never returns a class\'s notes or content, nor matches on them', function ()
 
     Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
 
-    $response = $this->getJson('/api/v1/search?q=agua')->assertOk()->assertJsonCount(1, 'data.classes');
+    $response = $this->postJson('/api/v1/search', ['q' => 'agua'])->assertOk()->assertJsonCount(1, 'data.classes');
 
     expect(array_keys($response->json('data.classes.0')))->toBe(['id', 'title', 'subject', 'group', 'date'])
         ->and($response->getContent())->not->toContain('reservad');
@@ -188,7 +188,7 @@ it('gives psychopedagogy and direction the whole school, never another school', 
 
     Sanctum::actingAs($user);
 
-    $response = $this->getJson('/api/v1/search?q=sol')->assertOk();
+    $response = $this->postJson('/api/v1/search', ['q' => 'sol'])->assertOk();
 
     expect(collect($response->json('data.students'))->pluck('id')->all())->toBe([$student->id])
         ->and(collect($response->json('data.groups'))->pluck('id')->all())->toBe([$group->id])
@@ -202,13 +202,13 @@ it('ignores case and accents in both directions', function () {
     $group = Group::factory()->create(['school_id' => $school->id, 'name' => 'Ñandú']);
     $student = searchStudentIn($group, 'JOSÉ MUÑOZ');
 
-    $this->getJson('/api/v1/search?q=jose%20munoz')->assertOk()
+    $this->postJson('/api/v1/search', ['q' => 'jose munoz'])->assertOk()
         ->assertJsonPath('data.students.0.id', $student->id);
-    $this->getJson('/api/v1/search?q='.urlencode('Josè'))->assertOk()
+    $this->postJson('/api/v1/search', ['q' => 'Josè'])->assertOk()
         ->assertJsonCount(0, 'data.students');
-    $this->getJson('/api/v1/search?q='.urlencode('ÑANDÚ'))->assertOk()
+    $this->postJson('/api/v1/search', ['q' => 'ÑANDÚ'])->assertOk()
         ->assertJsonPath('data.groups.0.id', $group->id);
-    $this->getJson('/api/v1/search?q='.urlencode('nandu'))->assertOk()
+    $this->postJson('/api/v1/search', ['q' => 'nandu'])->assertOk()
         ->assertJsonPath('data.groups.0.id', $group->id);
 });
 
@@ -218,8 +218,8 @@ it('treats LIKE wildcards in the term literally', function () {
     $group = Group::factory()->create(['school_id' => $school->id]);
     searchStudentIn($group, 'Ana Gómez');
 
-    $this->getJson('/api/v1/search?q='.urlencode('%%'))->assertOk()->assertJsonCount(0, 'data.students');
-    $this->getJson('/api/v1/search?q='.urlencode('a_a'))->assertOk()->assertJsonCount(0, 'data.students');
+    $this->postJson('/api/v1/search', ['q' => '%%'])->assertOk()->assertJsonCount(0, 'data.students');
+    $this->postJson('/api/v1/search', ['q' => 'a_a'])->assertOk()->assertJsonCount(0, 'data.students');
 });
 
 it('matches names and titles only, and returns only non-sensitive fields', function () {
@@ -250,7 +250,7 @@ it('matches names and titles only, and returns only non-sensitive fields', funct
 
     Sanctum::actingAs(User::factory()->forSchool($school)->psychopedagogue()->create());
 
-    $response = $this->getJson('/api/v1/search?q=luna')->assertOk();
+    $response = $this->postJson('/api/v1/search', ['q' => 'luna'])->assertOk();
 
     expect($response->json('data.students'))->toBe([[
         'id' => $student->id,
@@ -281,7 +281,7 @@ it('caps the results per type', function () {
         searchStudentIn($group, "Alumno Prueba {$i}");
     }
 
-    $this->getJson('/api/v1/search?q=prueba')->assertOk()->assertJsonCount(8, 'data.students');
+    $this->postJson('/api/v1/search', ['q' => 'prueba'])->assertOk()->assertJsonCount(8, 'data.students');
 });
 
 it('never logs the term', function () {
@@ -289,10 +289,117 @@ it('never logs the term', function () {
     $school = School::factory()->create();
     Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
 
-    $this->getJson('/api/v1/search?q=Valentina')->assertOk();
+    $this->postJson('/api/v1/search', ['q' => 'Valentina'])->assertOk();
 
     Log::shouldNotHaveReceived('info');
     Log::shouldNotHaveReceived('warning');
     Log::shouldNotHaveReceived('debug');
     Log::shouldNotHaveReceived('error');
+});
+
+it('rejects the term in the URL: the search is a POST with the term in the body', function () {
+    $school = School::factory()->create();
+    Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    searchStudentIn($group, 'Valentina Pérez');
+
+    $this->getJson('/api/v1/search?q=valentina')->assertMethodNotAllowed();
+    // A `q` in the query string of the POST is ignored, not read.
+    $this->postJson('/api/v1/search?q=valentina')->assertUnprocessable()->assertJsonValidationErrors('q');
+    $this->postJson('/api/v1/search', ['q' => 'valentina'])->assertOk()->assertJsonCount(1, 'data.students');
+});
+
+/**
+ * An assessment without a purpose (Eitán 26/11): «tipo · materia · grupo · fecha».
+ */
+function untitledSearchAssessment(Group $group, User $teacher, Subject $subject, string $type, string $date, ?string $purpose = null): Assessment
+{
+    return Assessment::factory()->create([
+        'school_id' => $group->school_id,
+        'group_id' => $group->id,
+        'teacher_id' => $teacher->id,
+        'subject_id' => $subject->id,
+        'type' => $type,
+        'purpose' => $purpose,
+        'administered_at' => $date,
+    ]);
+}
+
+it('finds an assessment without a purpose by any word of its composed name', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id, 'name' => '5.°A']);
+    $math = leadGroup($group, $teacher);
+    $math->update(['name' => 'Matemática']);
+    $written = untitledSearchAssessment($group, $teacher, $math, 'written', '2026-11-12');
+    $blank = untitledSearchAssessment($group, $teacher, $math, 'oral', '2026-10-03', '   ');
+
+    Sanctum::actingAs($teacher);
+    $ids = fn (string $q) => collect($this->postJson('/api/v1/search', ['q' => $q])->assertOk()->json('data.assessments'))->pluck('id')->all();
+
+    expect($ids('Escrito'))->toBe([$written->id])
+        ->and($ids('escrita'))->toBe([$written->id])
+        ->and($ids('matematica'))->toBe([$written->id, $blank->id])
+        ->and($ids('5.°A'))->toBe([$written->id, $blank->id])
+        ->and($ids('12/11'))->toBe([$written->id])
+        ->and($ids('12/11/2026'))->toBe([$written->id])
+        ->and($ids('12/11/2025'))->toBe([])
+        ->and($ids('Escrito · Matemática · 5.°A · 12/11'))->toBe([$written->id])
+        ->and($ids('oral 5.°A'))->toBe([$blank->id])
+        // Every word must match: there is no oral on 12/11.
+        ->and($ids('oral 12/11'))->toBe([])
+        ->and($ids('31/02x'))->toBe([]);
+
+    // The SPA composes the name: no title, plus its parts.
+    $first = $this->postJson('/api/v1/search', ['q' => 'escrito'])->json('data.assessments.0');
+    expect($first)->toMatchArray([
+        'title' => null,
+        'type' => 'written',
+        'subject' => 'Matemática',
+        'group' => ['id' => $group->id, 'name' => '5.°A'],
+        'date' => '2026-11-12',
+    ]);
+});
+
+it('keeps finding assessments with a purpose by their title only', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id, 'name' => '5.°A']);
+    $math = leadGroup($group, $teacher);
+    $math->update(['name' => 'Matemática']);
+    $titled = untitledSearchAssessment($group, $teacher, $math, 'written', '2026-11-12', 'Fracciones y decimales');
+
+    Sanctum::actingAs($teacher);
+
+    $this->postJson('/api/v1/search', ['q' => 'fracciones'])->assertOk()
+        ->assertJsonPath('data.assessments.0.id', $titled->id)
+        ->assertJsonPath('data.assessments.0.title', 'Fracciones y decimales');
+    foreach (['escrito', 'matematica', '12/11'] as $q) {
+        $this->postJson('/api/v1/search', ['q' => $q])->assertOk()->assertJsonCount(0, 'data.assessments');
+    }
+});
+
+it('scopes untitled assessments like the rest: not a colleague\'s, not another school\'s', function () {
+    $school = School::factory()->create();
+    $teacher = User::factory()->forSchool($school)->teacher()->create();
+    $colleague = User::factory()->forSchool($school)->teacher()->create();
+    $group = Group::factory()->create(['school_id' => $school->id]);
+    $math = leadGroup($group, $teacher);
+    $english = leadGroup($group, $colleague);
+    $mine = untitledSearchAssessment($group, $teacher, $math, 'written', '2026-11-12');
+    untitledSearchAssessment($group, $colleague, $english, 'written', '2026-11-12');
+
+    $foreignSchool = School::factory()->create();
+    $foreignTeacher = User::factory()->forSchool($foreignSchool)->teacher()->create();
+    $foreignGroup = Group::factory()->create(['school_id' => $foreignSchool->id]);
+    $foreignSubject = leadGroup($foreignGroup, $foreignTeacher);
+    untitledSearchAssessment($foreignGroup, $foreignTeacher, $foreignSubject, 'written', '2026-11-12');
+
+    Sanctum::actingAs($teacher);
+    $this->postJson('/api/v1/search', ['q' => 'escrito'])->assertOk()
+        ->assertJsonCount(1, 'data.assessments')
+        ->assertJsonPath('data.assessments.0.id', $mine->id);
+
+    Sanctum::actingAs(User::factory()->forSchool($school)->director()->create());
+    $this->postJson('/api/v1/search', ['q' => '12/11'])->assertOk()->assertJsonCount(2, 'data.assessments');
 });
