@@ -114,7 +114,10 @@ it('builds the test school with its structure, fictitious students and one accou
 
         $accommodation = Accommodation::query()->firstOrFail();
         expect($fifth->students()->whereKey($accommodation->student_id)->exists())->toBeTrue()
-            ->and($accommodation->barriers()->count())->toBe(1);
+            ->and($accommodation->barriers()->count())->toBe(1)
+            // Free text the UI shows as is: it must read in Spanish.
+            ->and($accommodation->type)->toBe('Tiempo extra en evaluaciones')
+            ->and($accommodation->focus_area)->toBe('Atención');
     });
 });
 
@@ -160,6 +163,11 @@ it('wipes everything of the test school on rebuild and leaves other schools unto
     $old = School::query()->where('slug', 'demo-integral')->firstOrFail();
     useDemoSchool($old);
     $oldUserIds = User::query()->where('school_id', $old->id)->pluck('id');
+    $oldAccommodationIds = DB::table('accommodations')->where('school_id', $old->id)->pluck('id');
+    $oldBarrierIds = DB::table('barriers')->where('school_id', $old->id)->pluck('id');
+    // Pivots without school_id, one hop from a scoped table: they must go too.
+    expect(DB::table('accommodation_subject')->whereIn('accommodation_id', $oldAccommodationIds)->count())->toBeGreaterThan(0)
+        ->and(DB::table('barrier_accommodation')->whereIn('barrier_id', $oldBarrierIds)->count())->toBeGreaterThan(0);
 
     $this->artisan('app:demo-school', demoSchoolArgs())->assertSuccessful();
 
@@ -169,6 +177,8 @@ it('wipes everything of the test school on rebuild and leaves other schools unto
         ->and(School::query()->whereKey($old->id)->exists())->toBeFalse()
         ->and(rowsOfSchool($old->id))->toBe([])
         ->and(DB::table('model_has_roles')->whereIn('model_id', $oldUserIds)->where('model_type', User::class)->count())->toBe(0)
+        ->and(DB::table('accommodation_subject')->whereIn('accommodation_id', $oldAccommodationIds)->count())->toBe(0)
+        ->and(DB::table('barrier_accommodation')->whereIn('barrier_id', $oldBarrierIds)->count())->toBe(0)
         ->and(rowsOfSchool($other->id))->toBe($otherBefore)
         ->and(DB::table('group_student')->count())->toBe($otherPivots + 120);
 

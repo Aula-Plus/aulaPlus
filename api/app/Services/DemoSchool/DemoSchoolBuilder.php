@@ -211,12 +211,12 @@ class DemoSchoolBuilder
 
         $accommodation = Accommodation::query()->create([
             'student_id' => $student->id,
-            'type' => 'extra_time',
+            'type' => 'Tiempo extra en evaluaciones',
             'category' => AccommodationCategory::Access->value,
             'starts_on' => SchoolTime::today()->startOfYear()->toDateString(),
             'active' => true,
             'description' => 'Consignas de a una y tiempo extra en las evaluaciones escritas.',
-            'focus_area' => 'attention',
+            'focus_area' => 'Atención',
             'requires_external_approval' => false,
             'created_by_id' => $psychopedagogue->id,
         ]);

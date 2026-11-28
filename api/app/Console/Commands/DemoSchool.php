@@ -21,6 +21,10 @@ use InvalidArgumentException;
  * it did not build. The emails are chosen by whoever runs it; the passwords
  * are random and printed once (security rule #1).
  *
+ * It is meant for staging (Eitán, 26/11). `--allow-production` exists only
+ * because a staging server may run with APP_ENV=production; it is not for
+ * the production database of a real school.
+ *
  * Usage:
  *   php artisan app:demo-school --director=… --psychopedagogue=… --teacher=…
  */
@@ -32,7 +36,7 @@ class DemoSchool extends Command
         {--psychopedagogue= : Email of the Psicopedagogía account}
         {--teacher= : Email of the teacher account}
         {--force : Do not ask before wiping the existing test school}
-        {--allow-production : Run even when APP_ENV is production}';
+        {--allow-production : Run even when APP_ENV is production (only for a staging server that runs as production)}';
 
     protected $description = 'Wipe and rebuild a test school with fictitious students and one account per role';
 
