@@ -38,4 +38,12 @@ describe("AppLayout", () => {
     expect(screen.getByRole("link", { name: "Alumnos" })).toBeInTheDocument()
     expect(screen.getByText("contenido")).toBeInTheDocument()
   })
+
+  it("puts «Buscar» outside the sidebar, so it stays when the sidebar collapses", () => {
+    renderLayout()
+
+    const button = screen.getByRole("button", { name: /buscar/i })
+    expect(button.closest("aside")).toBeNull()
+    expect(button.closest("main")).not.toBeNull()
+  })
 })
