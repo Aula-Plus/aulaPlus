@@ -346,6 +346,15 @@ Route::middleware('auth:sanctum')->group(function (): void {
             ->middleware('group.writable')->whereNumber('annualPlan');
         Route::post('/annual-plans/{annualPlan}/units', [UnitController::class, 'store'])
             ->middleware('group.writable');
+        // Screen 13 — Unidad (ClickUp 1dfd3mc4bga): the unit with its planner,
+        // objectives and their curricular items, and the «A mano» context.
+        Route::get('/units/{unit}', [UnitController::class, 'show'])->whereNumber('unit');
+        Route::patch('/units/{unit}/planner', [UnitController::class, 'updatePlanner'])
+            ->middleware('group.writable')->whereNumber('unit');
+        Route::get('/units/{unit}/accommodations', [UnitController::class, 'accommodations'])->whereNumber('unit');
+        Route::get('/units/{unit}/curricular-items', [UnitController::class, 'curricularItems'])->whereNumber('unit');
+        Route::put('/unit-objectives/{objective}/curricular-items', [UnitObjectiveController::class, 'syncCurricularItems'])
+            ->middleware('group.writable')->whereNumber('objective');
         Route::patch('/units/{unit}', [UnitController::class, 'update'])
             ->middleware('group.writable');
         Route::delete('/units/{unit}', [UnitController::class, 'destroy'])

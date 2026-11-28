@@ -520,7 +520,9 @@ function UnitRow({
     <>
       <TableRow>
         <TableCell className="font-medium">
-          Unidad {unit.position} — {unit.name}
+          <Link to={`/unidades/${unit.id}`} className="text-primary underline-offset-2 hover:underline">
+            Unidad {unit.position} — {unit.name}
+          </Link>
         </TableCell>
         <TableCell>
           {formatShortDate(unit.start_date)} – {formatShortDate(unit.end_date)}

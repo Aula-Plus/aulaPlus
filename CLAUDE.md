@@ -163,6 +163,19 @@ skeleton is done, until explicitly asked:
     if needed and keeps other classes' records) and, from the Calendar (screen 21, ClickUp 1dfd3mc4bgh), its
     optional time and room (`PATCH /v1/class-sessions/{id}`) plus the teacher's
     private «Mis horarios» (`TimetableSlot`, pre-fill only).
+  - Screen 13 «Unidad» (ClickUp 1dfd3mc4bga): the unit screen with its
+    planner values (`units.planner_values`, keyed by the resolved planner
+    field), each objective's curricular items (`unit_objective_curricular_item`,
+    picked from the program catalog; an objective can also be picked straight
+    from the catalog, taking the element's text and link) and the «A mano»
+    side panel. In a group of a closed year it is read-only unless direction
+    enabled loading (screen 26, `group.writable`). It links to screen 14
+    («Nueva clase desde esta unidad» and per objective), and its planner and
+    «A mano» show the group's resources as the plan's teacher sees them, with
+    the ones unchecked for the unit (`planner_values.resources`, PA-118). The
+    PTP block is not there yet (its own task). A class proposal from a unit
+    reads its planner (`BuildUnitPlannerInput`: filled fields not marked
+    «Solo para registro» and the checked resources' names).
   - Screens 14 «Nueva clase» and 15 «Propuesta de clase» (ClickUp 86e3jujh0,
     first delivery): a teacher asks the AI for a class of a group-subject they
     teach (from a unit of their Programa anual or directly; subject
@@ -175,8 +188,7 @@ skeleton is done, until explicitly asked:
   `docs/prompts/05-asistente-ia-docente.md`) is done; `Assessment` now also has
   full CRUD (`docs/prompts/13-evaluaciones-resultados.md`). What's still out of
   scope: screens 16–17 (Nueva evaluación / Propuesta de evaluación with AI, the
-  next delivery of the same task), reading the unit planner in the class
-  proposal (`BuildUnitPlannerInput`, after screen 13), comments of
+  next delivery of the same task), comments of
   Psicopedagogía/Dirección on a proposal, the extended class closing (Repaso,
   «no previsto», free text) and creating classes by hand (without the AI).
 - ~~"PTP y enriquecimiento"~~ — no longer deferred (ClickUp 1dfd3mc4bgc): it is

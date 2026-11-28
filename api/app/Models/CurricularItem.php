@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * curricular space -> subject -> strand -> substrand). Global catalog — NOT
  * tenant-scoped. Simple adjacency list via parent_id, no nested sets.
  */
-#[Fillable(['curricular_catalog_id', 'parent_id', 'type', 'code', 'name', 'description'])]
+#[Fillable(['curricular_catalog_id', 'parent_id', 'type', 'code', 'name', 'description', 'source', 'page'])]
 class CurricularItem extends Model
 {
     /** @use HasFactory<CurricularItemFactory> */

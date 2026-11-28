@@ -12,9 +12,10 @@ import type { GroupResources, ResourceVisibility } from "./resourcesApi"
  * teachers, Psicopedagogía and Dirección uncheck and add (`can_manage` comes
  * from the server, GroupPolicy::manageResources). A teacher chooses whether
  * what they add is for the whole group or only theirs (`can_add_own`); the
- * server decides who sees and removes each one.
+ * server decides who sees and removes each one. `onChanged` runs after each
+ * saved change (the Unidad's «A mano» reloads the unit's resources with it).
  */
-export function GroupResourcesCard({ groupId }: { groupId: number }) {
+export function GroupResourcesCard({ groupId, onChanged }: { groupId: number; onChanged?: () => void }) {
   const [resources, setResources] = useState<GroupResources | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +39,7 @@ export function GroupResourcesCard({ groupId }: { groupId: number }) {
     setError(null)
     try {
       setResources(await action())
+      onChanged?.()
       return true
     } catch {
       setError(failure)

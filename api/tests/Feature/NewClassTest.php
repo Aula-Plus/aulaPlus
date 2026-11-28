@@ -258,7 +258,7 @@ it('only regenerates from an earlier class draft of the same teacher', function 
 
 // ── What the AI receives ────────────────────────────────────────────────────
 
-it('sends the unit, its chosen objectives, the group performance from any unit, and says no planner was read', function () {
+it('sends the unit, its chosen objectives, its planner and the group performance from any unit', function () {
     $s = mathClassSetup();
     $students = Student::factory()->count(3)->create(['school_id' => $s['school']->id, 'full_name' => 'Ana Pérez Secreta']);
     foreach ($students as $student) {
@@ -282,7 +282,7 @@ it('sends the unit, its chosen objectives, the group performance from any unit, 
 
     expect($context['unit']['name'])->toBe('Fracciones')
         ->and($context['unit']['chosen_objectives'])->toBe(['Que comparen fracciones con material concreto'])
-        ->and($context['unit_planner'])->toMatchArray(['read' => false, 'reason' => 'planner_not_available'])
+        ->and($context['unit_planner'])->toMatchArray(['read' => true, 'reason' => null])
         ->and($context['group_performance']['assessments'])->toHaveCount(1)
         ->and($context['group_performance']['assessments'][0])->toMatchArray([
             'title' => 'Escrito de junio', 'units' => [], 'average_score' => 6.0,
@@ -329,9 +329,10 @@ it('stores a class draft by sections with its data used and the planner note', f
         ->and(array_keys($raw['sections']))->toBe(['opening', 'central_activity', 'closing', 'materials', 'assessment'])
         ->and($raw['sections']['opening'])->toBe(['content' => 'Tiras de papel para doblar.', 'duration_minutes' => 10])
         ->and($raw['data_used'][0]['source'])->toBe('Escrito del 15/06')
-        ->and($raw['planner'])->toBe(['read' => false, 'reason' => 'planner_not_available']);
+        ->and($raw['planner'])->toBe(['read' => true, 'reason' => null]);
     Http::assertSent(fn ($request) => str_contains($request['system'], '"central_activity"')
         && str_contains($request['system'], 'no leíste un planificador')
+        && str_contains($request['system'], '"values.resources"')
         && ! str_contains($request['messages'][0]['content'], 'x-api-key'));
 });
 
