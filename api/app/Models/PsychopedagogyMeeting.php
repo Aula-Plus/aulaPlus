@@ -22,6 +22,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * (P10-AGE-03), never with whom. Marking an individual session done may
  * leave a note in the student's file as an observation (`note_comment_id`,
  * P10-DEC-10); a meeting leaves a sheet (MeetingSheet).
+ *
+ * Each one is also a shared event (`calendar_event_id`, type `meeting`) in
+ * the calendar of its creator and of each person cited, who is notified
+ * (ClickUp 1dfd3mc56kp, P21-DEC-01). App\Services\Calendar\MeetingEvents
+ * keeps it in step; set only there.
  */
 #[Fillable([
     'kind', 'meeting_sheet_type_id', 'scheduled_on', 'start_time', 'student_id', 'group_id',
@@ -62,6 +67,11 @@ class PsychopedagogyMeeting extends Model
     public function attendees(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'psychopedagogy_meeting_user');
+    }
+
+    public function calendarEvent(): BelongsTo
+    {
+        return $this->belongsTo(CalendarEvent::class);
     }
 
     public function sheet(): HasOne

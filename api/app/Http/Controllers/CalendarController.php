@@ -8,6 +8,7 @@ use App\Http\Requests\InstitutionalEventRequest;
 use App\Models\CalendarEvent;
 use App\Services\Calendar\CalendarFeed;
 use App\Services\Calendar\EventAudience;
+use App\Services\Calendar\SharedEvents;
 use App\Support\SchoolTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -54,7 +55,7 @@ class CalendarController extends Controller
         // «Todo el colegio», widening who sees it.
         $event = DB::transaction(function () use ($request): CalendarEvent {
             $event = CalendarEvent::create([
-                ...$this->eventAttributes($request->validated()),
+                ...SharedEvents::attributes($request->validated()),
                 'type' => CalendarEventType::Institutional->value,
                 'created_by_id' => $request->user()->id,
             ]);
@@ -72,7 +73,7 @@ class CalendarController extends Controller
         $current = $this->present($calendarEvent);
 
         DB::transaction(function () use ($request, $calendarEvent, $current): void {
-            $calendarEvent->update($this->eventAttributes([
+            $calendarEvent->update(SharedEvents::attributes([
                 'title' => $current['title'],
                 'date' => $current['date'],
                 'time' => $current['time'],
@@ -101,30 +102,6 @@ class CalendarController extends Controller
         $calendarEvent->delete();
 
         return response()->noContent();
-    }
-
-    /**
-     * School-local date + optional time → stored instant (app timezone).
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    protected function eventAttributes(array $data): array
-    {
-        $time = $data['time'] ?? null;
-        $startAt = $time === null
-            ? SchoolTime::startOfDay($data['date'])
-            : CarbonImmutable::createFromFormat('Y-m-d H:i', $data['date'].' '.$time, SchoolTime::timezone())
-                ->setTimezone((string) config('app.timezone'));
-
-        return [
-            'title' => $data['title'],
-            'description' => $data['description'] ?? null,
-            'location' => $data['location'] ?? null,
-            'start_at' => $startAt,
-            'end_at' => null,
-            'all_day' => $time === null,
-        ];
     }
 
     /**

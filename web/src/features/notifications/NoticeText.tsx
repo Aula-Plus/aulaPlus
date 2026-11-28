@@ -15,6 +15,24 @@ import type { AppNotification } from "@/types"
 export function NoticeText({ notice, studentName }: { notice: AppNotification; studentName?: string | null }) {
   const data = notice.data
   switch (data.type) {
+    case "calendar_event_invited":
+      return (
+        <span>
+          {data.invited_by_name ?? "Alguien"} te sumó a «{data.title}» del {formatShortDate(data.date)}
+          {data.time ? ` a las ${data.time}` : ""}. Ya está en tu calendario.{" "}
+          <Link className="underline" to={`/calendario?vista=lista&desde=${data.date}&hasta=${data.date}`}>
+            Ver en el calendario
+          </Link>
+        </span>
+      )
+    case "calendar_event_cancelled":
+      return (
+        <span>
+          Se canceló «{data.title}» del {formatShortDate(data.date)}
+          {data.time ? ` a las ${data.time}` : ""}
+          {data.cancelled_by_name ? `: ${data.cancelled_by_name} lo borró` : ""}. Ya no está en tu calendario.
+        </span>
+      )
     case "comment_shared":
       return (
         <span>

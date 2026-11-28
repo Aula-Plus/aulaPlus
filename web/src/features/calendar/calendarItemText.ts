@@ -1,4 +1,4 @@
-import { assessmentTypeLabels, calendarItemTypeLabels, type CalendarItem } from "@/types"
+import { assessmentTypeLabels, calendarItemSourceLabels, calendarItemTypeLabels, type CalendarItem } from "@/types"
 
 /**
  * «Qué» of a calendar date: the subject of a class (P01-HOY-01 «Matemática»),
@@ -30,6 +30,22 @@ export function calendarItemLink(item: CalendarItem): string | null {
   // A class opens its own screen (15): its sections and its one-tap closing.
   if (item.type === "class") return `/clase/${item.id}`
   return null
+}
+
+/**
+ * The type label of a date: an event of someone's own calendar reads «Evento
+ * personal» (filed under «Reunión», like the prototype; ClickUp 1dfd3mc56kp).
+ */
+export function calendarItemTypeLabel(item: CalendarItem): string {
+  if (item.shared?.kind === "personal") return "Evento personal"
+  return calendarItemTypeLabels[item.type]
+}
+
+/** «Viene de»: «Mi calendario» for one's own event, who invited you otherwise. */
+export function calendarItemSourceLabel(item: CalendarItem): string {
+  if (!item.shared) return calendarItemSourceLabels[item.type]
+  if (item.shared.is_owner || !item.shared.owner) return "Mi calendario"
+  return `Invitación de ${item.shared.owner.name}`
 }
 
 /**

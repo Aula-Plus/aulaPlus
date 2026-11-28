@@ -50,3 +50,12 @@ export async function resolveAlert(alertId: number): Promise<Alert> {
   const { data } = await api.post<{ data: Alert }>(`/api/v1/alerts/${alertId}/resolve`)
   return data.data
 }
+
+/**
+ * «Avisarme a mí también cuando llegue el plazo»: whoever handed the alert off
+ * switches it on or off.
+ */
+export async function setAlertDeadlineNotice(alertId: number, enabled: boolean): Promise<Alert> {
+  const { data } = await api.put<{ data: Alert }>(`/api/v1/alerts/${alertId}/deadline-notice`, { enabled })
+  return data.data
+}

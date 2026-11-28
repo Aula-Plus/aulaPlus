@@ -211,3 +211,39 @@ it('returns results by code without exposing the student name or id', function (
     Sanctum::actingAs($teacher);
     $this->getJson("/api/v1/screening-test-applications/{$applicationId}/results")->assertForbidden();
 });
+
+it('lets Dirección read the results by code, without loading them nor the roster (decision of 24/10)', function () {
+    ['school' => $school, 'group' => $group] = screeningGroupWithStudents();
+    $type = approvedTypeForSchool($school);
+    $psychopedagogue = User::factory()->forSchool($school)->psychopedagogue()->create();
+    Sanctum::actingAs($psychopedagogue);
+
+    $applicationId = $this->postJson("/api/v1/groups/{$group->id}/screening-test-applications", [
+        'screening_test_type_id' => $type->id,
+    ])->json('data.id');
+    $resultId = $this->getJson("/api/v1/screening-test-applications/{$applicationId}/results")->json('data.0.id');
+    $this->patchJson("/api/v1/screening-test-results/{$resultId}", ['score' => 45])->assertOk();
+
+    $director = User::factory()->forSchool($school)->director()->create();
+    Sanctum::actingAs($director);
+
+    $response = $this->getJson("/api/v1/screening-test-applications/{$applicationId}/results")
+        ->assertOk()
+        ->assertJsonCount(3, 'data')
+        ->assertJsonPath('data.0.code', '01')
+        ->assertJsonPath('data.0.score', fn ($score) => (float) $score === 45.0)
+        ->assertJsonPath('data.0.current_band', fn ($band) => $band !== null);
+
+    $body = $response->getContent();
+    expect($body)->not->toContain('Ana Díaz')
+        ->and($body)->not->toContain('student_id');
+
+    // Reading is not loading: Dirección cannot load or correct a score…
+    $this->patchJson("/api/v1/screening-test-results/{$resultId}", ['score' => 80])->assertForbidden();
+    // …nor see the code sheet.
+    $this->getJson("/api/v1/screening-test-applications/{$applicationId}/roster")->assertForbidden();
+
+    // Another school's director gets nothing.
+    Sanctum::actingAs(User::factory()->forSchool(School::factory()->create())->director()->create());
+    expect($this->getJson("/api/v1/screening-test-applications/{$applicationId}/results")->status())->toBeIn([403, 404]);
+});

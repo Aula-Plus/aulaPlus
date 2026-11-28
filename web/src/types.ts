@@ -320,6 +320,12 @@ export interface Alert {
    * once a way out was chosen): it is «a tu cargo» for them.
    */
   is_in_charge?: boolean
+  /**
+   * «Avisarme a mí también cuando llegue el plazo» (ClickUp 86e3jpzdp): only
+   * for whoever handed the alert off and doesn't have it now; `null`
+   * otherwise. Decided server-side.
+   */
+  deadline_notice?: { enabled: boolean } | null
   /** What the current user may do, decided by `AlertPolicy`. */
   can?: { act: boolean; note?: boolean; resolve: boolean; link_follow_up?: boolean }
   resolved: boolean
@@ -1269,6 +1275,8 @@ export interface AppNotification {
   id: string
   data:
     | FollowUpAssignedNotice
+    | CalendarEventInvitedNotice
+    | CalendarEventCancelledNotice
     | AlertOverdueNotice
     | AccommodationProposalReturnedNotice
     | AccommodationConfirmedNotice
@@ -1281,6 +1289,35 @@ export interface AppNotification {
   /** When it was marked read; null while unread. Only the history (`?filter=all`) lists read ones. */
   read_at?: string | null
   created_at: string | null
+}
+
+/**
+ * Someone added me to an event of their calendar (ClickUp 1dfd3mc56kp); it is
+ * already in mine. Never names the student the event may have.
+ */
+export interface CalendarEventInvitedNotice {
+  type: "calendar_event_invited"
+  calendar_event_id: number
+  event_type: "personal" | "meeting"
+  title: string
+  date: string
+  time: string | null
+  invited_by_id: number | null
+  invited_by_name: string | null
+}
+
+/**
+ * The creator deleted an event I was invited to (ClickUp 1dfd3mc56kp, 26/11):
+ * it left my calendar. A snapshot of what and when; never the student.
+ */
+export interface CalendarEventCancelledNotice {
+  type: "calendar_event_cancelled"
+  event_type: "personal" | "meeting"
+  title: string
+  date: string
+  time: string | null
+  cancelled_by_id: number | null
+  cancelled_by_name: string | null
 }
 
 /**
@@ -1905,6 +1942,28 @@ export type CalendarItemType =
   | "project_stage"
   | "institutional"
 
+/**
+ * An event of people's own calendars (ClickUp 1dfd3mc56kp): stored once,
+ * shown in each participant's calendar. Every participant sees the student's
+ * name; `student.can_view` (the server's StudentPolicy for the viewer) says
+ * whether the file may be opened — an invitation never widens access.
+ */
+export interface SharedEventInfo {
+  kind: "personal" | "meeting"
+  owner: { id: number; name: string } | null
+  is_owner: boolean
+  can_leave: boolean
+  /** Everyone in it, the creator first. */
+  participants: { id: number; name: string }[]
+  student: { id: number; name: string; can_view: boolean } | null
+}
+
+/** Who can be invited and which students can be named (`/personal-events/options`). */
+export interface PersonalEventOptions {
+  users: StaffMember[]
+  students: { id: number; name: string }[]
+}
+
 /** Filter order and labels, as on screen 21 (P21-DEC-06). */
 export const calendarItemTypes: readonly CalendarItemType[] = [
   "assessment",
@@ -1937,7 +1996,10 @@ export const calendarItemSourceLabels: Record<CalendarItemType, string> = {
   institutional: "Dirección",
 }
 
-/** One date of `GET /api/v1/calendar`. Never carries a student's name. */
+/**
+ * One date of `GET /api/v1/calendar`. Never carries a student's name, except
+ * the one a shared event names for its participants (`shared.student`).
+ */
 export interface CalendarItem {
   key: string
   type: CalendarItemType
@@ -1947,6 +2009,11 @@ export interface CalendarItem {
   /** School-local `HH:MM`, or null for a date without a time. */
   time: string | null
   end_time: string | null
+  /**
+   * Only on events of people's own calendars (type `meeting`; ClickUp
+   * 1dfd3mc56kp): who created it, who takes part and the student it names.
+   */
+  shared?: SharedEventInfo
   title: string | null
   detail: string | null
   group: { id: number; name: string } | null
@@ -2101,6 +2168,54 @@ export const calendarBodyLabels: Record<CalendarBody, string> = {
   anep_upper_secondary: "ANEP Bachillerato",
   cambridge: "Cambridge",
   ib: "IB",
+}
+
+/**
+ * «Buscar en Aula+» (screen 01, P01-DEC-118 / PA-134, ClickUp 1dfd3mc56kr):
+ * `GET /api/v1/search`. Each result carries non-sensitive fields only, and
+ * only what the caller could open (decided server-side).
+ */
+export interface SearchStudentResult {
+  id: number
+  full_name: string
+  /** The group of the student's latest school year. */
+  group: { id: number; name: string } | null
+}
+
+export interface SearchGroupResult {
+  id: number
+  name: string
+  /** Education level label, or null for «Sin nivel». */
+  level: string | null
+  school_year: number | null
+}
+
+export interface SearchAssessmentResult {
+  id: number
+  /** Its purpose, or null when it has none (see `assessmentSearchLabel`). */
+  title: string | null
+  type: AssessmentType
+  subject: string | null
+  group: { id: number; name: string }
+  /** `YYYY-MM-DD` or null. */
+  date: string | null
+}
+
+/** A class (screens 14–15); opens `/clase/:id`. */
+export interface SearchClassResult {
+  id: number
+  title: string
+  subject: string | null
+  group: { id: number; name: string } | null
+  /** `YYYY-MM-DD`. */
+  date: string
+}
+
+export interface SearchResults {
+  students: SearchStudentResult[]
+  groups: SearchGroupResult[]
+  assessments: SearchAssessmentResult[]
+  classes: SearchClassResult[]
 }
 
 // ── Espacio de psicopedagogía (screen 10, ClickUp 1dfd3mc4bge) ──────────────

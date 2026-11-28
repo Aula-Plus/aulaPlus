@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\MeetingSheetController;
+use App\Models\CalendarEvent;
 use App\Models\Comment;
 use App\Models\Group;
 use App\Models\MeetingSheet;
@@ -10,6 +11,7 @@ use App\Models\School;
 use App\Models\Student;
 use App\Models\TherapeuticCompanion;
 use App\Models\User;
+use App\Notifications\CalendarEventInvitedNotification;
 use App\Notifications\MeetingActionAssignedNotification;
 use App\Notifications\MeetingSheetFragmentNotification;
 use App\Support\SchoolTime;
@@ -550,4 +552,132 @@ it('rejects people and students of another school in meetings and sheets', funct
 it('writes server-side dates as the app shows them', function () {
     expect(SchoolTime::shortDate(CarbonImmutable::parse('2026-11-20')))->toBe('20 nov 2026')
         ->and(SchoolTime::shortDate(CarbonImmutable::parse('2026-09-05')))->toBe('05 sept 2026');
+});
+
+/**
+ * Screen 10 → screen 21 (ClickUp 1dfd3mc56kp, P21-DEC-01): «si te citaron a
+ * una reunión, te llega por calendario y por notificación».
+ */
+function meetingFeed(string $day = '2026-12-10'): string
+{
+    return '/api/v1/calendar?'.http_build_query(['from' => $day, 'to' => $day, 'types' => ['meeting']]);
+}
+
+it('puts a scheduled meeting in the calendar of whoever scheduled it and of each person cited, with one notice each', function () {
+    Notification::fake();
+    ['psycho' => $psycho, 'director' => $director, 'mariana' => $mariana, 'nico' => $nico, 'lucia' => $lucia, 'types' => $types] = spaceScenario();
+    Sanctum::actingAs($psycho);
+
+    $this->postJson('/api/v1/psychopedagogy/meetings', [
+        'kind' => 'meeting', 'meeting_sheet_type_id' => $types[2]->id, 'scheduled_on' => '2026-12-10', 'start_time' => '15:30',
+        'student_id' => $lucia->id, 'attendee_ids' => [$psycho->id, $mariana->id],
+    ])->assertCreated();
+
+    $event = CalendarEvent::withoutGlobalScopes()->sole();
+    expect($event->type)->toBe('meeting')
+        ->and($event->title)->toBe('Reunión con equipo tratante')
+        ->and($event->created_by_id)->toBe($psycho->id)
+        ->and($event->student_id)->toBe($lucia->id)
+        ->and($event->description)->toBeNull();
+    Notification::assertSentTo($mariana, CalendarEventInvitedNotification::class, function ($notification, $channels, $notifiable) use ($event, $psycho) {
+        $data = $notification->toArray($notifiable);
+
+        return $data['calendar_event_id'] === $event->id && $data['event_type'] === 'meeting'
+            && $data['title'] === 'Reunión con equipo tratante' && $data['date'] === '2026-12-10' && $data['time'] === '15:30'
+            && $data['invited_by_id'] === $psycho->id && ! str_contains(json_encode($data), 'Lucía');
+    });
+    Notification::assertNotSentTo([$psycho, $director, $nico], CalendarEventInvitedNotification::class);
+
+    foreach ([$psycho, $mariana] as $participant) {
+        Sanctum::actingAs($participant);
+        $items = $this->getJson(meetingFeed())->assertOk()->json('data');
+        expect($items)->toHaveCount(1)
+            ->and($items[0]['title'])->toBe('Reunión con equipo tratante')
+            ->and($items[0]['time'])->toBe('15:30')
+            ->and($items[0]['shared']['kind'])->toBe('meeting')
+            ->and($items[0]['shared']['student']['name'])->toBe('Lucía Pereyra')
+            ->and(array_column($items[0]['shared']['participants'], 'name'))->toBe(['Laura Ferrando', 'Mariana López']);
+    }
+
+    // Not cited: for them it does not exist (screen 21 red line), Direction included.
+    foreach ([$director, $nico] as $outsider) {
+        Sanctum::actingAs($outsider);
+        expect($this->getJson(meetingFeed())->assertOk()->json('data'))->toBe([]);
+        $this->deleteJson("/api/v1/calendar-events/{$event->id}/participation")->assertNotFound();
+    }
+
+    // It is edited only from the agenda, never as a personal event.
+    Sanctum::actingAs($psycho);
+    $this->patchJson("/api/v1/personal-events/{$event->id}", ['title' => 'Otra cosa'])->assertForbidden();
+    $this->deleteJson("/api/v1/personal-events/{$event->id}")->assertForbidden();
+    expect($event->fresh()->title)->toBe('Reunión con equipo tratante');
+});
+
+it('keeps the meeting event in step with the agenda, notifying only the people added and respecting who left it', function () {
+    Notification::fake();
+    ['psycho' => $psycho, 'director' => $director, 'mariana' => $mariana, 'nico' => $nico, 'lucia' => $lucia, 'types' => $types] = spaceScenario();
+    Sanctum::actingAs($psycho);
+
+    $meetingId = $this->postJson('/api/v1/psychopedagogy/meetings', [
+        'kind' => 'meeting', 'meeting_sheet_type_id' => $types[0]->id, 'scheduled_on' => '2026-12-10', 'start_time' => '14:00',
+        'attendee_ids' => [$mariana->id, $nico->id],
+    ])->assertCreated()->json('data.id');
+    $event = CalendarEvent::withoutGlobalScopes()->sole();
+
+    // Mariana takes it out of her calendar.
+    Sanctum::actingAs($mariana);
+    $this->deleteJson("/api/v1/calendar-events/{$event->id}/participation")->assertNoContent();
+
+    // Psychopedagogy moves it, turns it into an individual session, drops Nico and cites Direction.
+    Sanctum::actingAs($psycho);
+    $this->putJson("/api/v1/psychopedagogy/meetings/{$meetingId}", [
+        'kind' => 'individual_session', 'scheduled_on' => '2026-12-11', 'start_time' => '09:15',
+        'student_id' => $lucia->id, 'attendee_ids' => [$mariana->id, $director->id],
+    ])->assertOk();
+
+    expect(CalendarEvent::withoutGlobalScopes()->count())->toBe(1);
+    $event->refresh();
+    expect($event->title)->toBe('Sesión individual')
+        ->and($event->student_id)->toBe($lucia->id);
+    Notification::assertSentToTimes($mariana, CalendarEventInvitedNotification::class, 1);
+    Notification::assertSentToTimes($nico, CalendarEventInvitedNotification::class, 1);
+    Notification::assertSentToTimes($director, CalendarEventInvitedNotification::class, 1);
+
+    Sanctum::actingAs($psycho);
+    $items = $this->getJson(meetingFeed('2026-12-11'))->assertOk()->json('data');
+    expect($items)->toHaveCount(1)
+        ->and($items[0]['time'])->toBe('09:15')
+        ->and(array_column($items[0]['shared']['participants'], 'name'))->toBe(['Laura Ferrando', 'Adriana Ruiz']);
+
+    // Mariana is still cited but had left: an unrelated edit does not put it back.
+    Sanctum::actingAs($mariana);
+    expect($this->getJson(meetingFeed('2026-12-11'))->assertOk()->json('data'))->toBe([]);
+    Sanctum::actingAs($nico);
+    expect($this->getJson(meetingFeed('2026-12-11'))->assertOk()->json('data'))->toBe([]);
+});
+
+it('links a meeting scheduled before the calendar link existed on its next edit', function () {
+    Notification::fake();
+    ['school' => $school, 'psycho' => $psycho, 'mariana' => $mariana, 'lucia' => $lucia] = spaceScenario();
+    $meeting = Tenancy::forSchool($school, function () use ($psycho, $mariana, $lucia) {
+        $meeting = PsychopedagogyMeeting::create([
+            'kind' => 'individual_session', 'scheduled_on' => '2026-12-10', 'start_time' => '10:00',
+            'student_id' => $lucia->id, 'created_by_id' => $psycho->id,
+        ]);
+        $meeting->attendees()->sync([$mariana->id]);
+
+        return $meeting;
+    });
+    expect(CalendarEvent::withoutGlobalScopes()->count())->toBe(0);
+
+    Sanctum::actingAs($psycho);
+    $this->putJson("/api/v1/psychopedagogy/meetings/{$meeting->id}", [
+        'kind' => 'individual_session', 'scheduled_on' => '2026-12-10', 'start_time' => '10:00',
+        'student_id' => $lucia->id, 'attendee_ids' => [$mariana->id],
+    ])->assertOk();
+
+    expect($meeting->fresh()->calendar_event_id)->not->toBeNull();
+    Notification::assertSentToTimes($mariana, CalendarEventInvitedNotification::class, 1);
+    Sanctum::actingAs($mariana);
+    expect($this->getJson(meetingFeed())->assertOk()->json('data'))->toHaveCount(1);
 });

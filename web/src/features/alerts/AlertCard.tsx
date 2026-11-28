@@ -309,6 +309,20 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
     setChoosing(null)
   }
 
+  const [savingNotice, setSavingNotice] = useState(false)
+
+  async function toggleDeadlineNotice(enabled: boolean) {
+    setError(null)
+    setSavingNotice(true)
+    try {
+      onChange(await alertsApi.setAlertDeadlineNotice(alert.id, enabled))
+    } catch {
+      setError("No pudimos guardar el aviso.")
+    } finally {
+      setSavingNotice(false)
+    }
+  }
+
   async function resolve() {
     setError(null)
     try {
@@ -384,6 +398,21 @@ export function AlertCard({ alert, onChange }: { alert: Alert; onChange: (update
             ))}
           </ul>
         </div>
+      )}
+
+      {alert.deadline_notice && (
+        // Whoever handed it off reads it with no actions, except this box
+        // (decision of 24/10): off by default, kept if it is handed off again.
+        <label className="mt-3 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={alert.deadline_notice.enabled}
+            disabled={savingNotice}
+            onChange={(event) => void toggleDeadlineNotice(event.target.checked)}
+          />
+          Avisarme a mí también cuando llegue el plazo
+        </label>
       )}
 
       {alert.can?.act && choosing === null && (

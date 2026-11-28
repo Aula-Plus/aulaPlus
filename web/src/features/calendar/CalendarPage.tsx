@@ -17,7 +17,6 @@ import {
 import { cn } from "@/lib/utils"
 import { fetchUserPreferences, updateUserPreferences } from "@/features/preferences/preferencesApi"
 import {
-  calendarItemSourceLabels,
   calendarItemTypeLabels,
   calendarItemTypes,
   type CalendarItem,
@@ -42,10 +41,18 @@ import {
   type CalendarView,
 } from "./calendarDates"
 import { CalendarItemTopic } from "./CalendarItemTopic"
-import { calendarItemHour, calendarItemLink, calendarItemTopic, calendarItemWhat } from "./calendarItemText"
+import {
+  calendarItemHour,
+  calendarItemLink,
+  calendarItemSourceLabel,
+  calendarItemTopic,
+  calendarItemTypeLabel,
+  calendarItemWhat,
+} from "./calendarItemText"
 import { audienceLabel } from "./eventAudience"
 import { ClassScheduleDialog } from "./ClassScheduleDialog"
 import { InstitutionalEventDialog } from "./InstitutionalEventDialog"
+import { PersonalEventDialog, SharedEventDialog } from "./PersonalEventDialog"
 import { TimetablePanel } from "./TimetablePanel"
 
 const TIMETABLE_PATH = "/calendario/mis-horarios"
@@ -61,13 +68,20 @@ const typeTone: Record<CalendarItemType, string> = {
   institutional: "border-slate-300 bg-slate-100 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
 }
 
-function roleDescription(user: User | null): string {
-  if (isDirector(user)) return "Los eventos institucionales y la carga de evaluaciones de todo el colegio."
+function roleDescription(user: User | null, directorView: DirectorView): string {
+  if (isDirector(user)) {
+    return directorView === "institutional"
+      ? "Los eventos institucionales y la carga de evaluaciones de todo el colegio."
+      : "Tu agenda, los eventos que compartís y los eventos del colegio."
+  }
   if (isPsychopedagogue(user)) return "Tu agenda, cruzada con las evaluaciones del resto del colegio."
   return "Lo que cae en tu semana: tus clases, tus evaluaciones y tus tareas."
 }
 
-function roleNote(user: User | null): string {
+function roleNote(user: User | null, directorView: DirectorView): string {
+  if (isDirector(user) && directorView === "personal") {
+    return "Ves tus eventos, los que te compartieron y los eventos del colegio. La carga de evaluaciones de todo el colegio está en «Calendario institucional»."
+  }
   if (isDirector(user)) {
     return "Ves la carga de evaluaciones de todo el colegio, para anticipar semanas cargadas. Un evento institucional tiene fecha, hora opcional, qué es y a quién le corresponde; lo ven quienes tienen esos grupos, está en el calendario completo del colegio y se quita desde la vista Lista."
   }
@@ -133,7 +147,37 @@ export function CalendarPage() {
 type Dialogs =
   | { kind: "class"; item: CalendarItem }
   | { kind: "event"; item?: CalendarItem }
+  | { kind: "personal"; item?: CalendarItem }
+  | { kind: "shared"; item: CalendarItem }
   | null
+
+/**
+ * Direction alternates between its own calendar and the institutional one
+ * (P21-DEC-04/108, ClickUp 1dfd3mc56kp). Both only regroup dates Direction
+ * already sees, so the switch is a view filter, not a permission:
+ * - «Mi calendario»: its own and shared events, meetings, tasks and the
+ *   school's events — without the school-wide assessment load;
+ * - «Institucional»: the school's events, the assessment load, closings and
+ *   project stages — without its personal agenda.
+ * Opening the Calendar filtered by assessments (the Inicio's load link)
+ * starts on the institutional one.
+ */
+type DirectorView = "personal" | "institutional"
+
+const INSTITUTIONAL_VIEW_TYPES: readonly CalendarItemType[] = [
+  "assessment",
+  "institutional",
+  "period_closing",
+  "project_stage",
+]
+
+function typeInDirectorView(type: CalendarItemType, view: DirectorView): boolean {
+  return view === "institutional" ? INSTITUTIONAL_VIEW_TYPES.includes(type) : type !== "assessment"
+}
+
+function inDirectorView(item: CalendarItem, view: DirectorView): boolean {
+  return typeInDirectorView(item.type, view)
+}
 
 /**
  * The feed for a window of any length (the list grows with «Ver más»): split
@@ -186,6 +230,9 @@ function CalendarBoard({ user }: { user: User | null }) {
   const [error, setError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialogs>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [directorView, setDirectorView] = useState<DirectorView>(() =>
+    initial.hidden.length > 0 && !initial.hidden.includes("assessment") ? "institutional" : "personal",
+  )
   // «Ver todo el calendario del colegio» (ClickUp 1dfd3mc55zp): the
   // institutional events that don't touch the teacher's groups too.
   // Psychopedagogy and Direction already see them all.
@@ -216,7 +263,14 @@ function CalendarBoard({ user }: { user: User | null }) {
 
   const reload = () => setReloadKey((key) => key + 1)
 
-  const visible = useMemo(() => (items ?? []).filter((item) => !hidden.includes(item.type)), [items, hidden])
+  const director = isDirector(user)
+  const visible = useMemo(
+    () =>
+      (items ?? []).filter(
+        (item) => !hidden.includes(item.type) && (!director || inDirectorView(item, directorView)),
+      ),
+    [items, hidden, director, directorView],
+  )
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarItem[]>()
     for (const item of visible) map.set(item.date, [...(map.get(item.date) ?? []), item])
@@ -228,7 +282,8 @@ function CalendarBoard({ user }: { user: User | null }) {
   }
 
   function open(item: CalendarItem) {
-    if (item.type === "class" && item.can_edit) setDialog({ kind: "class", item })
+    if (item.shared) setDialog({ kind: "shared", item })
+    else if (item.type === "class" && item.can_edit) setDialog({ kind: "class", item })
     else if (item.type === "institutional" && item.can_edit) setDialog({ kind: "event", item })
   }
 
@@ -263,7 +318,7 @@ function CalendarBoard({ user }: { user: User | null }) {
 
   return (
     <div className="grid gap-4">
-      <p className="text-sm text-muted-foreground">{roleDescription(user)}</p>
+      <p className="text-sm text-muted-foreground">{roleDescription(user, directorView)}</p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -314,15 +369,46 @@ function CalendarBoard({ user }: { user: User | null }) {
             {view === "list" ? listTitle(listRange.from, listRange.to) : viewTitle(view, anchor)}
           </h2>
         </div>
-        {canManageInstitutionalEvents(user) && (
-          <Button type="button" size="sm" onClick={() => setDialog({ kind: "event" })}>
-            <Plus /> Evento institucional
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ kind: "personal" })}>
+            <Plus /> Evento personal
           </Button>
-        )}
+          {canManageInstitutionalEvents(user) && (
+            <Button type="button" size="sm" onClick={() => setDialog({ kind: "event" })}>
+              <Plus /> Evento institucional
+            </Button>
+          )}
+        </div>
       </div>
 
+      {director && (
+        <div role="group" aria-label="Calendario" className="inline-flex w-fit rounded-md border p-0.5">
+          {(
+            [
+              ["personal", "Mi calendario"],
+              ["institutional", "Calendario institucional"],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={directorView === value ? "secondary" : "ghost"}
+              aria-pressed={directorView === value}
+              onClick={() => setDirectorView(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <div role="group" aria-label="Filtrar por tipo" className="flex flex-wrap gap-2">
-        {calendarItemTypes.map((type) => {
+        {calendarItemTypes
+          // Direction's switch already excludes some types: no chip that
+          // could never show anything in the current view.
+          .filter((type) => !director || typeInDirectorView(type, directorView))
+          .map((type) => {
           const on = !hidden.includes(type)
           return (
             <button
@@ -385,10 +471,26 @@ function CalendarBoard({ user }: { user: User | null }) {
         />
       )}
 
-      <p className="text-sm text-muted-foreground">{roleNote(user)}</p>
+      <p className="text-sm text-muted-foreground">{roleNote(user, directorView)}</p>
 
       {dialog?.kind === "class" && (
         <ClassScheduleDialog item={dialog.item} onClose={() => setDialog(null)} onSaved={saved} />
+      )}
+      {dialog?.kind === "personal" && (
+        <PersonalEventDialog
+          item={dialog.item}
+          defaultDate={anchor}
+          onClose={() => setDialog(null)}
+          onSaved={saved}
+        />
+      )}
+      {dialog?.kind === "shared" && (
+        <SharedEventDialog
+          item={dialog.item}
+          onClose={() => setDialog(null)}
+          onEdit={() => setDialog({ kind: "personal", item: dialog.item })}
+          onChanged={saved}
+        />
       )}
       {dialog?.kind === "event" && (
         <InstitutionalEventDialog
@@ -408,7 +510,7 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   const group = item.group ? ` · ${item.group.name}` : ""
   const topic = calendarItemTopic(item)
   const audience = audienceSuffix(item)
-  const label = `${calendarItemTypeLabels[item.type]} · ${what}${group}${topic ? ` · ${topic}` : ""}${hour ? ` · ${hour}` : ""}${audience ? ` · ${audience}` : ""}`
+  const label = `${calendarItemTypeLabel(item)} · ${what}${group}${topic ? ` · ${topic}` : ""}${hour ? ` · ${hour}` : ""}${audience ? ` · ${audience}` : ""}`
   const className = cn(
     "block w-full truncate rounded border px-1.5 py-0.5 text-left text-xs",
     typeTone[item.type],
@@ -435,7 +537,7 @@ function ItemChip({ item, onOpen, full = false }: { item: CalendarItem; onOpen: 
   )
   const link = calendarItemLink(item)
 
-  if (item.can_edit) {
+  if (item.can_edit || item.shared) {
     return (
       <button type="button" className={className} title={label} aria-label={label} onClick={() => onOpen(item)}>
         {content}
@@ -626,7 +728,7 @@ function ListTable({
               </TableCell>
               <TableCell>
                 <span className={cn("rounded-full border px-2 py-0.5 text-xs", typeTone[item.type])}>
-                  {calendarItemTypeLabels[item.type]}
+                  {calendarItemTypeLabel(item)}
                 </span>
               </TableCell>
               <TableCell className="max-w-md">
@@ -638,11 +740,16 @@ function ListTable({
                   <span className="block text-xs text-muted-foreground">{audienceSuffix(item)}</span>
                 )}
               </TableCell>
-              <TableCell>{calendarItemSourceLabels[item.type]}</TableCell>
+              <TableCell>{calendarItemSourceLabel(item)}</TableCell>
               <TableCell className="text-right whitespace-nowrap">
                 {item.type === "class" && item.can_edit && (
                   <Button variant="ghost" size="sm" onClick={() => onOpen(item)}>
                     Hora y salón
+                  </Button>
+                )}
+                {item.shared && (
+                  <Button variant="ghost" size="sm" onClick={() => onOpen(item)}>
+                    Ver
                   </Button>
                 )}
                 {item.type === "institutional" && item.can_edit && (
