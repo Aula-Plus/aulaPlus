@@ -4,7 +4,10 @@ namespace App\Http\Requests\Concerns;
 
 use App\Enums\AssessmentType;
 use App\Models\Accommodation;
+use App\Models\Student;
+use App\Models\User;
 use App\Support\Tenancy;
+use Closure;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
@@ -56,5 +59,25 @@ trait ValidatesAccommodationScope
             'assessment_types' => ['sometimes', 'nullable', 'array', 'list'],
             'assessment_types.*' => ['distinct', new Enum(AssessmentType::class)],
         ];
+    }
+
+    /**
+     * A teacher's proposal (ClickUp 1dfd3mc55zu, answer 2B of 2026-11-26) is
+     * restricted to the subjects that teacher gives the student
+     * (User::subjectIdsTaughtTo), or none = «Todas las materias».
+     * Psychopedagogy may change them when it confirms. On edit, a subject
+     * already attached stays accepted so resending the form never 422s.
+     *
+     * @param  list<int>  $attachedSubjectIds
+     */
+    protected function taughtSubjectRule(User $teacher, Student $student, array $attachedSubjectIds = []): Closure
+    {
+        $allowed = [...$teacher->subjectIdsTaughtTo($student), ...$attachedSubjectIds];
+
+        return function (string $attribute, mixed $value, Closure $fail) use ($allowed): void {
+            if (! in_array((int) $value, $allowed, true)) {
+                $fail('The selected subject is not one you give this student.');
+            }
+        };
     }
 }

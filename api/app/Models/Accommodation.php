@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AccommodationCategory;
+use App\Enums\AccommodationReviewAction;
 use App\Enums\AccommodationReviewStatus;
 use App\Enums\AssessmentType;
 use App\Enums\Role;
@@ -68,6 +69,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
     'approved',
     'review_status',
     'proposed_by_id',
+    'proposed_as',
     'reviewed_by_id',
     'reviewed_at',
     'created_by_id',
@@ -204,11 +206,33 @@ class Accommodation extends Model
     }
 
     /**
-     * A direction proposal still under review (pending or returned).
+     * A proposal still under review (pending or returned).
      */
     public function isOpenProposal(): bool
     {
         return $this->review_status?->isOpen() ?? false;
+    }
+
+    /**
+     * A proposal a teacher made from the student file (ClickUp 1dfd3mc55zu,
+     * PA-002). Until psychopedagogy confirms or rejects it, only its proposer
+     * and psychopedagogy see it (P06-AJU-02): never direction, never another
+     * teacher.
+     */
+    public function isTeacherProposal(): bool
+    {
+        return $this->proposed_as === Role::Teacher->value;
+    }
+
+    /**
+     * Whether a teacher's proposal is still private to its proposer and
+     * psychopedagogy: anything but confirmed or rejected (a withdrawn one
+     * never went public).
+     */
+    public function isPrivateTeacherProposal(): bool
+    {
+        return $this->isTeacherProposal()
+            && ! in_array($this->review_status, [AccommodationReviewStatus::Confirmed, AccommodationReviewStatus::Rejected], true);
     }
 
     /**
@@ -352,6 +376,19 @@ class Accommodation extends Model
     }
 
     /**
+     * The step that first sent a proposal to review: its note is «Lo que
+     * observaste» (ClickUp 1dfd3mc55zu). Eager-load it on lists so the
+     * resource's `observation` costs no query per row.
+     */
+    public function submittedReviewEvent(): HasOne
+    {
+        return $this->hasOne(AccommodationReviewEvent::class)->ofMany(
+            ['id' => 'min'],
+            fn ($query) => $query->where('action', AccommodationReviewAction::Submitted->value),
+        );
+    }
+
+    /**
      * The review task psychopedagogy got for this proposal.
      */
     public function reviewFollowUp(): HasOne
@@ -423,8 +460,20 @@ class Accommodation extends Model
     {
         $query->where('accommodations.school_id', $user->school_id);
 
-        if ($user->hasAnyRole(Role::schoolWideValues())) {
+        if ($user->hasRole(Role::Psychopedagogue->value)) {
             return $query;
+        }
+
+        // Direction sees everything but a teacher's proposal that is not
+        // public yet (ClickUp 1dfd3mc55zu, P06-AJU-02).
+        if ($user->hasRole(Role::Director->value)) {
+            return $query->where(fn (Builder $public) => $public
+                ->whereNull('accommodations.proposed_as')
+                ->orWhere('accommodations.proposed_as', '!=', Role::Teacher->value)
+                ->orWhereIn('accommodations.review_status', [
+                    AccommodationReviewStatus::Confirmed->value,
+                    AccommodationReviewStatus::Rejected->value,
+                ]));
         }
 
         return $query

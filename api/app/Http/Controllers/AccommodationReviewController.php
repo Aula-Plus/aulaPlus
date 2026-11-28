@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AccommodationReviewStatus;
+use App\Enums\Role;
 use App\Http\Requests\AccommodationProposals\ConfirmAccommodationProposalRequest;
 use App\Http\Requests\AccommodationProposals\RejectAccommodationProposalRequest;
 use App\Http\Requests\AccommodationProposals\ResubmitAccommodationProposalRequest;
@@ -13,6 +14,7 @@ use App\Http\Resources\AccommodationReviewEventResource;
 use App\Models\Accommodation;
 use App\Models\Student;
 use App\Services\Accommodations\AccommodationProposalWorkflow;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
@@ -27,18 +29,29 @@ class AccommodationReviewController extends Controller
     public function __construct(protected AccommodationProposalWorkflow $workflow) {}
 
     /**
-     * GET /students/{student}/accommodation-proposals — the student's direction
-     * proposals not confirmed yet, open ones first, then the closed ones
+     * GET /students/{student}/accommodation-proposals — the student's
+     * proposals (direction's and teachers') not confirmed yet, open ones first, then the closed ones
      * (withdrawn/rejected) kept for the record. A confirmed proposal is an
      * ordinary accommodation and shows with the rest. Not cached (unlike the
      * tracking aggregate), so a step shows at once. {student} resolves through
      * the SchoolScope (another tenant's 404s).
      */
-    public function index(Student $student): AnonymousResourceCollection
+    public function index(Request $request, Student $student): AnonymousResourceCollection
     {
-        $this->authorize('viewProposals', Accommodation::class);
+        $this->authorize('viewProposals', [Accommodation::class, $student]);
+        $user = $request->user();
 
         $proposals = $student->accommodations()
+            // Psychopedagogy: all of them. Direction: all but a teacher's
+            // proposal that is not public yet. A teacher: only their own
+            // (ClickUp 1dfd3mc55zu, P06-AJU-02).
+            ->when(
+                $user->hasAnyRole(Role::schoolWideValues()),
+                fn ($query) => $query->visibleTo($user),
+                fn ($query) => $query
+                    ->where('proposed_as', Role::Teacher->value)
+                    ->where('proposed_by_id', $user->id),
+            )
             ->whereIn('review_status', [
                 AccommodationReviewStatus::Pending->value,
                 AccommodationReviewStatus::Returned->value,
@@ -46,7 +59,7 @@ class AccommodationReviewController extends Controller
                 AccommodationReviewStatus::Rejected->value,
             ])
             // Everything AccommodationResource reads, so no query per row.
-            ->with(['subjects', 'proposedBy', 'reviewedBy', 'latestReviewEvent'])
+            ->with(['subjects', 'proposedBy', 'reviewedBy', 'latestReviewEvent', 'submittedReviewEvent'])
             ->latest('id')
             ->get()
             ->sortBy(fn (Accommodation $proposal): int => $proposal->isOpenProposal() ? 0 : 1)

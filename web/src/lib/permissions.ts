@@ -187,13 +187,24 @@ export function canManageAlertSettings(user: User | null): boolean {
 }
 
 /**
- * Direction proposes accommodations instead of creating them (ClickUp
- * 86e3qkwkk): what it saves goes to psychopedagogy's review. Mirror of
- * `AccommodationProposalWorkflow::createsProposals` (someone holding both
- * roles creates directly).
+ * Direction (ClickUp 86e3qkwkk) and teachers (ClickUp 1dfd3mc55zu, PA-002)
+ * propose accommodations instead of creating them: what they save goes to
+ * psychopedagogy's review. Mirror of
+ * `AccommodationProposalWorkflow::createsProposals` (someone who is also
+ * psychopedagogy creates directly).
  */
 export function createsAccommodationProposals(user: User | null): boolean {
-  return isDirector(user) && !isPsychopedagogue(user)
+  return (isDirector(user) || isTeacher(user)) && !isPsychopedagogue(user)
+}
+
+/**
+ * A teacher proposing from the student file (ClickUp 1dfd3mc55zu): they don't
+ * see the clinical profile, so the proposal goes through its own button and
+ * list («Tus propuestas de ajuste»). Mirror of
+ * `AccommodationProposalWorkflow::proposerRole` = teacher.
+ */
+export function proposesAccommodationsAsTeacher(user: User | null): boolean {
+  return isTeacher(user) && !isDirector(user) && !isPsychopedagogue(user)
 }
 
 /**

@@ -57,8 +57,24 @@ class ScheduledFollowUpPolicy
 
     public function view(User $user, ScheduledFollowUp $followUp): bool
     {
-        return $this->canAccessStudent($user, $followUp->student)
-            && (! $followUp->isAccommodationReview() || $user->hasAnyRole(Role::schoolWideValues()));
+        if (! $this->canAccessStudent($user, $followUp->student)) {
+            return false;
+        }
+
+        if (! $followUp->isAccommodationReview()) {
+            return true;
+        }
+
+        // A proposal's review task: school-wide roles, and direction only
+        // when it may see the proposal (a teacher's is private until
+        // confirmed or rejected, ClickUp 1dfd3mc55zu).
+        if ($user->hasRole(Role::Psychopedagogue->value)) {
+            return true;
+        }
+
+        return $user->hasRole(Role::Director->value)
+            && $followUp->accommodation !== null
+            && $followUp->accommodation->isVisibleTo($user);
     }
 
     /**

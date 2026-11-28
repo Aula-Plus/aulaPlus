@@ -10,7 +10,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { SingleSelect } from "@/components/ui/single-select"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { fetchSubjects } from "@/features/subjects/subjectsApi"
+import { fetchSubjects, fetchTaughtSubjects } from "@/features/subjects/subjectsApi"
 import {
   accommodationCategoryLabels,
   assessmentTypeLabels,
@@ -65,6 +65,9 @@ const accommodationSchema = z.object({
   review_due_date: z.string(),
   review_recipients: z.enum(["role", "people"]),
   reviewer_ids: z.array(z.number()),
+  // «Lo que observaste» of a new teacher proposal (ClickUp 1dfd3mc55zu):
+  // optional, sent only then.
+  observation: z.string().max(2000, "Usá hasta 2000 caracteres"),
 })
 
 /** A new direction proposal also needs its review deadline and reviewers. */
@@ -98,6 +101,11 @@ interface AccommodationFormDialogProps {
    * UX only — the server decides from the caller's role.
    */
   proposal?: boolean
+  /**
+   * The proposal comes from a teacher (ClickUp 1dfd3mc55zu): the form says
+   * who will see it and offers «Lo que observaste». UX only.
+   */
+  proposedByTeacher?: boolean
   /**
    * «Ajustes y PTP» (screen 06, ClickUp 1dfd3mc4bgc): a new accommodation
    * registered from psychopedagogy's inbox also offers its optional barrier —
@@ -142,6 +150,7 @@ export function AccommodationFormDialog({
   accommodation,
   onSaved,
   proposal = false,
+  proposedByTeacher = false,
   withBarrier = false,
 }: AccommodationFormDialogProps) {
   const isEdit = Boolean(accommodation)
@@ -151,8 +160,9 @@ export function AccommodationFormDialog({
     accommodation?.review_status === "pending" || accommodation?.review_status === "returned"
   const offersActive = isEdit && !proposal && !isOpenProposal
   const asksReview = proposal && !isEdit
+  const asksObservation = asksReview && proposedByTeacher
   const [formError, setFormError] = useState<string | null>(null)
-  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [subjects, setSubjects] = useState<Pick<Subject, "id" | "name">[]>([])
   const [reviewers, setReviewers] = useState<StaffMember[]>([])
   const asksBarrier = withBarrier && !isEdit && !proposal
   const [barriers, setBarriers] = useState<StudentBarrier[]>([])
@@ -184,6 +194,7 @@ export function AccommodationFormDialog({
       review_due_date: "",
       review_recipients: "role",
       reviewer_ids: [],
+      observation: "",
     },
   })
   const reviewRecipients = watch("review_recipients")
@@ -212,12 +223,14 @@ export function AccommodationFormDialog({
     ]
   }, [subjects, accommodation])
 
+  // A teacher only picks among the subjects they give the student, or none
+  // = «Todas las materias» (answer 2B, ClickUp 1dfd3mc55zu); the server
+  // enforces it. Psychopedagogy can change them when confirming.
   useEffect(() => {
     if (!open) return
-    fetchSubjects()
-      .then(setSubjects)
-      .catch(() => setSubjects([]))
-  }, [open])
+    const load = proposedByTeacher ? fetchTaughtSubjects(studentId) : fetchSubjects()
+    load.then(setSubjects).catch(() => setSubjects([]))
+  }, [open, proposedByTeacher, studentId])
 
   useEffect(() => {
     if (!open || !asksReview) return
@@ -255,6 +268,7 @@ export function AccommodationFormDialog({
       review_due_date: "",
       review_recipients: "role",
       reviewer_ids: [],
+      observation: "",
     })
   }, [open, accommodation, reset])
 
@@ -283,6 +297,7 @@ export function AccommodationFormDialog({
             ...(values.review_recipients === "people" ? { reviewer_ids: values.reviewer_ids } : {}),
           }
         : {}),
+      ...(asksObservation && values.observation.trim() ? { observation: values.observation.trim() } : {}),
     }
     try {
       if (accommodation) {
@@ -335,8 +350,9 @@ export function AccommodationFormDialog({
         </DialogHeader>
         {proposal && (
           <p className="text-sm text-muted-foreground">
-            La propuesta se envía a revisión de Psicopedagogía. No llega al docente ni cuenta como
-            ajuste vigente hasta que Psicopedagogía la confirme.
+            {proposedByTeacher
+              ? "La propuesta le llega a Psicopedagogía para revisarla. Hasta que la confirme, la ven solo vos y Psicopedagogía, y no cuenta como ajuste vigente."
+              : "La propuesta se envía a revisión de Psicopedagogía. No llega al docente ni cuenta como ajuste vigente hasta que Psicopedagogía la confirme."}
           </p>
         )}
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4" noValidate>
@@ -352,6 +368,15 @@ export function AccommodationFormDialog({
               <p className="text-sm text-destructive">{errors.description.message}</p>
             )}
           </div>
+          {asksObservation && (
+            <div className="grid gap-2">
+              <Label htmlFor="accommodation-observation">Lo que observaste (opcional)</Label>
+              <Textarea id="accommodation-observation" {...register("observation")} />
+              {errors.observation && (
+                <p className="text-sm text-destructive">{errors.observation.message}</p>
+              )}
+            </div>
+          )}
           <div className="grid gap-2">
             <Label htmlFor="accommodation-focus-area">Área de enfoque</Label>
             <Input id="accommodation-focus-area" {...register("focus_area")} />
@@ -411,8 +436,9 @@ export function AccommodationFormDialog({
               )}
             />
             <p className="text-xs text-muted-foreground">
-              Sin materias elegidas, aplica en todas. Si elegís materias, solo lo ven los docentes
-              que le dan esas materias al alumno.
+              {proposedByTeacher
+                ? "Podés elegir entre las materias que le das al alumno. Sin materias elegidas, aplica en todas. Psicopedagogía lo puede cambiar al confirmar."
+                : "Sin materias elegidas, aplica en todas. Si elegís materias, solo lo ven los docentes que le dan esas materias al alumno."}
             </p>
           </div>
           <fieldset className="grid gap-2">

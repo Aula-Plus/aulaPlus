@@ -19,8 +19,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The circuit by which direction proposes an accommodation and psychopedagogy
- * confirms it (ClickUp 86e3qkwkk). Authorization is decided before this runs
+ * The circuit by which direction (ClickUp 86e3qkwkk) or a teacher (ClickUp
+ * 1dfd3mc55zu, PA-002) proposes an accommodation and psychopedagogy confirms
+ * it. «Direction» below reads «whoever proposed it»: a teacher's proposal is
+ * withdrawn or resubmitted only by that teacher. Authorization is decided before this runs
  * (AccommodationPolicy, via the Form Requests); this class only checks the
  * business state (422 when the proposal is not in a state that allows the
  * step) and writes it, always in one transaction.
@@ -54,12 +56,31 @@ class AccommodationProposalWorkflow
 {
     /**
      * Whether an accommodation created by this user must go through review:
-     * direction proposes, psychopedagogy creates directly. Someone holding
-     * both roles creates directly.
+     * direction and teachers propose (PA-002; a teacher since ClickUp
+     * 1dfd3mc55zu), psychopedagogy creates directly. Someone holding
+     * psychopedagogy among their roles creates directly.
      */
     public static function createsProposals(User $user): bool
     {
-        return $user->hasRole(Role::Director->value) && ! $user->hasRole(Role::Psychopedagogue->value);
+        return static::proposerRole($user) !== null;
+    }
+
+    /**
+     * The role a proposal by this user is made with (stored as
+     * `proposed_as`): direction over teacher when someone holds both; null
+     * when they create directly (psychopedagogy).
+     */
+    public static function proposerRole(User $user): ?Role
+    {
+        if ($user->hasRole(Role::Psychopedagogue->value)) {
+            return null;
+        }
+
+        if ($user->hasRole(Role::Director->value)) {
+            return Role::Director;
+        }
+
+        return $user->hasRole(Role::Teacher->value) ? Role::Teacher : null;
     }
 
     /**
@@ -70,9 +91,11 @@ class AccommodationProposalWorkflow
      *                                       picked; null = the whole role
      *                                       (every active psychopedagogue)
      */
-    public function submitted(Accommodation $accommodation, User $actor, string $dueDate, ?array $reviewerIds = null): void
+    public function submitted(Accommodation $accommodation, User $actor, string $dueDate, ?array $reviewerIds = null, ?string $note = null): void
     {
-        $this->record($accommodation, $actor, AccommodationReviewAction::Submitted);
+        // A teacher may add what they observed (ClickUp 1dfd3mc55zu): it is
+        // the note of this first step, read in the proposal's history.
+        $this->record($accommodation, $actor, AccommodationReviewAction::Submitted, $note);
 
         $reviewers = User::query()
             ->where('school_id', $accommodation->school_id)

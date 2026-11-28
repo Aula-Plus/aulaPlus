@@ -6,6 +6,7 @@ use App\Enums\AccommodationCategory;
 use App\Enums\Role;
 use App\Http\Requests\Concerns\ValidatesAccommodationScope;
 use App\Models\Accommodation;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\Accommodations\AccommodationProposalWorkflow;
 use App\Support\SchoolTime;
@@ -30,6 +31,10 @@ use Illuminate\Validation\Rule;
  * psychopedagogy must confirm (ClickUp 86e3qkwkk; the controller decides,
  * never the payload). `requires_external_approval` is no longer accepted.
  *
+ * A teacher proposes too (ClickUp 1dfd3mc55zu, PA-002), only for a student
+ * whose file they can open, with the same fields and review routing as
+ * direction, plus an optional `observation`.
+ *
  * Direction, when proposing, picks the review deadline (`review_due_date`) and
  * who reviews it: the whole psychopedagogy role, or one or more specific
  * psychopedagogues (`reviewer_ids`). «Origen» is psychopedagogy's to write:
@@ -42,7 +47,22 @@ class StoreAccommodationRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return $this->user()->can('create', Accommodation::class);
+        $user = $this->user();
+
+        if (! $user->can('create', Accommodation::class)) {
+            return false;
+        }
+
+        // A teacher proposes only for a student whose file they can open
+        // (ClickUp 1dfd3mc55zu): the SchoolScope alone would let them reach
+        // any student of the school.
+        if (! $user->hasAnyRole(Role::schoolWideValues())) {
+            $student = $this->route('student');
+
+            return $student instanceof Student && $user->can('view', $student);
+        }
+
+        return true;
     }
 
     /**
@@ -64,7 +84,7 @@ class StoreAccommodationRequest extends FormRequest
                 ? ['sometimes', 'nullable', 'string', 'max:255']
                 : ['prohibited'],
             'llm_rule' => ['nullable', 'array'],
-            ...$this->accommodationScopeRules(),
+            ...$this->teacherScopedRules($this->accommodationScopeRules()),
             // «Vigente desde» of a proposal is set by psychopedagogy when it
             // confirms it, never by direction (same rule as the screen).
             ...($proposes ? ['starts_on' => ['prohibited']] : []),
@@ -73,6 +93,9 @@ class StoreAccommodationRequest extends FormRequest
                 'review_recipients' => ['prohibited'],
                 'reviewer_ids' => ['prohibited'],
             ]),
+            // «Lo que observaste» (optional, ClickUp 1dfd3mc55zu): what the
+            // proposer saw, kept as the note of the proposal's first step.
+            'observation' => $proposes ? ['nullable', 'string', 'max:2000'] : ['prohibited'],
         ];
     }
 
@@ -124,5 +147,24 @@ class StoreAccommodationRequest extends FormRequest
                 },
             ],
         ];
+    }
+
+    /**
+     * A teacher only picks among the subjects they give the student (answer
+     * 2B, ClickUp 1dfd3mc55zu); direction and psychopedagogy pick any.
+     *
+     * @param  array<string, array<int, mixed>>  $rules
+     * @return array<string, array<int, mixed>>
+     */
+    protected function teacherScopedRules(array $rules): array
+    {
+        $user = $this->user();
+        $student = $this->route('student');
+
+        if (! $user->hasAnyRole(Role::schoolWideValues()) && $student instanceof Student) {
+            $rules['subject_ids.*'][] = $this->taughtSubjectRule($user, $student);
+        }
+
+        return $rules;
     }
 }

@@ -459,6 +459,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // and the AccommodationInstanceOverride entity — deactivating an
         // accommodation for one assessment, with a mandatory reason.
         Route::post('/students/{student}/accommodations', [AccommodationController::class, 'store']);
+        // What a teacher may restrict their proposal to (ClickUp 1dfd3mc55zu, 2B).
+        Route::get('/students/{student}/taught-subjects', [AccommodationController::class, 'taughtSubjects']);
         Route::patch('/accommodations/{accommodation}', [AccommodationController::class, 'update']);
 
         // On an assessment of the group (`assessment_id` in the body).

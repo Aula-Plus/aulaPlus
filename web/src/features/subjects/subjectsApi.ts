@@ -24,6 +24,17 @@ export async function fetchSubjects(): Promise<Subject[]> {
   return data.data
 }
 
+/**
+ * The subjects the signed-in user gives a student (ClickUp 1dfd3mc55zu,
+ * answer 2B): what a teacher may restrict an accommodation proposal to.
+ */
+export async function fetchTaughtSubjects(studentId: number): Promise<Pick<Subject, "id" | "name">[]> {
+  const { data } = await api.get<{ data: Pick<Subject, "id" | "name">[] }>(
+    `/api/v1/students/${studentId}/taught-subjects`,
+  )
+  return data.data
+}
+
 export async function fetchSubject(id: number): Promise<Subject> {
   const { data } = await api.get<{ data: Subject }>(`/api/v1/subjects/${id}`)
   return data.data

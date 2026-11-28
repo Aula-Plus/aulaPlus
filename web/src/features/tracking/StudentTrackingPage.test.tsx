@@ -62,11 +62,13 @@ function pendingAccommodation(overrides: Partial<Accommodation> = {}): Accommoda
     is_effective: false,
     review_status: null,
     proposed_by_id: null,
+    proposed_as: null,
     proposed_by_name: null,
     reviewed_by_id: null,
     reviewed_by_name: null,
     reviewed_at: null,
     review_note: null,
+    observation: null,
     created_by_id: 5,
     created_at: "2026-08-05T10:00:00+00:00",
     updated_at: "2026-08-05T10:00:00+00:00",
@@ -112,6 +114,7 @@ describe("StudentTrackingPage", () => {
       { id: 4, name: "Matemática", short_code: null, color: null },
       { id: 5, name: "Ciencias", short_code: null, color: null },
     ])
+    vi.spyOn(subjectsApi, "fetchTaughtSubjects").mockResolvedValue([{ id: 4, name: "Matemática" }])
     vi.spyOn(performanceApi, "fetchStudentPerformanceTimeline").mockResolvedValue({
       results: [],
       marks: [],
@@ -277,16 +280,63 @@ describe("StudentTrackingPage", () => {
     expect(screen.queryByRole("button", { name: /resolver/i })).not.toBeInTheDocument()
   })
 
-  it("never shows nor requests «Propuestas de ajuste» for a teacher", async () => {
+  it("lets a teacher propose an accommodation from the file, with what they observed (ClickUp 1dfd3mc55zu)", async () => {
     vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
     vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
 
     renderPage("teacher")
     await openTab("Ajustes")
 
-    await screen.findByText("Perfil del alumno — Juan Pérez")
+    await userEvent.click(await screen.findByRole("button", { name: "Proponer ajuste" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText(/la ven solo vos y Psicopedagogía/)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText("Lo que observaste (opcional)")).toBeInTheDocument()
+    // Neither «Origen» nor «Vigente desde»: psychopedagogy sets them.
+    expect(within(dialog).queryByLabelText("Origen")).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText("Vigente desde")).not.toBeInTheDocument()
+  })
+
+  it("offers a proposing teacher only the subjects they give the student (answer 2B)", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    await userEvent.click(await screen.findByRole("button", { name: "Proponer ajuste" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText(/entre las materias que le das al alumno/)).toBeInTheDocument()
+    expect(subjectsApi.fetchTaughtSubjects).toHaveBeenCalled()
+    expect(subjectsApi.fetchSubjects).not.toHaveBeenCalled()
+  })
+
+  it("shows a teacher only their own proposals, and nothing while they have none", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    await screen.findByRole("button", { name: "Proponer ajuste" })
+    expect(trackingApi.fetchAccommodationProposals).toHaveBeenCalledWith(3)
     expect(screen.queryByText("Propuestas de ajuste")).not.toBeInTheDocument()
-    expect(trackingApi.fetchAccommodationProposals).not.toHaveBeenCalled()
+    expect(screen.queryByText("Tus propuestas de ajuste")).not.toBeInTheDocument()
+  })
+
+  it("tells a teacher their pending proposal is being reviewed and lets them withdraw it", async () => {
+    vi.spyOn(trackingApi, "fetchStudentTracking").mockResolvedValue(baseTracking())
+    vi.spyOn(trackingApi, "fetchStudentComments").mockResolvedValue([])
+    vi.mocked(trackingApi.fetchAccommodationProposals).mockResolvedValue([
+      pendingAccommodation({ review_status: "pending", proposed_by_id: 1, proposed_as: "teacher", proposed_by_name: "Ana" }),
+    ])
+
+    renderPage("teacher")
+    await openTab("Ajustes")
+
+    expect(await screen.findByText("Tus propuestas de ajuste")).toBeInTheDocument()
+    expect(screen.getByText(/Psicopedagogía la está revisando/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Retirar propuesta" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Confirmar" })).not.toBeInTheDocument()
   })
 
   it("does not show the change-history links to a teacher", async () => {
