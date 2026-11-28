@@ -17,6 +17,8 @@ export interface ConfirmDialogProps {
   title: string
   description: string
   confirmLabel?: string
+  /** Text of the confirm button while it works (default «Eliminando…»). */
+  confirmingLabel?: string
   isConfirming?: boolean
   onConfirm: () => void
 }
@@ -26,6 +28,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = "Confirmar",
+  confirmingLabel = "Eliminando…",
   isConfirming = false,
   onConfirm,
 }: ConfirmDialogProps) {
@@ -44,7 +47,7 @@ export function ConfirmDialog({
             </Button>
           </DialogClose>
           <Button type="button" variant="destructive" disabled={isConfirming} onClick={onConfirm}>
-            {isConfirming ? "Eliminando…" : confirmLabel}
+            {isConfirming ? confirmingLabel : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

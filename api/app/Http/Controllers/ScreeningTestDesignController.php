@@ -76,9 +76,11 @@ class ScreeningTestDesignController extends Controller
     }
 
     /**
-     * "Volver atrás": Dirección reverts the design in force and the previous
-     * one rules again. Only the design in force can be reverted, and only when
-     * there is a previous one to go back to (422 otherwise).
+     * "Volver atrás": Psicopedagogía or Dirección revert the design in force
+     * and the previous one rules again (ClickUp 86e3dt70g, PO decision of
+     * 24/10). Only the design in force can be reverted, and only when there is
+     * a previous one to go back to (422 otherwise). The other role is told,
+     * and so is whoever made the change.
      */
     public function revert(ScreeningTestDesign $design): ScreeningTestDesignResource
     {
@@ -122,10 +124,28 @@ class ScreeningTestDesignController extends Controller
             ]);
         });
 
+        /** @var User $reverter */
+        $reverter = auth()->user();
+        $otherRoles = array_values(array_diff(
+            [Role::Psychopedagogue->value, Role::Director->value],
+            $reverter->getRoleNames()->all(),
+        ));
+
+        $recipients = $otherRoles === []
+            ? collect()
+            : User::query()
+                ->where('school_id', $type->school_id)
+                ->whereNull('disabled_at')
+                ->whereKeyNot($reverter->id)
+                ->role($otherRoles)
+                ->get();
+
         $author = $design->createdBy;
-        if ($author !== null && $author->id !== auth()->id()) {
-            $author->notify(new ScreeningDesignRevertedNotification($design));
+        if ($author !== null && $author->id !== $reverter->id && $author->disabled_at === null) {
+            $recipients->push($author);
         }
+
+        Notification::send($recipients->unique('id')->values(), new ScreeningDesignRevertedNotification($design));
 
         return new ScreeningTestDesignResource($design->load(['createdBy:id,name', 'revertedBy:id,name']));
     }

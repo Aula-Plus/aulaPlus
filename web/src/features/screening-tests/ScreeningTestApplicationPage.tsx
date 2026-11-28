@@ -5,7 +5,11 @@ import { z } from "zod"
 import { useParams } from "react-router-dom"
 import { ClipboardList } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext"
-import { canManageScreeningTests, canRecalculateScreeningTestApplication } from "@/lib/permissions"
+import {
+  canManageScreeningTests,
+  canReadScreeningTestResults,
+  canRecalculateScreeningTestApplication,
+} from "@/lib/permissions"
 import { formatShortDate } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,10 +43,11 @@ function today(): string {
  * §5 draft used). Create an application over the group, print the code→student
  * sheet, and load scores by code with a live traffic light.
  *
- * The whole psychopedagogy toolkit (create, roster, results) is gated behind
- * `canManageScreeningTests`; the roster and results endpoints are
- * psychopedagogy-only server-side and their components are never mounted for
- * another role.
+ * The psychopedagogy toolkit (apply, code sheet, loading scores) is gated
+ * behind `canManageScreeningTests`; the roster endpoint is psychopedagogy-only
+ * server-side and its component is never mounted for another role. Dirección
+ * reads the results by code (`canReadScreeningTestResults`), in a read-only
+ * table: no score inputs and no code sheet (decision of 24/10).
  */
 export function ScreeningTestApplicationPage() {
   const { id } = useParams<{ id: string }>()
@@ -50,6 +55,7 @@ export function ScreeningTestApplicationPage() {
   const { user } = useAuth()
   const canManage = canManageScreeningTests(user)
   const canRecalculate = canRecalculateScreeningTestApplication(user)
+  const canReadResults = canReadScreeningTestResults(user)
 
   const [group, setGroup] = useState<Group | null>(null)
   const [types, setTypes] = useState<ScreeningTestType[] | null>(null)
@@ -236,7 +242,7 @@ export function ScreeningTestApplicationPage() {
                     <p className="text-sm text-muted-foreground">
                       {application.application_date ?? "Sin fecha"}
                       {application.results_count !== undefined &&
-                        ` · ${application.results_count} códigos`}
+                        ` · ${application.results_count} ${application.results_count === 1 ? "alumno" : "alumnos"}`}
                     </p>
                     {application.counts_in_impact === false && (
                       <p className="text-xs text-muted-foreground">
@@ -252,7 +258,7 @@ export function ScreeningTestApplicationPage() {
                       </p>
                     )}
                   </div>
-                  {(canManage || canRecalculate) && (
+                  {(canManage || canRecalculate || canReadResults) && (
                     <div className="flex flex-wrap justify-end gap-2">
                       {canRecalculate && (
                         <ConfirmDialog
@@ -272,6 +278,20 @@ export function ScreeningTestApplicationPage() {
                           isConfirming={recalculatingId === application.id}
                           onConfirm={() => recalculate(application.id)}
                         />
+                      )}
+                      {!canManage && canReadResults && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setOpenResultsId((current) =>
+                              current === application.id ? null : application.id,
+                            )
+                          }
+                        >
+                          {openResultsId === application.id ? "Ocultar resultados" : "Ver resultados"}
+                        </Button>
                       )}
                       {canManage && (
                         <>
@@ -315,6 +335,11 @@ export function ScreeningTestApplicationPage() {
                   {openResultsId === application.id && (
                     <ScreeningTestResultsEditor applicationId={application.id} />
                   )}
+                </CardContent>
+              )}
+              {!canManage && canReadResults && openResultsId === application.id && (
+                <CardContent className="grid gap-4">
+                  <ScreeningTestResultsEditor applicationId={application.id} readOnly />
                 </CardContent>
               )}
             </Card>

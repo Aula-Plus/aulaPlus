@@ -47,6 +47,14 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Alumnos" })).toBeInTheDocument()
   })
 
+  it("scrolls its options with the sidebar's own thin bar, not the system one (ClickUp 1dfd3mc56kt)", () => {
+    renderSidebar()
+
+    const nav = screen.getByRole("navigation")
+    expect(nav).toHaveClass("nav-scrollbar")
+    expect(nav).toHaveClass("overflow-y-auto")
+  })
+
   it("lists Grupos and Alumnos directly, without a 'Seguimiento' section heading", () => {
     renderSidebar()
 
