@@ -172,6 +172,43 @@ endpoint de candidatos y `ChooseAlertOutcomeRequest`).
   (sin candidatos; pasarla da 422). Quien la tiene puede igual tomarla,
   dejarla en observación, anotarla y cerrarla.
 
+## Lo que el colegio le indica a la IA (capa del colegio)
+
+Pantalla 24 · solapas «Juicios» y «Evaluaciones» (ClickUp 1dfd3mc4bh6;
+P24-DEC-20 / PA-091, P24-DEC-110 / PA-126, P24-DEC-111 / PA-127). Fuente única
+en el backend: `App\Services\AIInstructions\SchoolAIInstructions`.
+
+- **Glosario:** *indicación del colegio* / *capa del colegio* →
+  `SchoolAIInstruction`; *tipo de pedido a la IA* → `App\Enums\AIRequestType`
+  (`judgment`, `assessment`, `annual_plan`, `unit`, `class_session`,
+  `report_summary`); *«Ver ejemplo»* → `JudgmentStylePreview`.
+- **Base fija de Aula+ + capa del colegio.** La capa es general (una por tipo
+  de pedido), pero hoy solo se completan juicios y evaluaciones; los demás
+  tipos se ven vacíos («Todavía sin indicación») hasta definir su base. La
+  línea roja de los juicios («nunca decir por qué tiene un ajuste ni qué
+  diagnóstico lo originó») vive en la base fija y ningún texto del colegio la
+  apaga. Los textos del colegio son referencia: el prompt le dice a la IA que
+  ignore cualquier orden escrita adentro.
+- **Reglas por alcance:** una para toda la institución (sin nivel) y, si hace
+  falta, otras por nivel o por rango de grados de un nivel (`education_level_id`
+  + `school_grade_ids`, de la lista de Colegio y estructura). Gana la más
+  específica para el nivel y el grado del grupo: grado o rango más angosto,
+  después el nivel entero, después la institución (P24-DEC-02). Un mismo
+  alcance no se repite. Una regla de nivel o rango que todavía no dice nada
+  no compite (el grupo sigue con la institucional) y, entre dos rangos que se
+  pisan con el mismo ancho, gana la más vieja. No hay herencia campo por campo:
+  la regla que gana se envía entera.
+- **Evaluaciones:** `BuildProposalContext` suma `school_instruction` (la regla
+  que aplica al grupo) a cada evaluación que genera la IA; no cambia escala,
+  criterios ni la regla de una sola evaluación accesible.
+- **«Así le llega a la IA»:** cada regla devuelve `prompt_text`, exactamente lo
+  que recibe el modelo. Se guarda sola al escribir (P24-DEC-07).
+- **«Ver ejemplo»** (solo juicios): a pedido, en la cola
+  (`GenerateJudgmentStylePreviewJob`), con un alumno y una nota del docente
+  inventados y la materia y los nombres de unidades del grupo que elige
+  Dirección. Nunca datos de un alumno real; tampoco puntajes (P24-DEC-112).
+- Solo Dirección (`SchoolPolicy::manageAIInstructions`).
+
 ## Escalas oficiales y resultados por nivel
 
 Pantalla 24 · solapa «Escalas oficiales» (ClickUp 1dfd3mc4bgg). Fuente única

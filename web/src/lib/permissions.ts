@@ -263,9 +263,9 @@ export function canManageGradesVisibility(user: User | null): boolean {
 }
 
 /**
- * Screen 24 «Evaluación y juicios» (only its «Escalas oficiales» tab exists):
- * direction only. Mirror of `SchoolPolicy::viewOfficialScales` /
- * `updateNumericGradeSettings`.
+ * Screen 24 «Evaluación y juicios» (its three tabs, ClickUp 1dfd3mc4bgg and
+ * 1dfd3mc4bh6): direction only. Mirror of `SchoolPolicy::viewOfficialScales`,
+ * `updateNumericGradeSettings` and `manageAIInstructions`.
  */
 export function canViewOfficialScales(user: User | null): boolean {
   return isDirector(user)

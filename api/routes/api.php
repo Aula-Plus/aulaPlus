@@ -60,6 +60,7 @@ use App\Http\Controllers\PsychopedagogyMeetingController;
 use App\Http\Controllers\ReportDocumentController;
 use App\Http\Controllers\ResourceController;
 use App\Http\Controllers\ScheduledFollowUpController;
+use App\Http\Controllers\SchoolAIInstructionController;
 use App\Http\Controllers\SchoolYearController;
 use App\Http\Controllers\ScreeningTestApplicationController;
 use App\Http\Controllers\ScreeningTestDesignController;
@@ -182,6 +183,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/official-scales', [OfficialScaleController::class, 'index']);
         Route::get('/numeric-grade-settings', [NumericGradeSettingsController::class, 'show']);
         Route::put('/numeric-grade-settings', [NumericGradeSettingsController::class, 'update']);
+
+        // Screen 24 · «Juicios» and «Evaluaciones» (ClickUp 1dfd3mc4bh6):
+        // direction writes the school's layer of AI instructions; «Ver
+        // ejemplo» is a paid AI call (cost control, like the other AI routes).
+        Route::get('/ai-instructions', [SchoolAIInstructionController::class, 'index']);
+        Route::post('/ai-instructions', [SchoolAIInstructionController::class, 'store']);
+        Route::put('/ai-instructions/{instruction}', [SchoolAIInstructionController::class, 'update']);
+        Route::delete('/ai-instructions/{instruction}', [SchoolAIInstructionController::class, 'destroy']);
+        Route::get('/judgment-style-previews/options', [SchoolAIInstructionController::class, 'previewOptions']);
+        Route::post('/judgment-style-previews', [SchoolAIInstructionController::class, 'storePreview'])
+            ->middleware('throttle:5,1');
+        Route::get('/judgment-style-previews/{preview}', [SchoolAIInstructionController::class, 'showPreview']);
         Route::put('/students/{student}/team-summary', [StudentTeamSummaryController::class, 'update']);
 
         // Student reports (ClickUp 86e3jujgx): upload, anonymized-text review,

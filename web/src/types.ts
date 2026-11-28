@@ -2452,3 +2452,82 @@ export interface MaterialPublishedNotice {
   subject_id: number
   school_grade_id: number | null
 }
+
+/**
+ * Screen 24 «Evaluación y juicios» (ClickUp 1dfd3mc4bh6): each kind of
+ * request Aula+ makes to the AI. Only judgments and assessments are
+ * configurable today; the others show their place empty.
+ */
+export type AIRequestType =
+  | "judgment"
+  | "assessment"
+  | "annual_plan"
+  | "unit"
+  | "class_session"
+  | "report_summary"
+
+export const aiRequestTypeLabels: Record<AIRequestType, string> = {
+  judgment: "Juicios",
+  assessment: "Evaluaciones",
+  annual_plan: "Planificación anual",
+  unit: "Unidad",
+  class_session: "Clase",
+  report_summary: "Resumen de informe",
+}
+
+/** The fields of a rule, per type (empty = not written). */
+export interface JudgmentInstructionSettings {
+  tone: "close" | "descriptive" | "formal" | null
+  person: "second" | "third" | null
+  length: "short" | "medium" | "long" | null
+  words_to_use: string | null
+  words_to_avoid: string | null
+  goal: string | null
+  avoid: string | null
+  model_example: string | null
+  show_rubric: boolean
+}
+
+export interface AssessmentInstructionSettings {
+  goal: string | null
+  avoid: string | null
+  banned_words: string | null
+}
+
+export type AIInstructionSettings = Partial<JudgmentInstructionSettings & AssessmentInstructionSettings>
+
+/** One rule: institution-wide (no level), a whole level, or a range of its grades. */
+export interface SchoolAIInstruction {
+  id: number
+  request_type: AIRequestType
+  education_level_id: number | null
+  school_grade_ids: number[]
+  settings: AIInstructionSettings
+  /** «Así le llega a la IA»: exactly what the model receives. */
+  prompt_text: string | null
+  updated_at: string | null
+}
+
+/** `GET /api/v1/ai-instructions`: one entry per request type. */
+export interface AIInstructionType {
+  request_type: AIRequestType
+  configurable: boolean
+  /** What the model receives while the school wrote nothing. */
+  default_prompt_text: string | null
+  rules: SchoolAIInstruction[]
+}
+
+/** «Ver ejemplo» (P24-JUI-02): an invented student, never a real one. */
+export interface JudgmentStylePreview {
+  id: number
+  status: "pending" | "completed" | "error"
+  draft: string | null
+  error: boolean
+}
+
+export interface JudgmentPreviewGroupOption {
+  id: number
+  name: string
+  school_year: number | null
+  subjects: { id: number; name: string }[]
+}
